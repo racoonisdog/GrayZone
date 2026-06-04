@@ -1,0 +1,11 @@
+Feat | 새로운 기능 추가, 변경
+Fix | 버그 수정
+Refactor | 구조 개선
+Docs | 문서 추가, 변경
+Chore | 빌드 업무 수정, 패키지 매니저 수정, 패키지 관리자 구성 등 업데이트
+Test | 테스트 코드 추가, 수정, Production Code 변경없음
+Art | 그래픽 리소스 변경
+Sound | 사운드 리소스 변경
+Level | 맵/씬 변경
+Balance | 수치 밸런스 조정
+UI | UI 변경
