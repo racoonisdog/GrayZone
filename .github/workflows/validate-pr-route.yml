@@ -1,0 +1,20 @@
+name: Validate PR route
+
+on:
+  pull_request:
+    branches:
+      - Master
+
+jobs:
+  validate-pr-route:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only allow Develop into Master
+        run: |
+          echo "base=${{ github.base_ref }}"
+          echo "head=${{ github.head_ref }}"
+
+          if [ "${{ github.base_ref }}" = "Master" ] && [ "${{ github.head_ref }}" != "Develop" ]; then
+            echo "Only Develop can be merged into Master."
+            exit 1
+          fi
