@@ -1,0 +1,30 @@
+name: Validate PR route
+
+on:
+  pull_request:
+    branches:
+      - Master
+  push:
+    branches:
+      - Master
+  workflow_dispatch:
+
+jobs:
+  validate-pr-route:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only allow Develop into Master
+        run: |
+          echo "event=${{ github.event_name }}"
+          echo "base=${{ github.base_ref }}"
+          echo "head=${{ github.head_ref }}"
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Non-PR run used to register the required check."
+            exit 0
+          fi
+
+          if [ "${{ github.base_ref }}" = "Master" ] && [ "${{ github.head_ref }}" != "Develop" ]; then
+            echo "Only Develop can be merged into Master."
+            exit 1
+          fi
