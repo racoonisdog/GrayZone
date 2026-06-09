@@ -16,7 +16,7 @@ public class GameDateManager : MonoBehaviour
                 return 1;
             }
 
-            return Mathf.Max(1, GameDataManager.Instance.RuntimeData.currentDay);
+            return GameDataManager.Instance.CurrentDay;
         }
     }
 

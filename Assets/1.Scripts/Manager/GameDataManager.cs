@@ -19,6 +19,7 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private RuntimeGameData runtimeData = new RuntimeGameData();
 
     public RuntimeGameData RuntimeData => runtimeData;
+    public int CurrentDay => Mathf.Max(1, runtimeData.currentDay);
 
     private void Awake()
     {
