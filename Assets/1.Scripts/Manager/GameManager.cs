@@ -1,60 +1,168 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.UI;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance { get; private set; }
+    public static GameManager instance;
 
-    [Header("하위 매니저")]
-    [SerializeField] private GameDataManager gameDataManager;
-    [SerializeField] private GameSaveManager gameSaveManager;
-    [SerializeField] private GameSettingManager gameSettingManager;
+    [Header("Bullet")]
+    [SerializeField]
+    private Transform bulletpoint;
+    [SerializeField]
+    private GameObject bulletObj;
+    [SerializeField]
+    private float maxShootDelay = 0.2f;
+    [SerializeField]
+    private float currentShootDelay = 0.2f;
+    [SerializeField]
+    private Text bulletText;
+    private int maxBullet = 30;
+    private int currentBullet = 0;
+    [SerializeField] private GameObject muzzleFlashPrefab; // Project의 MuzzleFlash 프리팹
+    private GameObject muzzleFlashInstance;
+    private FollowTransform muzzleFollow;
+    private ParticleSystem[] muzzleParticles;
 
-    public GameDataManager DataManager => gameDataManager;
-    public GameSaveManager SaveManager => gameSaveManager;
-    public GameSettingManager SettingManager => gameSettingManager;
+    [Header("Weapon FX")]
+    [SerializeField]
+    private GameObject weaponFlashFX;
+    [SerializeField]
+    private Transform bulletCasePoint;
+    [SerializeField]
+    private GameObject bulletCaseFX;
+    [SerializeField]
+    private Transform weaponClipPoint;
+    [SerializeField]
+    private GameObject weaponClipFX;
 
-    private void Awake()
+
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
     {
-        if (Instance != null && Instance != this)
+        instance = this;
+
+        currentShootDelay = 0;
+
+        InitBullet();
+
+        // --- MuzzleFlash Init (1회) ---
+        if (muzzleFlashInstance != null)
+            return; // 이미 만들었으면 또 만들지 않음
+
+        if (muzzleFlashPrefab == null)
         {
-            Destroy(gameObject);
+            Debug.LogError("[GameManager] muzzleFlashPrefab이 할당되지 않았습니다.", this);
             return;
         }
 
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
-        CacheChildManagers();
+        muzzleFlashInstance = Instantiate(muzzleFlashPrefab);
+        muzzleFollow = muzzleFlashInstance.GetComponent<FollowTransform>();
+        if (muzzleFollow == null) muzzleFollow = muzzleFlashInstance.AddComponent<FollowTransform>();
+
+        muzzleFollow.Bind(bulletpoint, Vector3.zero, true);
+
+        muzzleParticles = muzzleFlashInstance.GetComponentsInChildren<ParticleSystem>(true);
+        StopMuzzleFlash();
     }
 
-    private void OnDestroy()
+    // Update is called once per frame
+    void Update()
     {
-        if (Instance == this)
-        {
-            Instance = null;
-        }
+        bulletText.text = currentBullet + " / " + maxBullet;
     }
 
-
-    private void CacheChildManagers()
+    public void Shooting(Vector3 targetPosition, Enemy enemy, AudioSource weaponSound, AudioClip shootingSound)
     {
-        if (gameDataManager == null)
-        {
-            gameDataManager = GetComponentInChildren<GameDataManager>(true);
-        }
+        currentShootDelay += Time.deltaTime;
 
-        if (gameSaveManager == null)
-        {
-            gameSaveManager = GetComponentInChildren<GameSaveManager>(true);
-        }
+        if (currentShootDelay < maxShootDelay || currentBullet <= 0)
+            return;
 
-        if (gameSettingManager == null)
-        {
-            gameSettingManager = GetComponentInChildren<GameSettingManager>(true);
-        }
+        currentBullet -= 1;
+        currentShootDelay = 0;
 
-        if (gameDataManager == null || gameSaveManager == null || gameSettingManager == null)
+        weaponSound.clip = shootingSound;
+        weaponSound.Play();
+
+        PlayMuzzleFlash();
+        Vector3 aim = (targetPosition - bulletpoint.position).normalized;
+
+        // Instantiate(weaponFlashFX, bulletpoint);
+        GameObject flashFX = PoolManager.instance.ActivateObj(1);
+        SetObjPosition(flashFX, bulletpoint);
+        flashFX.transform.rotation = Quaternion.LookRotation(aim, Vector3.up);
+
+        // Instantiate(bulletCaseFX, bulletCasePoint);
+        GameObject caseFX = PoolManager.instance.ActivateObj(2);
+        SetObjPosition(caseFX, bulletCasePoint);
+
+        // Instantiate(bulletObj, bulletpoint.position, Quaternion.LookRotation(aim,Vector3.up));
+        
+        GameObject prefabToSpawn = PoolManager.instance.ActivateObj(0);
+        SetObjPosition(prefabToSpawn, bulletpoint);
+        prefabToSpawn.transform.rotation = Quaternion.LookRotation(aim, Vector3.up);
+        
+        // Raycast
+        /*
+        if(enemy != null && enemy.enemyCurrentHP > 0)
         {
-            Debug.LogWarning("[GameManager] One or more child managers are missing.");
+            enemy.enemyCurrentHP -= 1;
+            Debug.Log("enemy HP : " + enemy.enemyCurrentHP);
+        }
+        */
+
+    }
+
+    public void ReloadClip()
+    {
+        // Instantiate(weaponClipFX, weaponClipPoint);
+        GameObject clipFX = PoolManager.instance.ActivateObj(3);
+        SetObjPosition(clipFX, weaponClipPoint);
+
+        InitBullet();
+    }
+
+    private void InitBullet()
+    {
+        currentBullet = maxBullet;
+    }
+
+    private void SetObjPosition(GameObject obj, Transform targetTransform)
+    {
+        obj.transform.position = targetTransform.position;
+    }
+
+    private void PlayMuzzleFlash()
+    {
+        if (muzzleParticles == null || muzzleFlashInstance == null) return;
+
+        // 혹시 꺼져있으면 다시 켜기
+        if (!muzzleFlashInstance.activeInHierarchy)
+            muzzleFlashInstance.SetActive(true);
+
+        foreach (var ps in muzzleParticles)
+        {
+            if (ps == null) continue;
+
+            // ps가 붙은 오브젝트가 꺼져있을 수도 있어서 이것도 켜기
+            if (!ps.gameObject.activeInHierarchy)
+                ps.gameObject.SetActive(true);
+
+            ps.Clear(true);
+            ps.Play(true);
         }
     }
+
+    private void StopMuzzleFlash()
+    {
+        if (muzzleParticles == null) return;
+
+        foreach (var ps in muzzleParticles)
+        {
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+    }
+
 }
