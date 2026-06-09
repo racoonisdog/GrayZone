@@ -12,12 +12,12 @@ public class FacilityDefinition : ScriptableObject
 
     [SerializeField] private string m_facilityId;
     [SerializeField] private string m_facilityName;
-    [SerializeField] private int m_maxCapacity;
+    [SerializeField] private bool m_unlockedByDefault;
     [SerializeField] private CostEntry[] m_unlockCost;
 
     public string FacilityId => m_facilityId;
     public string FacilityName => m_facilityName;
-    public int MaxCapacity => m_maxCapacity;
+    public bool UnlockedByDefault => m_unlockedByDefault;
 
     public CostBundle BuildUnlockCost()
     {

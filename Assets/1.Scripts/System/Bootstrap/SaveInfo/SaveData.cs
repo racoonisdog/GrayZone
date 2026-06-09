@@ -4,7 +4,7 @@ using System.Collections.Generic;
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public int schemaVersion = CurrentSchemaVersion;
     public string profileId = "default";
@@ -33,6 +33,7 @@ public class SaveData
         public int playerLevel = 1;
         public int playerGold;
         public string lastStageId = string.Empty;
+        public int currentDay = 1;
     }
 
     [Serializable]
