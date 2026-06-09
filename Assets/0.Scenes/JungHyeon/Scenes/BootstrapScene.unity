@@ -207,6 +207,50 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 75886313}
   m_CullTransparentMesh: 1
+--- !u!1 &163919177
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 163919178}
+  - component: {fileID: 163919179}
+  m_Layer: 0
+  m_Name: GameDateManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &163919178
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 163919177}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 866586632}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &163919179
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 163919177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b1b1cc181d943f4e9f1b238f5cf5c2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameDateManager
 --- !u!1 &866586630
 GameObject:
   m_ObjectHideFlags: 0
@@ -239,6 +283,7 @@ MonoBehaviour:
   gameDataManager: {fileID: 1829535191}
   gameSaveManager: {fileID: 1145930877}
   gameSettingManager: {fileID: 1153435030}
+  gameDateManager: {fileID: 0}
 --- !u!4 &866586632
 Transform:
   m_ObjectHideFlags: 0
@@ -255,6 +300,7 @@ Transform:
   - {fileID: 1829535192}
   - {fileID: 1145930878}
   - {fileID: 1153435031}
+  - {fileID: 163919178}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &928631860
@@ -910,6 +956,7 @@ MonoBehaviour:
     playerLevel: 1
     playerGold: 0
     lastStageId: 
+    currentDay: 1
 --- !u!4 &1829535192
 Transform:
   m_ObjectHideFlags: 0
