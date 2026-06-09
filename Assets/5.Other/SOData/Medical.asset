@@ -15,4 +15,6 @@ MonoBehaviour:
   m_facilityId: 
   m_facilityName: 
   m_maxCapacity: 0
-  m_unlockCost: []
+  m_unlockCost:
+  - type: 0
+    amount: 50

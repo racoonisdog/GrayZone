@@ -1,25 +1,69 @@
+using System.Collections.Generic;
 using UnityEditor.Overlays;
 using UnityEngine;
 
-//ToDo : 런타임 데이터 게임에 맞게 연결하기
 [System.Serializable]
 public class RuntimeGameData
 {
-    public int playerLevel = 1;
-    public int playerGold;
     public string lastStageId = string.Empty;
     public int currentDay = 1;
+    public string controlledNpcRuntimeId = string.Empty;
+    public List<string> squadNpcRuntimeIds = new List<string>();
+
+    private ResourceStorage resources;
+    private NpcRoster npcRoster;
+
+    public ResourceStorage Resources
+    {
+        get
+        {
+            resources ??= new ResourceStorage();
+            return resources;
+        }
+    }
+
+    public NpcRoster NpcRoster
+    {
+        get
+        {
+            npcRoster ??= new NpcRoster();
+            return npcRoster;
+        }
+    }
+
+    public void EnsureRuntimeContainers()
+    {
+        lastStageId ??= string.Empty;
+        controlledNpcRuntimeId ??= string.Empty;
+        squadNpcRuntimeIds ??= new List<string>();
+        currentDay = Mathf.Max(1, currentDay);
+
+        _ = Resources;
+        _ = NpcRoster;
+    }
 }
 
 public class GameDataManager : MonoBehaviour
 {
     public static GameDataManager Instance { get; private set; }
 
-    [Header("런타임 데이터")]
+    [Header("Runtime Data")]
     [SerializeField] private RuntimeGameData runtimeData = new RuntimeGameData();
 
-    public RuntimeGameData RuntimeData => runtimeData;
-    public int CurrentDay => Mathf.Max(1, runtimeData.currentDay);
+    public RuntimeGameData RuntimeData
+    {
+        get
+        {
+            EnsureRuntimeData();
+            return runtimeData;
+        }
+    }
+
+    public ResourceStorage Resources => RuntimeData.Resources;
+    public NpcRoster NpcRoster => RuntimeData.NpcRoster;
+    public IReadOnlyList<string> SquadNpcRuntimeIds => RuntimeData.squadNpcRuntimeIds;
+    public string ControlledNpcRuntimeId => RuntimeData.controlledNpcRuntimeId ?? string.Empty;
+    public int CurrentDay => Mathf.Max(1, RuntimeData.currentDay);
 
     private void Awake()
     {
@@ -28,6 +72,7 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
+        EnsureRuntimeData();
         Instance = this;
     }
 
@@ -41,23 +86,28 @@ public class GameDataManager : MonoBehaviour
 
     public RuntimeGameData Snapshot()
     {
-        return new RuntimeGameData
+        RuntimeGameData snapshot = new RuntimeGameData
         {
-            playerLevel = runtimeData.playerLevel,
-            playerGold = runtimeData.playerGold,
-            lastStageId = runtimeData.lastStageId ?? string.Empty,
-            currentDay = Mathf.Max(1, runtimeData.currentDay)
+            lastStageId = RuntimeData.lastStageId ?? string.Empty,
+            currentDay = CurrentDay,
+            controlledNpcRuntimeId = RuntimeData.controlledNpcRuntimeId ?? string.Empty,
+            squadNpcRuntimeIds = new List<string>(RuntimeData.squadNpcRuntimeIds)
         };
+
+        foreach (NPCRuntimeData npc in NpcRoster.All)
+        {
+            snapshot.NpcRoster.Add(npc);
+        }
+
+        return snapshot;
     }
 
     public SaveData CreateSaveData(string profileId)
     {
         SaveData saveData = new SaveData();
         saveData.profileId = string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId;
-        saveData.progress.playerLevel = runtimeData.playerLevel;
-        saveData.progress.playerGold = runtimeData.playerGold;
-        saveData.progress.lastStageId = runtimeData.lastStageId ?? string.Empty;
-        saveData.progress.currentDay = Mathf.Max(1, runtimeData.currentDay);
+        saveData.progress.lastStageId = RuntimeData.lastStageId ?? string.Empty;
+        saveData.progress.currentDay = CurrentDay;
         saveData.MarkSavedNow();
         return saveData;
     }
@@ -76,10 +126,8 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
-        runtimeData.playerLevel = Mathf.Max(1, saveData.progress.playerLevel);
-        runtimeData.playerGold = Mathf.Max(0, saveData.progress.playerGold);
-        runtimeData.lastStageId = saveData.progress.lastStageId ?? string.Empty;
-        runtimeData.currentDay = Mathf.Max(1, saveData.progress.currentDay);
+        RuntimeData.lastStageId = saveData.progress.lastStageId ?? string.Empty;
+        RuntimeData.currentDay = Mathf.Max(1, saveData.progress.currentDay);
     }
 
     public void ApplySnapshot(RuntimeGameData snapshot)
@@ -90,30 +138,119 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
-        runtimeData.playerLevel = Mathf.Max(1, snapshot.playerLevel);
-        runtimeData.playerGold = Mathf.Max(0, snapshot.playerGold);
-        runtimeData.lastStageId = snapshot.lastStageId ?? string.Empty;
-        runtimeData.currentDay = Mathf.Max(1, snapshot.currentDay);
+        snapshot.EnsureRuntimeContainers();
+
+        RuntimeData.lastStageId = snapshot.lastStageId ?? string.Empty;
+        RuntimeData.currentDay = Mathf.Max(1, snapshot.currentDay);
+        RuntimeData.controlledNpcRuntimeId = snapshot.controlledNpcRuntimeId ?? string.Empty;
+        RuntimeData.squadNpcRuntimeIds = new List<string>(snapshot.squadNpcRuntimeIds);
+
+        NpcRoster.Clear();
+        foreach (NPCRuntimeData npc in snapshot.NpcRoster.All)
+        {
+            NpcRoster.Add(npc);
+        }
     }
 
-    public void SetPlayerLevel(int level)
+    public bool TryRecruitNpc(NPCChar npcData, out NPCRuntimeData runtimeNpc)
     {
-        runtimeData.playerLevel = Mathf.Max(1, level);
+        return NpcRoster.TryAdd(npcData, out runtimeNpc);
     }
 
-    public void SetPlayerGold(int gold)
+    public bool TryRecruitNpc(NPCChar npcData, string runtimeId, out NPCRuntimeData runtimeNpc)
     {
-        runtimeData.playerGold = Mathf.Max(0, gold);
+        return NpcRoster.TryAdd(npcData, runtimeId, out runtimeNpc);
+    }
+
+    public bool TryGetNpc(string runtimeId, out NPCRuntimeData runtimeNpc)
+    {
+        return NpcRoster.TryGet(runtimeId, out runtimeNpc);
+    }
+
+    public bool TryRemoveNpc(string runtimeId)
+    {
+        if (!NpcRoster.Remove(runtimeId))
+        {
+            return false;
+        }
+
+        RemoveNpcReferences(runtimeId);
+        return true;
+    }
+
+    public bool TrySetControlledNpc(string runtimeId)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeId) || !NpcRoster.Contains(runtimeId))
+        {
+            return false;
+        }
+
+        RuntimeData.controlledNpcRuntimeId = runtimeId.Trim();
+        return true;
+    }
+
+    public void ClearControlledNpc()
+    {
+        RuntimeData.controlledNpcRuntimeId = string.Empty;
+    }
+
+    public bool TryAddSquadNpc(string runtimeId)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeId) || !NpcRoster.Contains(runtimeId))
+        {
+            return false;
+        }
+
+        string trimmedRuntimeId = runtimeId.Trim();
+        if (RuntimeData.squadNpcRuntimeIds.Contains(trimmedRuntimeId))
+        {
+            return true;
+        }
+
+        RuntimeData.squadNpcRuntimeIds.Add(trimmedRuntimeId);
+        return true;
+    }
+
+    public bool TryRemoveSquadNpc(string runtimeId)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeId))
+        {
+            return false;
+        }
+
+        return RuntimeData.squadNpcRuntimeIds.Remove(runtimeId.Trim());
     }
 
     public void SetLastStageId(string stageId)
     {
-        runtimeData.lastStageId = stageId ?? string.Empty;
+        RuntimeData.lastStageId = stageId ?? string.Empty;
     }
 
     public void SetCurrentDay(int day)
     {
-        runtimeData.currentDay = Mathf.Max(1, day);
+        RuntimeData.currentDay = Mathf.Max(1, day);
+    }
+
+    private void EnsureRuntimeData()
+    {
+        runtimeData ??= new RuntimeGameData();
+        runtimeData.EnsureRuntimeContainers();
+    }
+
+    private void RemoveNpcReferences(string runtimeId)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeId))
+        {
+            return;
+        }
+
+        string trimmedRuntimeId = runtimeId.Trim();
+        if (RuntimeData.controlledNpcRuntimeId == trimmedRuntimeId)
+        {
+            RuntimeData.controlledNpcRuntimeId = string.Empty;
+        }
+
+        RuntimeData.squadNpcRuntimeIds.RemoveAll(id => id == trimmedRuntimeId);
     }
 
     private bool TryRejectDuplicateOrInvalidRoot()
