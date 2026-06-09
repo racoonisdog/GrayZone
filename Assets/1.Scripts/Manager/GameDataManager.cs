@@ -8,6 +8,7 @@ public class RuntimeGameData
     public int playerLevel = 1;
     public int playerGold;
     public string lastStageId = string.Empty;
+    public int currentDay = 1;
 }
 
 public class GameDataManager : MonoBehaviour
@@ -43,7 +44,8 @@ public class GameDataManager : MonoBehaviour
         {
             playerLevel = runtimeData.playerLevel,
             playerGold = runtimeData.playerGold,
-            lastStageId = runtimeData.lastStageId ?? string.Empty
+            lastStageId = runtimeData.lastStageId ?? string.Empty,
+            currentDay = Mathf.Max(1, runtimeData.currentDay)
         };
     }
 
@@ -54,6 +56,7 @@ public class GameDataManager : MonoBehaviour
         saveData.progress.playerLevel = runtimeData.playerLevel;
         saveData.progress.playerGold = runtimeData.playerGold;
         saveData.progress.lastStageId = runtimeData.lastStageId ?? string.Empty;
+        saveData.progress.currentDay = Mathf.Max(1, runtimeData.currentDay);
         saveData.MarkSavedNow();
         return saveData;
     }
@@ -75,6 +78,7 @@ public class GameDataManager : MonoBehaviour
         runtimeData.playerLevel = Mathf.Max(1, saveData.progress.playerLevel);
         runtimeData.playerGold = Mathf.Max(0, saveData.progress.playerGold);
         runtimeData.lastStageId = saveData.progress.lastStageId ?? string.Empty;
+        runtimeData.currentDay = Mathf.Max(1, saveData.progress.currentDay);
     }
 
     public void ApplySnapshot(RuntimeGameData snapshot)
@@ -88,6 +92,7 @@ public class GameDataManager : MonoBehaviour
         runtimeData.playerLevel = Mathf.Max(1, snapshot.playerLevel);
         runtimeData.playerGold = Mathf.Max(0, snapshot.playerGold);
         runtimeData.lastStageId = snapshot.lastStageId ?? string.Empty;
+        runtimeData.currentDay = Mathf.Max(1, snapshot.currentDay);
     }
 
     public void SetPlayerLevel(int level)
@@ -103,6 +108,11 @@ public class GameDataManager : MonoBehaviour
     public void SetLastStageId(string stageId)
     {
         runtimeData.lastStageId = stageId ?? string.Empty;
+    }
+
+    public void SetCurrentDay(int day)
+    {
+        runtimeData.currentDay = Mathf.Max(1, day);
     }
 
     private bool TryRejectDuplicateOrInvalidRoot()
