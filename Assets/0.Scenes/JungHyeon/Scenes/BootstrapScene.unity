@@ -236,9 +236,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d49d4bfd8dda6184f8dccaa0d88e93e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  gameDataManager: {fileID: 1829535191}
-  gameSaveManager: {fileID: 1145930877}
-  gameSettingManager: {fileID: 1153435030}
+  bulletpoint: {fileID: 0}
+  bulletObj: {fileID: 0}
+  maxShootDelay: 0.2
+  currentShootDelay: 0.2
+  bulletText: {fileID: 0}
+  muzzleFlashPrefab: {fileID: 0}
+  weaponFlashFX: {fileID: 0}
+  bulletCasePoint: {fileID: 0}
+  bulletCaseFX: {fileID: 0}
+  weaponClipPoint: {fileID: 0}
+  weaponClipFX: {fileID: 0}
 --- !u!4 &866586632
 Transform:
   m_ObjectHideFlags: 0
