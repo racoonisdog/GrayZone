@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.AI;
 
-public class SquadMemberController : MonoBehaviour
+public class SquadMemberController_TPZ : MonoBehaviour
 {
     public enum SquadRole
     {
@@ -24,10 +24,10 @@ public class SquadMemberController : MonoBehaviour
     [Header("References")]
     [SerializeField] private StarterAssetsInputs starterAssetsInputs;
     [SerializeField] private ThirdPersonController thirdPersonController;
-    [SerializeField] private PlayerManager playerManager;
-    [SerializeField] private WeaponController weaponController;
+    [SerializeField] private PlayerManager_TPZ playerManager;
+    [SerializeField] private WeaponController_TPZ weaponController;
     [SerializeField] private Animator animator;
-    [SerializeField] private SquadFollowerAI followerAI;
+    [SerializeField] private SquadFollowerAI_TPZ followerAI;
     [SerializeField] private PlayerInput playerInput;
     [SerializeField] private Transform cameraTarget;
     [SerializeField] private NavMeshAgent navMeshAgent;
@@ -48,7 +48,7 @@ public class SquadMemberController : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
-        // 초기 상태 적용은 SquadManager가 전담
+        // 초기 상태 적용은 SquadManager_TPZ가 전담
     }
 
     private void AutoFindReferences()
@@ -60,10 +60,10 @@ public class SquadMemberController : MonoBehaviour
             thirdPersonController = GetComponent<ThirdPersonController>();
 
         if (playerManager == null)
-            playerManager = GetComponent<PlayerManager>();
+            playerManager = GetComponent<PlayerManager_TPZ>();
 
         if (weaponController == null)
-            weaponController = GetComponentInChildren<WeaponController>();
+            weaponController = GetComponentInChildren<WeaponController_TPZ>();
 
         if (animator == null)
             animator = GetComponent<Animator>();
@@ -78,7 +78,7 @@ public class SquadMemberController : MonoBehaviour
             characterController = GetComponent<CharacterController>();
 
         if (followerAI == null)
-            followerAI = GetComponent<SquadFollowerAI>();
+            followerAI = GetComponent<SquadFollowerAI_TPZ>();
 
         if (cameraTarget == null)
         {

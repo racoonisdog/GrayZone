@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.AI;
 
-public class SquadFollowerAI : MonoBehaviour
+public class SquadFollowerAI_TPZ : MonoBehaviour
 {
     [Header("Follow")]
     [SerializeField] private float followDistance = 2.5f;
@@ -12,9 +12,9 @@ public class SquadFollowerAI : MonoBehaviour
     [Header("Move")]
     [SerializeField] private float rotationSpeed = 10f;
 
-    private SquadMemberController memberController;
+    private SquadMemberController_TPZ memberController;
     private NavMeshAgent agent;
-    private SquadManager squadManager;
+    private SquadManager_TPZ squadManager;
     private Animator animator;
 
     private float nextUpdateTime;
@@ -22,9 +22,9 @@ public class SquadFollowerAI : MonoBehaviour
 
     private void Awake()
     {
-        memberController = GetComponent<SquadMemberController>();
+        memberController = GetComponent<SquadMemberController_TPZ>();
         agent = GetComponent<NavMeshAgent>();
-        squadManager = FindFirstObjectByType<SquadManager>();
+        squadManager = FindFirstObjectByType<SquadManager_TPZ>();
         animator = GetComponent<Animator>();
 
         if (agent != null)

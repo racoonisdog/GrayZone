@@ -10426,7 +10426,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f5701831c78cec140bc4572f673ff629, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoolManager
+  m_EditorClassIdentifier: Assembly-CSharp::PoolManager_TPZ
   prefabs:
   - {fileID: 0}
   - {fileID: 0}
@@ -13300,7 +13300,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7b919905eabb83b4194275d43c5d69ba, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::WeaponController
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponController_TPZ
   currentBullet: 30
   maxBullet: 30
   shootDelay: 0.12
@@ -38383,7 +38383,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 59ac3d4e93319824f8dbab9cb0133f50, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SquadFollowerAI
+  m_EditorClassIdentifier: Assembly-CSharp::SquadFollowerAI_TPZ
   followDistance: 2.5
   stopDistance: 1.5
   updateInterval: 0.15
@@ -38400,7 +38400,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 52fa68172c70e23409e960ed1cee1e0b, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth_TPZ
   maxHP: 10
   currentHP: 0
   hpSlider: {fileID: 0}
@@ -38416,7 +38416,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 26a385ee9e4a18a40ba4e77f6a168a70, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerManager
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerManager_TPZ
   aimCam: {fileID: 1284248327}
   aimImage: {fileID: 1681076898}
   aimObj: {fileID: 1449910475}
@@ -38784,7 +38784,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2a30a944be831e340b6caeeec07db876, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SquadMemberController
+  m_EditorClassIdentifier: Assembly-CSharp::SquadMemberController_TPZ
   memberName: Member
   role: 0
   isPlayerControlled: 0
@@ -42250,7 +42250,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7b919905eabb83b4194275d43c5d69ba, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::WeaponController
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponController_TPZ
   currentBullet: 30
   maxBullet: 30
   shootDelay: 0.12
@@ -45390,7 +45390,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 59ac3d4e93319824f8dbab9cb0133f50, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SquadFollowerAI
+  m_EditorClassIdentifier: Assembly-CSharp::SquadFollowerAI_TPZ
   followDistance: 2.5
   stopDistance: 1.5
   updateInterval: 0.15
@@ -45407,7 +45407,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 52fa68172c70e23409e960ed1cee1e0b, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth_TPZ
   maxHP: 10
   currentHP: 0
   hpSlider: {fileID: 0}
@@ -45423,7 +45423,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 26a385ee9e4a18a40ba4e77f6a168a70, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerManager
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerManager_TPZ
   aimCam: {fileID: 1284248327}
   aimImage: {fileID: 1681076898}
   aimObj: {fileID: 1449910475}
@@ -45791,7 +45791,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2a30a944be831e340b6caeeec07db876, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SquadMemberController
+  m_EditorClassIdentifier: Assembly-CSharp::SquadMemberController_TPZ
   memberName: Member
   role: 0
   isPlayerControlled: 0
@@ -68861,7 +68861,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7b919905eabb83b4194275d43c5d69ba, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::WeaponController
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponController_TPZ
   currentBullet: 30
   maxBullet: 30
   shootDelay: 0.12
@@ -73191,7 +73191,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 947233e86de954a4ca9a211a5328d2e9, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SquadManager
+  m_EditorClassIdentifier: Assembly-CSharp::SquadManager_TPZ
   squadMembers:
   - {fileID: 6982812147524483946}
   - {fileID: 1268660176}
@@ -105626,7 +105626,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 59ac3d4e93319824f8dbab9cb0133f50, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SquadFollowerAI
+  m_EditorClassIdentifier: Assembly-CSharp::SquadFollowerAI_TPZ
   followDistance: 2.5
   stopDistance: 1.5
   updateInterval: 0.15
@@ -105643,7 +105643,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2a30a944be831e340b6caeeec07db876, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SquadMemberController
+  m_EditorClassIdentifier: Assembly-CSharp::SquadMemberController_TPZ
   memberName: Member
   role: 0
   isPlayerControlled: 0
@@ -105670,7 +105670,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 52fa68172c70e23409e960ed1cee1e0b, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth_TPZ
   maxHP: 10
   currentHP: 0
   hpSlider: {fileID: 0}
@@ -105686,7 +105686,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 26a385ee9e4a18a40ba4e77f6a168a70, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerManager
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerManager_TPZ
   aimCam: {fileID: 1284248327}
   aimImage: {fileID: 1681076898}
   aimObj: {fileID: 1449910475}
