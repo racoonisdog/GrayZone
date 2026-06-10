@@ -14,10 +14,13 @@ public class FacilityDefinition : ScriptableObject
     [SerializeField] private string m_facilityName;
     [SerializeField] private bool m_unlockedByDefault;
     [SerializeField] private CostEntry[] m_unlockCost;
+    [SerializeField] private int m_defaultslot;
 
     public string FacilityId => m_facilityId;
     public string FacilityName => m_facilityName;
     public bool UnlockedByDefault => m_unlockedByDefault;
+
+    public int Defaultslot => m_defaultslot;
 
     public CostBundle BuildUnlockCost()
     {
