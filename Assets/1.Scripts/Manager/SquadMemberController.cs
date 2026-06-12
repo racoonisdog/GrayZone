@@ -24,7 +24,7 @@ public class SquadMemberController : MonoBehaviour
     [Header("References")]
     [SerializeField] private StarterAssetsInputs starterAssetsInputs;
     [SerializeField] private ThirdPersonController thirdPersonController;
-    [SerializeField] private PlayerManager playerManager;
+    //[SerializeField] private PlayerManager playerManager;
     [SerializeField] private WeaponController weaponController;
     [SerializeField] private Animator animator;
     [SerializeField] private SquadFollowerAI followerAI;
@@ -59,8 +59,8 @@ public class SquadMemberController : MonoBehaviour
         if (thirdPersonController == null)
             thirdPersonController = GetComponent<ThirdPersonController>();
 
-        if (playerManager == null)
-            playerManager = GetComponent<PlayerManager>();
+        //if (playerManager == null)
+        //    playerManager = GetComponent<PlayerManager>();
 
         if (weaponController == null)
             weaponController = GetComponentInChildren<WeaponController>();
@@ -125,16 +125,16 @@ public class SquadMemberController : MonoBehaviour
         bool allowDirectControl = isAlive && !isDown && isPlayerControlled;
         bool allowAIControl = isAlive && !isDown && !isPlayerControlled;
 
-        if (!allowDirectControl && playerManager != null)
-        {
-            playerManager.ForceStopAim();
-        }
+        //if (!allowDirectControl && playerManager != null)
+        //{
+        //    playerManager.ForceStopAim();
+        //}
 
-        if (starterAssetsInputs != null)
-        {
-            starterAssetsInputs.ResetInputState();
-            starterAssetsInputs.enabled = allowDirectControl;
-        }
+//        //if (starterAssetsInputs != null)
+        //{
+        //    starterAssetsInputs.ResetInputState();
+        //    starterAssetsInputs.enabled = allowDirectControl;
+        //}
 
         if (characterController != null)
         {
@@ -164,8 +164,8 @@ public class SquadMemberController : MonoBehaviour
         if (thirdPersonController != null)
             thirdPersonController.enabled = allowDirectControl;
 
-        if (playerManager != null)
-            playerManager.enabled = allowDirectControl;
+        //if (playerManager != null)
+        //    playerManager.enabled = allowDirectControl;
 
         if (weaponController != null)
             weaponController.enabled = true;

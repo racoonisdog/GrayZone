@@ -78,3 +78,11 @@ crashlytics-build.properties
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
+
+# Local Unity agent tooling accidentally placed in the project
+/.unity-cli/
+/unity-cli/
+/unity-scanner/
+/unity-cli.exe
+/unity-scanner.exe
+/Packages/com.youngwoocho02.unity-cli-connector/

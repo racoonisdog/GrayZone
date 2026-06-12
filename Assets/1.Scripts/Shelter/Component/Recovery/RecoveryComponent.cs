@@ -1,14 +1,15 @@
-using UnityEngine;
-
-public class RecoveryComponent
+public interface IRecoveryComponent
 {
-    public bool Heal(NPCRuntimeData target, int amount)
-    {
-        return target.RecoverHp(amount);
-    }
+    void CompleteShelterRecovery(NPCRuntimeData target);
+}
 
-    public bool Revive(NPCRuntimeData target, int hpPercent)
+public class RecoveryComponent : IRecoveryComponent
+{
+    public void CompleteShelterRecovery(NPCRuntimeData target)
     {
-        return target.ReviveToPercent(hpPercent);
+        if (target == null)
+            return;
+
+        target.CompleteRecovery();
     }
 }
