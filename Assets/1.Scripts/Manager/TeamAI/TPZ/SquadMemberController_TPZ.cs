@@ -22,8 +22,8 @@ public class SquadMemberController_TPZ : MonoBehaviour
     [SerializeField] private bool isDown = false;
 
     [Header("References")]
-    [SerializeField] private StarterAssetsInputs starterAssetsInputs;
-    [SerializeField] private ThirdPersonController thirdPersonController;
+    [SerializeField] private StarterAssetsInputs_TPZ starterAssetsInputs;
+    [SerializeField] private ThirdPersonController_TPZ thirdPersonController;
     [SerializeField] private PlayerManager_TPZ playerManager;
     [SerializeField] private WeaponController_TPZ weaponController;
     [SerializeField] private Animator animator;
@@ -54,10 +54,10 @@ public class SquadMemberController_TPZ : MonoBehaviour
     private void AutoFindReferences()
     {
         if (starterAssetsInputs == null)
-            starterAssetsInputs = GetComponent<StarterAssetsInputs>();
+            starterAssetsInputs = GetComponent<StarterAssetsInputs_TPZ>();
 
         if (thirdPersonController == null)
-            thirdPersonController = GetComponent<ThirdPersonController>();
+            thirdPersonController = GetComponent<ThirdPersonController_TPZ>();
 
         if (playerManager == null)
             playerManager = GetComponent<PlayerManager_TPZ>();

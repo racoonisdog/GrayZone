@@ -7,8 +7,8 @@ using UnityEngine.Animations.Rigging;
 
 public class PlayerManager_TPZ : MonoBehaviour
 {
-    private StarterAssetsInputs input;
-    private ThirdPersonController controller;
+    private StarterAssetsInputs_TPZ input;
+    private ThirdPersonController_TPZ controller;
     private Animator anim;
     private WeaponController_TPZ weaponController;
 
@@ -32,8 +32,8 @@ public class PlayerManager_TPZ : MonoBehaviour
 
     void Start()
     {
-        input = GetComponent<StarterAssetsInputs>();
-        controller = GetComponent<ThirdPersonController>();
+        input = GetComponent<StarterAssetsInputs_TPZ>();
+        controller = GetComponent<ThirdPersonController_TPZ>();
         anim = GetComponent<Animator>();
         weaponSound = GetComponent<AudioSource>();
         weaponController = GetComponentInChildren<WeaponController_TPZ>();
