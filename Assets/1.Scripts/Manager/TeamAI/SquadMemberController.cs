@@ -53,9 +53,9 @@ public class SquadMemberController : MonoBehaviour
     [SerializeField] private bool m_isDown;
 
     [Foldout("Reference Options")]
-    [Tooltip("입력 값을 보관하는 Starter Assets 입력 컴포넌트입니다.")]
+    [Tooltip("입력 값을 보관하는 플레이어 입력 컴포넌트입니다.")]
     [FormerlySerializedAs("starterAssetsInputs")]
-    [SerializeField] private StarterAssetsInputs m_starterAssetsInputs;
+    [SerializeField] private PlayerInputs m_starterAssetsInputs;
 
     [Tooltip("직접 조작 시 사용하는 3인칭 컨트롤러입니다.")]
     [FormerlySerializedAs("thirdPersonController")]
@@ -135,7 +135,7 @@ public class SquadMemberController : MonoBehaviour
     {
         if (m_starterAssetsInputs == null)
         {
-            m_starterAssetsInputs = GetComponent<StarterAssetsInputs>();
+            m_starterAssetsInputs = GetComponent<PlayerInputs>();
         }
 
         if (m_thirdPersonController == null)
