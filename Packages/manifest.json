@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.youngwoocho02.unity-cli-connector": "https://github.com/youngwoocho02/unity-cli.git?path=unity-connector",
     "com.unity.ai.navigation": "2.0.12",
     "com.unity.animation.rigging": "1.4.1",
     "com.unity.cinemachine": "3.1.6",

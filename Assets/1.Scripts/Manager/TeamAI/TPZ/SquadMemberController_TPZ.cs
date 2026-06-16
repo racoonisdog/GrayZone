@@ -48,7 +48,11 @@ public class SquadMemberController_TPZ : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
+<<<<<<< HEAD
         // ÃÊ±â »óÅÂ Àû¿ëÀº SquadManager_TPZ°¡ Àü´ã
+=======
+        // ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SquadManager_TPZï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+>>>>>>> parent of 691ea0c (Revert "Merge branch 'Develop' into WorkSpace")
     }
 
     private void AutoFindReferences()
@@ -125,6 +129,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
         bool allowDirectControl = isAlive && !isDown && isPlayerControlled;
         bool allowAIControl = isAlive && !isDown && !isPlayerControlled;
 
+<<<<<<< HEAD
         if (!allowDirectControl && playerManager != null)
         {
             playerManager.ForceStopAim();
@@ -135,6 +140,18 @@ public class SquadMemberController_TPZ : MonoBehaviour
             starterAssetsInputs.ResetInputState();
             starterAssetsInputs.enabled = allowDirectControl;
         }
+=======
+        //if (!allowDirectControl && playerManager != null)
+        //{
+        //    playerManager.ForceStopAim();
+        //}
+
+//        //if (starterAssetsInputs != null)
+        //{
+        //    starterAssetsInputs.ResetInputState();
+        //    starterAssetsInputs.enabled = allowDirectControl;
+        //}
+>>>>>>> parent of 691ea0c (Revert "Merge branch 'Develop' into WorkSpace")
 
         if (characterController != null)
         {
@@ -164,8 +181,13 @@ public class SquadMemberController_TPZ : MonoBehaviour
         if (thirdPersonController != null)
             thirdPersonController.enabled = allowDirectControl;
 
+<<<<<<< HEAD
         if (playerManager != null)
             playerManager.enabled = allowDirectControl;
+=======
+        //if (playerManager != null)
+        //    playerManager.enabled = allowDirectControl;
+>>>>>>> parent of 691ea0c (Revert "Merge branch 'Develop' into WorkSpace")
 
         if (weaponController != null)
             weaponController.enabled = true;
@@ -173,7 +195,11 @@ public class SquadMemberController_TPZ : MonoBehaviour
         if (followerAI != null)
             followerAI.enabled = allowAIControl;
 
+<<<<<<< HEAD
         // PlayerInput´Â ¸¶Áö¸·¿¡
+=======
+        // PlayerInputï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+>>>>>>> parent of 691ea0c (Revert "Merge branch 'Develop' into WorkSpace")
         if (playerInput != null)
         {
             if (allowDirectControl)

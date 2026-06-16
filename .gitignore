@@ -78,8 +78,18 @@ crashlytics-build.properties
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
-Packages/manifest.json
-Packages/packages-lock.json
+
+# Local Unity agent tooling accidentally placed in the project
+/.unity-cli/
+/unity-cli/
+/unity-scanner/
+/unity-cli.exe
+/unity-scanner.exe
+/Packages/com.youngwoocho02.unity-cli-connector/
+/GrayZone_privateDoc-main
 /Tools
+<<<<<<< HEAD
 AGENTS.md 
-Packages/manifest.json
+=======
+AGENTS.md
+>>>>>>> parent of 691ea0c (Revert "Merge branch 'Develop' into WorkSpace")
