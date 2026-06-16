@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.AI;
 
-public class SquadMemberController : MonoBehaviour
+public class SquadMemberController_TPZ : MonoBehaviour
 {
     public enum SquadRole
     {
@@ -22,12 +22,12 @@ public class SquadMemberController : MonoBehaviour
     [SerializeField] private bool isDown = false;
 
     [Header("References")]
-    [SerializeField] private StarterAssetsInputs starterAssetsInputs;
-    [SerializeField] private ThirdPersonController thirdPersonController;
-    //[SerializeField] private PlayerManager playerManager;
-    [SerializeField] private WeaponController weaponController;
+    [SerializeField] private StarterAssetsInputs_TPZ starterAssetsInputs;
+    [SerializeField] private ThirdPersonController_TPZ thirdPersonController;
+    [SerializeField] private PlayerManager_TPZ playerManager;
+    [SerializeField] private WeaponController_TPZ weaponController;
     [SerializeField] private Animator animator;
-    [SerializeField] private SquadFollowerAI followerAI;
+    [SerializeField] private SquadFollowerAI_TPZ followerAI;
     [SerializeField] private PlayerInput playerInput;
     [SerializeField] private Transform cameraTarget;
     [SerializeField] private NavMeshAgent navMeshAgent;
@@ -48,22 +48,22 @@ public class SquadMemberController : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
-        // ÃÊ±â »óÅÂ Àû¿ëÀº SquadManager°¡ Àü´ã
+        // ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SquadManager_TPZï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     }
 
     private void AutoFindReferences()
     {
         if (starterAssetsInputs == null)
-            starterAssetsInputs = GetComponent<StarterAssetsInputs>();
+            starterAssetsInputs = GetComponent<StarterAssetsInputs_TPZ>();
 
         if (thirdPersonController == null)
-            thirdPersonController = GetComponent<ThirdPersonController>();
+            thirdPersonController = GetComponent<ThirdPersonController_TPZ>();
 
-        //if (playerManager == null)
-        //    playerManager = GetComponent<PlayerManager>();
+        if (playerManager == null)
+            playerManager = GetComponent<PlayerManager_TPZ>();
 
         if (weaponController == null)
-            weaponController = GetComponentInChildren<WeaponController>();
+            weaponController = GetComponentInChildren<WeaponController_TPZ>();
 
         if (animator == null)
             animator = GetComponent<Animator>();
@@ -78,7 +78,7 @@ public class SquadMemberController : MonoBehaviour
             characterController = GetComponent<CharacterController>();
 
         if (followerAI == null)
-            followerAI = GetComponent<SquadFollowerAI>();
+            followerAI = GetComponent<SquadFollowerAI_TPZ>();
 
         if (cameraTarget == null)
         {
@@ -173,7 +173,7 @@ public class SquadMemberController : MonoBehaviour
         if (followerAI != null)
             followerAI.enabled = allowAIControl;
 
-        // PlayerInput´Â ¸¶Áö¸·¿¡
+        // PlayerInputï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if (playerInput != null)
         {
             if (allowDirectControl)

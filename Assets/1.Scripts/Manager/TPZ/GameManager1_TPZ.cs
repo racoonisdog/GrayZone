@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using UnityEngine.UI;
 using UnityEngine;
 
-public class GameManager1 : MonoBehaviour
+public class GameManager1_TPZ : MonoBehaviour
 {
-    public static GameManager1 instance;
+    public static GameManager1_TPZ instance;
 
     [Header("Bullet")]
     [SerializeField]
@@ -90,17 +90,17 @@ public class GameManager1 : MonoBehaviour
         Vector3 aim = (targetPosition - bulletpoint.position).normalized;
 
         // Instantiate(weaponFlashFX, bulletpoint);
-        GameObject flashFX = PoolManager.instance.ActivateObj(1);
+        GameObject flashFX = PoolManager_TPZ.instance.ActivateObj(1);
         SetObjPosition(flashFX, bulletpoint);
         flashFX.transform.rotation = Quaternion.LookRotation(aim, Vector3.up);
 
         // Instantiate(bulletCaseFX, bulletCasePoint);
-        GameObject caseFX = PoolManager.instance.ActivateObj(2);
+        GameObject caseFX = PoolManager_TPZ.instance.ActivateObj(2);
         SetObjPosition(caseFX, bulletCasePoint);
 
         // Instantiate(bulletObj, bulletpoint.position, Quaternion.LookRotation(aim,Vector3.up));
         
-        GameObject prefabToSpawn = PoolManager.instance.ActivateObj(0);
+        GameObject prefabToSpawn = PoolManager_TPZ.instance.ActivateObj(0);
         SetObjPosition(prefabToSpawn, bulletpoint);
         prefabToSpawn.transform.rotation = Quaternion.LookRotation(aim, Vector3.up);
         
@@ -118,7 +118,7 @@ public class GameManager1 : MonoBehaviour
     public void ReloadClip()
     {
         // Instantiate(weaponClipFX, weaponClipPoint);
-        GameObject clipFX = PoolManager.instance.ActivateObj(3);
+        GameObject clipFX = PoolManager_TPZ.instance.ActivateObj(3);
         SetObjPosition(clipFX, weaponClipPoint);
 
         InitBullet();

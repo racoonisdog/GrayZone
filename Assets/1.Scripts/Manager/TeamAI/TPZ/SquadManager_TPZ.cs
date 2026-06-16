@@ -4,10 +4,10 @@ using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class SquadManager : MonoBehaviour
+public class SquadManager_TPZ : MonoBehaviour
 {
     [Header("Squad Members")]
-    [SerializeField] private List<SquadMemberController> squadMembers = new List<SquadMemberController>();
+    [SerializeField] private List<SquadMemberController_TPZ> squadMembers = new List<SquadMemberController_TPZ>();
 
     [Header("Current Control")]
     [SerializeField] private int currentMemberIndex = 0;
@@ -24,7 +24,7 @@ public class SquadManager : MonoBehaviour
 
     public int CurrentMemberIndex => currentMemberIndex;
 
-    public SquadMemberController CurrentMember
+    public SquadMemberController_TPZ CurrentMember
     {
         get
         {
@@ -128,8 +128,8 @@ public class SquadManager : MonoBehaviour
         if (!CanSwitchTo(index)) return;
         if (index == currentMemberIndex) return;
 
-        SquadMemberController previousMember = CurrentMember;
-        SquadMemberController nextMember = squadMembers[index];
+        SquadMemberController_TPZ previousMember = CurrentMember;
+        SquadMemberController_TPZ nextMember = squadMembers[index];
 
         if (previousMember != null)
         {
@@ -150,7 +150,7 @@ public class SquadManager : MonoBehaviour
     {
         if (index < 0 || index >= squadMembers.Count) return false;
 
-        SquadMemberController member = squadMembers[index];
+        SquadMemberController_TPZ member = squadMembers[index];
         if (member == null) return false;
         if (!member.IsAlive) return false;
         if (member.IsDown) return false;
