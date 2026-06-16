@@ -43,7 +43,6 @@ public class MedicalUI : MonoBehaviour
     [Header("Flat Slot Images")]
     [SerializeField] private Image[] m_slotImages;
 
-    private MedicalInteractionController m_currentController;
     private MedicalManager m_currentManager;
     private bool m_isOpening;
 
@@ -61,12 +60,14 @@ public class MedicalUI : MonoBehaviour
         UnbindManager();
     }
 
-    public void Open(MedicalInteractionController controller)
+    public void Open(FacilityInteractionPoint interactionPoint)
     {
         UnbindManager();
 
-        m_currentController = controller;
-        m_currentManager = controller != null ? controller.Manager : null;
+        m_currentManager = null;
+
+        if (interactionPoint != null)
+            interactionPoint.TryGetFacility(out m_currentManager);
 
         if (m_currentManager != null)
             m_currentManager.OnPatientSlotsChanged += Refresh;
@@ -81,7 +82,6 @@ public class MedicalUI : MonoBehaviour
     public void Close()
     {
         UnbindManager();
-        m_currentController = null;
         SetRootActive(false);
     }
 
@@ -130,35 +130,6 @@ public class MedicalUI : MonoBehaviour
             bool isUnlocked = slot != null && slot.IsUnlocked;
             ApplySlotImage(targetImage, isUnlocked);
         }
-    }
-
-    public void AssignPatient()
-    {
-        TrySend(MedicalInteractionController.MedicalInteractionEvent.AssignPatient);
-    }
-
-    public void ReleasePatient()
-    {
-        TrySend(MedicalInteractionController.MedicalInteractionEvent.ReleasePatient);
-    }
-
-    public void AssignStaff()
-    {
-        TrySend(MedicalInteractionController.MedicalInteractionEvent.AssignStaff);
-    }
-
-    public void ReleaseStaff()
-    {
-        TrySend(MedicalInteractionController.MedicalInteractionEvent.ReleaseStaff);
-    }
-
-    private void TrySend(MedicalInteractionController.MedicalInteractionEvent interactionEvent)
-    {
-        if (m_currentController == null)
-            return;
-
-        if (m_currentController.TrySend(interactionEvent))
-            Refresh();
     }
 
     private void ApplySlotImage(Image targetImage, bool isUnlocked)

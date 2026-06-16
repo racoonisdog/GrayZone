@@ -1,5 +1,7 @@
 using UnityEngine;
 
+//ToDo : UI종류가 많아질 경우 enum으로 분류해서 가지기
+
 public class UIManager : MonoBehaviour
 {
     [Header("Interaction UI")]
@@ -55,7 +57,7 @@ public class UIManager : MonoBehaviour
         SetInteractionUIActive(false);
 
 
-        // ToDo : ���߿� ����
+        // ToDo : 나중에 삭제
         if (m_logMessages)
             Debug.Log("[UI] Hide Interaction", this);
     }
@@ -67,14 +69,20 @@ public class UIManager : MonoBehaviour
 
     public bool TryOpenTargetUI(GameObject target)
     {
-        if (!TryGetMedicalInteractionController(target, out MedicalInteractionController medicalController))
+        if (!TryGetFacilityInteractionPoint(target, out FacilityInteractionPoint interactionPoint))
             return false;
 
-        OpenMedicalUI(medicalController);
-        return true;
+        switch (interactionPoint.InteractionType)
+        {
+            case FacilityInteractionType.Medical:
+                OpenMedicalUI(interactionPoint);
+                return true;
+            default:
+                return false;
+        }
     }
 
-    public void OpenMedicalUI(MedicalInteractionController medicalController)
+    public void OpenMedicalUI(FacilityInteractionPoint interactionPoint)
     {
         if (m_medicalUI == null)
         {
@@ -82,14 +90,14 @@ public class UIManager : MonoBehaviour
             return;
         }
 
-        if (medicalController == null)
+        if (interactionPoint == null)
             return;
 
         SetInteractionUIActive(false);
-        m_medicalUI.Open(medicalController);
+        m_medicalUI.Open(interactionPoint);
 
         if (m_logMessages)
-            Debug.Log($"[UI] Open Medical UI : {medicalController.name}", medicalController);
+            Debug.Log($"[UI] Open Medical UI : {interactionPoint.name}", interactionPoint);
     }
 
     public void CloseMedicalUI()
@@ -118,20 +126,20 @@ public class UIManager : MonoBehaviour
         m_interactionUI.SetActive(active);
     }
 
-    private bool TryGetMedicalInteractionController(GameObject target, out MedicalInteractionController medicalController)
+    private bool TryGetFacilityInteractionPoint(GameObject target, out FacilityInteractionPoint interactionPoint)
     {
-        medicalController = null;
+        interactionPoint = null;
         if (target == null)
             return false;
 
-        if (target.TryGetComponent(out medicalController))
+        if (target.TryGetComponent(out interactionPoint))
             return true;
 
-        medicalController = target.GetComponentInParent<MedicalInteractionController>();
-        if (medicalController != null)
+        interactionPoint = target.GetComponentInParent<FacilityInteractionPoint>();
+        if (interactionPoint != null)
             return true;
 
-        medicalController = target.GetComponentInChildren<MedicalInteractionController>();
-        return medicalController != null;
+        interactionPoint = target.GetComponentInChildren<FacilityInteractionPoint>();
+        return interactionPoint != null;
     }
 }
