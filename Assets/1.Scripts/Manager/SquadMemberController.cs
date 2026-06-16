@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.AI;
 
-public class SquadMemberController_TPZ : MonoBehaviour
+public class SquadMemberController : MonoBehaviour
 {
     public enum SquadRole
     {
@@ -22,12 +22,12 @@ public class SquadMemberController_TPZ : MonoBehaviour
     [SerializeField] private bool isDown = false;
 
     [Header("References")]
-    [SerializeField] private StarterAssetsInputs_TPZ starterAssetsInputs;
-    [SerializeField] private ThirdPersonController_TPZ thirdPersonController;
-    [SerializeField] private PlayerManager_TPZ playerManager;
-    [SerializeField] private WeaponController_TPZ weaponController;
+    [SerializeField] private StarterAssetsInputs starterAssetsInputs;
+    [SerializeField] private ThirdPersonController thirdPersonController;
+    //[SerializeField] private PlayerManager playerManager;
+    [SerializeField] private WeaponController weaponController;
     [SerializeField] private Animator animator;
-    [SerializeField] private SquadFollowerAI_TPZ followerAI;
+    [SerializeField] private SquadFollowerAI followerAI;
     [SerializeField] private PlayerInput playerInput;
     [SerializeField] private Transform cameraTarget;
     [SerializeField] private NavMeshAgent navMeshAgent;
@@ -48,22 +48,22 @@ public class SquadMemberController_TPZ : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
-        // 초기 상태 적용은 SquadManager_TPZ가 전담
+        // 초기 상태 적용은 SquadManager가 전담
     }
 
     private void AutoFindReferences()
     {
         if (starterAssetsInputs == null)
-            starterAssetsInputs = GetComponent<StarterAssetsInputs_TPZ>();
+            starterAssetsInputs = GetComponent<StarterAssetsInputs>();
 
         if (thirdPersonController == null)
-            thirdPersonController = GetComponent<ThirdPersonController_TPZ>();
+            thirdPersonController = GetComponent<ThirdPersonController>();
 
-        if (playerManager == null)
-            playerManager = GetComponent<PlayerManager_TPZ>();
+        //if (playerManager == null)
+        //    playerManager = GetComponent<PlayerManager>();
 
         if (weaponController == null)
-            weaponController = GetComponentInChildren<WeaponController_TPZ>();
+            weaponController = GetComponentInChildren<WeaponController>();
 
         if (animator == null)
             animator = GetComponent<Animator>();
@@ -78,7 +78,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
             characterController = GetComponent<CharacterController>();
 
         if (followerAI == null)
-            followerAI = GetComponent<SquadFollowerAI_TPZ>();
+            followerAI = GetComponent<SquadFollowerAI>();
 
         if (cameraTarget == null)
         {
@@ -125,16 +125,16 @@ public class SquadMemberController_TPZ : MonoBehaviour
         bool allowDirectControl = isAlive && !isDown && isPlayerControlled;
         bool allowAIControl = isAlive && !isDown && !isPlayerControlled;
 
-        if (!allowDirectControl && playerManager != null)
-        {
-            playerManager.ForceStopAim();
-        }
+        //if (!allowDirectControl && playerManager != null)
+        //{
+        //    playerManager.ForceStopAim();
+        //}
 
-        if (starterAssetsInputs != null)
-        {
-            starterAssetsInputs.ResetInputState();
-            starterAssetsInputs.enabled = allowDirectControl;
-        }
+//        //if (starterAssetsInputs != null)
+        //{
+        //    starterAssetsInputs.ResetInputState();
+        //    starterAssetsInputs.enabled = allowDirectControl;
+        //}
 
         if (characterController != null)
         {
@@ -164,8 +164,8 @@ public class SquadMemberController_TPZ : MonoBehaviour
         if (thirdPersonController != null)
             thirdPersonController.enabled = allowDirectControl;
 
-        if (playerManager != null)
-            playerManager.enabled = allowDirectControl;
+        //if (playerManager != null)
+        //    playerManager.enabled = allowDirectControl;
 
         if (weaponController != null)
             weaponController.enabled = true;
