@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class PoolManager_TPZ : MonoBehaviour
+public class PoolManager : MonoBehaviour
 {
-    public static PoolManager_TPZ instance;
+    public static PoolManager instance;
 
     [SerializeField] private GameObject[] prefabs;
     private int poolSize = 1;

@@ -2,7 +2,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 
-public class WeaponController_TPZ : MonoBehaviour
+public class WeaponController : MonoBehaviour
 {
     [Header("Bullet")]
     [SerializeField] private int currentBullet = 30;
@@ -50,7 +50,7 @@ public class WeaponController_TPZ : MonoBehaviour
         if (!canShoot) return false;
         if (isReloading) return false;
         if (currentBullet <= 0) return false;
-        if (PoolManager_TPZ.instance == null) return false;
+        if (PoolManager.instance == null) return false;
 
         currentBullet--;
         canShoot = false;
@@ -105,7 +105,7 @@ public class WeaponController_TPZ : MonoBehaviour
 
         Quaternion bulletRotation = Quaternion.LookRotation(shootDirection);
 
-        GameObject bullet = PoolManager_TPZ.instance.GetObject(
+        GameObject bullet = PoolManager.instance.GetObject(
             bulletPoolIndex,
             firePos.position,
             bulletRotation
@@ -118,7 +118,7 @@ public class WeaponController_TPZ : MonoBehaviour
     {
         if (shellPos == null) return;
 
-        GameObject shell = PoolManager_TPZ.instance.GetObject(
+        GameObject shell = PoolManager.instance.GetObject(
             shellPoolIndex,
             shellPos.position,
             shellPos.rotation
@@ -131,7 +131,7 @@ public class WeaponController_TPZ : MonoBehaviour
     {
         if (clipPos == null) return;
 
-        GameObject clip = PoolManager_TPZ.instance.GetObject(
+        GameObject clip = PoolManager.instance.GetObject(
             clipPoolIndex,
             clipPos.position,
             clipPos.rotation

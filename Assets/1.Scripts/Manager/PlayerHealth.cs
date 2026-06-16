@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-public class PlayerHealth_TPZ : MonoBehaviour
+public class PlayerHealth : MonoBehaviour
 {
     [Header("HP")]
     [SerializeField] private int maxHP = 10;
