@@ -78,3 +78,8 @@ crashlytics-build.properties
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
+Packages/manifest.json
+Packages/packages-lock.json
+/Tools
+AGENTS.md
+Packages/manifest.json
