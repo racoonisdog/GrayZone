@@ -76,8 +76,6 @@ crashlytics-build.properties
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
-Packages/manifest.json
-Packages/packages-lock.json
 Packages/com.youngwoocho02.unity-cli-connector/
 Packages/unity-cli/
 /Tools
