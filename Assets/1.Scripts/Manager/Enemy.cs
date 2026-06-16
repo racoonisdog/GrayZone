@@ -55,7 +55,7 @@ public class Enemy : MonoBehaviour
     private NavMeshAgent agent;
     private Animator animator;
     private Transform targetPlayer;
-    private SquadMemberController targetMember;
+    private SquadMemberController_TPZ targetMember;
 
     private Vector3 spawnPosition;
     private Vector3 currentWanderPoint;
@@ -135,14 +135,14 @@ public class Enemy : MonoBehaviour
 
     private void FindBestTarget()
     {
-        SquadMemberController[] members = FindObjectsByType<SquadMemberController>(FindObjectsSortMode.None);
+        SquadMemberController_TPZ[] members = FindObjectsByType<SquadMemberController_TPZ>(FindObjectsSortMode.None);
 
         float closestDistance = Mathf.Infinity;
-        SquadMemberController closestMember = null;
+        SquadMemberController_TPZ closestMember = null;
 
         for (int i = 0; i < members.Length; i++)
         {
-            SquadMemberController member = members[i];
+            SquadMemberController_TPZ member = members[i];
             if (member == null) continue;
             if (!member.IsAlive) continue;
             if (member.IsDown) continue;
@@ -483,12 +483,12 @@ public class Enemy : MonoBehaviour
 
         for (int i = 0; i < hits.Length; i++)
         {
-            SquadMemberController member = hits[i].GetComponentInParent<SquadMemberController>();
+            SquadMemberController_TPZ member = hits[i].GetComponentInParent<SquadMemberController_TPZ>();
             if (member == null) continue;
             if (!member.IsAlive) continue;
             if (member.IsDown) continue;
 
-            PlayerHealth playerHealth = hits[i].GetComponentInParent<PlayerHealth>();
+            PlayerHealth_TPZ playerHealth = hits[i].GetComponentInParent<PlayerHealth_TPZ>();
             if (playerHealth != null)
             {
                 playerHealth.TakeDamage(attackDamage);
@@ -661,7 +661,7 @@ public class Enemy : MonoBehaviour
 
         if (Physics.Raycast(origin, direction.normalized, out RaycastHit hit, sightRange, ~0))
         {
-            SquadMemberController member = hit.transform.GetComponentInParent<SquadMemberController>();
+            SquadMemberController_TPZ member = hit.transform.GetComponentInParent<SquadMemberController_TPZ>();
             if (member != null && member == targetMember)
             {
                 return true;
