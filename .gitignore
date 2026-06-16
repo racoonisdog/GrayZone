@@ -87,3 +87,5 @@ crashlytics-build.properties
 /unity-scanner.exe
 /Packages/com.youngwoocho02.unity-cli-connector/
 /GrayZone_privateDoc-main
+/Tools
+AGENTS.md 
