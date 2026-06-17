@@ -106,11 +106,15 @@ public class WeaponController : MonoBehaviour
     [SerializeField] private ParticleSystem m_muzzleFlashParticle;
 
     [Foldout("Hitscan Options")]
+    [SerializeField] private int m_hitscanDamage = 1;
+
     [SerializeField] private float m_hitscanRange = 100.0f;
 
     [SerializeField] private LayerMask m_hitscanLayerMask = ~0;
 
     public const float HitscanAimTolerance = 0.05f;
+
+    private const string EnemyLayerName = "Enemy";
 
     private bool m_canShoot = true;
     private bool m_isReloading;
@@ -151,6 +155,9 @@ public class WeaponController : MonoBehaviour
 
     /// <summary>히트스캔 판정에 사용할 최대 사거리입니다.</summary>
     public float HitscanRange => m_hitscanRange;
+
+    /// <summary>히트스캔 사격이 적에게 적용할 피해량입니다.</summary>
+    public int HitscanDamage => m_hitscanDamage;
 
     /// <summary>히트스캔 레이캐스트가 충돌 검사할 레이어 마스크입니다.</summary>
     public LayerMask HitscanLayerMask => m_hitscanLayerMask;
@@ -251,6 +258,8 @@ public class WeaponController : MonoBehaviour
         m_currentBullet = Mathf.Clamp(m_currentBullet, 0, m_maxBullet);
         m_shootDelay = Mathf.Max(0.0f, m_shootDelay);
         m_reloadTime = Mathf.Max(0.0f, m_reloadTime);
+        m_hitscanDamage = Mathf.Max(0, m_hitscanDamage);
+        m_hitscanRange = Mathf.Max(0.0f, m_hitscanRange);
     }
 
     /// <summary>
@@ -363,7 +372,7 @@ public class WeaponController : MonoBehaviour
     /// 계산된 히트스캔 사격 정보를 소비해 즉시 사격 결과를 처리합니다.
     /// </summary>
     /// <param name="shotInfo">조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
-    /// <remarks>현재는 디버그 라인만 표시하며, 피해 적용과 Health 연결은 아직 수행하지 않습니다.</remarks>
+    /// <remarks>Enemy 레이어에 맞은 경우 부모에서 <see cref="EnemyHealth"/>를 찾아 피해를 적용합니다.</remarks>
     private void LayShoot(HitscanShotInfo shotInfo)
     {
         if (!shotInfo.IsValid)
@@ -374,10 +383,42 @@ public class WeaponController : MonoBehaviour
         if (shotInfo.HasHit)
         {
             Debug.DrawLine(shotInfo.Origin, shotInfo.EndPoint, Color.red, 1.0f, false);
+            ApplyHitscanDamage(shotInfo);
             return;
         }
 
         Debug.DrawLine(shotInfo.Origin, shotInfo.EndPoint, Color.yellow, 1.0f, false);
+    }
+
+    /// <summary>
+    /// 히트스캔 충돌 대상이 Enemy 레이어이면 EnemyHealth로 피해를 전달합니다.
+    /// </summary>
+    /// <param name="shotInfo">사격으로 발생한 히트스캔 충돌 정보입니다.</param>
+    private void ApplyHitscanDamage(HitscanShotInfo shotInfo)
+    {
+        if (m_hitscanDamage <= 0 || shotInfo.Hit.collider == null)
+        {
+            return;
+        }
+
+        if (!IsEnemyLayer(shotInfo.Hit.collider.gameObject))
+        {
+            return;
+        }
+
+        EnemyHealth enemyHealth = shotInfo.Hit.collider.GetComponentInParent<EnemyHealth>();
+        if (enemyHealth == null)
+        {
+            return;
+        }
+
+        enemyHealth.TakeDamage(m_hitscanDamage);
+    }
+
+    private static bool IsEnemyLayer(GameObject target)
+    {
+        int enemyLayer = LayerMask.NameToLayer(EnemyLayerName);
+        return enemyLayer >= 0 && target.layer == enemyLayer;
     }
 
     /// <summary>
