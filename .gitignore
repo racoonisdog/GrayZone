@@ -79,4 +79,7 @@ crashlytics-build.properties
 Packages/com.youngwoocho02.unity-cli-connector/
 Packages/unity-cli/
 /Tools
-AGENTS.md 
+
+# Local agent bootstrap files
+/AGENTS.md
+/CLAUDE.md
