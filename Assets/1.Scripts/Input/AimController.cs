@@ -384,7 +384,7 @@ public class AimController : MonoBehaviour
     {
         SetAimState(false);
         HideHitscanObstructionMarker();
-        SetRigWeight(1.0f);
+        SetRigWeight(0.0f);
         m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
         m_animator.SetBool(AnimIDShoot, false);
     }
@@ -603,7 +603,7 @@ public class AimController : MonoBehaviour
         }
 
         m_controller.SetReload(false);
-        SetRigWeight(1.0f);
+        SetRigWeight(0.0f);
         m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
 
         if (m_weaponController != null)
