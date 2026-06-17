@@ -194,7 +194,7 @@ public class PlayerManager : MonoBehaviour
 
         if (m_input == null)
         {
-            Debug.LogError("[AimController] StarterAssetsInputs 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
+            Debug.LogError("[AimController] PlayerInputs 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
             isValid = false;
         }
 

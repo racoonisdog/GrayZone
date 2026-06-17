@@ -72,14 +72,11 @@ crashlytics-build.properties
 /[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 
 # Temporary auto-generated Android Assets
-/[Aa]ssets/[Ss]treamingAssets/aa.meta
-/[Aa]ssets/[Ss]treamingAssets/aa/*
 /Assets/3.Resources
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
-Packages/manifest.json
-Packages/packages-lock.json
+Packages/com.youngwoocho02.unity-cli-connector/
+Packages/unity-cli/
 /Tools
 AGENTS.md 
-Packages/manifest.json
