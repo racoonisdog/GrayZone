@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -5,61 +6,54 @@ using UnityEngine.UI;
 using VInspector;
 
 /// <summary>
-/// Ä³¸¯ÅÍÀÇ Ã¼·Â °ªÀ» °ü¸®ÇÏ°í, Ã¼·Â UI¸¦ °»½ÅÇÏ´Â ÄÄÆ÷³ÍÆ®ÀÔ´Ï´Ù.
+/// HP, í”¼í•´, íšŒë³µ, ì‚¬ë§, ë¶€í™œ, ì„ íƒì  HP UI ê°±ì‹ ì„ ê³µí†µìœ¼ë¡œ ì²˜ë¦¬í•˜ëŠ” ì²´ë ¥ ì»´í¬ë„ŒíŠ¸ì…ë‹ˆë‹¤.
 /// </summary>
-/// <remarks>
-/// ÃÖ´ë Ã¼·Â, ÇöÀç Ã¼·Â, ÇÇÇØ, È¸º¹, »ç¸Á Ã³¸®¸¦ ´ã´çÇÕ´Ï´Ù.
-/// UI ÂüÁ¶°¡ ºñ¾î ÀÖ¾îµµ Ã¼·Â ·ÎÁ÷Àº µ¿ÀÛÇÏ¸ç, UI °»½Å¸¸ »ı·«µË´Ï´Ù.
-/// </remarks>
 public class HealthSystemBase : MonoBehaviour
 {
     [Foldout("HP Options")]
-    [Tooltip("ÃÖ´ë Ã¼·ÂÀÔ´Ï´Ù. 1º¸´Ù ÀÛÀº °ªÀº ÀÚµ¿À¸·Î 1·Î º¸Á¤µË´Ï´Ù.")]
+    [Tooltip("ìµœëŒ€ HPì…ë‹ˆë‹¤. 1ë³´ë‹¤ ì‘ì€ ê°’ì€ 1ë¡œ ë³´ì •ë©ë‹ˆë‹¤.")]
     [FormerlySerializedAs("m_maxHP")]
     [SerializeField] protected int m_maxHp = 10;
 
-    [Tooltip("ÇöÀç Ã¼·ÂÀÔ´Ï´Ù. ·±Å¸ÀÓ ½ÃÀÛ ½Ã ÃÖ´ë Ã¼·ÂÀ¸·Î ÃÊ±âÈ­µË´Ï´Ù.")]
+    [Tooltip("í˜„ì¬ HPì…ë‹ˆë‹¤. Startì—ì„œ ìµœëŒ€ HPë¡œ ì´ˆê¸°í™”ë©ë‹ˆë‹¤.")]
     [FormerlySerializedAs("m_currentHP")]
     [SerializeField] protected int m_currentHp;
 
     [Foldout("UI Options")]
-    [Tooltip("Ã¼·Â ºñÀ²À» Ç¥½ÃÇÒ UI ½½¶óÀÌ´õÀÔ´Ï´Ù.")]
+    [Tooltip("ì„ íƒ ì‚¬í•­ì¸ HP ìŠ¬ë¼ì´ë”ì…ë‹ˆë‹¤. ì´ ì°¸ì¡°ê°€ ì—†ì–´ë„ ì²´ë ¥ ë¡œì§ì€ ë™ì‘í•©ë‹ˆë‹¤.")]
     [FormerlySerializedAs("hpSlider")]
     [SerializeField] protected Slider m_hpSlider;
 
-    [Tooltip("ÇöÀç Ã¼·Â°ú ÃÖ´ë Ã¼·ÂÀ» Ç¥½ÃÇÒ TMP ÅØ½ºÆ®ÀÔ´Ï´Ù.")]
+    [Tooltip("ì„ íƒ ì‚¬í•­ì¸ HP í…ìŠ¤íŠ¸ì…ë‹ˆë‹¤. ì´ ì°¸ì¡°ê°€ ì—†ì–´ë„ ì²´ë ¥ ë¡œì§ì€ ë™ì‘í•©ë‹ˆë‹¤.")]
     [FormerlySerializedAs("hpText")]
     [SerializeField] protected TextMeshProUGUI m_hpText;
 
     protected bool m_isDead;
 
-    /// <summary>
-    /// ÇöÀç Ã¼·ÂÀÔ´Ï´Ù.
-    /// </summary>
+    /// <summary>í˜„ì¬ HPì…ë‹ˆë‹¤.</summary>
     public int CurrentHP => m_currentHp;
 
-    /// <summary>
-    /// ÃÖ´ë Ã¼·ÂÀÔ´Ï´Ù.
-    /// </summary>
+    /// <summary>ìµœëŒ€ HPì…ë‹ˆë‹¤.</summary>
     public int MaxHP => m_maxHp;
 
-    /// <summary>
-    /// ÇöÀç »ç¸Á »óÅÂ ¿©ºÎÀÔ´Ï´Ù.
-    /// </summary>
+    /// <summary>ì´ ì²´ë ¥ ì»´í¬ë„ŒíŠ¸ê°€ ì‚¬ë§ ìƒíƒœì¸ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.</summary>
     public bool IsDead => m_isDead;
 
-    /// <summary>
-    /// ÄÄÆ÷³ÍÆ®°¡ ½ÃÀÛµÉ ¶§ Ã¼·ÂÀ» ÃÊ±âÈ­ÇÏ°í UI¸¦ °»½ÅÇÕ´Ï´Ù.
-    /// </summary>
+    /// <summary>í˜„ì¬ HPë‚˜ ìµœëŒ€ HPê°€ ë³€ê²½ë  ë•Œ ë°œìƒí•©ë‹ˆë‹¤. ì¸ìëŠ” í˜„ì¬ HPì™€ ìµœëŒ€ HPì…ë‹ˆë‹¤.</summary>
+    public event Action<int, int> OnHPChanged;
+
+    /// <summary>HPê°€ 0ì— ë„ë‹¬í•´ ì»´í¬ë„ŒíŠ¸ê°€ ì‚¬ë§ ìƒíƒœë¡œ ì§„ì…í•  ë•Œ ë°œìƒí•©ë‹ˆë‹¤.</summary>
+    public event Action OnDied;
+
+    /// <summary>ë¶€í™œ ë˜ëŠ” ì „ì²´ íšŒë³µìœ¼ë¡œ ì»´í¬ë„ŒíŠ¸ê°€ ì‚¬ë§ ìƒíƒœì—ì„œ ë²—ì–´ë‚  ë•Œ ë°œìƒí•©ë‹ˆë‹¤.</summary>
+    public event Action OnRevive;
+
     private void Start()
     {
         InitializeHealth();
     }
 
 #if UNITY_EDITOR
-    /// <summary>
-    /// Inspector °ªÀÌ º¯°æµÉ ¶§ Ã¼·Â °ªÀ» À¯È¿ ¹üÀ§·Î º¸Á¤ÇÕ´Ï´Ù.
-    /// </summary>
     protected void OnValidate()
     {
         m_maxHp = Mathf.Max(1, m_maxHp);
@@ -68,98 +62,141 @@ public class HealthSystemBase : MonoBehaviour
 #endif
 
     /// <summary>
-    /// ÇöÀç Ã¼·ÂÀ» ÃÖ´ë Ã¼·ÂÀ¸·Î ÃÊ±âÈ­ÇÕ´Ï´Ù.
+    /// í˜„ì¬ HPë¥¼ ìµœëŒ€ HPë¡œ ì´ˆê¸°í™”í•˜ê³  ì‚¬ë§ ìƒíƒœë¥¼ í•´ì œí•©ë‹ˆë‹¤.
     /// </summary>
-    public void InitializeHealth()
+    public virtual void InitializeHealth()
     {
         m_maxHp = Mathf.Max(1, m_maxHp);
         m_currentHp = m_maxHp;
         m_isDead = false;
 
-        UpdateUI();
+        NotifyHPChanged();
     }
 
     /// <summary>
-    /// ÃÖ´ë Ã¼·ÂÀ» ¼³Á¤ÇÕ´Ï´Ù.
+    /// ìµœëŒ€ HPë¥¼ ì„¤ì •í•©ë‹ˆë‹¤. í•„ìš”í•˜ë©´ í˜„ì¬ HPë„ ìƒˆ ìµœëŒ€ HPë¡œ ì±„ì›ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ ÃÖ´ë Ã¼·ÂÀÔ´Ï´Ù. 1º¸´Ù ÀÛÀº °ªÀº 1·Î º¸Á¤µË´Ï´Ù.</param>
-    /// <param name="fillCurrentHp">ÇöÀç Ã¼·Âµµ ÃÖ´ë Ã¼·ÂÀ¸·Î Ã¤¿ïÁö ¿©ºÎÀÔ´Ï´Ù.</param>
     public void SetMaxHP(int value, bool fillCurrentHp = false)
     {
         m_maxHp = Mathf.Max(1, value);
 
         if (fillCurrentHp)
         {
-            m_currentHp = m_maxHp;
-            m_isDead = false;
-        }
-        else
-        {
-            m_currentHp = Mathf.Clamp(m_currentHp, 0, m_maxHp);
+            RestoreFull();
+            return;
         }
 
-        UpdateUI();
+        m_currentHp = Mathf.Clamp(m_currentHp, 0, m_maxHp);
+        RefreshDeathState();
+        NotifyHPChanged();
     }
 
     /// <summary>
-    /// ÇöÀç Ã¼·ÂÀ» Á÷Á¢ ¼³Á¤ÇÕ´Ï´Ù.
+    /// í˜„ì¬ HPë¥¼ ì„¤ì •í•˜ê³  í•„ìš”í•˜ë©´ ì‚¬ë§ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ ÇöÀç Ã¼·ÂÀÔ´Ï´Ù. 0°ú ÃÖ´ë Ã¼·Â »çÀÌ·Î º¸Á¤µË´Ï´Ù.</param>
     public void SetCurrentHP(int value)
     {
         m_currentHp = Mathf.Clamp(value, 0, m_maxHp);
-        m_isDead = m_currentHp <= 0;
-
-        UpdateUI();
+        RefreshDeathState();
+        NotifyHPChanged();
     }
 
     /// <summary>
-    /// ÁöÁ¤ÇÑ ÇÇÇØ·®¸¸Å­ ÇöÀç Ã¼·ÂÀ» °¨¼Ò½ÃÅµ´Ï´Ù.
+    /// í”¼í•´ë¥¼ ì ìš©í•©ë‹ˆë‹¤. HPê°€ ì‹¤ì œë¡œ ë³€ê²½ëœ ê²½ìš°ì—ë§Œ trueë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="damage">Àû¿ëÇÒ ÇÇÇØ·®ÀÔ´Ï´Ù. 0º¸´Ù ÀÛÀº °ªÀº ¹«½ÃµË´Ï´Ù.</param>
-    public void TakeDamage(int damage)
+    public virtual bool TakeDamage(int damage)
     {
         if (m_isDead)
-            return;
+        {
+            return false;
+        }
 
         damage = Mathf.Max(0, damage);
-
         if (damage <= 0)
-            return;
+        {
+            return false;
+        }
 
         m_currentHp = Mathf.Max(m_currentHp - damage, 0);
+        Debug.Log($"[HealthSystem] Hit. Current HP : {m_currentHp}", this);
 
-        Debug.Log($"[HealthSystem] Player Hit. Current HP : {m_currentHp}", this);
-
-        UpdateUI();
+        NotifyHPChanged();
 
         if (m_currentHp <= 0)
         {
             Die();
         }
+
+        return true;
     }
 
     /// <summary>
-    /// ÁöÁ¤ÇÑ È¸º¹·®¸¸Å­ ÇöÀç Ã¼·ÂÀ» È¸º¹ÇÕ´Ï´Ù.
+    /// HPë¥¼ íšŒë³µí•©ë‹ˆë‹¤. HPê°€ ì‹¤ì œë¡œ ë³€ê²½ëœ ê²½ìš°ì—ë§Œ trueë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="amount">Àû¿ëÇÒ È¸º¹·®ÀÔ´Ï´Ù. 0º¸´Ù ÀÛÀº °ªÀº ¹«½ÃµË´Ï´Ù.</param>
-    public void Heal(int amount)
+    public bool Heal(int amount)
     {
         if (m_isDead)
-            return;
+        {
+            return false;
+        }
 
         amount = Mathf.Max(0, amount);
-
         if (amount <= 0)
-            return;
+        {
+            return false;
+        }
 
+        int previousHp = m_currentHp;
         m_currentHp = Mathf.Min(m_currentHp + amount, m_maxHp);
 
-        UpdateUI();
+        if (m_currentHp == previousHp)
+        {
+            return false;
+        }
+
+        NotifyHPChanged();
+        return true;
     }
 
     /// <summary>
-    /// Ã¼·Â UI¸¦ ÇöÀç Ã¼·Â °ª¿¡ ¸Â°Ô °»½ÅÇÕ´Ï´Ù.
+    /// í˜„ì¬ HPë¥¼ ìµœëŒ€ HPë¡œ íšŒë³µí•©ë‹ˆë‹¤. ì‚¬ë§ ìƒíƒœë¼ë©´ ì»´í¬ë„ŒíŠ¸ë„ í•¨ê»˜ ë¶€í™œì‹œí‚µë‹ˆë‹¤.
+    /// </summary>
+    public void RestoreFull()
+    {
+        bool wasDead = m_isDead;
+
+        m_currentHp = m_maxHp;
+        m_isDead = false;
+
+        if (wasDead)
+        {
+            OnRevive?.Invoke();
+        }
+
+        NotifyHPChanged();
+    }
+
+    /// <summary>
+    /// ì§€ì •í•œ HP ê°’ìœ¼ë¡œ ì‚¬ë§ ìƒíƒœì—ì„œ ë¶€í™œí•©ë‹ˆë‹¤.
+    /// </summary>
+    public bool Revive(int amount)
+    {
+        if (!m_isDead)
+        {
+            return false;
+        }
+
+        m_currentHp = Mathf.Clamp(amount, 1, m_maxHp);
+        m_isDead = false;
+
+        OnRevive?.Invoke();
+        NotifyHPChanged();
+
+        return true;
+    }
+
+    /// <summary>
+    /// í˜„ì¬ HP ê°’ì— ë§ì¶° ì„ íƒ ì‚¬í•­ì¸ UI ì°¸ì¡°ë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
     protected void UpdateUI()
     {
@@ -177,18 +214,38 @@ public class HealthSystemBase : MonoBehaviour
     }
 
     /// <summary>
-    /// Ã¼·ÂÀÌ 0 ÀÌÇÏ°¡ µÇ¾úÀ» ¶§ »ç¸Á »óÅÂ·Î ÀüÈ¯ÇÕ´Ï´Ù.
+    /// UIë¥¼ ê°±ì‹ í•˜ê³  HP ë³€ê²½ ì´ë²¤íŠ¸ë¥¼ ë°œìƒì‹œí‚µë‹ˆë‹¤.
     /// </summary>
-    /// <remarks>
-    /// ÀÌÈÄ ¾Ö´Ï¸ŞÀÌ¼Ç, ÀÔ·Â ºñÈ°¼ºÈ­, °ÔÀÓ¿À¹ö UI, ¸®½ºÆù Ã³¸® µîÀ» ÀÌ ÁöÁ¡¿¡¼­ ¿¬°áÇÒ ¼ö ÀÖ½À´Ï´Ù.
-    /// </remarks>
-    protected void Die()
+    protected void NotifyHPChanged()
+    {
+        UpdateUI();
+        OnHPChanged?.Invoke(m_currentHp, m_maxHp);
+    }
+
+    private void RefreshDeathState()
+    {
+        if (m_currentHp <= 0)
+        {
+            Die();
+            return;
+        }
+
+        m_isDead = false;
+    }
+
+    /// <summary>
+    /// ì‚¬ë§ ìƒíƒœë¡œ ì§„ì…í•˜ê³  ì‚¬ë§ ì´ë²¤íŠ¸ë¥¼ ë°œìƒì‹œí‚µë‹ˆë‹¤.
+    /// </summary>
+    protected virtual void Die()
     {
         if (m_isDead)
+        {
             return;
+        }
 
         m_isDead = true;
 
-        Debug.Log("[HealthSystem] Player Dead", this);
+        Debug.Log("[HealthSystem] Dead", this);
+        OnDied?.Invoke();
     }
 }
