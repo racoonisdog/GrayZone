@@ -8,3 +8,10 @@ public enum NPCInjuryState
     NearDeath,
     Dead
 }
+public enum NPCType
+{
+    Tanker,
+    Healer,
+    Dealer
+}
+

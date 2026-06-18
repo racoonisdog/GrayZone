@@ -23,7 +23,7 @@ public class SquadMemberController : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private StarterAssetsInputs starterAssetsInputs;
-    [SerializeField] private ThirdPersonController thirdPersonController;
+    //[SerializeField] private ThirdPersonController thirdPersonController;
     //[SerializeField] private PlayerManager playerManager;
     [SerializeField] private WeaponController weaponController;
     [SerializeField] private Animator animator;
@@ -56,8 +56,8 @@ public class SquadMemberController : MonoBehaviour
         if (starterAssetsInputs == null)
             starterAssetsInputs = GetComponent<StarterAssetsInputs>();
 
-        if (thirdPersonController == null)
-            thirdPersonController = GetComponent<ThirdPersonController>();
+        //if (thirdPersonController == null)
+        //    thirdPersonController = GetComponent<ThirdPersonController>();
 
         //if (playerManager == null)
         //    playerManager = GetComponent<PlayerManager>();
@@ -161,8 +161,8 @@ public class SquadMemberController : MonoBehaviour
             }
         }
 
-        if (thirdPersonController != null)
-            thirdPersonController.enabled = allowDirectControl;
+        //if (thirdPersonController != null)
+        //    thirdPersonController.enabled = allowDirectControl;
 
         //if (playerManager != null)
         //    playerManager.enabled = allowDirectControl;

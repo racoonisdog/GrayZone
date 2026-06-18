@@ -1,5 +1,6 @@
-using System.Collections.Generic;
+using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class MedicalUI : MonoBehaviour
@@ -9,12 +10,12 @@ public class MedicalUI : MonoBehaviour
     {
         [SerializeField] private Image[] m_slotImages;
 
-        public void Render(MedicalPatientRow row, Sprite unlockedSprite, Sprite lockedSprite)
+        public int SlotCount => m_slotImages != null ? m_slotImages.Length : 0;
+
+        public void Render(int unlockedSlotCount, int firstSlotIndex, Sprite unlockedSprite, Sprite lockedSprite)
         {
             if (m_slotImages == null)
                 return;
-
-            IReadOnlyList<MedicalPatientSlot> cells = row != null ? row.Cells : null;
 
             for (int i = 0; i < m_slotImages.Length; i++)
             {
@@ -22,8 +23,9 @@ public class MedicalUI : MonoBehaviour
                 if (targetImage == null)
                     continue;
 
-                MedicalPatientSlot cell = cells != null && i < cells.Count ? cells[i] : null;
-                Sprite slotSprite = cell != null && cell.IsUnlocked ? unlockedSprite : lockedSprite;
+                int slotIndex = firstSlotIndex + i;
+                bool isUnlocked = slotIndex < unlockedSlotCount;
+                Sprite slotSprite = isUnlocked ? unlockedSprite : lockedSprite;
                 ApplySlotSprite(targetImage, slotSprite);
             }
         }
@@ -45,11 +47,18 @@ public class MedicalUI : MonoBehaviour
 
     private MedicalManager m_currentManager;
     private bool m_isOpening;
+    private bool m_isOpen;
+
+    public bool IsOpen => m_isOpen;
+
+    public event Action Closed;
 
     private void Awake()
     {
         if (m_root == null)
             m_root = gameObject;
+
+        m_isOpen = m_root != null && m_root.activeSelf;
 
         if (m_hideOnAwake && !m_isOpening)
             Close();
@@ -58,22 +67,33 @@ public class MedicalUI : MonoBehaviour
     private void OnDisable()
     {
         UnbindManager();
+
+        if (!m_isOpening)
+            SetOpenState(false);
     }
 
-    public void Open(FacilityInteractionPoint interactionPoint)
+
+    private void Update()
+    {
+        if (Keyboard.current != null &&
+                Keyboard.current.escapeKey.wasPressedThisFrame)
+        {
+            Close();
+        }
+    }
+
+
+    public void Open(MedicalManager manager)
     {
         UnbindManager();
 
-        m_currentManager = null;
-
-        if (interactionPoint != null)
-            interactionPoint.TryGetFacility(out m_currentManager);
-
+        m_currentManager = manager;
         if (m_currentManager != null)
             m_currentManager.OnPatientSlotsChanged += Refresh;
 
         m_isOpening = true;
         SetRootActive(true);
+        SetOpenState(true);
         m_isOpening = false;
 
         Refresh();
@@ -83,39 +103,38 @@ public class MedicalUI : MonoBehaviour
     {
         UnbindManager();
         SetRootActive(false);
+        SetOpenState(false);
     }
 
     public void Refresh()
     {
-        IReadOnlyList<MedicalPatientRow> rows = m_currentManager != null
-            ? m_currentManager.PatientRows
-            : null;
-        IReadOnlyList<MedicalPatientSlot> slots = m_currentManager != null
-            ? m_currentManager.PatientSlots
-            : null;
+        int unlockedSlotCount = m_currentManager != null
+            ? m_currentManager.PatientCapacity
+            : 0;
 
         if (m_slotRows != null && m_slotRows.Length > 0)
         {
-            RefreshSlotRows(rows);
+            RefreshSlotRows(unlockedSlotCount);
             return;
         }
 
-        RefreshFlatSlots(slots);
+        RefreshFlatSlots(unlockedSlotCount);
     }
 
-    private void RefreshSlotRows(IReadOnlyList<MedicalPatientRow> rows)
+    private void RefreshSlotRows(int unlockedSlotCount)
     {
+        int firstSlotIndex = 0;
         for (int i = 0; i < m_slotRows.Length; i++)
         {
             if (m_slotRows[i] == null)
                 continue;
 
-            MedicalPatientRow row = rows != null && i < rows.Count ? rows[i] : null;
-            m_slotRows[i].Render(row, m_unlockedSlotSprite, m_lockedSlotSprite);
+            m_slotRows[i].Render(unlockedSlotCount, firstSlotIndex, m_unlockedSlotSprite, m_lockedSlotSprite);
+            firstSlotIndex += m_slotRows[i].SlotCount;
         }
     }
 
-    private void RefreshFlatSlots(IReadOnlyList<MedicalPatientSlot> slots)
+    private void RefreshFlatSlots(int unlockedSlotCount)
     {
         if (m_slotImages == null)
             return;
@@ -126,8 +145,7 @@ public class MedicalUI : MonoBehaviour
             if (targetImage == null)
                 continue;
 
-            MedicalPatientSlot slot = slots != null && i < slots.Count ? slots[i] : null;
-            bool isUnlocked = slot != null && slot.IsUnlocked;
+            bool isUnlocked = i < unlockedSlotCount;
             ApplySlotImage(targetImage, isUnlocked);
         }
     }
@@ -159,5 +177,16 @@ public class MedicalUI : MonoBehaviour
     {
         if (m_root != null && m_root.activeSelf != active)
             m_root.SetActive(active);
+    }
+
+    private void SetOpenState(bool isOpen)
+    {
+        if (m_isOpen == isOpen)
+            return;
+
+        m_isOpen = isOpen;
+
+        if (!m_isOpen)
+            Closed?.Invoke();
     }
 }

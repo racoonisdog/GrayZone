@@ -3,25 +3,25 @@ using System.Collections.Generic;
 
 
 //Todo : 시설 업그레이드 관련 기능 Component만들어야함 , 기획문서 필요
-public class BaseManager : MonoBehaviour
+public class FacilityManager : MonoBehaviour
 {
     [SerializeField] private FacilityDefinition[] _definitions;
 
-    private readonly Dictionary<string, FacilityState> _states = new();
+    private readonly Dictionary<string, FacilityState> m_states = new();
 
-    public IReadOnlyDictionary<string, FacilityState> States => _states;
+    public IReadOnlyDictionary<string, FacilityState> States => m_states;
 
     private void Awake()
     {
         foreach (var def in _definitions)
         {
             if (def == null) continue;
-            _states[def.FacilityId] = new FacilityState(def); 
+            m_states[def.FacilityId] = new FacilityState(def); 
         }
     }
 
     public FacilityState GetState(string facilityId)
-        => _states.TryGetValue(facilityId, out var state) ? state : null;
+        => m_states.TryGetValue(facilityId, out var state) ? state : null;
 
     public bool TryUnlock(string facilityId, ResourceStorage storage)
     {

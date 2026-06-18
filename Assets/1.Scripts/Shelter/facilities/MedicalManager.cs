@@ -1,60 +1,54 @@
 using UnityEngine;
 using System.Collections.Generic;
-using UnityEngine.Serialization;
 
-public class MedicalManager : MonoBehaviour
+public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
 {
+    private const int BasePatientCapacity = 2;
+    private const int FirstUpgradePatientCapacity = 4;
+    private const int FullPatientCapacity = 9;
+    private const int MaxPatientCapacityLevel = 2;
+
     [Header("Facility")]
     [SerializeField] private FacilityDefinition definition;
     [SerializeField] private string fallbackFacilityId = "medical_center";
     [SerializeField] private string roomId = "medical_room";
 
-    [Header("Patient Rows")]
-    [FormerlySerializedAs("maxPatientSlots")]
-    [SerializeField] private int maxPatientRows = 3;
-    [SerializeField] private int cellsPerPatientRow = 3;
-    [FormerlySerializedAs("startingUnlockedPatientSlots")]
-    [SerializeField] private int startingUnlockedPatientRows = 1;
-    [SerializeField] private int unlockedCellsPerUnlockedRow = 1;
-
     [Header("Staff")]
     [SerializeField] private int maxStaff = 1;
 
     [Header("Recovery")]
+    //ToDo : 플레이어의 부상 상태에 따른 회복 시간 로직 설정하기
     [SerializeField] private int healDays = 5;
     [SerializeField] private StaffHealBonus[] staffHealBonuses = new StaffHealBonus[]
     {
         new StaffHealBonus { type = NPCType.Tanker,   daysReduction = 1 },
-        new StaffHealBonus { type = NPCType.Detector, daysReduction = 1 },
         new StaffHealBonus { type = NPCType.Healer,   daysReduction = 2 },
         new StaffHealBonus { type = NPCType.Dealer,   daysReduction = 1 }
     };
 
-    private readonly List<MedicalPatientRow> patientRows = new List<MedicalPatientRow>();
-    private readonly List<MedicalPatientSlot> patientSlots = new List<MedicalPatientSlot>();
+    private readonly List<MedicalTreatment> patientTreatments = new List<MedicalTreatment>(FullPatientCapacity);
     private readonly List<NPCRuntimeData> assignedStaff = new List<NPCRuntimeData>();
     private IRecoveryComponent recovery = new RecoveryComponent();
     private StaffAssignment staffSlots;
-    private int patientUpgrade = 0;
+    private int patientCapacityLevel = 0;
 
     public event System.Action<NPCRuntimeData> OnStaffAssigned;
     public event System.Action<NPCRuntimeData> OnStaffReleased;
     public event System.Action<NPCRuntimeData> OnPatientHealed;
     public event System.Action OnPatientSlotsChanged;
 
-    public IReadOnlyList<MedicalPatientRow> PatientRows => patientRows;
-    public IReadOnlyList<MedicalPatientSlot> PatientSlots => patientSlots;
-    public int CurrentPatientCount => GetCurrentPatientCount();
-    public int MaxPatientCount => UnlockedPatientSlotCount;
-    public int PatientRowCount => patientRows.Count;
-    public int PatientSlotCount => patientSlots.Count;
-    public int UnlockedPatientRowCount => GetUnlockedPatientRowCount();
-    public int LockedPatientRowCount => PatientRowCount - UnlockedPatientRowCount;
-    public int UnlockedPatientSlotCount => GetUnlockedPatientSlotCount();
-    public int LockedPatientSlotCount => PatientSlotCount - UnlockedPatientSlotCount;
+    public IReadOnlyList<MedicalTreatment> PatientTreatments => patientTreatments;
+    public int CurrentPatientCount => patientTreatments.Count;
+    public int MaxPatientCount => PatientCapacity;
+    public int PatientCapacity => GetPatientCapacity();
+    public int MaxPatientCapacity => FullPatientCapacity;
+    public int UnlockedPatientSlotCount => PatientCapacity;
+    public int LockedPatientSlotCount => FullPatientCapacity - PatientCapacity;
     public int CurrentStaffCount => assignedStaff.Count;
     public int MaxStaffCount => staffSlots != null ? staffSlots.MaxPeople : maxStaff;
-    public int PatientUpgrade => patientUpgrade;
+    public int PatientUpgrade => patientCapacityLevel;
+    public int UpgradeLevel => patientCapacityLevel;
+    public int MaxUpgradeLevel => GetMaxPatientCapacityLevel();
 
     public string FacilityId
     {
@@ -68,16 +62,12 @@ public class MedicalManager : MonoBehaviour
 
     private void Awake()
     {
-        InitializePatientSlots();
         staffSlots = new StaffAssignment(maxStaff);
     }
 
     private void OnValidate()
     {
-        maxPatientRows = Mathf.Max(1, maxPatientRows);
-        cellsPerPatientRow = Mathf.Max(1, cellsPerPatientRow);
-        startingUnlockedPatientRows = Mathf.Clamp(startingUnlockedPatientRows, 0, maxPatientRows);
-        unlockedCellsPerUnlockedRow = Mathf.Clamp(unlockedCellsPerUnlockedRow, 1, cellsPerPatientRow);
+        patientCapacityLevel = Mathf.Clamp(patientCapacityLevel, 0, GetMaxPatientCapacityLevel());
         maxStaff = Mathf.Max(0, maxStaff);
         healDays = Mathf.Max(1, healDays);
     }
@@ -96,40 +86,39 @@ public class MedicalManager : MonoBehaviour
 
     public void LoadPatientUpgrade(int saved)
     {
-        int previousUnlockedSlots = UnlockedPatientSlotCount;
-        patientUpgrade = Mathf.Clamp(saved, 0, GetMaxPatientUpgrade());
-        ApplyPatientSlotUnlocks();
+        int previousCapacity = PatientCapacity;
+        patientCapacityLevel = Mathf.Clamp(saved, 0, GetMaxPatientCapacityLevel());
 
-        if (patientSlots.Count > 0 && UnlockedPatientSlotCount != previousUnlockedSlots)
+        if (PatientCapacity != previousCapacity)
             NotifyPatientSlotsChanged();
+    }
+
+    public void ApplyUpgradeLevel(int level)
+    {
+        LoadPatientUpgrade(level);
     }
 
     public bool TryAssignPatient(NPCRuntimeData target)
     {
         if (target == null) return false;
-        if (FindPatientSlot(target) != null) return true;
+        if (FindPatientSlotIndex(target) >= 0) return true;
 
-        MedicalPatientSlot slot = FindAvailablePatientSlot();
-        if (slot == null) return false;
+        if (patientTreatments.Count >= PatientCapacity) return false;
         if (!target.AssignToShelter(FacilityId, roomId)) return false;
 
-        if (!slot.TryAssign(target, GetEffectiveHealDays()))
-        {
-            target.ReleaseFromShelter();
-            return false;
-        }
-
+        patientTreatments.Add(new MedicalTreatment(target, GetEffectiveHealDays()));
         NotifyPatientSlotsChanged();
         return true;
     }
 
     public bool TryReleasePatient(NPCRuntimeData target)
     {
-        MedicalPatientSlot slot = FindPatientSlot(target);
-        if (slot == null) return false;
+        int slotIndex = FindPatientSlotIndex(target);
+        if (slotIndex < 0) return false;
 
-        NPCRuntimeData releasedPatient = slot.Release();
-        releasedPatient.ReleaseFromShelter();
+        MedicalTreatment treatment = patientTreatments[slotIndex];
+        patientTreatments.RemoveAt(slotIndex);
+        treatment.Patient.ReleaseFromShelter();
         NotifyPatientSlotsChanged();
         return true;
     }
@@ -138,10 +127,9 @@ public class MedicalManager : MonoBehaviour
     {
         if (amount <= 0) return false;
 
-        int previousUnlockedSlots = UnlockedPatientSlotCount;
-        patientUpgrade = Mathf.Clamp(patientUpgrade + amount, 0, GetMaxPatientUpgrade());
-        ApplyPatientSlotUnlocks();
-        bool upgraded = UnlockedPatientSlotCount > previousUnlockedSlots;
+        int previousCapacity = PatientCapacity;
+        patientCapacityLevel = Mathf.Clamp(patientCapacityLevel + amount, 0, GetMaxPatientCapacityLevel());
+        bool upgraded = PatientCapacity > previousCapacity;
         if (upgraded)
             NotifyPatientSlotsChanged();
 
@@ -150,14 +138,15 @@ public class MedicalManager : MonoBehaviour
 
     public int GetPatientHealDaysRemaining(NPCRuntimeData patient)
     {
-        MedicalPatientSlot slot = FindPatientSlot(patient);
-        return slot != null ? slot.RemainingDays : 0;
+        int slotIndex = FindPatientSlotIndex(patient);
+        return slotIndex >= 0 ? patientTreatments[slotIndex].RemainingDays : 0;
     }
 
     public bool TryAssignStaff(NPCRuntimeData staff)
     {
         if (staff == null) return false;
         if (assignedStaff.Contains(staff)) return true;
+        if (staffSlots == null) staffSlots = new StaffAssignment(maxStaff);
         if (!staffSlots.CanAssign(assignedStaff.Count, 1)) return false;
 
         assignedStaff.Add(staff);
@@ -185,26 +174,25 @@ public class MedicalManager : MonoBehaviour
     {
         int elapsedDays = Mathf.Max(1, next - prev);
         bool changed = false;
-        for (int i = 0; i < patientSlots.Count; i++)
+        for (int i = patientTreatments.Count - 1; i >= 0; i--)
         {
-            MedicalPatientSlot slot = patientSlots[i];
-            if (!slot.IsOccupied)
-                continue;
-
-            slot.ReduceRemainingDays(elapsedDays);
+            MedicalTreatment treatment = patientTreatments[i];
+            treatment.ReduceRemainingDays(elapsedDays);
             changed = true;
 
-            if (slot.IsOccupied && slot.RemainingDays <= 0)
-                CompleteHealing(slot);
+            if (treatment.RemainingDays <= 0)
+                CompleteHealing(i);
         }
 
         if (changed)
             NotifyPatientSlotsChanged();
     }
 
-    private void CompleteHealing(MedicalPatientSlot slot)
+    private void CompleteHealing(int slotIndex)
     {
-        NPCRuntimeData patient = slot.Release();
+        MedicalTreatment treatment = patientTreatments[slotIndex];
+        patientTreatments.RemoveAt(slotIndex);
+        NPCRuntimeData patient = treatment.Patient;
         recovery.CompleteShelterRecovery(patient);
         patient.ReleaseFromShelter();
         OnPatientHealed?.Invoke(patient);
@@ -231,126 +219,78 @@ public class MedicalManager : MonoBehaviour
         if (bonus <= 0) return;
 
         int delta = subtract ? -bonus : bonus;
-        for (int i = 0; i < patientSlots.Count; i++)
+        for (int i = 0; i < patientTreatments.Count; i++)
         {
-            patientSlots[i].AdjustRemainingDays(delta);
+            patientTreatments[i].AdjustRemainingDays(delta);
         }
     }
 
-    private void InitializePatientSlots()
-    {
-        patientRows.Clear();
-        patientSlots.Clear();
-
-        int unlockedRows = GetTargetUnlockedPatientRowCount();
-        for (int rowIndex = 0; rowIndex < maxPatientRows; rowIndex++)
-        {
-            int unlockedCells = rowIndex < unlockedRows ? unlockedCellsPerUnlockedRow : 0;
-            int firstSlotIndex = patientSlots.Count;
-            MedicalPatientRow row = new MedicalPatientRow(rowIndex, cellsPerPatientRow, unlockedCells, firstSlotIndex);
-
-            patientRows.Add(row);
-            for (int cellIndex = 0; cellIndex < row.Cells.Count; cellIndex++)
-            {
-                patientSlots.Add(row.Cells[cellIndex]);
-            }
-        }
-    }
-
-    private void ApplyPatientSlotUnlocks()
-    {
-        if (patientRows.Count == 0)
-            return;
-
-        int unlockedRows = GetTargetUnlockedPatientRowCount();
-        for (int i = 0; i < patientRows.Count; i++)
-        {
-            int unlockedCells = i < unlockedRows ? unlockedCellsPerUnlockedRow : 0;
-            patientRows[i].SetUnlockedCellCount(unlockedCells);
-        }
-    }
-
-    private MedicalPatientSlot FindAvailablePatientSlot()
-    {
-        for (int i = 0; i < patientRows.Count; i++)
-        {
-            MedicalPatientSlot slot = patientRows[i].FindAvailableSlot();
-            if (slot != null)
-                return slot;
-        }
-
-        return null;
-    }
-
-    private MedicalPatientSlot FindPatientSlot(NPCRuntimeData patient)
+    private int FindPatientSlotIndex(NPCRuntimeData patient)
     {
         if (patient == null)
-            return null;
+            return -1;
 
-        for (int i = 0; i < patientSlots.Count; i++)
+        for (int i = 0; i < patientTreatments.Count; i++)
         {
-            if (patientSlots[i].Patient == patient)
-                return patientSlots[i];
+            MedicalTreatment treatment = patientTreatments[i];
+            if (treatment.Patient == patient)
+                return i;
         }
 
-        return null;
+        return -1;
     }
 
-    private int GetCurrentPatientCount()
+    private int GetPatientCapacity()
     {
-        int count = 0;
-        for (int i = 0; i < patientSlots.Count; i++)
+        switch (patientCapacityLevel)
         {
-            if (patientSlots[i].IsOccupied)
-                count++;
+            case 0:
+                return BasePatientCapacity;
+            case 1:
+                return FirstUpgradePatientCapacity;
+            default:
+                return FullPatientCapacity;
         }
-
-        return count;
     }
 
-    private int GetUnlockedPatientSlotCount()
+    private int GetMaxPatientCapacityLevel()
     {
-        int count = 0;
-        for (int i = 0; i < patientSlots.Count; i++)
-        {
-            if (patientSlots[i].IsUnlocked)
-                count++;
-        }
-
-        return count;
-    }
-
-    private int GetUnlockedPatientRowCount()
-    {
-        int count = 0;
-        for (int i = 0; i < patientRows.Count; i++)
-        {
-            if (patientRows[i].IsUnlocked)
-                count++;
-        }
-
-        return count;
-    }
-
-    private int GetTargetUnlockedPatientRowCount()
-    {
-        return Mathf.Clamp(startingUnlockedPatientRows + patientUpgrade, 0, maxPatientRows);
-    }
-
-    private int GetMaxPatientUpgrade()
-    {
-        return Mathf.Max(0, maxPatientRows - startingUnlockedPatientRows);
+        return MaxPatientCapacityLevel;
     }
 
     private void NotifyPatientSlotsChanged()
     {
         OnPatientSlotsChanged?.Invoke();
     }
+
 }
+
 
 [System.Serializable]
 public struct StaffHealBonus
 {
     public NPCType type;
     public int daysReduction;
+}
+
+public sealed class MedicalTreatment
+{
+    public NPCRuntimeData Patient { get; }
+    public int RemainingDays { get; private set; }
+
+    public MedicalTreatment(NPCRuntimeData patient, int remainingDays)
+    {
+        Patient = patient;
+        RemainingDays = Mathf.Max(1, remainingDays);
+    }
+
+    public void ReduceRemainingDays(int days)
+    {
+        RemainingDays = Mathf.Max(0, RemainingDays - Mathf.Max(1, days));
+    }
+
+    public void AdjustRemainingDays(int delta)
+    {
+        RemainingDays = Mathf.Max(1, RemainingDays + delta);
+    }
 }

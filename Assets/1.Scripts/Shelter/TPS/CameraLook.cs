@@ -15,11 +15,15 @@ public class CameraLook : MonoBehaviour
     [SerializeField] private bool lockCursorOnStart = true;
     [SerializeField] private bool relockCursorOnLeftClick = true;
 
+    [Header("Control Lock")]
+    [SerializeField] private bool m_lookLocked;
+
     private float yaw;
     private float pitch;
 
     public float Yaw => yaw;
     public float Pitch => pitch;
+    public bool IsLookLocked => m_lookLocked;
 
     private void Start()
     {
@@ -33,11 +37,17 @@ public class CameraLook : MonoBehaviour
 
     private void Update()
     {
+        if (m_lookLocked)
+            return;
+
         HandleCursorInput();
     }
 
     private void LateUpdate()
     {
+        if (m_lookLocked)
+            return;
+
         if (lockCursorOnStart && Cursor.lockState != CursorLockMode.Locked)
             return;
 
@@ -49,6 +59,23 @@ public class CameraLook : MonoBehaviour
         pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
 
         transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
+    }
+
+    public void SetLookLocked(bool locked)
+    {
+        if (m_lookLocked == locked)
+            return;
+
+        m_lookLocked = locked;
+
+        if (m_lookLocked)
+        {
+            UnlockCursor();
+            return;
+        }
+
+        if (lockCursorOnStart)
+            LockCursor();
     }
 
     private Vector2 ReadMouseDelta()

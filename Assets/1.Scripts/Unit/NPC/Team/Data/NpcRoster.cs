@@ -3,17 +3,13 @@ using System.Collections.Generic;
 public class NpcRoster
 {
     private readonly List<NPCRuntimeData> npcs = new();
+    //기획 문서상 ID가 추가되었을때 사용할 수 있는 key value
     private readonly Dictionary<string, NPCRuntimeData> byRuntimeId = new();
 
     public IReadOnlyList<NPCRuntimeData> All => npcs;
     public int Count => npcs.Count;
 
     public bool TryAdd(NPCChar npcData, out NPCRuntimeData runtimeData)
-    {
-        return TryAdd(npcData, null, out runtimeData);
-    }
-
-    public bool TryAdd(NPCChar npcData, string runtimeId, out NPCRuntimeData runtimeData)
     {
         runtimeData = null;
 
@@ -22,7 +18,7 @@ public class NpcRoster
             return false;
         }
 
-        NPCRuntimeData newRuntimeData = new NPCRuntimeData(npcData, runtimeId);
+        NPCRuntimeData newRuntimeData = new NPCRuntimeData(npcData);
         if (!Add(newRuntimeData))
         {
             return false;

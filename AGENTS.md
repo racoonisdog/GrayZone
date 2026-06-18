@@ -7,10 +7,11 @@ This file is the short project-root bootstrap for Codex and agent sessions in th
 ## Canonical Paths
 
 - Unity project root: `C:\Users\user\GrayZone`
-- Private document root: `C:\Users\user\GrayZone\GrayZone_privateDoc-main`
-- Path registry: `C:\Users\user\GrayZone\GrayZone_privateDoc-main\Junghyun\AI-Agent\Local\Harness\PATH_REGISTRY.md`
-- Codex harness: `C:\Users\user\GrayZone\GrayZone_privateDoc-main\Junghyun\AI-Agent\Local\Harness\Codex\AGENTS.md`
-- Unity-Cli harness: `C:\Users\user\GrayZone\GrayZone_privateDoc-main\Junghyun\AI-Agent\Local\Harness\Unity-Cli\CLI_SESSION_HARNESS.md`
+- Private document root: `C:\Users\user\GrayZone_privateDoc-main`
+- Path registry: `C:\Users\user\GrayZone_privateDoc-main\Junghyun\AI-Agent\Local\Harness\PATH_REGISTRY.md`
+- Codex harness: `C:\Users\user\GrayZone_privateDoc-main\Junghyun\AI-Agent\Local\Harness\Codex\AGENTS.md`
+- Unity-Cli harness: `C:\Users\user\GrayZone_privateDoc-main\Junghyun\AI-Agent\Local\Harness\Unity-Cli\CLI_SESSION_HARNESS.md`
+- Automation harness: `C:\Users\user\GrayZone_privateDoc-main\Junghyun\AI-Agent\Local\Harness\Automation\AI_DAILY_SUMMARY_AUTOMATION.md`
 
 ## Startup Flow
 
@@ -18,7 +19,9 @@ This file is the short project-root bootstrap for Codex and agent sessions in th
 - Before relying on local harness, log, launcher, Obsidian, or SVN paths, read the path registry.
 - For normal code edits, inspect only the repository files needed for the request.
 - For GrayZone workflow details, read the Codex harness.
+- For every GrayZone-related Codex question, audit, planning-only task, or code change, follow the Codex harness per-turn worklog rule before the final answer.
 - For Unity Editor, scene, prefab, serialized reference, compile, console, or Play Mode validation, read the Unity-Cli harness and prefer Unity-facing tools.
+- For Codex session summaries, daily summaries, transcript recovery, or AI daily summary output, read the Automation harness.
 
 ## Unity Tools
 

@@ -157,11 +157,6 @@ public class GameDataManager : MonoBehaviour
         return NpcRoster.TryAdd(npcData, out runtimeNpc);
     }
 
-    public bool TryRecruitNpc(NPCChar npcData, string runtimeId, out NPCRuntimeData runtimeNpc)
-    {
-        return NpcRoster.TryAdd(npcData, runtimeId, out runtimeNpc);
-    }
-
     public bool TryGetNpc(string runtimeId, out NPCRuntimeData runtimeNpc)
     {
         return NpcRoster.TryGet(runtimeId, out runtimeNpc);

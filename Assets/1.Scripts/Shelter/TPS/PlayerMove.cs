@@ -25,6 +25,9 @@ public class PlayerMove : MonoBehaviour
     [Header("Interactor")]
     [SerializeField] private PlayerInteractor playerInteractor;
 
+    [Header("Control Lock")]
+    [SerializeField] private bool m_moveLocked;
+
     private float verticalVelocity;
     private float rotationVelocity;
     private float animationBlend;
@@ -44,6 +47,7 @@ public class PlayerMove : MonoBehaviour
     public Vector3 CurrentMoveDirection => currentMoveDirection;
     public bool IsGrounded => characterController != null && characterController.isGrounded;
     public bool HasMoveInput => MoveInput.sqrMagnitude > inputDeadZone * inputDeadZone;
+    public bool IsMoveLocked => m_moveLocked;
 
     private void Reset()
     {
@@ -64,6 +68,15 @@ public class PlayerMove : MonoBehaviour
     {
         if (characterController == null) return;
 
+        if (m_moveLocked)
+        {
+            ClearMoveState();
+            ApplyGravity();
+            MoveCharacter(Vector3.zero);
+            UpdateAnimator();
+            return;
+        }
+
         MoveInput = ReadMoveInput();
         currentMoveDirection = GetCameraRelativeMoveDirection(MoveInput);
 
@@ -71,6 +84,17 @@ public class PlayerMove : MonoBehaviour
         ApplyGravity();
         MoveCharacter(currentMoveDirection);
         UpdateAnimator();
+    }
+
+    public void SetMoveLocked(bool locked)
+    {
+        if (m_moveLocked == locked)
+            return;
+
+        m_moveLocked = locked;
+
+        if (m_moveLocked)
+            ClearMoveState();
     }
 
 #if ENABLE_INPUT_SYSTEM
@@ -102,6 +126,15 @@ public class PlayerMove : MonoBehaviour
 
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
+    }
+
+    private void ClearMoveState()
+    {
+        MoveInput = Vector2.zero;
+        currentMoveDirection = Vector3.zero;
+        rotationVelocity = 0f;
+        animationBlend = 0f;
+        UpdateAnimator();
     }
 
     private void AssignAnimationIds()
