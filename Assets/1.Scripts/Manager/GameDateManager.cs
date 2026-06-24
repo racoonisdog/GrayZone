@@ -11,18 +11,18 @@ public class GameDateManager : MonoBehaviour
     {
         get
         {
-            if (GameDataManager.Instance == null)
+            if (ShelterDataManager.Instance != null)
             {
-                return 1;
+                return ShelterDataManager.Instance.CurrentDay;
             }
 
-            return GameDataManager.Instance.CurrentDay;
+            return 1;
         }
     }
 
     private void Awake()
     {
-        if (TryRejectDuplicateOrInvalidRoot())
+        if (TryRejectDuplicate())
         {
             return;
         }
@@ -45,16 +45,16 @@ public class GameDateManager : MonoBehaviour
             return false;
         }
 
-        if (GameDataManager.Instance == null)
+        if (ShelterDataManager.Instance == null)
         {
-            Debug.LogWarning("[GameDateManager] GameDataManager.Instance is null.");
+            Debug.LogWarning("[GameDateManager] ShelterDataManager.Instance is null.");
             return false;
         }
 
         int previousDay = CurrentDay;
         int nextDay = previousDay + days;
 
-        GameDataManager.Instance.SetCurrentDay(nextDay);
+        ShelterDataManager.Instance.SetCurrentDay(nextDay);
         DayAdvanced?.Invoke(previousDay, nextDay);
         return true;
     }
@@ -64,22 +64,8 @@ public class GameDateManager : MonoBehaviour
         return Mathf.Max(0, completeDay - CurrentDay);
     }
 
-    private bool TryRejectDuplicateOrInvalidRoot()
+    private bool TryRejectDuplicate()
     {
-        GameManager rootManager = GetComponentInParent<GameManager>();
-        if (rootManager == null)
-        {
-            Debug.LogWarning("[GameDateManager] Parent GameManager not found. Destroying duplicate/orphan instance.");
-            Destroy(gameObject);
-            return true;
-        }
-
-        if (GameManager.Instance != null && rootManager != GameManager.Instance)
-        {
-            Destroy(gameObject);
-            return true;
-        }
-
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);

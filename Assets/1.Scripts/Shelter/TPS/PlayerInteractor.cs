@@ -9,8 +9,7 @@ using UnityEngine.InputSystem;
 public class PlayerInteractor : MonoBehaviour
 {
     [Header("Target Filter")]
-    [SerializeField] private string m_targetTag = "Other";
-    [SerializeField] private string m_targetLayer = "Target";
+    [SerializeField] private string m_targetLayer = "ShelterFacility";
 
     [Header("UI")]
     [SerializeField] private UIManager m_uiManager;
@@ -74,8 +73,6 @@ public class PlayerInteractor : MonoBehaviour
             return;
 
         m_interactionTargets.Add(target);
-        //ToDo : 로그는 나중에 삭제하기
-        Debug.Log($"[Interactor] Target Enter : {target.name}", target);
 
         RefreshCurrentTarget();
     }
@@ -88,7 +85,6 @@ public class PlayerInteractor : MonoBehaviour
             return;
 
         m_interactionTargets.Remove(target);
-        Debug.Log($"[Interactor] Target Exit : {target.name}", target);
 
         RefreshCurrentTarget();
     }
@@ -136,11 +132,6 @@ public class PlayerInteractor : MonoBehaviour
             return;
 
         m_currentTarget = closestTarget;
-
-        if (m_currentTarget != null)
-            Debug.Log($"[Interactor] Current Target : {m_currentTarget.name}", m_currentTarget);
-        else
-            Debug.Log("[Interactor] Current Target : None", this);
 
         NotifyTargetChanged(m_currentTarget);
     }
@@ -198,7 +189,7 @@ public class PlayerInteractor : MonoBehaviour
         if (IsInteractionTarget(other.gameObject))
             return other.gameObject;
 
-        // If the collider belongs to a Rigidbody root, allow the root to be tagged/layered.
+        // If the collider belongs to a Rigidbody root, allow the root to be layered.
         if (other.attachedRigidbody != null && IsInteractionTarget(other.attachedRigidbody.gameObject))
             return other.attachedRigidbody.gameObject;
 
@@ -212,7 +203,7 @@ public class PlayerInteractor : MonoBehaviour
         if (resolvedTarget != null && m_interactionTargets.Contains(resolvedTarget))
             return resolvedTarget;
 
-        // If a target changed tag/layer while inside the trigger, still remove it.
+        // If a target changed layer while inside the trigger, still remove it.
         if (other != null && m_interactionTargets.Contains(other.gameObject))
             return other.gameObject;
 
@@ -232,18 +223,13 @@ public class PlayerInteractor : MonoBehaviour
         if (candidate == null)
             return false;
 
-        // Layer or tag can independently qualify the object as interactable.
-        return IsTargetLayer(candidate) || IsTargetTag(candidate);
+        // The configured layer qualifies the object as interactable.
+        return IsTargetLayer(candidate);
     }
 
     private bool IsTargetLayer(GameObject candidate)
     {
         return m_targetLayerIndex >= 0 && candidate.layer == m_targetLayerIndex;
-    }
-
-    private bool IsTargetTag(GameObject candidate)
-    {
-        return !string.IsNullOrEmpty(m_targetTag) && candidate.tag == m_targetTag;
     }
 
     private bool IsValidRegisteredTarget(GameObject target)

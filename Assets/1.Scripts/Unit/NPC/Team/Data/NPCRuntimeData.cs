@@ -100,4 +100,17 @@ public class NPCRuntimeData
         SetCurrentHp(CurrentHp + healAmount);
         return true;
     }
+
+    public NPCRuntimeData Clone()
+    {
+        NPCRuntimeData clone = new NPCRuntimeData(NPCData, RuntimeId)
+        {
+            CurrentInjuryState = CurrentInjuryState,
+            IsAssignedToShelter = IsAssignedToShelter,
+            AssignedRoomId = AssignedRoomId,
+            CurrentHp = CurrentHp
+        };
+
+        return clone;
+    }
 }

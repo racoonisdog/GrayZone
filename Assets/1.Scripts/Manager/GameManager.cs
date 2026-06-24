@@ -6,14 +6,10 @@ public class GameManager : MonoBehaviour
 
     [Header("하위 매니저")]
     [SerializeField] private GameDataManager gameDataManager;
-    [SerializeField] private GameSaveManager gameSaveManager;
     [SerializeField] private GameSettingManager gameSettingManager;
-    [SerializeField] private GameDateManager gameDateManager;
 
     public GameDataManager DataManager => gameDataManager;
-    public GameSaveManager SaveManager => gameSaveManager;
     public GameSettingManager SettingManager => gameSettingManager;
-    public GameDateManager DateManager => gameDateManager;
 
     private void Awake()
     {
@@ -36,7 +32,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-
     private void CacheChildManagers()
     {
         if (gameDataManager == null)
@@ -44,24 +39,14 @@ public class GameManager : MonoBehaviour
             gameDataManager = GetComponentInChildren<GameDataManager>(true);
         }
 
-        if (gameSaveManager == null)
-        {
-            gameSaveManager = GetComponentInChildren<GameSaveManager>(true);
-        }
-
         if (gameSettingManager == null)
         {
             gameSettingManager = GetComponentInChildren<GameSettingManager>(true);
         }
 
-        if (gameDateManager == null)
+        if (gameDataManager == null || gameSettingManager == null)
         {
-            gameDateManager = GetComponentInChildren<GameDateManager>(true);
-        }
-
-        if (gameDataManager == null || gameSaveManager == null || gameSettingManager == null || gameDateManager == null)
-        {
-            Debug.LogWarning("[GameManager] One or more child managers are missing.");
+            Debug.LogWarning("[GameManager] DataManager or SettingManager is missing.");
         }
     }
 }
