@@ -73,7 +73,7 @@ public class GameManager1_TPZ : MonoBehaviour
         bulletText.text = currentBullet + " / " + maxBullet;
     }
 
-    public void Shooting(Vector3 targetPosition, Enemy enemy, AudioSource weaponSound, AudioClip shootingSound)
+    public void Shooting(Vector3 targetPosition, EnemyController enemy, AudioSource weaponSound, AudioClip shootingSound)
     {
         currentShootDelay += Time.deltaTime;
 

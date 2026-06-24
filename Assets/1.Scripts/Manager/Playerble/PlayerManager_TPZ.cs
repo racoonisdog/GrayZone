@@ -28,7 +28,7 @@ public class PlayerManager_TPZ : MonoBehaviour
     [SerializeField] private AudioClip[] reloadSound;
     private AudioSource weaponSound;
 
-    private Enemy enemy;
+    private EnemyController enemy;
 
     void Start()
     {
@@ -98,7 +98,7 @@ public class PlayerManager_TPZ : MonoBehaviour
                 targetPosition = hit.point;
                 aimObj.transform.position = hit.point;
 
-                enemy = hit.collider.GetComponentInParent<Enemy>();
+                enemy = hit.collider.GetComponentInParent<EnemyController>();
             }
             else
             {
