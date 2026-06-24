@@ -1,97 +1,97 @@
-using UnityEngine;
+О╩©using UnityEngine;
 using UnityEngine.Serialization;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
 /// <summary>
-/// гц╥╧юл╬Н ют╥б ╩Себ╦╕ ╨╦╟Эго╟М Input System юл╨╔ф╝╦╕ ╥╠е╦юс ют╥б ╟╙ю╦╥н ╨╞х╞го╢б ддфВЁмф╝ют╢о╢ы.
+/// М■▄К═┬Л²╢Л√╢ Л·┘К═╔ Л┐│М┐°К╔╪ КЁ╢Й╢─М∙≤ЙЁ═ Input System Л²╢К╡╓М┼╦К╔╪ К÷╟М┐─Л·└ Л·┘К═╔ Й╟▓Л°╪К║° КЁ─М≥≤М∙≤К┼■ Л╩╢М▐╛К└▄М┼╦Л·┘К▀┬К▀╓.
 /// </summary>
 /// <remarks>
-/// юл е╛╥║╫╨╢б ют╥б ╬в╪г дщ╧И©║╪╜ ╧чю╨ ╟╙ю╩ Ё╩╨н гй╣Е©║ дЁ╫лго╟М,
-/// юл╣©/╫ца║/а║га/юЭ╥баЗаж/а╤аь/╟Ь╟щ/юГюЕюЭ ╩Себ╦╕ ╢ы╦╔ ╫ц╫╨еш©║╪╜ юпю╩ ╪Ж юж╟т а╕╟Ьгу╢о╢ы.
+/// Л²╢ М│╢К·≤Л┼╓К┼■ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л≈░Л└° К╟⌡Л²─ Й╟▓Л²└ К┌╢К╤─ М∙└К⌠°Л≈░ Л╨░Л▀╠М∙≤ЙЁ═,
+/// Л²╢К▐≥/Л▀°Л═░/Л═░М■└/Л═└К═╔Л╖┬Лё╪/Л║╟Л╓─/ЙЁ╣Й╡╘/Л·╛Л·╔Л═└ Л┐│М┐°К╔╪ К▀╓К╔╦ Л▀°Л┼╓М┘°Л≈░Л└° Л²╫Л²└ Л┬≤ Л·┬Й╡▄ Л═°ЙЁ╣М∙╘К▀┬К▀╓.
 /// <para>
-/// ╨╞╪Ж да╨╔╪гю╨ <c>m_</c> а╒╣н╩Г╦╕ ╩Г©Кго╢б private serialized field╦╕ ╠Баью╦╥н го╦Г,
-/// ╠Ба╦ Starter Assets ╫╨е╦юоюг <c>move</c>, <c>look</c>, <c>jump</c> а╒╠ы╣╣ хёх╞©К га╥нфшф╪╥н ю╞аЖгу╢о╢ы.
+/// КЁ─Л┬≤ Л╩╗К╡╓Л┘≤Л²─ <c>m_</c> Л═▒К▒░Л┌╛К╔╪ Л┌╛Л ╘М∙≤К┼■ private serialized fieldК╔╪ Й╦╟Л╓─Л°╪К║° М∙≤К╘╟,
+/// Й╦╟Л║╢ Starter Assets Л┼╓М┐─Л²╪Л²≤ <c>move</c>, <c>look</c>, <c>jump</c> Л═▒Й╥╪К▐└ М≤╦М≥≤Л ╘ М■└К║°М█╪М▀╟К║° Л°═Л╖─М∙╘К▀┬К▀╓.
 /// </para>
 /// </remarks>
 public class PlayerInputs : MonoBehaviour
 {
     [Header("Character Input Values")]
-    [Tooltip("гЖюГ юл╣© ют╥б╟╙ют╢о╢ы. x╢б аб©Л, y╢б юЭхд ют╥бю╩ юг╧лгу╢о╢ы.")]
+    [Tooltip("М≤└Л·╛ Л²╢К▐≥ Л·┘К═╔Й╟▓Л·┘К▀┬К▀╓. xК┼■ Л╒▄Л ╟, yК┼■ Л═└М⌡└ Л·┘К═╔Л²└ Л²≤К╞╦М∙╘К▀┬К▀╓.")]
     [FormerlySerializedAs("move")]
     [SerializeField] private Vector2 m_move;
 
-    [Tooltip("гЖюГ ╫ца║ ют╥б╟╙ют╢о╢ы. x╢б аб©Л х╦юЭ, y╢б ╩Сго х╦юЭю╩ юг╧лгу╢о╢ы.")]
+    [Tooltip("М≤└Л·╛ Л▀°Л═░ Л·┘К═╔Й╟▓Л·┘К▀┬К▀╓. xК┼■ Л╒▄Л ╟ М ▄Л═└, yК┼■ Л┐│М∙≤ М ▄Л═└Л²└ Л²≤К╞╦М∙╘К▀┬К▀╓.")]
     [FormerlySerializedAs("look")]
     [SerializeField] private Vector2 m_look;
 
-    [Tooltip("а║га ют╥бюл ╢╜╦╟ ╩СебюнаЖ ©╘╨нют╢о╢ы.")]
+    [Tooltip("Л═░М■└ Л·┘К═╔Л²╢ К┬▄К╕╟ Л┐│М┐°Л²╦Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.")]
     [FormerlySerializedAs("jump")]
     [SerializeField] private bool m_jump;
 
-    [Tooltip("юЭ╥баЗаж ют╥бюл ╢╜╦╟ ╩СебюнаЖ ©╘╨нют╢о╢ы.")]
+    [Tooltip("Л═└К═╔Л╖┬Лё╪ Л·┘К═╔Л²╢ К┬▄К╕╟ Л┐│М┐°Л²╦Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.")]
     [FormerlySerializedAs("sprint")]
     [SerializeField] private bool m_sprint;
 
-    [Tooltip("а╤аь ют╥бюл ╢╜╦╟ ╩СебюнаЖ ©╘╨нют╢о╢ы.")]
+    [Tooltip("Л║╟Л╓─ Л·┘К═╔Л²╢ К┬▄К╕╟ Л┐│М┐°Л²╦Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.")]
     [FormerlySerializedAs("aim")]
     [SerializeField] private bool m_aim;
 
-    [Tooltip("╧ъ╩Г ют╥бюл ╢╜╦╟ ╩СебюнаЖ ©╘╨нют╢о╢ы.")]
+    [Tooltip("К╟°Л┌╛ Л·┘К═╔Л²╢ К┬▄К╕╟ Л┐│М┐°Л²╦Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.")]
     [FormerlySerializedAs("shoot")]
     [SerializeField] private bool m_shoot;
 
-    [Tooltip("юГюЕюЭ ют╥бюл ╢╜╦╟ ╩СебюнаЖ ©╘╨нют╢о╢ы.")]
+    [Tooltip("Л·╛Л·╔Л═└ Л·┘К═╔Л²╢ К┬▄К╕╟ Л┐│М┐°Л²╦Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.")]
     [FormerlySerializedAs("reload")]
     [SerializeField] private bool m_reload;
 
     [Header("Movement Settings")]
-    [Tooltip("╬фЁ╞╥н╠в юл╣© ют╥бю╩ ╩Г©КграЖ ©╘╨нют╢о╢ы. trueюл╦И ют╥б ╪╪╠Б magnitude╦╕ юл╣© ╪с╣╣©║ ╧щ©╣гу╢о╢ы.")]
+    [Tooltip("Л∙└К┌═К║°Й╥╦ Л²╢К▐≥ Л·┘К═╔Л²└ Л┌╛Л ╘М∙═Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓. trueЛ²╢К╘╢ Л·┘К═╔ Л└╦Й╦╟ magnitudeК╔╪ Л²╢К▐≥ Л├█К▐└Л≈░ К╟≤Л≤│М∙╘К▀┬К▀╓.")]
     [FormerlySerializedAs("analogMovement")]
     [SerializeField] private bool m_analogMovement;
 
     [Header("Mouse Cursor Settings")]
-    [Tooltip("╬жгц╦╝диюл╪г фВд©╫╨ ╫ц д©╪╜╦╕ х╜╦И аъ╬с©║ юА╠шаЖ ©╘╨нют╢о╢ы.")]
+    [Tooltip("Л∙═М■▄К╕╛Л╪─Л²╢Л┘≤ М▐╛Л╩╓Л┼╓ Л▀° Л╩╓Л└°К╔╪ М≥■К╘╢ Л╓▒Л∙≥Л≈░ Л·═Й╦─Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.")]
     [FormerlySerializedAs("cursorLocked")]
     [SerializeField] private bool m_cursorLocked = true;
 
-    [Tooltip("╦╤©Л╫╨ д©╪╜ ют╥бю╩ ╫ца║ х╦юЭ©║ ╩Г©КграЖ ©╘╨нют╢о╢ы.")]
+    [Tooltip("К╖┬Л ╟Л┼╓ Л╩╓Л└° Л·┘К═╔Л²└ Л▀°Л═░ М ▄Л═└Л≈░ Л┌╛Л ╘М∙═Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.")]
     [FormerlySerializedAs("cursorInputForLook")]
     [SerializeField] private bool m_cursorInputForLook = true;
 
-    /// <summary>гЖюГ юл╣© ют╥б╟╙ют╢о╢ы.</summary>
+    /// <summary>М≤└Л·╛ Л²╢К▐≥ Л·┘К═╔Й╟▓Л·┘К▀┬К▀╓.</summary>
     public Vector2 Move => m_move;
 
-    /// <summary>гЖюГ ╫ца║ ют╥б╟╙ют╢о╢ы.</summary>
+    /// <summary>М≤└Л·╛ Л▀°Л═░ Л·┘К═╔Й╟▓Л·┘К▀┬К▀╓.</summary>
     public Vector2 Look => m_look;
 
-    /// <summary>а║га ют╥б ╩Себют╢о╢ы.</summary>
+    /// <summary>Л═░М■└ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</summary>
     public bool Jump => m_jump;
 
-    /// <summary>юЭ╥баЗаж ют╥б ╩Себют╢о╢ы.</summary>
+    /// <summary>Л═└К═╔Л╖┬Лё╪ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</summary>
     public bool Sprint => m_sprint;
 
-    /// <summary>а╤аь ют╥б ╩Себют╢о╢ы.</summary>
+    /// <summary>Л║╟Л╓─ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</summary>
     public bool Aim => m_aim;
 
-    /// <summary>╧ъ╩Г ют╥б ╩Себют╢о╢ы.</summary>
+    /// <summary>К╟°Л┌╛ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</summary>
     public bool Shoot => m_shoot;
 
-    /// <summary>юГюЕюЭ ют╥б ╩Себют╢о╢ы.</summary>
+    /// <summary>Л·╛Л·╔Л═└ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</summary>
     public bool Reload => m_reload;
 
-    /// <summary>╬фЁ╞╥н╠в юл╣© ют╥б ╩Г©К ©╘╨нют╢о╢ы.</summary>
+    /// <summary>Л∙└К┌═К║°Й╥╦ Л²╢К▐≥ Л·┘К═╔ Л┌╛Л ╘ Л≈╛К╤─Л·┘К▀┬К▀╓.</summary>
     public bool AnalogMovement => m_analogMovement;
 
-    /// <summary>д©╪╜ юА╠щ ╩Г©К ©╘╨нют╢о╢ы.</summary>
+    /// <summary>Л╩╓Л└° Л·═Й╦┬ Л┌╛Л ╘ Л≈╛К╤─Л·┘К▀┬К▀╓.</summary>
     public bool CursorLocked => m_cursorLocked;
 
-    /// <summary>д©╪╜ ют╥бю╩ ╫ца║ х╦юЭ©║ ╩Г©КграЖ ©╘╨нют╢о╢ы.</summary>
+    /// <summary>Л╩╓Л└° Л·┘К═╔Л²└ Л▀°Л═░ М ▄Л═└Л≈░ Л┌╛Л ╘М∙═Л╖─ Л≈╛К╤─Л·┘К▀┬К▀╓.</summary>
     public bool CursorInputForLook => m_cursorInputForLook;
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя юл╣© ют╥б га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л²╢К▐≥ Л·┘К═╔ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public Vector2 move
     {
@@ -100,7 +100,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя ╫ца║ ют╥б га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л▀°Л═░ Л·┘К═╔ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public Vector2 look
     {
@@ -109,7 +109,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя а║га ют╥б га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л═░М■└ Л·┘К═╔ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool jump
     {
@@ -118,7 +118,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя юЭ╥баЗаж ют╥б га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л═└К═╔Л╖┬Лё╪ Л·┘К═╔ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool sprint
     {
@@ -127,7 +127,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя а╤аь ют╥б га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л║╟Л╓─ Л·┘К═╔ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool aim
     {
@@ -136,7 +136,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя ╧ъ╩Г ют╥б га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° К╟°Л┌╛ Л·┘К═╔ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool shoot
     {
@@ -145,7 +145,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя юГюЕюЭ ют╥б га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л·╛Л·╔Л═└ Л·┘К═╔ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool reload
     {
@@ -154,7 +154,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя ╬фЁ╞╥н╠в юл╣© ╪Ёа╓ га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л∙└К┌═К║°Й╥╦ Л²╢К▐≥ Л└╓Л═∙ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool analogMovement
     {
@@ -163,7 +163,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя д©╪╜ юА╠щ ╪Ёа╓ га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л╩╓Л└° Л·═Й╦┬ Л└╓Л═∙ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool cursorLocked
     {
@@ -172,7 +172,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╠Ба╦ Starter Assets дз╣Е©мюг хёх╞ю╩ ю╖гя ╫ца║ ют╥б гЦ©К ╪Ёа╓ га╥нфшф╪ют╢о╢ы.
+    /// Й╦╟Л║╢ Starter Assets Л╫■К⌠°Л≥─Л²≤ М≤╦М≥≤Л²└ Л°└М∙° Л▀°Л═░ Л·┘К═╔ М≈┬Л ╘ Л└╓Л═∙ М■└К║°М█╪М▀╟Л·┘К▀┬К▀╓.
     /// </summary>
     public bool cursorInputForLook
     {
@@ -182,18 +182,18 @@ public class PlayerInputs : MonoBehaviour
 
 #if ENABLE_INPUT_SYSTEM
     /// <summary>
-    /// юл╣© ют╥б ╬в╪г дщ╧Иют╢о╢ы.
+    /// Л²╢К▐≥ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л·┘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">Input System©║╪╜ юЭ╢ч╣х юл╣© ют╥б╟╙ют╢о╢ы.</param>
+    /// <param name="value">Input SystemЛ≈░Л└° Л═└К▀╛К░° Л²╢К▐≥ Л·┘К═╔Й╟▓Л·┘К▀┬К▀╓.</param>
     public void OnMove(InputValue value)
     {
         MoveInput(value.Get<Vector2>());
     }
 
     /// <summary>
-    /// ╫ца║ ют╥б ╬в╪г дщ╧Иют╢о╢ы.
+    /// Л▀°Л═░ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л·┘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">Input System©║╪╜ юЭ╢ч╣х ╫ца║ ют╥б╟╙ют╢о╢ы.</param>
+    /// <param name="value">Input SystemЛ≈░Л└° Л═└К▀╛К░° Л▀°Л═░ Л·┘К═╔Й╟▓Л·┘К▀┬К▀╓.</param>
     public void OnLook(InputValue value)
     {
         if (m_cursorInputForLook)
@@ -203,45 +203,45 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// а║га ют╥б ╬в╪г дщ╧Иют╢о╢ы.
+    /// Л═░М■└ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л·┘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">Input System©║╪╜ юЭ╢ч╣х а║га ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="value">Input SystemЛ≈░Л└° Л═└К▀╛К░° Л═░М■└ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void OnJump(InputValue value)
     {
         JumpInput(value.isPressed);
     }
 
     /// <summary>
-    /// юЭ╥баЗаж ют╥б ╬в╪г дщ╧Иют╢о╢ы.
+    /// Л═└К═╔Л╖┬Лё╪ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л·┘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">Input System©║╪╜ юЭ╢ч╣х юЭ╥баЗаж ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="value">Input SystemЛ≈░Л└° Л═└К▀╛К░° Л═└К═╔Л╖┬Лё╪ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void OnSprint(InputValue value)
     {
         SprintInput(value.isPressed);
     }
 
     /// <summary>
-    /// а╤аь ют╥б ╬в╪г дщ╧Иют╢о╢ы.
+    /// Л║╟Л╓─ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л·┘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">Input System©║╪╜ юЭ╢ч╣х а╤аь ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="value">Input SystemЛ≈░Л└° Л═└К▀╛К░° Л║╟Л╓─ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void OnAim(InputValue value)
     {
         AimInput(value.isPressed);
     }
 
     /// <summary>
-    /// ╧ъ╩Г ют╥б ╬в╪г дщ╧Иют╢о╢ы.
+    /// К╟°Л┌╛ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л·┘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">Input System©║╪╜ юЭ╢ч╣х ╧ъ╩Г ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="value">Input SystemЛ≈░Л└° Л═└К▀╛К░° К╟°Л┌╛ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void OnShoot(InputValue value)
     {
         ShootInput(value.isPressed);
     }
 
     /// <summary>
-    /// юГюЕюЭ ют╥б ╬в╪г дщ╧Иют╢о╢ы.
+    /// Л·╛Л·╔Л═└ Л·┘К═╔ Л∙║Л┘≤ Л╫°К╟╠Л·┘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">Input System©║╪╜ юЭ╢ч╣х юГюЕюЭ ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="value">Input SystemЛ≈░Л└° Л═└К▀╛К░° Л·╛Л·╔Л═└ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void OnReload(InputValue value)
     {
         ReloadInput(value.isPressed);
@@ -249,72 +249,72 @@ public class PlayerInputs : MonoBehaviour
 #endif
 
     /// <summary>
-    /// юл╣© ют╥б╟╙ю╩ ╟╩╫егу╢о╢ы.
+    /// Л²╢К▐≥ Л·┘К═╔Й╟▓Л²└ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newMoveDirection">╩У юл╣© ют╥б ╧ФгБют╢о╢ы.</param>
+    /// <param name="newMoveDirection">Л┐┬ Л²╢К▐≥ Л·┘К═╔ К╟╘М√╔Л·┘К▀┬К▀╓.</param>
     public void MoveInput(Vector2 newMoveDirection)
     {
         m_move = newMoveDirection;
     }
 
     /// <summary>
-    /// ╫ца║ ют╥б╟╙ю╩ ╟╩╫егу╢о╢ы.
+    /// Л▀°Л═░ Л·┘К═╔Й╟▓Л²└ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newLookDirection">╩У ╫ца║ ют╥б ╧ФгБют╢о╢ы.</param>
+    /// <param name="newLookDirection">Л┐┬ Л▀°Л═░ Л·┘К═╔ К╟╘М√╔Л·┘К▀┬К▀╓.</param>
     public void LookInput(Vector2 newLookDirection)
     {
         m_look = newLookDirection;
     }
 
     /// <summary>
-    /// а║га ют╥б ╩Себ╦╕ ╟╩╫егу╢о╢ы.
+    /// Л═░М■└ Л·┘К═╔ Л┐│М┐°К╔╪ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newJumpState">╩У а║га ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="newJumpState">Л┐┬ Л═░М■└ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void JumpInput(bool newJumpState)
     {
         m_jump = newJumpState;
     }
 
     /// <summary>
-    /// юЭ╥баЗаж ют╥б ╩Себ╦╕ ╟╩╫егу╢о╢ы.
+    /// Л═└К═╔Л╖┬Лё╪ Л·┘К═╔ Л┐│М┐°К╔╪ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newSprintState">╩У юЭ╥баЗаж ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="newSprintState">Л┐┬ Л═└К═╔Л╖┬Лё╪ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void SprintInput(bool newSprintState)
     {
         m_sprint = newSprintState;
     }
 
     /// <summary>
-    /// а╤аь ют╥б ╩Себ╦╕ ╟╩╫егу╢о╢ы.
+    /// Л║╟Л╓─ Л·┘К═╔ Л┐│М┐°К╔╪ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newAimState">╩У а╤аь ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="newAimState">Л┐┬ Л║╟Л╓─ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void AimInput(bool newAimState)
     {
         m_aim = newAimState;
     }
 
     /// <summary>
-    /// ╧ъ╩Г ют╥б ╩Себ╦╕ ╟╩╫егу╢о╢ы.
+    /// К╟°Л┌╛ Л·┘К═╔ Л┐│М┐°К╔╪ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newShootState">╩У ╧ъ╩Г ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="newShootState">Л┐┬ К╟°Л┌╛ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void ShootInput(bool newShootState)
     {
         m_shoot = newShootState;
     }
 
     /// <summary>
-    /// юГюЕюЭ ют╥б ╩Себ╦╕ ╟╩╫егу╢о╢ы.
+    /// Л·╛Л·╔Л═└ Л·┘К═╔ Л┐│М┐°К╔╪ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newReloadState">╩У юГюЕюЭ ют╥б ╩Себют╢о╢ы.</param>
+    /// <param name="newReloadState">Л┐┬ Л·╛Л·╔Л═└ Л·┘К═╔ Л┐│М┐°Л·┘К▀┬К▀╓.</param>
     public void ReloadInput(bool newReloadState)
     {
         m_reload = newReloadState;
     }
 
     /// <summary>
-    /// д©╪╜ юА╠щ ╩Г©К ©╘╨н╦╕ ╪Ёа╓гу╢о╢ы.
+    /// Л╩╓Л└° Л·═Й╦┬ Л┌╛Л ╘ Л≈╛К╤─К╔╪ Л└╓Л═∙М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">д©╪╜╦╕ юА╠в╥а╦И true, гьа╕го╥а╦И falseют╢о╢ы.</param>
+    /// <param name="value">Л╩╓Л└°К╔╪ Л·═Й╥╦К═╓К╘╢ true, М∙╢Л═°М∙≤К═╓К╘╢ falseЛ·┘К▀┬К▀╓.</param>
     public void SetCursorLocked(bool value)
     {
         m_cursorLocked = value;
@@ -322,47 +322,47 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ╫ца║ х╦юЭ©║ д©╪╜ ют╥бю╩ ╩Г©КграЖ ╪Ёа╓гу╢о╢ы.
+    /// Л▀°Л═░ М ▄Л═└Л≈░ Л╩╓Л└° Л·┘К═╔Л²└ Л┌╛Л ╘М∙═Л╖─ Л└╓Л═∙М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">д©╪╜ ют╥бю╩ ╫ца║ х╦юЭ©║ ╩Г©Кго╥а╦И trueют╢о╢ы.</param>
+    /// <param name="value">Л╩╓Л└° Л·┘К═╔Л²└ Л▀°Л═░ М ▄Л═└Л≈░ Л┌╛Л ╘М∙≤К═╓К╘╢ trueЛ·┘К▀┬К▀╓.</param>
     public void SetCursorInputForLook(bool value)
     {
         m_cursorInputForLook = value;
     }
 
     /// <summary>
-    /// ╬фЁ╞╥н╠в юл╣© ют╥б ╩Г©К ©╘╨н╦╕ ╪Ёа╓гу╢о╢ы.
+    /// Л∙└К┌═К║°Й╥╦ Л²╢К▐≥ Л·┘К═╔ Л┌╛Л ╘ Л≈╛К╤─К╔╪ Л└╓Л═∙М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="value">ют╥б ╪╪╠Б╦╕ юл╣© ╪с╣╣©║ ╧щ©╣го╥а╦И trueют╢о╢ы.</param>
+    /// <param name="value">Л·┘К═╔ Л└╦Й╦╟К╔╪ Л²╢К▐≥ Л├█К▐└Л≈░ К╟≤Л≤│М∙≤К═╓К╘╢ trueЛ·┘К▀┬К▀╓.</param>
     public void SetAnalogMovement(bool value)
     {
         m_analogMovement = value;
     }
 
     /// <summary>
-    /// ╬жгц╦╝диюл╪г фВд©╫╨ ╩Себ╟║ ╧ы╡П ╤╖ д©╪╜ ╩Себ╦╕ ╟╩╫егу╢о╢ы.
+    /// Л∙═М■▄К╕╛Л╪─Л²╢Л┘≤ М▐╛Л╩╓Л┼╓ Л┐│М┐°Й╟─ К╟■К─■ К∙▄ Л╩╓Л└° Л┐│М┐°К╔╪ Й╟╠Л▀═М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="hasFocus">╬жгц╦╝диюл╪гюл фВд©╫╨╦╕ ╬Р╬Зю╦╦И trueют╢о╢ы.</param>
+    /// <param name="hasFocus">Л∙═М■▄К╕╛Л╪─Л²╢Л┘≤Л²╢ М▐╛Л╩╓Л┼╓К╔╪ Л√╩Л≈┬Л°╪К╘╢ trueЛ·┘К▀┬К▀╓.</param>
     private void OnApplicationFocus(bool hasFocus)
     {
         SetCursorState(m_cursorLocked);
     }
 
     /// <summary>
-    /// Unity д©╪╜ юА╠щ ╩Себ╦╕ юШ©Кгу╢о╢ы.
+    /// Unity Л╩╓Л└° Л·═Й╦┬ Л┐│М┐°К╔╪ Л═│Л ╘М∙╘К▀┬К▀╓.
     /// </summary>
-    /// <param name="newState">д©╪╜╦╕ юА╠в╥а╦И true, гьа╕го╥а╦И falseют╢о╢ы.</param>
+    /// <param name="newState">Л╩╓Л└°К╔╪ Л·═Й╥╦К═╓К╘╢ true, М∙╢Л═°М∙≤К═╓К╘╢ falseЛ·┘К▀┬К▀╓.</param>
     private void SetCursorState(bool newState)
     {
         Cursor.lockState = newState ? CursorLockMode.Locked : CursorLockMode.None;
     }
 
     /// <summary>
-    /// ╦П╣Г ╥╠е╦юс ют╥б ╩Себ╦╕ ╠Б╨╩╟╙ю╦╥н цй╠Бх╜гу╢о╢ы.
+    /// К╙╗К⌠═ К÷╟М┐─Л·└ Л·┘К═╔ Л┐│М┐°К╔╪ Й╦╟КЁ╦Й╟▓Л°╪К║° Л╢┬Й╦╟М≥■М∙╘К▀┬К▀╓.
     /// </summary>
     /// <remarks>
-    /// юл╣©╟З ╫ца║ ют╥бю╨ <see cref="Vector2.zero"/>╥н цй╠Бх╜го╟М,
-    /// ╧Жф╟гЭ ют╥бю╨ ╦П╣н false╥н цй╠Бх╜гу╢о╢ы.
+    /// Л²╢К▐≥ЙЁ╪ Л▀°Л═░ Л·┘К═╔Л²─ <see cref="Vector2.zero"/>К║° Л╢┬Й╦╟М≥■М∙≤ЙЁ═,
+    /// К╡└М┼╪М≤∙ Л·┘К═╔Л²─ К╙╗К▒░ falseК║° Л╢┬Й╦╟М≥■М∙╘К▀┬К▀╓.
     /// </remarks>
     public void ResetInputState()
     {
