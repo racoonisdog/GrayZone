@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -8,8 +8,12 @@ using VInspector;
 /// <summary>
 /// HP, 피해, 회복, 사망, 부활, 선택적 HP UI 갱신을 공통으로 처리하는 체력 컴포넌트입니다.
 /// </summary>
-public class HealthSystemBase : MonoBehaviour
+public class HealthSystemBase : MonoBehaviour, IDamageable
 {
+    [Foldout("Faction Options")]
+    [Tooltip("이 유닛의 진영입니다. None이면 gameObject의 레이어 번호에서 진영을 추론합니다.")]
+    [SerializeField] protected Faction m_faction = Faction.None;
+
     [Foldout("HP Options")]
     [Tooltip("최대 HP입니다. 1보다 작은 값은 1로 보정됩니다.")]
     [FormerlySerializedAs("m_maxHP")]
@@ -39,6 +43,28 @@ public class HealthSystemBase : MonoBehaviour
     /// <summary>이 체력 컴포넌트가 사망 상태인지 여부입니다.</summary>
     public bool IsDead => m_isDead;
 
+    /// <summary>
+    /// 이 유닛의 진영입니다. 직렬화 값이 <see cref="Faction.None"/>이면
+    /// gameObject의 레이어 번호에서 진영을 추론합니다(레이어 번호 == 진영 enum 값).
+    /// </summary>
+    public Faction Faction => m_faction != Faction.None
+        ? m_faction
+        : LayerToFaction(gameObject.layer);
+
+    /// <summary>
+    /// 레이어 번호를 진영으로 환산합니다. 진영 enum 값이 레이어 번호와 동일하게
+    /// 맞춰져 있어, 알려진 레이어면 그대로 캐스팅합니다.
+    /// </summary>
+    private static Faction LayerToFaction(int layer)
+    {
+        Faction candidate = (Faction)layer;
+        return candidate == Faction.Player
+            || candidate == Faction.Enemy
+            || candidate == Faction.NPC
+            ? candidate
+            : Faction.None;
+    }
+
     /// <summary>현재 HP나 최대 HP가 변경될 때 발생합니다. 인자는 현재 HP와 최대 HP입니다.</summary>
     public event Action<int, int> OnHPChanged;
 
@@ -47,6 +73,9 @@ public class HealthSystemBase : MonoBehaviour
 
     /// <summary>부활 또는 전체 회복으로 컴포넌트가 사망 상태에서 벗어날 때 발생합니다.</summary>
     public event Action OnRevive;
+
+    /// <summary>피해로 현재 HP가 감소했을 때 발생합니다. 인자는 실제로 감소한 HP입니다.</summary>
+    public event Action<int> OnDamaged;
 
     private void Start()
     {
@@ -117,10 +146,19 @@ public class HealthSystemBase : MonoBehaviour
             return false;
         }
 
+        int previousHp = m_currentHp;
         m_currentHp = Mathf.Max(m_currentHp - damage, 0);
+        int actualDamage = previousHp - m_currentHp;
+
+        if (actualDamage <= 0)
+        {
+            return false;
+        }
+
         Debug.Log($"[HealthSystem] Hit. Current HP : {m_currentHp}", this);
 
         NotifyHPChanged();
+        OnDamaged?.Invoke(actualDamage);
 
         if (m_currentHp <= 0)
         {

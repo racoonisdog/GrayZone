@@ -114,11 +114,10 @@ public class WeaponController : MonoBehaviour
 
     public const float HitscanAimTolerance = 0.05f;
 
-    private const string EnemyLayerName = "Enemy";
-
     private bool m_canShoot = true;
     private bool m_isReloading;
     private bool m_hasRequiredReferences;
+    private Faction m_ownerFaction = Faction.Player;
 
     /// <summary>현재 탄약 수입니다.</summary>
     public int CurrentBullet => m_currentBullet;
@@ -198,6 +197,7 @@ public class WeaponController : MonoBehaviour
     private void OnDisable()
     {
         CancelInvoke(nameof(ResetShoot));
+        CancelInvoke(nameof(CompleteReload));
     }
 
     /// <summary>
@@ -209,6 +209,11 @@ public class WeaponController : MonoBehaviour
         {
             m_audioSource = GetComponent<AudioSource>();
         }
+
+        // 무기를 소유한 유닛의 진영을 사격 주체 진영으로 사용합니다.
+        // (스쿼드 멤버 자식에 부착되어 부모의 HealthSystemBase를 찾습니다. 없으면 Player로 가정.)
+        HealthSystemBase ownerHealth = GetComponentInParent<HealthSystemBase>();
+        m_ownerFaction = ownerHealth != null ? ownerHealth.Faction : Faction.Player;
     }
 
     /// <summary>
@@ -347,6 +352,8 @@ public class WeaponController : MonoBehaviour
 
         m_isReloading = true;
         PlayReloadSound();
+        CancelInvoke(nameof(CompleteReload));
+        Invoke(nameof(CompleteReload), m_reloadTime);
     }
 
     /// <summary>
@@ -354,6 +361,7 @@ public class WeaponController : MonoBehaviour
     /// </summary>
     public void CompleteReload()
     {
+        CancelInvoke(nameof(CompleteReload));
         m_currentBullet = m_maxBullet;
         m_isReloading = false;
         UpdateBulletUI();
@@ -364,6 +372,7 @@ public class WeaponController : MonoBehaviour
     /// </summary>
     public void CancelReload()
     {
+        CancelInvoke(nameof(CompleteReload));
         m_isReloading = false;
         UpdateBulletUI();
     }
@@ -391,9 +400,10 @@ public class WeaponController : MonoBehaviour
     }
 
     /// <summary>
-    /// 히트스캔 충돌 대상이 Enemy 레이어이면 EnemyHealth로 피해를 전달합니다.
+    /// 히트스캔 충돌 대상이 적대 진영이면 공용 피해 경로로 피해를 전달합니다.
     /// </summary>
     /// <param name="shotInfo">사격으로 발생한 히트스캔 충돌 정보입니다.</param>
+    /// <remarks>대상 구체 타입을 모른 채 <see cref="CombatDamage"/>가 진영 판정 후 적용합니다.</remarks>
     private void ApplyHitscanDamage(HitscanShotInfo shotInfo)
     {
         if (m_hitscanDamage <= 0 || shotInfo.Hit.collider == null)
@@ -401,24 +411,7 @@ public class WeaponController : MonoBehaviour
             return;
         }
 
-        if (!IsEnemyLayer(shotInfo.Hit.collider.gameObject))
-        {
-            return;
-        }
-
-        EnemyHealth enemyHealth = shotInfo.Hit.collider.GetComponentInParent<EnemyHealth>();
-        if (enemyHealth == null)
-        {
-            return;
-        }
-
-        enemyHealth.TakeDamage(m_hitscanDamage);
-    }
-
-    private static bool IsEnemyLayer(GameObject target)
-    {
-        int enemyLayer = LayerMask.NameToLayer(EnemyLayerName);
-        return enemyLayer >= 0 && target.layer == enemyLayer;
+        CombatDamage.TryApplyDamage(shotInfo.Hit.collider, m_ownerFaction, m_hitscanDamage);
     }
 
     /// <summary>

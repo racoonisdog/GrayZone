@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class BulletManager : MonoBehaviour
 {
@@ -11,7 +11,12 @@ public class BulletManager : MonoBehaviour
     private float destroyTime = 3f;
 
     [SerializeField]
-    private float damage = 1f;
+    private int damage = 1;
+
+    // 이 탄환을 발사한 주체의 진영입니다. 적대 진영에게만 피해를 적용합니다.
+    // 현재 물리 탄환은 플레이어 무기에서만 생성되므로 기본값은 Player이며,
+    // 다른 진영이 사용할 경우 발사 시 SetFaction으로 설정합니다.
+    private Faction m_ownerFaction = Faction.Player;
 
     private float currentLifeTime;
 
@@ -53,17 +58,20 @@ public class BulletManager : MonoBehaviour
         currentLifeTime = destroyTime;
     }
 
+    /// <summary>
+    /// 이 탄환을 발사한 주체의 진영을 설정합니다.
+    /// </summary>
+    /// <param name="faction">발사 주체의 진영입니다.</param>
+    public void SetFaction(Faction faction)
+    {
+        m_ownerFaction = faction;
+    }
+
     private void OnTriggerEnter(Collider other)
     {
-        Enemy enemy = other.GetComponentInParent<Enemy>();
-
-        if (enemy != null)
-        {
-            Vector3 hitDirection = transform.forward;
-            Vector3 hitPoint = other.ClosestPoint(transform.position);
-
-            enemy.TakeDamage(damage, hitPoint, hitDirection);
-        }
+        // 히트스캔(WeaponController)과 동일한 진영 기반 공용 피해 경로를 사용합니다.
+        // 대상 구체 타입을 모른 채 CombatDamage가 IDamageable 조회 후 적대 판정하여 적용합니다.
+        CombatDamage.TryApplyDamage(other, m_ownerFaction, damage);
 
         DestroyBullet();
     }
