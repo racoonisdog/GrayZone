@@ -28,6 +28,32 @@ public static class CombatDamage
     }
 
     /// <summary>
+    /// 이미 찾은 <see cref="IDamageable"/>에, 적대 진영이고 생존 중일 때만 피해를 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 콜라이더 기반 경로와 콜라이더 없이 대상을 직접 가진 경로(예: 비활성 콜라이더 타격)가
+    /// 동일한 적대 판정과 피해 적용을 공유하도록 하는 단일 진입점입니다.
+    /// </remarks>
+    /// <param name="target">피해 대상입니다.</param>
+    /// <param name="attacker">공격 측 진영입니다.</param>
+    /// <param name="damage">적용할 피해량입니다.</param>
+    /// <returns>피해가 실제로 적용되면 true입니다.</returns>
+    public static bool TryApplyDamage(IDamageable target, Faction attacker, int damage)
+    {
+        if (target == null || target.IsDead || damage <= 0)
+        {
+            return false;
+        }
+
+        if (!AreHostile(attacker, target.Faction))
+        {
+            return false;
+        }
+
+        return target.TakeDamage(damage);
+    }
+
+    /// <summary>
     /// 콜라이더에서 <see cref="IDamageable"/>을 찾아, 적대 진영이고 생존 중일 때만 피해를 적용합니다.
     /// </summary>
     /// <param name="collider">피격 판정 대상 콜라이더입니다.</param>
@@ -45,17 +71,7 @@ public static class CombatDamage
         }
 
         target = collider.GetComponentInParent<IDamageable>();
-        if (target == null || target.IsDead)
-        {
-            return false;
-        }
-
-        if (!AreHostile(attacker, target.Faction))
-        {
-            return false;
-        }
-
-        return target.TakeDamage(damage);
+        return TryApplyDamage(target, attacker, damage);
     }
 
     /// <summary>

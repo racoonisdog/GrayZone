@@ -131,17 +131,8 @@ public class EnemyAttack : MonoBehaviour
             health = target.GetComponentInChildren<PlayerHealth>();
         }
 
-        if (health == null || health.IsDead)
-        {
-            return false;
-        }
-
-        if (!CombatDamage.AreHostile(m_ownerFaction, health.Faction))
-        {
-            return false;
-        }
-
-        return health.TakeDamage(m_attackDamage);
+        // 적대 판정과 생존/피해 적용은 공용 경로로 처리합니다(null·사망 대상은 내부에서 걸러집니다).
+        return CombatDamage.TryApplyDamage(health, m_ownerFaction, m_attackDamage);
     }
 
     /// <summary>
