@@ -958,9 +958,14 @@ MonoBehaviour:
   m_targetLayer:
     serializedVersion: 2
     m_Bits: 0
-  m_hitscanObstructionMarker: {fileID: 0}
-  m_hitscanObstructionMarkerOffset: 0.01
+  m_hitscanBlockMarker: {fileID: 7452519899688939550}
+  m_hitscanBlockMarkerOffset: 0.01
   m_drawHitscanDebugRay: 0
+  m_drawAimPointSphere: 0
+  m_drawImpactPointSphere: 0
+  m_debugSphereRadius: 0.15
+  m_spawnImpactMarkerOnShot: 0
+  m_impactMarkerPrefab: {fileID: 0}
   m_handRig: {fileID: 3580838561190631184}
   m_aimRig: {fileID: 5188019311049236787}
   m_shootingSound: {fileID: 0}
@@ -1649,7 +1654,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &4170847010339260505
 Transform:
   m_ObjectHideFlags: 0
