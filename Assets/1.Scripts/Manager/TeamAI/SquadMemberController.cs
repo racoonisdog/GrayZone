@@ -130,8 +130,11 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>카메라가 따라갈 기준 Transform입니다.</summary>
     public Transform CameraTarget => m_cameraTarget != null ? m_cameraTarget : transform;
 
-    /// <summary>이 멤버가 생존 상태에서 사망 상태로 바뀔 때 발생합니다.</summary>
+    /// <summary>이 멤버가 생존 상태에서 사망(전투 이탈) 상태로 바뀔 때 발생합니다.</summary>
     public event Action<SquadMemberController> OnMemberDied;
+
+    /// <summary>이 멤버가 다운(빈사) 상태로 진입할 때 발생합니다.</summary>
+    public event Action<SquadMemberController> OnMemberDowned;
 
     /// <summary>
     /// Inspector에서 컴포넌트가 추가되거나 Reset될 때 현재 GameObject 기준으로 참조를 자동 탐색합니다.
@@ -178,11 +181,15 @@ public class SquadMemberController : MonoBehaviour
     }
 
     /// <summary>
-    /// HP가 0에 도달해 사망하면 생존 플래그를 내려 조작/추종/타겟 유효성을 함께 해제합니다.
+    /// HP가 0에 도달하면 다운(빈사) 상태로 전환합니다.
     /// </summary>
+    /// <remarks>
+    /// 1차 프로토타입 기준: HP 0은 사망이 아니라 다운이며, 다운 중에는 이동/조준/사격이 제한됩니다.
+    /// 전투 이탈(사망 확정)은 구조 가능 시간이 끝났을 때 처리합니다(후속 작업).
+    /// </remarks>
     private void HandleHealthDied()
     {
-        SetAlive(false);
+        SetDown(true);
     }
 
     /// <summary>
@@ -319,8 +326,14 @@ public class SquadMemberController : MonoBehaviour
             return;
         }
 
+        bool wasDown = m_isDown;
         m_isDown = value;
         ApplyControlState();
+
+        if (!wasDown && m_isDown)
+        {
+            OnMemberDowned?.Invoke(this);
+        }
     }
 
     /// <summary>
@@ -372,7 +385,10 @@ public class SquadMemberController : MonoBehaviour
             return;
         }
 
-        bool keepShoot = state.Aim && state.Shoot;
+        // 조준(ADS)뿐 아니라 힙파이어(조준 없이 사격)도 전환에 유지하기 위해 사격 입력은 그대로 넘깁니다.
+        bool keepShoot = state.Shoot;
+        // 전투 자세(백뷰)는 조준이거나 사격(힙파이어) 중이면 유지합니다.
+        bool inCombat = state.Aim || state.Shoot;
 
         if (m_playerInputs != null)
         {
@@ -386,7 +402,7 @@ public class SquadMemberController : MonoBehaviour
 
         if (m_thirdPersonController != null)
         {
-            m_thirdPersonController.SetAimMove(state.Aim);
+            m_thirdPersonController.SetAimMove(inCombat);
             m_thirdPersonController.ApplyLocomotionCarryoverState(state.Locomotion);
         }
 
