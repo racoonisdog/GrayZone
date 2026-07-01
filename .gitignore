@@ -83,3 +83,4 @@ Packages/unity-cli/
 # Local agent bootstrap files
 /AGENTS.md
 /CLAUDE.md
+/.claude/
