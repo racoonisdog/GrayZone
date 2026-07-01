@@ -19,7 +19,16 @@ public class PlayerbleUnitData : MonoBehaviour
     [Header("Observed Modules")]
     [SerializeField] private PlayerHealth m_health;
     [SerializeField] private SquadMemberController m_squadMember;
+    [SerializeField] private WeaponController m_weaponController;
     [SerializeField] private Transform m_publicTarget;
+
+    [Header("Weapon Public Data")]
+    [SerializeField] private Weapon m_currentWeapon;
+    [SerializeField] private string m_currentWeaponFallbackName;
+
+    [Header("Ammo Inventory")]
+    [SerializeField] private int m_reserveAmmo;
+    [SerializeField] private int m_maxReserveAmmo = 120;
 
     /// <summary>
     /// 공개 상태 중 외부에 노출되는 값이 바뀌었을 때 발생합니다.
@@ -103,6 +112,71 @@ public class PlayerbleUnitData : MonoBehaviour
         : 0.0f;
 
     /// <summary>
+    /// 현재 장착 무기의 컨트롤러입니다.
+    /// </summary>
+    public WeaponController WeaponController => m_weaponController;
+
+    /// <summary>
+    /// 현재 장착 무기의 정의 데이터입니다.
+    /// 비어 있으면 무기 컨트롤러와 fallback 이름만 사용합니다.
+    /// </summary>
+    public Weapon CurrentWeapon => m_currentWeapon;
+
+    /// <summary>
+    /// 현재 무기 정의 데이터가 연결되어 있는지 여부입니다.
+    /// </summary>
+    public bool HasCurrentWeaponDefinition => m_currentWeapon != null;
+
+    /// <summary>
+    /// 현재 무기 ID입니다.
+    /// </summary>
+    public string CurrentWeaponId => m_currentWeapon != null
+        ? (m_currentWeapon.weaponId?.Trim() ?? string.Empty)
+        : string.Empty;
+
+    /// <summary>
+    /// 현재 무기 이름입니다. 정의 데이터, fallback 이름, 컨트롤러 오브젝트 이름 순으로 반환합니다.
+    /// </summary>
+    public string CurrentWeaponName => ResolveCurrentWeaponName();
+
+    /// <summary>
+    /// 현재 무기 타입입니다. 정의 데이터가 없으면 enum 기본값을 반환합니다.
+    /// </summary>
+    public WeaponType CurrentWeaponType => m_currentWeapon != null
+        ? m_currentWeapon.weaponType
+        : default;
+
+    /// <summary>
+    /// 현재 무기의 한 탄창 기준 장탄 수입니다.
+    /// </summary>
+    public int CurrentMagazineAmmo => m_weaponController != null ? m_weaponController.CurrentBullet : 0;
+
+    /// <summary>
+    /// 현재 무기의 탄창 용량입니다.
+    /// </summary>
+    public int MagazineCapacity => m_weaponController != null ? m_weaponController.MaxBullet : 0;
+
+    /// <summary>
+    /// 플레이어가 탄창 밖에 보유 중인 예비 탄약 수입니다.
+    /// </summary>
+    public int ReserveAmmo => m_reserveAmmo;
+
+    /// <summary>
+    /// 플레이어가 보유할 수 있는 예비 탄약 최대치입니다.
+    /// </summary>
+    public int MaxReserveAmmo => m_maxReserveAmmo;
+
+    /// <summary>
+    /// 현재 탄창과 예비 탄약을 합산한 총 보유 탄약 수입니다.
+    /// </summary>
+    public int TotalAmmo => CurrentMagazineAmmo + m_reserveAmmo;
+
+    /// <summary>
+    /// 현재 무기와 탄약 상태를 로그/UI용으로 짧게 요약한 문자열입니다.
+    /// </summary>
+    public string CurrentWeaponShortInfo => BuildCurrentWeaponShortInfo();
+
+    /// <summary>
     /// 외부 시스템이 이 유닛을 대상으로 삼을 기준 Transform입니다.
     /// </summary>
     public Transform PublicTarget => m_publicTarget != null ? m_publicTarget : transform;
@@ -123,11 +197,13 @@ public class PlayerbleUnitData : MonoBehaviour
     {
         CacheReferences();
         SubscribeHealth();
+        SubscribeWeapon();
     }
 
     private void OnDisable()
     {
         UnsubscribeHealth();
+        UnsubscribeWeapon();
     }
 
 #if UNITY_EDITOR
@@ -194,6 +270,107 @@ public class PlayerbleUnitData : MonoBehaviour
         SetReliability(m_reliability + amount);
     }
 
+    /// <summary>
+    /// 현재 무기 정의 데이터를 설정합니다.
+    /// </summary>
+    /// <param name="weapon">새 무기 정의 데이터입니다.</param>
+    public void SetCurrentWeapon(Weapon weapon)
+    {
+        if (m_currentWeapon == weapon)
+        {
+            return;
+        }
+
+        m_currentWeapon = weapon;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 현재 무기 이름 fallback 값을 설정합니다.
+    /// </summary>
+    /// <param name="value">무기 정의 데이터가 없을 때 표시할 이름입니다.</param>
+    public void SetCurrentWeaponFallbackName(string value)
+    {
+        string nextValue = value?.Trim() ?? string.Empty;
+        if (m_currentWeaponFallbackName == nextValue)
+        {
+            return;
+        }
+
+        m_currentWeaponFallbackName = nextValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 관찰할 무기 컨트롤러를 설정합니다.
+    /// </summary>
+    /// <param name="weaponController">새 무기 컨트롤러입니다.</param>
+    public void SetWeaponController(WeaponController weaponController)
+    {
+        if (m_weaponController == weaponController)
+        {
+            return;
+        }
+
+        bool wasActive = isActiveAndEnabled;
+        if (wasActive)
+        {
+            UnsubscribeWeapon();
+        }
+
+        m_weaponController = weaponController;
+
+        if (wasActive)
+        {
+            SubscribeWeapon();
+        }
+
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 예비 탄약 수를 설정합니다.
+    /// </summary>
+    /// <param name="value">새 예비 탄약 수입니다.</param>
+    public void SetReserveAmmo(int value)
+    {
+        int clampedValue = Mathf.Clamp(value, 0, m_maxReserveAmmo);
+        if (m_reserveAmmo == clampedValue)
+        {
+            return;
+        }
+
+        m_reserveAmmo = clampedValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 예비 탄약 수를 증감합니다.
+    /// </summary>
+    /// <param name="amount">더할 값입니다. 음수도 허용됩니다.</param>
+    public void AddReserveAmmo(int amount)
+    {
+        SetReserveAmmo(m_reserveAmmo + amount);
+    }
+
+    /// <summary>
+    /// 예비 탄약 최대치를 설정합니다.
+    /// </summary>
+    /// <param name="value">새 예비 탄약 최대치입니다.</param>
+    public void SetMaxReserveAmmo(int value)
+    {
+        int nextMaxValue = Mathf.Max(0, value);
+        int nextReserveAmmo = Mathf.Clamp(m_reserveAmmo, 0, nextMaxValue);
+        if (m_maxReserveAmmo == nextMaxValue && m_reserveAmmo == nextReserveAmmo)
+        {
+            return;
+        }
+
+        m_maxReserveAmmo = nextMaxValue;
+        m_reserveAmmo = nextReserveAmmo;
+        NotifyPublicDataChanged();
+    }
+
     private void CacheReferences()
     {
         if (m_health == null)
@@ -204,6 +381,11 @@ public class PlayerbleUnitData : MonoBehaviour
         if (m_squadMember == null)
         {
             m_squadMember = GetComponent<SquadMemberController>();
+        }
+
+        if (m_weaponController == null)
+        {
+            m_weaponController = GetComponentInChildren<WeaponController>(true);
         }
 
         if (m_publicTarget == null && m_squadMember != null)
@@ -220,7 +402,7 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_health.OnHPChanged += HandleHpChanged;
-        m_health.OnDied += NotifyPublicDataChanged;
+        m_health.OnDeath += NotifyPublicDataChanged;
         m_health.OnRevive += NotifyPublicDataChanged;
         m_health.OnInjuryGaugeChanged += HandleInjuryGaugeChanged;
         m_health.OnInjuryStateChanged += HandleInjuryStateChanged;
@@ -234,10 +416,30 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_health.OnHPChanged -= HandleHpChanged;
-        m_health.OnDied -= NotifyPublicDataChanged;
+        m_health.OnDeath -= NotifyPublicDataChanged;
         m_health.OnRevive -= NotifyPublicDataChanged;
         m_health.OnInjuryGaugeChanged -= HandleInjuryGaugeChanged;
         m_health.OnInjuryStateChanged -= HandleInjuryStateChanged;
+    }
+
+    private void SubscribeWeapon()
+    {
+        if (m_weaponController == null)
+        {
+            return;
+        }
+
+        m_weaponController.OnBulletChanged += HandleWeaponBulletChanged;
+    }
+
+    private void UnsubscribeWeapon()
+    {
+        if (m_weaponController == null)
+        {
+            return;
+        }
+
+        m_weaponController.OnBulletChanged -= HandleWeaponBulletChanged;
     }
 
     private void HandleHpChanged(int currentHp, int maxHp)
@@ -255,13 +457,44 @@ public class PlayerbleUnitData : MonoBehaviour
         NotifyPublicDataChanged();
     }
 
+    private void HandleWeaponBulletChanged(int currentBullet, int maxBullet)
+    {
+        NotifyPublicDataChanged();
+    }
+
     private void NotifyPublicDataChanged()
     {
         OnPublicDataChanged?.Invoke();
     }
 
+    private string ResolveCurrentWeaponName()
+    {
+        if (m_currentWeapon != null && !string.IsNullOrWhiteSpace(m_currentWeapon.weaponName))
+        {
+            return m_currentWeapon.weaponName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(m_currentWeaponFallbackName))
+        {
+            return m_currentWeaponFallbackName.Trim();
+        }
+
+        return m_weaponController != null ? m_weaponController.gameObject.name : string.Empty;
+    }
+
+    private string BuildCurrentWeaponShortInfo()
+    {
+        string weaponName = CurrentWeaponName;
+        string ammoInfo = $"{CurrentMagazineAmmo}/{MagazineCapacity}, reserve {m_reserveAmmo}";
+        return string.IsNullOrWhiteSpace(weaponName)
+            ? ammoInfo
+            : $"{weaponName} {ammoInfo}";
+    }
+
     private void ClampValues()
     {
         m_reliability = Mathf.Clamp(m_reliability, 0, 100);
+        m_maxReserveAmmo = Mathf.Max(0, m_maxReserveAmmo);
+        m_reserveAmmo = Mathf.Clamp(m_reserveAmmo, 0, m_maxReserveAmmo);
     }
 }

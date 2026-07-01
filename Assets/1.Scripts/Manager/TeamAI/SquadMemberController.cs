@@ -136,6 +136,9 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>이 멤버가 다운(빈사) 상태로 진입할 때 발생합니다.</summary>
     public event Action<SquadMemberController> OnMemberDowned;
 
+    private static readonly int DownHash = Animator.StringToHash("IsDown");
+    private static readonly int DeathHash = Animator.StringToHash("IsDead");
+
     /// <summary>
     /// Inspector에서 컴포넌트가 추가되거나 Reset될 때 현재 GameObject 기준으로 참조를 자동 탐색합니다.
     /// </summary>
@@ -165,7 +168,8 @@ public class SquadMemberController : MonoBehaviour
             return;
         }
 
-        m_playerHealth.OnDied += HandleHealthDied;
+        m_playerHealth.OnDown += HandleHealthDowned;
+        m_playerHealth.OnDeath += HandleHealthDeath;
         m_playerHealth.OnRevive += HandleHealthRevive;
     }
 
@@ -176,7 +180,8 @@ public class SquadMemberController : MonoBehaviour
             return;
         }
 
-        m_playerHealth.OnDied -= HandleHealthDied;
+        m_playerHealth.OnDown -= HandleHealthDowned;
+        m_playerHealth.OnDeath -= HandleHealthDeath;
         m_playerHealth.OnRevive -= HandleHealthRevive;
     }
 
@@ -185,11 +190,19 @@ public class SquadMemberController : MonoBehaviour
     /// </summary>
     /// <remarks>
     /// 1차 프로토타입 기준: HP 0은 사망이 아니라 다운이며, 다운 중에는 이동/조준/사격이 제한됩니다.
-    /// 전투 이탈(사망 확정)은 구조 가능 시간이 끝났을 때 처리합니다(후속 작업).
+    /// 전투 이탈(사망 확정)은 구조 가능 시간이 끝났을 때 <see cref="HandleHealthDeath"/>로 처리합니다(후속 작업).
     /// </remarks>
-    private void HandleHealthDied()
+    private void HandleHealthDowned()
     {
         SetDown(true);
+    }
+
+    /// <summary>
+    /// 특수 사망 조건(예: 구조 실패)으로 체력 컴포넌트가 사망하면 전투 이탈(사망) 상태로 전환합니다.
+    /// </summary>
+    private void HandleHealthDeath()
+    {
+        SetAlive(false);
     }
 
     /// <summary>
@@ -308,6 +321,7 @@ public class SquadMemberController : MonoBehaviour
         }
 
         ApplyControlState();
+        UpdateDownDeathAnimator();
 
         if (wasAlive && !m_isAlive)
         {
@@ -329,11 +343,38 @@ public class SquadMemberController : MonoBehaviour
         bool wasDown = m_isDown;
         m_isDown = value;
         ApplyControlState();
+        UpdateDownDeathAnimator();
 
         if (!wasDown && m_isDown)
         {
             OnMemberDowned?.Invoke(this);
         }
+    }
+
+    /// <summary>
+    /// 현재 생존/다운 상태를 애니메이터 파라미터(Down/Death)에 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 사망이면 Death=true·Down=false, 생존 중 다운이면 Down=true·Death=false, 그 외엔 둘 다 false입니다.
+    /// </remarks>
+    private void UpdateDownDeathAnimator()
+    {
+        bool isDead = !m_isAlive;
+        bool isDown = !isDead && m_isDown;
+
+        // 다운/사망 시 상체 조준 IK와 무기 레이어를 완전히 해제해 목표(다운/사망) 모션이 IK에 의해 깨지지 않게 합니다.
+        if ((isDead || isDown) && m_aimController != null)
+        {
+            m_aimController.ReleaseCombatVisuals();
+        }
+
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(DeathHash, isDead);
+        m_animator.SetBool(DownHash, isDown);
     }
 
     /// <summary>

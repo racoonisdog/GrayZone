@@ -69,7 +69,7 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     public event Action<int, int> OnHPChanged;
 
     /// <summary>HP가 0에 도달해 컴포넌트가 사망 상태로 진입할 때 발생합니다.</summary>
-    public event Action OnDied;
+    public event Action OnDeath;
 
     /// <summary>부활 또는 전체 회복으로 컴포넌트가 사망 상태에서 벗어날 때 발생합니다.</summary>
     public event Action OnRevive;
@@ -155,14 +155,16 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
             return false;
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"[HealthSystem] Hit. Current HP : {m_currentHp}", this);
+#endif
 
         NotifyHPChanged();
         OnDamaged?.Invoke(actualDamage);
 
         if (m_currentHp <= 0)
         {
-            Die();
+            OnHpDepleted();
         }
 
         return true;
@@ -264,7 +266,7 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     {
         if (m_currentHp <= 0)
         {
-            Die();
+            OnHpDepleted();
             return;
         }
 
@@ -272,9 +274,24 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     }
 
     /// <summary>
+    /// HP가 0에 도달했을 때의 처리입니다. 기본 동작은 즉시 사망(<see cref="Death"/>)입니다.
+    /// </summary>
+    /// <remarks>
+    /// 다운(빈사)이 가능한 유닛(플레이어)은 이 메서드를 재정의해 사망 대신 다운으로 분기합니다.
+    /// 그 경우 사망은 특수 조건에서만 <see cref="Death"/>를 직접 호출해 발동합니다.
+    /// </remarks>
+    protected virtual void OnHpDepleted()
+    {
+        Death();
+    }
+
+    /// <summary>
     /// 사망 상태로 진입하고 사망 이벤트를 발생시킵니다.
     /// </summary>
-    protected virtual void Die()
+    /// <remarks>
+    /// HP 0 기본 처리(<see cref="OnHpDepleted"/>) 외에, 특수한 사망 조건에서 외부 시스템이 직접 호출할 수 있습니다.
+    /// </remarks>
+    public virtual void Death()
     {
         if (m_isDead)
         {
@@ -283,7 +300,9 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
 
         m_isDead = true;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log("[HealthSystem] Dead", this);
-        OnDied?.Invoke();
+#endif
+        OnDeath?.Invoke();
     }
 }

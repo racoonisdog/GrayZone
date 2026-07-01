@@ -5,7 +5,7 @@ public class GameSaveManager : MonoBehaviour
 {
     public static GameSaveManager Instance { get; private set; }
 
-    [Header("ÀúÀå ¼³Á¤")]
+    [Header("ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½")]
     [SerializeField] private string defaultProfileId = SaveFilePaths.DefaultProfileId;
     [SerializeField] private bool prettyPrint = true;
 

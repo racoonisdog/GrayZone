@@ -398,6 +398,7 @@ public class SquadManager : MonoBehaviour
             }
 
             member.OnMemberDied += HandleMemberDied;
+            member.OnMemberDowned += HandleMemberDowned;
             m_subscribedMemberDeathEvents.Add(member);
         }
     }
@@ -410,6 +411,7 @@ public class SquadManager : MonoBehaviour
             if (member != null)
             {
                 member.OnMemberDied -= HandleMemberDied;
+                member.OnMemberDowned -= HandleMemberDowned;
             }
         }
 
@@ -431,6 +433,28 @@ public class SquadManager : MonoBehaviour
         if (wasCurrentMember && !switched && m_logSwitchDebug)
         {
             Debug.Log("[SquadManager] No available squad member remains after current member death.", this);
+        }
+    }
+
+    /// <summary>
+    /// 멤버가 다운(빈사) 상태가 되면, 그 멤버가 현재 조작 대상일 때 조작 가능한 다른 멤버로 자동 전환합니다.
+    /// </summary>
+    /// <remarks>
+    /// 다운은 사망과 달리 구조로 복귀할 수 있으므로 사망 정리(ClearDeadControlState)는 수행하지 않습니다.
+    /// 조작 권한 해제는 다운 진입 시 <see cref="SquadMemberController"/>가 이미 처리합니다.
+    /// </remarks>
+    private void HandleMemberDowned(SquadMemberController member)
+    {
+        if (member == null || member != CurrentMember)
+        {
+            return;
+        }
+
+        bool switched = TrySwitchToNextMember(m_swapMemberTransformsOnDeath, false);
+
+        if (!switched && m_logSwitchDebug)
+        {
+            Debug.Log("[SquadManager] No available squad member remains after current member down.", this);
         }
     }
 
@@ -619,6 +643,7 @@ public class SquadManager : MonoBehaviour
     /// <param name="label">출력 시점 라벨입니다.</param>
     /// <param name="previousMember">전환 전 플레이어 조작 멤버입니다.</param>
     /// <param name="nextMember">전환 후 플레이어 조작 멤버입니다.</param>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
     private void LogSwitchDebugSnapshot(string label, SquadMemberController previousMember, SquadMemberController nextMember)
     {
         string previousName = previousMember != null ? previousMember.name : "null";
@@ -651,9 +676,9 @@ public class SquadManager : MonoBehaviour
 
             bool agentEnabled = navMeshAgent != null && navMeshAgent.enabled;
             bool agentOnNavMesh = agentEnabled && navMeshAgent.isOnNavMesh;
-            bool grounded = animator != null && animator.GetBool("Grounded");
-            bool jump = animator != null && animator.GetBool("Jump");
-            bool freeFall = animator != null && animator.GetBool("FreeFall");
+            bool grounded = animator != null && animator.GetBool("IsGrounded");
+            bool jump = animator != null && animator.GetBool("IsJump");
+            bool freeFall = animator != null && animator.GetBool("IsFreeFall");
             float speed = animator != null ? animator.GetFloat("Speed") : 0.0f;
             float motionSpeed = animator != null ? animator.GetFloat("MotionSpeed") : 0.0f;
             Vector3 agentVelocity = agentEnabled ? navMeshAgent.velocity : Vector3.zero;

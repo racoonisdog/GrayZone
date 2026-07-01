@@ -149,7 +149,7 @@ public class EnemyController : MonoBehaviour
         }
 
         enemyHealth.OnDamaged += HandleDamaged;
-        enemyHealth.OnDied += HandleDied;
+        enemyHealth.OnDeath += HandleDied;
     }
 
     /// <summary>
@@ -163,7 +163,7 @@ public class EnemyController : MonoBehaviour
         }
 
         enemyHealth.OnDamaged -= HandleDamaged;
-        enemyHealth.OnDied -= HandleDied;
+        enemyHealth.OnDeath -= HandleDied;
     }
 
     /// <summary>

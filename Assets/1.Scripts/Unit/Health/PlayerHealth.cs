@@ -44,6 +44,9 @@ public class PlayerHealth : HealthSystemBase
     /// <summary>누적 데미지 기준 부상 상태가 변경될 때 발생합니다.</summary>
     public event Action<PlayerInjuryState> OnInjuryStateChanged;
 
+    /// <summary>HP가 0에 도달해 다운(빈사) 상태로 진입해야 할 때 발생합니다.</summary>
+    public event Action OnDown;
+
 #if UNITY_EDITOR
     protected new void OnValidate()
     {
@@ -61,6 +64,18 @@ public class PlayerHealth : HealthSystemBase
     {
         base.InitializeHealth();
         ResetInjuryDamage();
+    }
+
+    /// <summary>
+    /// 플레이어는 HP가 0에 도달해도 즉시 사망하지 않고 다운(빈사) 상태로 진입합니다.
+    /// </summary>
+    /// <remarks>
+    /// 사망(<see cref="HealthSystemBase.Death"/>)은 구조 실패 등 특수 조건에서만 별도로 발동합니다.
+    /// 따라서 여기서는 사망 플래그를 세우지 않고 다운 진입 이벤트만 발신합니다.
+    /// </remarks>
+    protected override void OnHpDepleted()
+    {
+        OnDown?.Invoke();
     }
 
     public override bool TakeDamage(int damage)

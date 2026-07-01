@@ -120,6 +120,22 @@ public class ThirdPersonController : MonoBehaviour
 
 
 
+    /// <summary>사격 반동에 따른 카메라 킥(시각 오프셋) 설정값입니다.</summary>
+    [Foldout("Camera Kick Options")]
+    [Tooltip("킥 오프셋이 0(원래 시점)으로 복귀하는 속도입니다. 클수록 빠르게 제자리로 돌아옵니다.")]
+    [SerializeField] private float m_cameraKickRecoverySpeed = 8.0f;
+
+    [Tooltip("마지막 킥(발사) 이후 이 시간(초)이 지나야 킥 오프셋 회복을 시작합니다. 사격 중에는 오프셋을 유지하고, 멈춘 뒤에야 복귀시키기 위한 지연입니다. 무기 풀오토 사격 간격(ShootDelay)보다 커야 연사 중 오프셋이 유지됩니다.")]
+    [SerializeField] private float m_cameraKickRecoveryDelay = 0.15f;
+
+    [Tooltip("누적될 수 있는 세로(피치) 킥 오프셋의 상한 각도(도)입니다. 풀오토 연사 시 시점이 과하게 솟구치지 않도록 제한합니다.")]
+    [SerializeField] private float m_cameraKickMaxPitch = 4.0f;
+
+    [Tooltip("누적될 수 있는 좌우(요) 킥 오프셋의 상한 각도(도)입니다.")]
+    [SerializeField] private float m_cameraKickMaxYaw = 3.0f;
+
+
+
     /// <summary>애니메이션 이벤트에서 재생할 캐릭터 오디오 설정값입니다.</summary>
     [Foldout("Audio Options")]
     [FormerlySerializedAs("LandingAudioClip")]
@@ -137,6 +153,15 @@ public class ThirdPersonController : MonoBehaviour
 
     /// <summary>카메라 회전 보간에 사용하는 현재 pitch 값입니다.</summary>
     private float m_cinemachineTargetPitch;
+
+    /// <summary>사격 반동으로 카메라 타겟 회전에 가산할 세로(피치) 킥 오프셋입니다. 매 프레임 0으로 복귀합니다.</summary>
+    private float m_cameraKickPitchOffset;
+
+    /// <summary>사격 반동으로 카메라 타겟 회전에 가산할 좌우(요) 킥 오프셋입니다. 매 프레임 0으로 복귀합니다.</summary>
+    private float m_cameraKickYawOffset;
+
+    /// <summary>마지막으로 카메라 킥이 가해진 시각입니다. 회복 시작 지연 판정에 사용합니다.</summary>
+    private float m_lastCameraKickTime = float.NegativeInfinity;
 
     /// <summary>현재 프레임 이동에 사용할 수평 속도입니다.</summary>
     private float m_speed;
@@ -387,6 +412,48 @@ public class ThirdPersonController : MonoBehaviour
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
     public void SetLockCameraPosition(bool value) => m_lockCameraPosition = value;
+
+    /// <summary>
+    /// 사격 반동 등으로 카메라에 순간 킥(시각 오프셋)을 누적합니다.
+    /// </summary>
+    /// <param name="pitchDegrees">세로(피치) 킥 각도(도)입니다. 양수면 시점이 위로 솟습니다.</param>
+    /// <param name="yawDegrees">좌우(요) 킥 각도(도)입니다.</param>
+    /// <remarks>
+    /// 플레이어의 실제 조준값(<see cref="m_cinemachineTargetYaw"/>/<see cref="m_cinemachineTargetPitch"/>)은 바꾸지 않고,
+    /// 카메라 타겟 회전에만 더해지는 시각 오프셋입니다. <see cref="CameraRotation"/>에서 매 프레임 0으로 복귀하므로 조준은 원래 위치로 되돌아옵니다.
+    /// </remarks>
+    public void AddCameraKick(float pitchDegrees, float yawDegrees)
+    {
+        m_cameraKickPitchOffset = Mathf.Clamp(
+            m_cameraKickPitchOffset + pitchDegrees,
+            -m_cameraKickMaxPitch,
+            m_cameraKickMaxPitch);
+
+        m_cameraKickYawOffset = Mathf.Clamp(
+            m_cameraKickYawOffset + yawDegrees,
+            -m_cameraKickMaxYaw,
+            m_cameraKickMaxYaw);
+
+        m_lastCameraKickTime = Time.time;
+    }
+
+    /// <summary>
+    /// 논리 조준 회전입니다. 카메라 킥(시각 흔들림)이 빠진, 플레이어 시점 입력(+추후 총기 반동) 기준의 회전입니다.
+    /// </summary>
+    /// <remarks>
+    /// 사격 판정(AimPoint 계산)은 이 회전을 기준으로 해야 하며, 카메라 킥이 반영된 렌더 카메라 방향을 쓰면 안 됩니다.
+    /// 화면 출력(<see cref="CameraRotation"/>)은 이 논리 회전 위에 킥 오프셋을 얹어(<c>Euler(pitch - kickPitch, yaw + kickYaw, 0)</c>) 흔들림만 표현합니다.
+    /// 총기 반동을 추가할 때는 이 논리 회전(시점 yaw/pitch)에 반영하고, 카메라 킥은 렌더에만 반영합니다.
+    /// </remarks>
+    public Quaternion LogicalAimRotation => Quaternion.Euler(
+        m_cinemachineTargetPitch + m_cameraAngleOverride,
+        m_cinemachineTargetYaw,
+        0.0f);
+
+    /// <summary>
+    /// 논리 조준 전방 방향입니다. 카메라 킥이 빠진, 사격 판정에 사용할 정규화 방향입니다.
+    /// </summary>
+    public Vector3 LogicalAimForward => LogicalAimRotation * Vector3.forward;
 
     /// <summary>
     /// 착지 효과음 클립을 설정합니다.
@@ -679,9 +746,9 @@ public class ThirdPersonController : MonoBehaviour
     private void AssignAnimationIDs()
     {
         m_animIDSpeed = Animator.StringToHash("Speed");
-        m_animIDGrounded = Animator.StringToHash("Grounded");
-        m_animIDJump = Animator.StringToHash("Jump");
-        m_animIDFreeFall = Animator.StringToHash("FreeFall");
+        m_animIDGrounded = Animator.StringToHash("IsGrounded");
+        m_animIDJump = Animator.StringToHash("IsJump");
+        m_animIDFreeFall = Animator.StringToHash("IsFreeFall");
         m_animIDMotionSpeed = Animator.StringToHash("MotionSpeed");
     }
 
@@ -717,11 +784,21 @@ public class ThirdPersonController : MonoBehaviour
         m_cinemachineTargetYaw = ClampAngle(m_cinemachineTargetYaw, float.MinValue, float.MaxValue);
         m_cinemachineTargetPitch = ClampAngle(m_cinemachineTargetPitch, m_bottomClamp, m_topClamp);
 
+        // 사격 킥 오프셋 처리: 사격 중(마지막 킥 이후 지연 이내)에는 벌어진 오프셋을 유지하고,
+        // 사격을 멈춰 지연이 지난 뒤에야 원래 시점(0)으로 부드럽게 복귀시킵니다. 실제 조준값은 건드리지 않습니다.
+        if (Time.time - m_lastCameraKickTime > m_cameraKickRecoveryDelay)
+        {
+            float recoveryFactor = Mathf.Clamp01(Time.deltaTime * m_cameraKickRecoverySpeed);
+            m_cameraKickPitchOffset = Mathf.Lerp(m_cameraKickPitchOffset, 0.0f, recoveryFactor);
+            m_cameraKickYawOffset = Mathf.Lerp(m_cameraKickYawOffset, 0.0f, recoveryFactor);
+        }
+
         if (m_cinemachineCameraTarget != null)
         {
+            // 피치 킥은 위로 솟는 느낌이 되도록 뺍니다(StarterAssets pitch 규약: 값이 커질수록 아래를 봄).
             m_cinemachineCameraTarget.transform.rotation = Quaternion.Euler(
-                m_cinemachineTargetPitch + m_cameraAngleOverride,
-                m_cinemachineTargetYaw,
+                m_cinemachineTargetPitch + m_cameraAngleOverride - m_cameraKickPitchOffset,
+                m_cinemachineTargetYaw + m_cameraKickYawOffset,
                 0.0f);
         }
     }

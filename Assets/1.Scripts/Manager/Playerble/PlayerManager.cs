@@ -21,8 +21,8 @@ public class PlayerManager : MonoBehaviour
     private const int WeaponLayerIndex = 1;
     private const float AimRotationLerpSpeed = 50.0f;
 
-    private static readonly int AnimIDShoot = Animator.StringToHash("Shoot");
-    private static readonly int AnimIDReload = Animator.StringToHash("Reload");
+    private static readonly int AnimIDShoot = Animator.StringToHash("IsShoot");
+    private static readonly int AnimIDReload = Animator.StringToHash("DoReload");
 
     [Foldout("Aim Options")]
     [Tooltip("조준 중 활성화할 Cinemachine 카메라입니다.")]
