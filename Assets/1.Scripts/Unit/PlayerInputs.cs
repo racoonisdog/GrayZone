@@ -46,6 +46,9 @@ public class PlayerInputs : MonoBehaviour
     [FormerlySerializedAs("reload")]
     [SerializeField] private bool m_reload;
 
+    [Tooltip("상호작용 입력이 눌린 상태(홀드 포함)인지 여부입니다.")]
+    [SerializeField] private bool m_interact;
+
     [Header("Movement Settings")]
     [Tooltip("아날로그 이동 입력을 사용할지 여부입니다. true이면 입력 세기 magnitude를 이동 속도에 반영합니다.")]
     [FormerlySerializedAs("analogMovement")]
@@ -80,6 +83,9 @@ public class PlayerInputs : MonoBehaviour
 
     /// <summary>재장전 입력 상태입니다.</summary>
     public bool Reload => m_reload;
+
+    /// <summary>상호작용 입력이 눌린 상태(홀드 포함)입니다. 탭/홀드 판정은 소비 측(InteractionController)에서 처리합니다.</summary>
+    public bool Interact => m_interact;
 
     /// <summary>아날로그 이동 입력 사용 여부입니다.</summary>
     public bool AnalogMovement => m_analogMovement;
@@ -246,6 +252,16 @@ public class PlayerInputs : MonoBehaviour
     {
         ReloadInput(value.isPressed);
     }
+
+    /// <summary>
+    /// 상호작용(Interaction) 입력 액션 콜백입니다.
+    /// </summary>
+    /// <param name="value">Input System에서 전달된 상호작용 입력 상태입니다.</param>
+    /// <remarks>버튼 액션이라 누름/뗌 모두 호출되며, <c>isPressed</c>로 홀드 상태를 그대로 보관합니다.</remarks>
+    public void OnInteraction(InputValue value)
+    {
+        InteractInput(value.isPressed);
+    }
 #endif
 
     /// <summary>
@@ -312,6 +328,15 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
+    /// 상호작용 입력 상태를 갱신합니다.
+    /// </summary>
+    /// <param name="newInteractState">새 상호작용 입력 상태입니다.</param>
+    public void InteractInput(bool newInteractState)
+    {
+        m_interact = newInteractState;
+    }
+
+    /// <summary>
     /// 커서 잠금 사용 여부를 설정합니다.
     /// </summary>
     /// <param name="value">커서를 잠그려면 true, 해제하려면 false입니다.</param>
@@ -373,5 +398,6 @@ public class PlayerInputs : MonoBehaviour
         m_aim = false;
         m_shoot = false;
         m_reload = false;
+        m_interact = false;
     }
 }
