@@ -211,7 +211,7 @@ public class GameDataManager : MonoBehaviour
         SaveData.ShelterSaveData saveData = new SaveData.ShelterSaveData
         {
             currentDay = source.CurrentDay,
-            battleSquadNpcRuntimeIds = new List<string>(source.BattleSquadNpcRuntimeIds)
+            battleSquadNpcDefinitionIds = new List<string>(source.BattleSquadNpcDefinitionIds)
         };
 
         foreach (FacilityRuntimeState state in source.FacilityStates)
@@ -279,7 +279,7 @@ public class GameDataManager : MonoBehaviour
             }
         }
 
-        ShelterData.ApplySavedState(saveData.currentDay, saveData.battleSquadNpcRuntimeIds, facilityStates);
+        ShelterData.ApplySavedState(saveData.currentDay, saveData.battleSquadNpcDefinitionIds, facilityStates);
     }
 
     private bool TryRejectDuplicateOrInvalidRoot()
