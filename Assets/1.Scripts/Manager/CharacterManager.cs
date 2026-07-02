@@ -78,10 +78,10 @@ public class CharacterManager : MonoBehaviour
         enabledCapabilities = capabilities;
     }
 
-    public bool TryGetCharacter(string runtimeId, out NPCRuntimeData character)
+    public bool TryGetCharacter(string definitionId, out NPCRuntimeData character)
     {
         character = null;
-        return DataSource != null && DataSource.TryGetNpc(runtimeId, out character);
+        return DataSource != null && DataSource.TryGetNpc(definitionId, out character);
     }
 
     public void FillAllCharacters(List<NPCRuntimeData> results)
@@ -102,11 +102,6 @@ public class CharacterManager : MonoBehaviour
         }
     }
 
-    public void FillTreatmentCandidates(List<NPCRuntimeData> results)
-    {
-        FillCharacters(results, CharacterAssignmentFilter.AvailableInjured);
-    }
-
     public void FillFacilityAssignableCharacters(string facilityId, List<NPCRuntimeData> results, CharacterAssignmentFilter filter = CharacterAssignmentFilter.AvailableAlive)
     {
         if (string.IsNullOrWhiteSpace(facilityId))
@@ -120,17 +115,17 @@ public class CharacterManager : MonoBehaviour
         return MatchesFilter(character, filter);
     }
 
-    public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, out CharacterActionFailure failure)
+    public bool TryAssignToFacility(string definitionId, string facilityId, string roomId, FacilityAssignmentKind kind, out CharacterActionFailure failure)
     {
-        return TryAssignToFacility(runtimeId, facilityId, roomId, CharacterAssignmentFilter.AvailableAlive, out failure);
+        return TryAssignToFacility(definitionId, facilityId, roomId, CharacterAssignmentFilter.AvailableAlive, kind, out failure);
     }
 
-    public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, CharacterAssignmentFilter filter, out CharacterActionFailure failure)
+    public bool TryAssignToFacility(string definitionId, string facilityId, string roomId, CharacterAssignmentFilter filter, FacilityAssignmentKind kind, out CharacterActionFailure failure)
     {
-        return TryAssignToFacility(runtimeId, facilityId, roomId, filter, out _, out failure);
+        return TryAssignToFacility(definitionId, facilityId, roomId, filter, kind, out _, out failure);
     }
 
-    public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, CharacterAssignmentFilter filter, out NPCRuntimeData character, out CharacterActionFailure failure)
+    public bool TryAssignToFacility(string definitionId, string facilityId, string roomId, CharacterAssignmentFilter filter, FacilityAssignmentKind kind, out NPCRuntimeData character, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
         character = null;
@@ -144,7 +139,7 @@ public class CharacterManager : MonoBehaviour
             return false;
         }
 
-        if (!TryGetCharacter(runtimeId, out character))
+        if (!TryGetCharacter(definitionId, out character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -160,7 +155,7 @@ public class CharacterManager : MonoBehaviour
 
         string normalizedFacilityId = facilityId.Trim();
         string normalizedRoomId = string.IsNullOrWhiteSpace(roomId) ? normalizedFacilityId : roomId.Trim();
-        if (!character.AssignToShelter(normalizedFacilityId, normalizedRoomId))
+        if (!character.AssignToShelter(normalizedFacilityId, normalizedRoomId, kind))
         {
             failure = CharacterActionFailure.InvalidFacilityId;
             return false;
@@ -170,14 +165,14 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TryReleaseFromFacility(string runtimeId, out CharacterActionFailure failure)
+    public bool TryReleaseFromFacility(string definitionId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.FacilityAssignment, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out NPCRuntimeData character))
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -194,14 +189,14 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TrySetCurrentHp(string runtimeId, int currentHp, out CharacterActionFailure failure)
+    public bool TrySetCurrentHp(string definitionId, int currentHp, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out NPCRuntimeData character))
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -212,14 +207,14 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TrySetInjuryState(string runtimeId, NPCInjuryState injuryState, out CharacterActionFailure failure)
+    public bool TrySetInjuryState(string definitionId, NPCInjuryState injuryState, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out NPCRuntimeData character))
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -230,14 +225,51 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TryApplyDamage(string runtimeId, int damage, out CharacterActionFailure failure)
+    public bool TrySetInjuryGauge(string definitionId, float injuryGauge, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out NPCRuntimeData character))
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
+        {
+            failure = CharacterActionFailure.CharacterNotFound;
+            return false;
+        }
+
+        bool changed = character.SetInjuryGauge(injuryGauge);
+        NotifyCharacterChangedIfNeeded(character, changed);
+        return true;
+    }
+
+    // 부상상태를 현재 게이지 기준으로 재계산한다(완치/수동해제 시점 사용).
+    public bool TryRefreshInjuryState(string definitionId, out CharacterActionFailure failure)
+    {
+        failure = CharacterActionFailure.None;
+
+        if (!CanUseCapability(CharacterEditCapability.HealthChange, out failure))
+            return false;
+
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
+        {
+            failure = CharacterActionFailure.CharacterNotFound;
+            return false;
+        }
+
+        bool changed = character.RefreshInjuryStateFromGauge();
+        NotifyCharacterChangedIfNeeded(character, changed);
+        return true;
+    }
+
+    public bool TryApplyDamage(string definitionId, int damage, out CharacterActionFailure failure)
+    {
+        failure = CharacterActionFailure.None;
+
+        if (!CanUseCapability(CharacterEditCapability.HealthChange, out failure))
+            return false;
+
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -254,14 +286,14 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TryRecoverHp(string runtimeId, int amount, out CharacterActionFailure failure)
+    public bool TryRecoverHp(string definitionId, int amount, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out NPCRuntimeData character))
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -278,14 +310,14 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TryReviveToPercent(string runtimeId, int percent, out CharacterActionFailure failure)
+    public bool TryReviveToPercent(string definitionId, int percent, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out NPCRuntimeData character))
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -302,14 +334,14 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TryCompleteRecovery(string runtimeId, out CharacterActionFailure failure)
+    public bool TryCompleteRecovery(string definitionId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.HealthChange | CharacterEditCapability.FacilityAssignment, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out NPCRuntimeData character))
+        if (!TryGetCharacter(definitionId, out NPCRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -326,14 +358,14 @@ public class CharacterManager : MonoBehaviour
         return true;
     }
 
-    public bool TryChangeWeapon(string runtimeId, Weapon weapon, out CharacterActionFailure failure)
+    public bool TryChangeWeapon(string definitionId, Weapon weapon, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.EquipmentChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out _))
+        if (!TryGetCharacter(definitionId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -349,14 +381,14 @@ public class CharacterManager : MonoBehaviour
         return false;
     }
 
-    public bool TryChangeWeaponPart(string runtimeId, WeaponPart part, out CharacterActionFailure failure)
+    public bool TryChangeWeaponPart(string definitionId, WeaponPart part, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.EquipmentChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out _))
+        if (!TryGetCharacter(definitionId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -372,14 +404,14 @@ public class CharacterManager : MonoBehaviour
         return false;
     }
 
-    public bool TryUpgradeEquipment(string runtimeId, string equipmentId, out CharacterActionFailure failure)
+    public bool TryUpgradeEquipment(string definitionId, string equipmentId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.EquipmentUpgrade, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out _))
+        if (!TryGetCharacter(definitionId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -395,14 +427,14 @@ public class CharacterManager : MonoBehaviour
         return false;
     }
 
-    public bool TryChangeSkill(string runtimeId, string skillId, out CharacterActionFailure failure)
+    public bool TryChangeSkill(string definitionId, string skillId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!CanUseCapability(CharacterEditCapability.SkillChange, out failure))
             return false;
 
-        if (!TryGetCharacter(runtimeId, out _))
+        if (!TryGetCharacter(definitionId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -436,8 +468,8 @@ public class CharacterManager : MonoBehaviour
         if (character == null)
             return false;
 
-        bool alive = !character.IsDead && character.GetCurrentInjuryState() != NPCInjuryState.Dead;
-        bool injured = alive && character.GetCurrentInjuryState() != NPCInjuryState.Healthy;
+        bool alive = true; // 사망 개념 없음 (게이지 0=행동불능, 사망 아님)
+        bool injured = character.GetCurrentInjuryState() != NPCInjuryState.Healthy; // enum 기준: 건강 아니면 부상
         bool available = !character.GetIsAssignedToShelter();
 
         switch (filter)
@@ -450,8 +482,6 @@ public class CharacterManager : MonoBehaviour
                 return alive && available;
             case CharacterAssignmentFilter.Injured:
                 return injured;
-            case CharacterAssignmentFilter.AvailableInjured:
-                return injured && available;
             default:
                 return false;
         }
@@ -519,8 +549,7 @@ public enum CharacterAssignmentFilter
     Any,
     AliveOnly,
     AvailableAlive,
-    Injured,
-    AvailableInjured
+    Injured
 }
 
 public enum CharacterActionFailure
