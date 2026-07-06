@@ -110,6 +110,7 @@ public class MedicalPatientSlotView : MonoBehaviour
         {
             m_injuryIcon.sprite = null;
             m_injuryIcon.enabled = false;
+            m_injuryIcon.gameObject.SetActive(false);
         }
 
         if (m_nameText != null)
@@ -140,6 +141,7 @@ public class MedicalPatientSlotView : MonoBehaviour
             Sprite icon = m_injuryCatalog != null ? m_injuryCatalog.GetIcon(status.InjuryState) : null;
             m_injuryIcon.sprite = icon;
             m_injuryIcon.enabled = icon != null;
+            m_injuryIcon.gameObject.SetActive(icon != null);
         }
 
         if (m_nameText != null)
