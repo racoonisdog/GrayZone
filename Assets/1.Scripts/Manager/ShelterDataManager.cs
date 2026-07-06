@@ -98,7 +98,7 @@ public class ShelterDataManager : MonoBehaviour
         }
 
         ApplySharedSnapshot(GameDataManager.Instance.CreateSharedSnapshot());
-        ApplySnapshot(GameDataManager.Instance.CreateShelterSnapshot());
+        ApplyShelterSnapshot(GameDataManager.Instance.CreateShelterSnapshot());
     }
 
     public bool PushToDataManager()
@@ -112,7 +112,7 @@ public class ShelterDataManager : MonoBehaviour
         return GameDataManager.Instance.SyncFromShelter(this);
     }
 
-    public ShelterRuntimeData CreateSnapshot()
+    public ShelterRuntimeData CreateShelterSnapshot()
     {
         return ShelterData.Clone();
     }
@@ -122,7 +122,7 @@ public class ShelterDataManager : MonoBehaviour
         return SharedData.Clone();
     }
 
-    public void ApplySnapshot(ShelterRuntimeData snapshot)
+    public void ApplyShelterSnapshot(ShelterRuntimeData snapshot)
     {
         if (snapshot == null)
         {

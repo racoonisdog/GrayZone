@@ -1177,7 +1177,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -3794,7 +3794,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -3967,6 +3967,7 @@ GameObject:
   - component: {fileID: 1106301635}
   - component: {fileID: 1106301634}
   - component: {fileID: 1106301636}
+  - component: {fileID: 1106301637}
   m_Layer: 31
   m_Name: MedicalInteraction
   m_TagString: Untagged
@@ -4025,6 +4026,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
   interactionType: 1
   facilityRoot: {fileID: 1106301633}
+--- !u!114 &1106301637
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1106301633}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 0}
 --- !u!1 &1155638155
 GameObject:
   m_ObjectHideFlags: 0
@@ -4568,7 +4582,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -6458,7 +6472,7 @@ MonoBehaviour:
   definition: {fileID: 11400000, guid: 29e244eb7ba12c049b3f344949bac152, type: 2}
   fallbackFacilityId: medical_center
   roomId: medical_room
-  characterManager: {fileID: 0}
+  characterManager: {fileID: 766322780}
   patientSlotsByLevel: 010000000200000003000000
   helperSlotsByLevel: 010000000100000002000000
   baseRecoveryPerDay: 5
@@ -6469,8 +6483,6 @@ MonoBehaviour:
     bonusPercent: 1
   - type: 2
     bonusPercent: 2
-  - type: 3
-    bonusPercent: 1
 --- !u!1 &1586379058
 GameObject:
   m_ObjectHideFlags: 0
@@ -7771,6 +7783,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1536208056}
+  - {fileID: 1987084306}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1905612788
@@ -7978,6 +7991,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1987084306}
   - component: {fileID: 1987084307}
+  - component: {fileID: 1987084309}
+  - component: {fileID: 1987084308}
   m_Layer: 31
   m_Name: DayAdvanceInteractionPoint
   m_TagString: Untagged
@@ -7993,13 +8008,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1987084305}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -3.01, y: 0, z: 11.88}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -1.18846, y: 0, z: 1.6972303}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2615246560587502355}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1892554803}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &1987084307
 BoxCollider:
@@ -8022,6 +8037,33 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.39, y: 1.76, z: 0.33}
   m_Center: {x: 0, y: 0.88, z: 0}
+--- !u!114 &1987084308
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1987084305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e34df7c292f326749b6cf4872c526a95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SleepInteractable
+  daysToAdvance: 1
+--- !u!114 &1987084309
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1987084305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36fe8a092d814e199d5fa43a9a351628, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInteractor
+  m_targetLayer: ShelterFacility
+  m_uiManager: {fileID: 1751716468}
 --- !u!1 &1997914411
 GameObject:
   m_ObjectHideFlags: 0
@@ -40393,6 +40435,5 @@ SceneRoots:
   - {fileID: 1655556015}
   - {fileID: 876761858}
   - {fileID: 1819593658}
-  - {fileID: 1987084306}
   - {fileID: 1685441700}
   - {fileID: 1892554803}

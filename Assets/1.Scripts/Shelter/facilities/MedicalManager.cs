@@ -99,8 +99,10 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     public void LoadPatientUpgrade(int saved)
     {
         int previousCapacity = PatientCapacity;
+        //레벨복원
         patientCapacityLevel = Mathf.Clamp(saved, 0, GetMaxPatientCapacityLevel());
 
+        //복원했을때 수치가 다르면 갱신
         if (PatientCapacity != previousCapacity)
             NotifyPatientSlotsChanged();
     }
@@ -153,11 +155,15 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     public bool TryAssignPatient(string definitionId)
     {
         if (string.IsNullOrWhiteSpace(definitionId)) return false;
+        //몇번째 슬롯에 있는지(슬롯에 없는 id면 -1 return)
         if (FindPatientSlotIndex(definitionId) >= 0) return true;
 
+        //목록에 있는 숫자가 최대치 보다 높을경우 오류상태
         if (patientTreatments.Count >= PatientCapacity) return false;
+
         if (!TryGetCharacterManager(out CharacterManager manager)) return false;
 
+        //셸터 데이터에서 NPC를 관리하는 CharacterManager로 부터 데이터를 가져오는 함수
         if (!manager.TryGetCharacter(definitionId, out NPCRuntimeData target))
             return false;
 
@@ -506,17 +512,14 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             Recalculate(dailyRecovery);
         }
 
-        // 현재 게이지 기준으로 치료 계획을 (재)산출한다. 첫 틱 보정은 산출 직후 1회 적용.
+        // 현재 게이지 기준으로 치료 계획을 (재)산출한다. 계산은 TreatmentDurationCalculator에 위임한다.
         public void Recalculate(float daily)
         {
-            dailyRecovery = Mathf.Max(1f, daily);
-            float missing = Mathf.Max(0f, maxGauge - Patient.InjuryGauge);
-            int totalDays = Mathf.Max(1, RoundHalfUp(missing / dailyRecovery));
-            TotalDays = totalDays;
-            RemainingDays = totalDays;
-            nextRecoveryAmount = missing - dailyRecovery * (totalDays - 1);
-            if (nextRecoveryAmount <= 0f)
-                nextRecoveryAmount = dailyRecovery;
+            TreatmentPlan plan = TreatmentDurationCalculator.Calculate(Patient.InjuryGauge, maxGauge, daily);
+            dailyRecovery = plan.DailyRecovery;
+            TotalDays = plan.TotalDays;
+            RemainingDays = plan.TotalDays;
+            nextRecoveryAmount = plan.FirstTickRecovery;
         }
 
         // 이번 날 회복량을 반환하고 남은 일수/다음 회복량을 진행시킨다.
@@ -526,11 +529,6 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             nextRecoveryAmount = dailyRecovery;
             RemainingDays = Mathf.Max(0, RemainingDays - 1);
             return amount;
-        }
-
-        private static int RoundHalfUp(float value)
-        {
-            return (int)System.Math.Round(value, System.MidpointRounding.AwayFromZero);
         }
     }
 }
