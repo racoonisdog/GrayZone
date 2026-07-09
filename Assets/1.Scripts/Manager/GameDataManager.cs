@@ -1,69 +1,44 @@
 using System.Collections.Generic;
-using UnityEditor.Overlays;
 using UnityEngine;
 
-[System.Serializable]
-public class RuntimeGameData
-{
-    public string lastStageId = string.Empty;
-    public int currentDay = 1;
-    public string controlledNpcRuntimeId = string.Empty;
-    public List<string> squadNpcRuntimeIds = new List<string>();
-
-    private ResourceStorage resources;
-    private NpcRoster npcRoster;
-
-    public ResourceStorage Resources
-    {
-        get
-        {
-            resources ??= new ResourceStorage();
-            return resources;
-        }
-    }
-
-    public NpcRoster NpcRoster
-    {
-        get
-        {
-            npcRoster ??= new NpcRoster();
-            return npcRoster;
-        }
-    }
-
-    public void EnsureRuntimeContainers()
-    {
-        lastStageId ??= string.Empty;
-        controlledNpcRuntimeId ??= string.Empty;
-        squadNpcRuntimeIds ??= new List<string>();
-        currentDay = Mathf.Max(1, currentDay);
-
-        _ = Resources;
-        _ = NpcRoster;
-    }
-}
-
+[DefaultExecutionOrder(-300)]
 public class GameDataManager : MonoBehaviour
 {
     public static GameDataManager Instance { get; private set; }
 
-    [Header("Runtime Data")]
-    [SerializeField] private RuntimeGameData runtimeData = new RuntimeGameData();
+    [Header("Shared Runtime Baseline Data")]
+    [SerializeField] private SharedRuntimeData sharedData = new SharedRuntimeData();
 
-    public RuntimeGameData RuntimeData
+    [Header("Scene Runtime Backup Data")]
+    [SerializeField] private ShelterRuntimeData shelterData = new ShelterRuntimeData();
+
+    private ShelterDataManager activeShelterDataManager;
+
+    private SharedRuntimeData SharedData
     {
         get
         {
-            EnsureRuntimeData();
-            return runtimeData;
+            EnsureSharedData();
+            return sharedData;
         }
     }
 
-    public ResourceStorage Resources => RuntimeData.Resources;
-    public NpcRoster NpcRoster => RuntimeData.NpcRoster;
-    public IReadOnlyList<string> SquadNpcRuntimeIds => RuntimeData.squadNpcRuntimeIds;
-    public string ControlledNpcRuntimeId => RuntimeData.controlledNpcRuntimeId ?? string.Empty;
-    public int CurrentDay => Mathf.Max(1, RuntimeData.currentDay);
+    private ShelterRuntimeData ShelterData
+    {
+        get
+        {
+            EnsureShelterData();
+            return shelterData;
+        }
+    }
+
+    public int RosterCount => SharedData.RosterCount;
+    public int TotalOwnedCharacterCount => SharedData.TotalOwnedCharacterCount;
+    public int PlayableCharacterCount => SharedData.PlayableCharacterCount;
+    public int NonPlayableNpcCount => SharedData.NonPlayableNpcCount;
+    public int ShelterStability => Mathf.Clamp(SharedData.ShelterStability, 0, 100);
+    public int CurrentDay => ShelterData.CurrentDay;
+    public bool HasActiveShelterDataManager => activeShelterDataManager != null;
 
     private void Awake()
     {
@@ -72,7 +47,8 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
-        EnsureRuntimeData();
+        EnsureSharedData();
+        EnsureShelterData();
         Instance = this;
     }
 
@@ -84,30 +60,67 @@ public class GameDataManager : MonoBehaviour
         }
     }
 
-    public RuntimeGameData Snapshot()
+    public void RegisterShelterDataManager(ShelterDataManager shelterDataManager)
     {
-        RuntimeGameData snapshot = new RuntimeGameData
-        {
-            lastStageId = RuntimeData.lastStageId ?? string.Empty,
-            currentDay = CurrentDay,
-            controlledNpcRuntimeId = RuntimeData.controlledNpcRuntimeId ?? string.Empty,
-            squadNpcRuntimeIds = new List<string>(RuntimeData.squadNpcRuntimeIds)
-        };
+        if (shelterDataManager == null)
+            return;
 
-        foreach (NPCRuntimeData npc in NpcRoster.All)
+        activeShelterDataManager = shelterDataManager;
+    }
+
+    public void UnregisterShelterDataManager(ShelterDataManager shelterDataManager)
+    {
+        if (activeShelterDataManager == shelterDataManager)
         {
-            snapshot.NpcRoster.Add(npc);
+            activeShelterDataManager = null;
+        }
+    }
+
+    public bool SyncFromShelter()
+    {
+        if (activeShelterDataManager == null)
+        {
+            Debug.LogWarning("[GameDataManager] Active ShelterDataManager is not registered.");
+            return false;
         }
 
-        return snapshot;
+        return SyncFromShelter(activeShelterDataManager);
+    }
+
+    public bool SyncFromShelter(ShelterDataManager shelterDataManager)
+    {
+        if (shelterDataManager == null)
+        {
+            Debug.LogWarning("[GameDataManager] ShelterDataManager is null.");
+            return false;
+        }
+
+        ApplySharedSnapshot(shelterDataManager.CreateSharedSnapshot());
+        ApplyShelterSnapshot(shelterDataManager.CreateShelterSnapshot());
+        return true;
+    }
+
+    public SharedRuntimeData CreateSharedSnapshot()
+    {
+        return SharedData.Clone();
+    }
+
+    public ShelterRuntimeData CreateShelterSnapshot()
+    {
+        return ShelterData.Clone();
     }
 
     public SaveData CreateSaveData(string profileId)
     {
-        SaveData saveData = new SaveData();
-        saveData.profileId = string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId;
-        saveData.progress.lastStageId = RuntimeData.lastStageId ?? string.Empty;
-        saveData.progress.currentDay = CurrentDay;
+        SaveData saveData = new SaveData
+        {
+            profileId = string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId
+        };
+
+        SharedRuntimeData sharedSnapshot = activeShelterDataManager != null ? activeShelterDataManager.CreateSharedSnapshot() : SharedData.Clone();
+        ShelterRuntimeData shelterSnapshot = activeShelterDataManager != null ? activeShelterDataManager.CreateShelterSnapshot() : ShelterData.Clone();
+        saveData.shared = CreateSharedSaveData(sharedSnapshot);
+        saveData.shelter = CreateShelterSaveData(shelterSnapshot);
         saveData.MarkSavedNow();
         return saveData;
     }
@@ -120,17 +133,11 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
-        if (saveData.progress == null)
-        {
-            Debug.LogWarning("[GameDataManager] SaveData.progress is null.");
-            return;
-        }
-
-        RuntimeData.lastStageId = saveData.progress.lastStageId ?? string.Empty;
-        RuntimeData.currentDay = Mathf.Max(1, saveData.progress.currentDay);
+        ApplySharedSaveData(saveData.shared ?? new SaveData.SharedSaveData());
+        ApplyShelterSaveData(saveData.shelter ?? new SaveData.ShelterSaveData());
     }
 
-    public void ApplySnapshot(RuntimeGameData snapshot)
+    public void ApplySharedSnapshot(SharedRuntimeData snapshot)
     {
         if (snapshot == null)
         {
@@ -138,119 +145,141 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
-        snapshot.EnsureRuntimeContainers();
+        SharedData.CopyFrom(snapshot);
+    }
 
-        RuntimeData.lastStageId = snapshot.lastStageId ?? string.Empty;
-        RuntimeData.currentDay = Mathf.Max(1, snapshot.currentDay);
-        RuntimeData.controlledNpcRuntimeId = snapshot.controlledNpcRuntimeId ?? string.Empty;
-        RuntimeData.squadNpcRuntimeIds = new List<string>(snapshot.squadNpcRuntimeIds);
-
-        NpcRoster.Clear();
-        foreach (NPCRuntimeData npc in snapshot.NpcRoster.All)
+    public void ApplyShelterSnapshot(ShelterRuntimeData snapshot)
+    {
+        if (snapshot == null)
         {
-            NpcRoster.Add(npc);
-        }
-    }
-
-    public bool TryRecruitNpc(NPCChar npcData, out NPCRuntimeData runtimeNpc)
-    {
-        return NpcRoster.TryAdd(npcData, out runtimeNpc);
-    }
-
-    public bool TryRecruitNpc(NPCChar npcData, string runtimeId, out NPCRuntimeData runtimeNpc)
-    {
-        return NpcRoster.TryAdd(npcData, runtimeId, out runtimeNpc);
-    }
-
-    public bool TryGetNpc(string runtimeId, out NPCRuntimeData runtimeNpc)
-    {
-        return NpcRoster.TryGet(runtimeId, out runtimeNpc);
-    }
-
-    public bool TryRemoveNpc(string runtimeId)
-    {
-        if (!NpcRoster.Remove(runtimeId))
-        {
-            return false;
-        }
-
-        RemoveNpcReferences(runtimeId);
-        return true;
-    }
-
-    public bool TrySetControlledNpc(string runtimeId)
-    {
-        if (string.IsNullOrWhiteSpace(runtimeId) || !NpcRoster.Contains(runtimeId))
-        {
-            return false;
-        }
-
-        RuntimeData.controlledNpcRuntimeId = runtimeId.Trim();
-        return true;
-    }
-
-    public void ClearControlledNpc()
-    {
-        RuntimeData.controlledNpcRuntimeId = string.Empty;
-    }
-
-    public bool TryAddSquadNpc(string runtimeId)
-    {
-        if (string.IsNullOrWhiteSpace(runtimeId) || !NpcRoster.Contains(runtimeId))
-        {
-            return false;
-        }
-
-        string trimmedRuntimeId = runtimeId.Trim();
-        if (RuntimeData.squadNpcRuntimeIds.Contains(trimmedRuntimeId))
-        {
-            return true;
-        }
-
-        RuntimeData.squadNpcRuntimeIds.Add(trimmedRuntimeId);
-        return true;
-    }
-
-    public bool TryRemoveSquadNpc(string runtimeId)
-    {
-        if (string.IsNullOrWhiteSpace(runtimeId))
-        {
-            return false;
-        }
-
-        return RuntimeData.squadNpcRuntimeIds.Remove(runtimeId.Trim());
-    }
-
-    public void SetLastStageId(string stageId)
-    {
-        RuntimeData.lastStageId = stageId ?? string.Empty;
-    }
-
-    public void SetCurrentDay(int day)
-    {
-        RuntimeData.currentDay = Mathf.Max(1, day);
-    }
-
-    private void EnsureRuntimeData()
-    {
-        runtimeData ??= new RuntimeGameData();
-        runtimeData.EnsureRuntimeContainers();
-    }
-
-    private void RemoveNpcReferences(string runtimeId)
-    {
-        if (string.IsNullOrWhiteSpace(runtimeId))
-        {
+            Debug.LogWarning("[GameDataManager] Shelter snapshot is null.");
             return;
         }
 
-        string trimmedRuntimeId = runtimeId.Trim();
-        if (RuntimeData.controlledNpcRuntimeId == trimmedRuntimeId)
+        ShelterData.CopyFrom(snapshot);
+    }
+
+    private void EnsureSharedData()
+    {
+        sharedData ??= new SharedRuntimeData();
+        sharedData.EnsureRuntimeContainers();
+    }
+
+    private void EnsureShelterData()
+    {
+        shelterData ??= new ShelterRuntimeData();
+        shelterData.EnsureRuntimeContainers();
+    }
+
+    private SaveData.SharedSaveData CreateSharedSaveData(SharedRuntimeData source)
+    {
+        source.EnsureRuntimeContainers();
+
+        SaveData.SharedSaveData saveData = new SaveData.SharedSaveData
         {
-            RuntimeData.controlledNpcRuntimeId = string.Empty;
+            lastStageId = source.LastStageId,
+            shelterStability = source.ShelterStability,
+            playableCharacterCount = source.PlayableCharacterCount,
+            nonPlayableNpcCount = source.NonPlayableNpcCount
+        };
+
+        foreach (KeyValuePair<CurrencyType, int> resource in source.Resources.Amounts)
+        {
+            saveData.resources.Add(new SaveData.ResourceAmountData
+            {
+                type = resource.Key,
+                amount = Mathf.Max(0, resource.Value)
+            });
         }
 
-        RuntimeData.squadNpcRuntimeIds.RemoveAll(id => id == trimmedRuntimeId);
+        foreach (NPCRuntimeData npc in source.NpcRoster.All)
+        {
+            SaveData.NpcSaveData npcSaveData = NpcSaveDataMapper.FromRuntime(npc);
+            if (npcSaveData == null)
+                continue;
+
+            saveData.npcs.Add(npcSaveData);
+        }
+
+        return saveData;
+    }
+
+    private SaveData.ShelterSaveData CreateShelterSaveData(ShelterRuntimeData source)
+    {
+        source.EnsureRuntimeContainers();
+
+        SaveData.ShelterSaveData saveData = new SaveData.ShelterSaveData
+        {
+            currentDay = source.CurrentDay,
+            battleSquadNpcDefinitionIds = new List<string>(source.BattleSquadNpcDefinitionIds)
+        };
+
+        foreach (FacilityRuntimeState state in source.FacilityStates)
+        {
+            SaveData.FacilitySaveData facilitySaveData = FacilitySaveDataMapper.FromRuntime(state);
+            if (facilitySaveData == null)
+                continue;
+
+            saveData.facilities.Add(facilitySaveData);
+        }
+
+        return saveData;
+    }
+
+    private void ApplySharedSaveData(SaveData.SharedSaveData saveData)
+    {
+        SharedData.SetLastStageId(saveData.lastStageId);
+        SharedData.SetShelterStability(saveData.shelterStability);
+        SharedData.SetOwnedCharacterCounts(saveData.playableCharacterCount, saveData.nonPlayableNpcCount);
+
+        SharedData.Resources.Clear();
+        if (saveData.resources != null)
+        {
+            foreach (SaveData.ResourceAmountData resource in saveData.resources)
+            {
+                if (resource == null)
+                    continue;
+
+                SharedData.Resources.SetAmount(resource.type, resource.amount);
+            }
+        }
+
+        SharedData.NpcRoster.Clear();
+        if (saveData.npcs != null)
+        {
+            foreach (SaveData.NpcSaveData npc in saveData.npcs)
+            {
+                if (npc == null)
+                    continue;
+
+                NPCRuntimeData runtimeNpc = NpcSaveDataMapper.ToRuntime(npc);
+                if (runtimeNpc != null)
+                {
+                    SharedData.NpcRoster.Add(runtimeNpc);
+                }
+            }
+        }
+    }
+
+    private void ApplyShelterSaveData(SaveData.ShelterSaveData saveData)
+    {
+        List<FacilityRuntimeState> facilityStates = new List<FacilityRuntimeState>();
+        if (saveData.facilities != null)
+        {
+            foreach (SaveData.FacilitySaveData facility in saveData.facilities)
+            {
+                if (facility == null)
+                    continue;
+
+                FacilityRuntimeState runtimeState = FacilitySaveDataMapper.ToRuntime(facility);
+                if (runtimeState != null)
+                {
+                    facilityStates.Add(runtimeState);
+                }
+            }
+        }
+
+        ShelterData.ApplySavedState(saveData.currentDay, saveData.battleSquadNpcDefinitionIds, facilityStates);
     }
 
     private bool TryRejectDuplicateOrInvalidRoot()

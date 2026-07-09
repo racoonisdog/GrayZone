@@ -2,9 +2,9 @@ using System.Collections.Generic;
 
 public sealed class CostBundle
 {
-    private readonly List<CurrencyCost> _costs = new();
+    private readonly List<CurrencyCost> m_costs = new();
 
-    public IReadOnlyList<CurrencyCost> Costs => _costs;
+    public IReadOnlyList<CurrencyCost> Costs => m_costs;
 
     public CostBundle(params CurrencyCost[] costs)
     {
@@ -14,9 +14,9 @@ public sealed class CostBundle
         foreach (CurrencyCost cost in costs)
         {
             if (cost.Amount > 0)
-                _costs.Add(cost);
+                m_costs.Add(cost);
         }
     }
 
-    public bool IsFree => _costs.Count == 0;
+    public bool IsFree => m_costs.Count == 0;
 }

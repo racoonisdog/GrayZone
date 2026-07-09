@@ -48,7 +48,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
-        // ÃÊ±â »óÅÂ Àû¿ëÀº SquadManager_TPZ°¡ Àü´ã
+        // ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SquadManager_TPZï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     }
 
     private void AutoFindReferences()
@@ -161,8 +161,8 @@ public class SquadMemberController_TPZ : MonoBehaviour
             }
         }
 
-        if (thirdPersonController != null)
-            thirdPersonController.enabled = allowDirectControl;
+        //if (thirdPersonController != null)
+        //    thirdPersonController.enabled = allowDirectControl;
 
         if (playerManager != null)
             playerManager.enabled = allowDirectControl;
@@ -173,7 +173,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
         if (followerAI != null)
             followerAI.enabled = allowAIControl;
 
-        // PlayerInput´Â ¸¶Áö¸·¿¡
+        // PlayerInputï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if (playerInput != null)
         {
             if (allowDirectControl)

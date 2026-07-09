@@ -4,11 +4,13 @@ using System;
 //창고시스템
 public class ResourceStorage
 {
-    private readonly Dictionary<CurrencyType, int> _amounts = new();
+    private readonly Dictionary<CurrencyType, int> m_amounts = new();
+
+    public IReadOnlyDictionary<CurrencyType, int> Amounts => m_amounts;
 
     public int GetAmount(CurrencyType type)
     {
-        return _amounts.TryGetValue(type, out int amount) ? amount : 0;
+        return m_amounts.TryGetValue(type, out int amount) ? amount : 0;
     }
 
     public bool Add(CurrencyType type, int amount)
@@ -16,13 +18,13 @@ public class ResourceStorage
         if (amount <= 0)
             return false;
 
-        _amounts[type] = GetAmount(type) + amount;
+        m_amounts[type] = GetAmount(type) + amount;
         return true;
     }
 
     public void SetAmount(CurrencyType type, int amount)
     {
-        _amounts[type] = Math.Max(0, amount);
+        m_amounts[type] = Math.Max(0, amount);
     }
 
     public bool CanSpend(CurrencyCost cost)
@@ -36,7 +38,40 @@ public class ResourceStorage
         if (!CanSpend(cost))
             return false;
 
-        _amounts[cost.Type] = GetAmount(cost.Type) - cost.Amount;
+        m_amounts[cost.Type] = GetAmount(cost.Type) - cost.Amount;
         return true;
+    }
+
+    public Dictionary<CurrencyType, int> CreateSnapshot()
+    {
+        return new Dictionary<CurrencyType, int>(m_amounts);
+    }
+
+    public void CopyFrom(ResourceStorage source)
+    {
+        if (source == null)
+        {
+            Clear();
+            return;
+        }
+
+        ApplySnapshot(source.m_amounts);
+    }
+
+    public void ApplySnapshot(IReadOnlyDictionary<CurrencyType, int> snapshot)
+    {
+        m_amounts.Clear();
+        if (snapshot == null)
+            return;
+
+        foreach (KeyValuePair<CurrencyType, int> entry in snapshot)
+        {
+            SetAmount(entry.Key, entry.Value);
+        }
+    }
+
+    public void Clear()
+    {
+        m_amounts.Clear();
     }
 }
