@@ -24,6 +24,9 @@ public class SquadManager : MonoBehaviour
     [FormerlySerializedAs("currentMemberIndex")]
     [SerializeField] private int m_currentMemberIndex;
 
+    [Tooltip("스쿼드 멤버 순서와 같은 플레이어 공개 데이터 목록입니다.")]
+    [SerializeField] private List<PlayerbleUnitData> m_playerDataSources = new List<PlayerbleUnitData>();
+
     [Foldout("Switch Options")]
     [Tooltip("카메라 타겟을 새 멤버로 넘기는 대신 현재 조작 멤버와 전환 대상 멤버의 Transform을 스왑하는 전환 방식을 사용할지 여부입니다.")]
     [SerializeField] private bool m_swapMemberTransforms;
@@ -75,6 +78,10 @@ public class SquadManager : MonoBehaviour
     /// <summary>관리 중인 스쿼드 멤버 목록입니다.</summary>
     public IReadOnlyList<SquadMemberController> SquadMembers => m_squadMembers;
 
+    public IReadOnlyList<PlayerbleUnitData> PlayerDataSources => m_playerDataSources;
+
+    public PlayerbleUnitData CurrentPlayerData => GetPlayerData(m_currentMemberIndex);
+
     /// <summary>현재 플레이어가 직접 조작 중인 스쿼드 멤버입니다.</summary>
     public SquadMemberController CurrentMember
     {
@@ -92,6 +99,18 @@ public class SquadManager : MonoBehaviour
 
             return m_squadMembers[m_currentMemberIndex];
         }
+    }
+
+    public PlayerbleUnitData GetPlayerData(int index)
+    {
+        SyncPlayerDataSources();
+
+        if (m_playerDataSources == null || index < 0 || index >= m_playerDataSources.Count)
+        {
+            return null;
+        }
+
+        return m_playerDataSources[index];
     }
 
     /// <summary>다음 멤버로 전환하는 입력 키입니다.</summary>
@@ -194,6 +213,7 @@ public class SquadManager : MonoBehaviour
         }
 
         RemoveNullMembers();
+        SyncPlayerDataSources();
     }
 
     /// <summary>
@@ -211,6 +231,35 @@ public class SquadManager : MonoBehaviour
             if (m_squadMembers[i] == null)
             {
                 m_squadMembers.RemoveAt(i);
+            }
+        }
+    }
+
+    private void SyncPlayerDataSources()
+    {
+        if (m_playerDataSources == null)
+        {
+            m_playerDataSources = new List<PlayerbleUnitData>();
+        }
+
+        int memberCount = m_squadMembers != null ? m_squadMembers.Count : 0;
+        while (m_playerDataSources.Count < memberCount)
+        {
+            m_playerDataSources.Add(null);
+        }
+
+        while (m_playerDataSources.Count > memberCount)
+        {
+            m_playerDataSources.RemoveAt(m_playerDataSources.Count - 1);
+        }
+
+        for (int i = 0; i < memberCount; i++)
+        {
+            SquadMemberController member = m_squadMembers[i];
+            PlayerbleUnitData currentData = m_playerDataSources[i];
+            if (currentData == null || member == null || currentData.gameObject != member.gameObject)
+            {
+                m_playerDataSources[i] = member != null ? member.GetComponent<PlayerbleUnitData>() : null;
             }
         }
     }
@@ -731,6 +780,7 @@ public class SquadManager : MonoBehaviour
         UnsubscribeMemberDeathEvents();
         m_squadMembers = members ?? new List<SquadMemberController>();
         RemoveNullMembers();
+        SyncPlayerDataSources();
         NormalizeMemberIndex();
         SubscribeMemberDeathEvents();
         UpdateCameraTarget();

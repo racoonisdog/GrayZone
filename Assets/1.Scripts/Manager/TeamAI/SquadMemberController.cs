@@ -67,6 +67,9 @@ public class SquadMemberController : MonoBehaviour
     [FormerlySerializedAs("isDown")]
     [SerializeField] private bool m_isDown;
 
+    private bool m_isInteractionLocked;
+    private Collider m_reviveDetectionCollider;
+
     [Foldout("Reference Options")]
     [Tooltip("입력 값을 보관하는 플레이어 입력 컴포넌트입니다.")]
     [FormerlySerializedAs("starterAssetsInputs")]
@@ -138,6 +141,12 @@ public class SquadMemberController : MonoBehaviour
 
     private static readonly int DownHash = Animator.StringToHash("IsDown");
     private static readonly int DeathHash = Animator.StringToHash("IsDead");
+    private static readonly int InteractionHash = Animator.StringToHash("IsInteraction");
+    private static readonly int ReviveHash = Animator.StringToHash("IsRevive");
+    private static readonly int StandingHash = Animator.StringToHash("IsStanding");
+    private static readonly int RootHash = Animator.StringToHash("IsRoot");
+    private static readonly int DownStateHash = Animator.StringToHash("Base Layer.Down");
+    private static readonly int GroundedLocomotionStateHash = Animator.StringToHash("Base Layer.Idle Walk Run Blend");
 
     /// <summary>
     /// Inspector에서 컴포넌트가 추가되거나 Reset될 때 현재 GameObject 기준으로 참조를 자동 탐색합니다.
@@ -153,6 +162,8 @@ public class SquadMemberController : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
+        EnsureDownedAllyInteractable();
+        EnsureReviveDetectionCollider();
         ApplyControlState();
     }
 
@@ -211,6 +222,7 @@ public class SquadMemberController : MonoBehaviour
     private void HandleHealthRevive()
     {
         SetAlive(true);
+        SetDown(false);
     }
 
     /// <summary>
@@ -303,6 +315,10 @@ public class SquadMemberController : MonoBehaviour
     public void SetPlayerControlled(bool value)
     {
         m_isPlayerControlled = value;
+        if (!m_isPlayerControlled)
+        {
+            m_isInteractionLocked = false;
+        }
         ApplyControlState();
     }
 
@@ -318,6 +334,7 @@ public class SquadMemberController : MonoBehaviour
         if (!m_isAlive)
         {
             m_isDown = false;
+            m_isInteractionLocked = false;
         }
 
         ApplyControlState();
@@ -342,6 +359,11 @@ public class SquadMemberController : MonoBehaviour
 
         bool wasDown = m_isDown;
         m_isDown = value;
+        if (m_isDown)
+        {
+            m_isInteractionLocked = false;
+        }
+        UpdateReviveDetectionCollider();
         ApplyControlState();
         UpdateDownDeathAnimator();
 
@@ -349,6 +371,133 @@ public class SquadMemberController : MonoBehaviour
         {
             OnMemberDowned?.Invoke(this);
         }
+    }
+
+    private void EnsureDownedAllyInteractable()
+    {
+        if (m_playerHealth == null)
+        {
+            return;
+        }
+
+        if (GetComponent<DownedAllyInteractable>() == null)
+        {
+            gameObject.AddComponent<DownedAllyInteractable>();
+        }
+    }
+
+    /// <summary>
+    /// 다운된 아군을 상호작용 탐지(OverlapSphere)로 찾을 수 있도록, 다운 중에만 켜지는 전용 트리거 콜라이더를 준비합니다.
+    /// </summary>
+    /// <remarks>
+    /// 비조작 팔로워는 CharacterController가 꺼져 있어(NavMeshAgent 구동) 유일한 콜라이더가 비활성이며, 이 경우
+    /// <see cref="Physics.OverlapSphere"/>가 대상을 반환하지 못합니다. 다운 상태에서만 켜는 트리거 콜라이더로 이 사각을 메웁니다.
+    /// </remarks>
+    private void EnsureReviveDetectionCollider()
+    {
+        if (m_reviveDetectionCollider != null)
+        {
+            return;
+        }
+
+        SphereCollider detection = gameObject.AddComponent<SphereCollider>();
+        detection.isTrigger = true;
+        detection.radius = 0.6f;
+        detection.center = new Vector3(0.0f, 1.0f, 0.0f);
+        m_reviveDetectionCollider = detection;
+        UpdateReviveDetectionCollider();
+    }
+
+    private void UpdateReviveDetectionCollider()
+    {
+        if (m_reviveDetectionCollider != null)
+        {
+            m_reviveDetectionCollider.enabled = m_isDown;
+        }
+    }
+
+    public void SetInteractionLocked(bool value)
+    {
+        if (m_isInteractionLocked == value)
+        {
+            if (m_isInteractionLocked)
+            {
+                SuppressNonInteractionInputs();
+            }
+
+            return;
+        }
+
+        m_isInteractionLocked = value;
+        ApplyControlState();
+
+        if (m_isInteractionLocked)
+        {
+            SuppressNonInteractionInputs();
+        }
+    }
+
+    public void RefreshInteractionLock()
+    {
+        if (!m_isInteractionLocked)
+        {
+            return;
+        }
+
+        SuppressNonInteractionInputs();
+    }
+
+    public void SetReviveInteractionAnimator(bool active)
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(InteractionHash, active);
+        m_animator.SetBool(ReviveHash, active);
+        m_animator.SetBool(RootHash, false);
+    }
+
+    public void SetAssistedStandingAnimator(bool active)
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(StandingHash, active);
+
+        if (active)
+        {
+            // 기립 전이가 'Any State→Down'(IsDown)과 Down 상태에 막히지 않도록 Down 파라미터를 선제적으로 내린다.
+            // 다운 로직 상태(m_isDown)는 유지되며(구조 완료 시 SetDown(false)로 정리) 애니메이터 파라미터만 먼저 반영한다.
+            m_animator.SetBool(DownHash, false);
+        }
+        else if (m_isAlive && m_isDown)
+        {
+            // 구조 취소: 다시 다운 포즈로 되돌린다.
+            m_animator.SetBool(DownHash, true);
+            m_animator.Play(DownStateHash, 0, 0.0f);
+            m_animator.Update(0.0f);
+        }
+    }
+
+    public void CompleteAssistedStandingAnimator()
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(StandingHash, false);
+        m_animator.SetBool(DownHash, false);
+        m_animator.SetBool(DeathHash, false);
+        m_animator.SetBool(InteractionHash, false);
+        m_animator.SetBool(ReviveHash, false);
+        m_animator.SetBool(RootHash, false);
+        m_animator.Play(GroundedLocomotionStateHash, 0, 0.0f);
+        m_animator.Update(0.0f);
     }
 
     /// <summary>
@@ -426,10 +575,11 @@ public class SquadMemberController : MonoBehaviour
             return;
         }
 
-        // 조준(ADS)뿐 아니라 힙파이어(조준 없이 사격)도 전환에 유지하기 위해 사격 입력은 그대로 넘깁니다.
-        bool keepShoot = state.Shoot;
-        // 전투 자세(백뷰)는 조준이거나 사격(힙파이어) 중이면 유지합니다.
-        bool inCombat = state.Aim || state.Shoot;
+        // 조준(ADS)은 유지하지만, 전력질주 중인 힙파이어는 sprint가 우선이므로 전환에 넘기지 않습니다.
+        bool sprintCancelsHipfire = state.Sprint && !state.Aim;
+        bool keepShoot = sprintCancelsHipfire ? false : state.Shoot;
+        // 전투 자세(백뷰)는 조준이거나 유지 가능한 사격(힙파이어) 중이면 유지합니다.
+        bool inCombat = state.Aim || keepShoot;
 
         if (m_playerInputs != null)
         {
@@ -611,7 +761,8 @@ public class SquadMemberController : MonoBehaviour
     /// </summary>
     private void ApplyControlState()
     {
-        bool allowDirectControl = m_isAlive && !m_isDown && m_isPlayerControlled;
+        bool allowPlayerInput = m_isAlive && !m_isDown && m_isPlayerControlled;
+        bool allowDirectControl = allowPlayerInput && !m_isInteractionLocked;
         bool allowAIControl = m_isAlive && !m_isDown && !m_isPlayerControlled;
 
         if (!allowDirectControl && m_aimController != null)
@@ -621,8 +772,19 @@ public class SquadMemberController : MonoBehaviour
 
         if (m_playerInputs != null)
         {
-            m_playerInputs.ResetInputState();
-            m_playerInputs.enabled = allowDirectControl;
+            if (allowPlayerInput)
+            {
+                if (!allowDirectControl)
+                {
+                    m_playerInputs.ResetNonInteractionInputState();
+                }
+            }
+            else
+            {
+                m_playerInputs.ResetInputState();
+            }
+
+            m_playerInputs.enabled = allowPlayerInput;
         }
 
         if (m_characterController != null)
@@ -666,7 +828,20 @@ public class SquadMemberController : MonoBehaviour
             m_followerAI.enabled = allowAIControl;
         }
 
-        ApplyPlayerInputState(allowDirectControl);
+        ApplyPlayerInputState(allowPlayerInput);
+    }
+
+    private void SuppressNonInteractionInputs()
+    {
+        if (m_playerInputs != null)
+        {
+            m_playerInputs.ResetNonInteractionInputState();
+        }
+
+        if (m_aimController != null)
+        {
+            m_aimController.ForceStopAim();
+        }
     }
 
     /// <summary>
@@ -714,6 +889,18 @@ public class SquadMemberController : MonoBehaviour
 
         if (allowDirectControl)
         {
+            // 이미 "Player" 맵으로 활성 상태면 재설정하지 않는다.
+            // SwitchCurrentActionMap/ActivateInput은 맵을 껐다 켜므로, 이미 눌린 채인 버튼(예: 구조 홀드 중 Interaction)의
+            // 홀드 상태가 소실되어 다음 프레임에 IsPressed()가 false가 되고 홀드가 끊긴다. 상태가 이미 맞으면 건너뛴다.
+            bool alreadyActive = m_playerInput.enabled
+                && m_playerInput.inputIsActive
+                && m_playerInput.currentActionMap != null
+                && m_playerInput.currentActionMap.name == "Player";
+            if (alreadyActive)
+            {
+                return;
+            }
+
             m_playerInput.enabled = true;
             m_playerInput.ActivateInput();
             m_playerInput.SwitchCurrentActionMap("Player");

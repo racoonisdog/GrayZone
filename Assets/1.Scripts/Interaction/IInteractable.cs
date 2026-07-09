@@ -34,3 +34,14 @@ public interface IInteractable
     /// </summary>
     float HoldDuration { get; }
 }
+
+public interface IHoldInteractable
+{
+    void BeginHold(GameObject interactor);
+
+    void UpdateHold(GameObject interactor, float progress01);
+
+    void CancelHold(GameObject interactor);
+
+    void CompleteHold(GameObject interactor);
+}

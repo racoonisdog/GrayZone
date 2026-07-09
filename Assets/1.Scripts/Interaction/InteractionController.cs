@@ -53,6 +53,7 @@ public class InteractionController : MonoBehaviour
     private IInteractable m_current;
     private bool m_prevPressed;
     private bool m_consumed;
+    private bool m_holdStarted;
     private float m_holdTimer;
 
     /// <summary>현재 상호작용 대상입니다. 없으면 <c>null</c>입니다.</summary>
@@ -96,8 +97,24 @@ public class InteractionController : MonoBehaviour
             m_camera = Camera.main;
         }
 
-        SetCurrent(FindBest());
+        SetCurrent(ShouldKeepActiveHoldTarget() ? m_current : FindBest());
         HandleInput();
+    }
+
+    private bool ShouldKeepActiveHoldTarget()
+    {
+        if (!m_holdStarted || m_current == null || !m_current.CanInteract(gameObject))
+        {
+            return false;
+        }
+
+        if (m_current is not Component component || component == null)
+        {
+            return false;
+        }
+
+        float sqrDistance = (component.transform.position - Origin).sqrMagnitude;
+        return sqrDistance <= m_radius * m_radius;
     }
 
     /// <summary>
@@ -175,10 +192,13 @@ public class InteractionController : MonoBehaviour
             return;
         }
 
+        CancelActiveHold();
+
         m_current = next;
         m_holdTimer = 0.0f;
         HoldProgress01 = 0.0f;
-        m_consumed = false;
+        // m_consumed는 여기서 리셋하지 않는다. 한 번 누름으로 실행(예: 구조 완료)한 뒤 버튼을 계속 누른 채
+        // 다음 대상으로 옮겨가면 자동으로 다시 채워지는 문제를 막기 위해, 버튼을 뗄 때(!pressed)만 리셋한다.
         OnCurrentChanged?.Invoke(m_current);
 
         if (m_debugLog)
@@ -198,15 +218,20 @@ public class InteractionController : MonoBehaviour
 
         if (m_current == null)
         {
+            CancelActiveHold();
             m_holdTimer = 0.0f;
             HoldProgress01 = 0.0f;
-            m_consumed = false;
+            if (!pressed)
+            {
+                m_consumed = false;
+            }
             return;
         }
 
         // 떼면 홀드 상태와 1회 소비 플래그를 초기화합니다.
         if (!pressed)
         {
+            CancelActiveHold();
             m_holdTimer = 0.0f;
             HoldProgress01 = 0.0f;
             m_consumed = false;
@@ -226,32 +251,47 @@ public class InteractionController : MonoBehaviour
             // 탭: 이번 프레임에 새로 눌렸을 때만 실행합니다.
             if (justPressed)
             {
-                Execute();
-                m_consumed = true;
+                m_consumed = Execute();
             }
             return;
         }
 
         // 홀드: 누르고 있는 동안 누적하고, 목표 시간을 채우면 실행합니다.
+        if (m_holdTimer <= 0.0f && !m_holdStarted && !justPressed)
+        {
+            return;
+        }
+
+        BeginActiveHold();
         m_holdTimer += Time.deltaTime;
         HoldProgress01 = Mathf.Clamp01(m_holdTimer / hold);
+        UpdateActiveHold();
 
         if (m_holdTimer >= hold)
         {
-            Execute();
-            m_consumed = true;
-            HoldProgress01 = 1.0f;
+            bool executed = Execute();
+            if (executed)
+            {
+                m_consumed = true;
+                HoldProgress01 = 1.0f;
+                CompleteActiveHold();
+            }
+            else
+            {
+                CancelActiveHold();
+                HoldProgress01 = 0.0f;
+            }
         }
     }
 
     /// <summary>
     /// 실행 직전 조건을 재확인하고 상호작용을 실행합니다.
     /// </summary>
-    private void Execute()
+    private bool Execute()
     {
         if (m_current == null || !m_current.CanInteract(gameObject))
         {
-            return;
+            return false;
         }
 
         IInteractable target = m_current;
@@ -261,6 +301,53 @@ public class InteractionController : MonoBehaviour
         {
             Debug.Log($"[Interaction] interact ✔ {Describe(target)} (by {gameObject.name})", this);
         }
+
+        return true;
+    }
+
+    private void BeginActiveHold()
+    {
+        if (m_holdStarted || m_current is not IHoldInteractable holdInteractable)
+        {
+            return;
+        }
+
+        m_holdStarted = true;
+        holdInteractable.BeginHold(gameObject);
+    }
+
+    private void UpdateActiveHold()
+    {
+        if (!m_holdStarted || m_current is not IHoldInteractable holdInteractable)
+        {
+            return;
+        }
+
+        holdInteractable.UpdateHold(gameObject, HoldProgress01);
+    }
+
+    private void CancelActiveHold()
+    {
+        if (!m_holdStarted || m_current is not IHoldInteractable holdInteractable)
+        {
+            m_holdStarted = false;
+            return;
+        }
+
+        holdInteractable.CancelHold(gameObject);
+        m_holdStarted = false;
+    }
+
+    private void CompleteActiveHold()
+    {
+        if (!m_holdStarted || m_current is not IHoldInteractable holdInteractable)
+        {
+            m_holdStarted = false;
+            return;
+        }
+
+        holdInteractable.CompleteHold(gameObject);
+        m_holdStarted = false;
     }
 
     /// <summary>
@@ -284,6 +371,8 @@ public class InteractionController : MonoBehaviour
     /// </summary>
     private void ResetState()
     {
+        CancelActiveHold();
+
         if (m_current != null)
         {
             m_current = null;

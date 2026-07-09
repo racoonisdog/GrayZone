@@ -1,6 +1,24 @@
 ﻿using System;
 using UnityEngine;
 
+/// <summary>
+/// 플레이어블 캐릭터의 고정 식별자입니다.
+/// </summary>
+public enum PlayableCharacterId
+{
+    /// <summary>아직 캐릭터가 지정되지 않은 상태입니다.</summary>
+    Unknown = 0,
+
+    /// <summary>나린입니다.</summary>
+    Narin = 1,
+
+    /// <summary>청솔입니다.</summary>
+    Cheongsol = 2,
+
+    /// <summary>서하입니다.</summary>
+    Seoha = 3
+}
+
 [DisallowMultipleComponent]
 /// <summary>
 /// 플레이어 유닛의 공용 상태를 모아두는 공개 데이터 Module입니다.
@@ -10,6 +28,7 @@ public class PlayerbleUnitData : MonoBehaviour
 {
     [Header("Public Identity")]
     [SerializeField] private string m_runtimeId;
+    [SerializeField] private PlayableCharacterId m_characterId = PlayableCharacterId.Unknown;
     [SerializeField] private string m_displayName = "Player";
 
     [Header("Public Runtime Data")]
@@ -19,6 +38,7 @@ public class PlayerbleUnitData : MonoBehaviour
     [Header("Observed Modules")]
     [SerializeField] private PlayerHealth m_health;
     [SerializeField] private SquadMemberController m_squadMember;
+    [SerializeField] private InteractionController m_interactionController;
     [SerializeField] private WeaponController m_weaponController;
     [SerializeField] private Transform m_publicTarget;
 
@@ -42,6 +62,11 @@ public class PlayerbleUnitData : MonoBehaviour
     public string RuntimeId => string.IsNullOrWhiteSpace(m_runtimeId)
         ? gameObject.name
         : m_runtimeId.Trim();
+
+    /// <summary>
+    /// 플레이어블 캐릭터의 고정 식별자입니다.
+    /// </summary>
+    public PlayableCharacterId CharacterId => m_characterId;
 
     /// <summary>
     /// UI나 로그에서 표시할 이름입니다.
@@ -96,6 +121,20 @@ public class PlayerbleUnitData : MonoBehaviour
     /// 출격 또는 배치 가능한 상태인지 여부입니다.
     /// </summary>
     public bool CanDeploy => IsAlive && !IsDown;
+
+    public DownedAllyInteractable CurrentReviveInteractionTarget => m_interactionController != null
+        ? m_interactionController.Current as DownedAllyInteractable
+        : null;
+
+    public bool HasReviveInteractionTarget => CurrentReviveInteractionTarget != null;
+
+    public bool IsReviving => CurrentReviveInteractionTarget != null
+        && (m_interactionController.HoldProgress01 > 0.0f
+            || CurrentReviveInteractionTarget.IsReviveHoldActive);
+
+    public float ReviveGaugeAmount => CurrentReviveInteractionTarget != null
+        ? Mathf.Clamp01(Mathf.Max(m_interactionController.HoldProgress01, CurrentReviveInteractionTarget.ReviveHoldProgress01))
+        : 0.0f;
 
     /// <summary>
     /// 현재 부상 상태입니다.
@@ -226,6 +265,21 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_runtimeId = nextValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 플레이어블 캐릭터 식별자를 설정합니다.
+    /// </summary>
+    /// <param name="value">새 캐릭터 식별자입니다.</param>
+    public void SetCharacterId(PlayableCharacterId value)
+    {
+        if (m_characterId == value)
+        {
+            return;
+        }
+
+        m_characterId = value;
         NotifyPublicDataChanged();
     }
 
@@ -381,6 +435,11 @@ public class PlayerbleUnitData : MonoBehaviour
         if (m_squadMember == null)
         {
             m_squadMember = GetComponent<SquadMemberController>();
+        }
+
+        if (m_interactionController == null)
+        {
+            m_interactionController = GetComponent<InteractionController>();
         }
 
         if (m_weaponController == null)

@@ -49,6 +49,11 @@ public class PlayerInputs : MonoBehaviour
     [Tooltip("상호작용 입력이 눌린 상태(홀드 포함)인지 여부입니다.")]
     [SerializeField] private bool m_interact;
 
+#if ENABLE_INPUT_SYSTEM
+    private PlayerInput m_playerInput;
+    private InputAction m_interactionAction;
+#endif
+
     [Header("Movement Settings")]
     [Tooltip("아날로그 이동 입력을 사용할지 여부입니다. true이면 입력 세기 magnitude를 이동 속도에 반영합니다.")]
     [FormerlySerializedAs("analogMovement")]
@@ -85,7 +90,14 @@ public class PlayerInputs : MonoBehaviour
     public bool Reload => m_reload;
 
     /// <summary>상호작용 입력이 눌린 상태(홀드 포함)입니다. 탭/홀드 판정은 소비 측(InteractionController)에서 처리합니다.</summary>
-    public bool Interact => m_interact;
+    public bool Interact
+    {
+        get
+        {
+            RefreshInteractionInputFromAction();
+            return m_interact;
+        }
+    }
 
     /// <summary>아날로그 이동 입력 사용 여부입니다.</summary>
     public bool AnalogMovement => m_analogMovement;
@@ -187,6 +199,11 @@ public class PlayerInputs : MonoBehaviour
     }
 
 #if ENABLE_INPUT_SYSTEM
+    private void Awake()
+    {
+        CachePlayerInput();
+    }
+
     /// <summary>
     /// 이동 입력 액션 콜백입니다.
     /// </summary>
@@ -336,6 +353,46 @@ public class PlayerInputs : MonoBehaviour
         m_interact = newInteractState;
     }
 
+    private void RefreshInteractionInputFromAction()
+    {
+#if ENABLE_INPUT_SYSTEM
+        InputAction action = ResolveInteractionAction();
+        if (action != null)
+        {
+            m_interact = action.IsPressed();
+        }
+#endif
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    private void CachePlayerInput()
+    {
+        if (m_playerInput == null)
+        {
+            m_playerInput = GetComponent<PlayerInput>();
+        }
+    }
+
+    private InputAction ResolveInteractionAction()
+    {
+        if (m_interactionAction != null)
+        {
+            return m_interactionAction;
+        }
+
+        CachePlayerInput();
+        if (m_playerInput == null || m_playerInput.actions == null)
+        {
+            return null;
+        }
+
+        m_interactionAction = m_playerInput.actions.FindAction("Interaction", false)
+            ?? m_playerInput.actions.FindAction("Interact", false);
+
+        return m_interactionAction;
+    }
+#endif
+
     /// <summary>
     /// 커서 잠금 사용 여부를 설정합니다.
     /// </summary>
@@ -399,5 +456,13 @@ public class PlayerInputs : MonoBehaviour
         m_shoot = false;
         m_reload = false;
         m_interact = false;
+    }
+
+    public void ResetNonInteractionInputState()
+    {
+        bool wasInteracting = m_interact;
+
+        ResetInputState();
+        m_interact = wasInteracting;
     }
 }

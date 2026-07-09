@@ -25,7 +25,30 @@ public class PlayerHealth : HealthSystemBase
     [Tooltip("현재까지 실제 HP에서 차감된 누적 데미지입니다.")]
     [SerializeField] private int m_accumulatedDamage;
 
+    [Foldout("Down Options")]
+    [Tooltip("Seconds before a downed player becomes combat-out if not revived.")]
+    [SerializeField] private float m_downDuration = 30.0f;
+
+    [Tooltip("After this many successful revives, the next HP-0 event becomes combat-out immediately.")]
+    [SerializeField] private int m_maxReviveCount = 3;
+
+    [Tooltip("Max HP percent restored by the first revive in the current sortie.")]
+    [Range(1, 100)]
+    [SerializeField] private int m_firstReviveHpPercent = 50;
+
+    [Tooltip("Max HP percent restored by the second revive in the current sortie.")]
+    [Range(1, 100)]
+    [SerializeField] private int m_secondReviveHpPercent = 25;
+
+    [Tooltip("Max HP percent restored by the third revive in the current sortie.")]
+    [Range(1, 100)]
+    [SerializeField] private int m_thirdReviveHpPercent = 10;
+
     private PlayerInjuryState m_currentInjuryState = PlayerInjuryState.Normal;
+    private bool m_isDowned;
+    private bool m_downTimerPaused;
+    private float m_downTimeRemaining;
+    private int m_reviveCount;
 
     /// <summary>현재까지 누적된 실제 피해량입니다.</summary>
     public int AccumulatedDamage => m_accumulatedDamage;
@@ -38,6 +61,22 @@ public class PlayerHealth : HealthSystemBase
         ? Mathf.Clamp01((float)m_accumulatedDamage / m_maxHp)
         : 0.0f;
 
+    public bool IsDowned => m_isDowned;
+
+    public bool IsDownTimerPaused => m_downTimerPaused;
+
+    public float DownDuration => Mathf.Max(0.0f, m_downDuration);
+
+    public float DownTimeRemaining => Mathf.Max(0.0f, m_downTimeRemaining);
+
+    public float DownTimeNormalized => m_downDuration > 0.0f
+        ? Mathf.Clamp01(m_downTimeRemaining / m_downDuration)
+        : 0.0f;
+
+    public int ReviveCount => m_reviveCount;
+
+    public int MaxReviveCount => Mathf.Max(1, m_maxReviveCount);
+
     /// <summary>부상 게이지가 변경될 때 발생합니다. 인자는 누적 데미지와 정규화된 게이지 값입니다.</summary>
     public event Action<int, float> OnInjuryGaugeChanged;
 
@@ -46,6 +85,10 @@ public class PlayerHealth : HealthSystemBase
 
     /// <summary>HP가 0에 도달해 다운(빈사) 상태로 진입해야 할 때 발생합니다.</summary>
     public event Action OnDown;
+
+    public event Action<float, float> OnDownTimerChanged;
+
+    public event Action<int, int> OnReviveCountChanged;
 
 #if UNITY_EDITOR
     protected new void OnValidate()
@@ -56,14 +99,41 @@ public class PlayerHealth : HealthSystemBase
         m_seriousInjuryDamage = Mathf.Max(m_minorInjuryDamage, m_seriousInjuryDamage);
         m_criticalInjuryDamage = Mathf.Max(m_seriousInjuryDamage, m_criticalInjuryDamage);
         m_accumulatedDamage = Mathf.Max(0, m_accumulatedDamage);
+        m_downDuration = Mathf.Max(0.0f, m_downDuration);
+        m_maxReviveCount = Mathf.Max(1, m_maxReviveCount);
+        m_firstReviveHpPercent = Mathf.Clamp(m_firstReviveHpPercent, 1, 100);
+        m_secondReviveHpPercent = Mathf.Clamp(m_secondReviveHpPercent, 1, 100);
+        m_thirdReviveHpPercent = Mathf.Clamp(m_thirdReviveHpPercent, 1, 100);
         m_currentInjuryState = GetInjuryState(m_accumulatedDamage);
     }
 #endif
 
+    private void Update()
+    {
+        if (!m_isDowned || m_isDead || m_downTimerPaused)
+        {
+            return;
+        }
+
+        m_downTimeRemaining = Mathf.Max(0.0f, m_downTimeRemaining - Time.deltaTime);
+        NotifyDownTimerChanged();
+
+        if (m_downTimeRemaining <= 0.0f)
+        {
+            ExpireDownTimer();
+        }
+    }
+
     public override void InitializeHealth()
     {
         base.InitializeHealth();
+        m_isDowned = false;
+        m_downTimerPaused = false;
+        m_downTimeRemaining = 0.0f;
+        m_reviveCount = 0;
         ResetInjuryDamage();
+        NotifyDownTimerChanged();
+        OnReviveCountChanged?.Invoke(m_reviveCount, MaxReviveCount);
     }
 
     /// <summary>
@@ -75,7 +145,27 @@ public class PlayerHealth : HealthSystemBase
     /// </remarks>
     protected override void OnHpDepleted()
     {
+        if (m_isDowned)
+        {
+            return;
+        }
+
+        if (m_reviveCount >= Mathf.Max(1, m_maxReviveCount))
+        {
+            Death();
+            return;
+        }
+
+        m_isDowned = true;
+        m_downTimerPaused = false;
+        m_downTimeRemaining = DownDuration;
         OnDown?.Invoke();
+        NotifyDownTimerChanged();
+
+        if (m_downTimeRemaining <= 0.0f)
+        {
+            ExpireDownTimer();
+        }
     }
 
     public override bool TakeDamage(int damage)
@@ -91,6 +181,93 @@ public class PlayerHealth : HealthSystemBase
         AddInjuryDamage(actualDamage);
 
         return true;
+    }
+
+    /// <summary>
+    /// 다운 상태에서 지정한 HP로 전투에 복귀시킵니다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이어 다운은 사망 플래그를 세우지 않는 HP 0 상태이므로,
+    /// 기본 <see cref="HealthSystemBase.Revive"/> 대신 이 경로를 사용합니다.
+    /// </remarks>
+    public bool ReviveFromDown(int amount)
+    {
+        if (m_isDead || m_currentHp > 0 || !m_isDowned)
+        {
+            return false;
+        }
+
+        m_isDowned = false;
+        m_downTimerPaused = false;
+        m_downTimeRemaining = 0.0f;
+        m_reviveCount = Mathf.Min(m_reviveCount + 1, MaxReviveCount);
+        OnReviveCountChanged?.Invoke(m_reviveCount, MaxReviveCount);
+        NotifyDownTimerChanged();
+
+        return ReviveToHp(amount);
+    }
+
+    public bool ReviveFromDown()
+    {
+        return ReviveFromDown(CalculateNextReviveHp());
+    }
+
+    public void SetDownTimerPaused(bool value)
+    {
+        if (!m_isDowned || m_isDead)
+        {
+            m_downTimerPaused = false;
+            return;
+        }
+
+        m_downTimerPaused = value;
+    }
+
+    public int CalculateNextReviveHp()
+    {
+        int percent = GetReviveHpPercent(m_reviveCount + 1);
+        return Mathf.Clamp(Mathf.CeilToInt(m_maxHp * (percent / 100.0f)), 1, m_maxHp);
+    }
+
+    public override void Death()
+    {
+        bool wasDowned = m_isDowned;
+
+        m_isDowned = false;
+        m_downTimerPaused = false;
+        m_downTimeRemaining = 0.0f;
+
+        if (wasDowned)
+        {
+            NotifyDownTimerChanged();
+        }
+
+        base.Death();
+    }
+
+    private void ExpireDownTimer()
+    {
+        if (!m_isDowned || m_isDead)
+        {
+            return;
+        }
+
+        Death();
+    }
+
+    private void NotifyDownTimerChanged()
+    {
+        OnDownTimerChanged?.Invoke(DownTimeRemaining, DownDuration);
+    }
+
+    private int GetReviveHpPercent(int reviveNumber)
+    {
+        return reviveNumber switch
+        {
+            1 => m_firstReviveHpPercent,
+            2 => m_secondReviveHpPercent,
+            _ => m_thirdReviveHpPercent,
+        };
     }
 
     /// <summary>
