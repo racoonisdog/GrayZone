@@ -42,8 +42,9 @@ namespace GrayZone.EditorTools
                 case "combat": return DumpCombat();
                 case "sceneui": return DumpSceneUI();
                 case "go": return DumpGameObject(p.Get("name", ""));
+                case "revive": return DumpRevive();
                 default:
-                    return new ErrorResponse("what 파라미터가 필요합니다: combat | sceneui | go");
+                    return new ErrorResponse("what 파라미터가 필요합니다: combat | sceneui | go | revive");
             }
         }
 
@@ -160,6 +161,69 @@ namespace GrayZone.EditorTools
                 .ToList();
 
             return new SuccessResponse($"go '{name}': {matches.Count} match(es).", matches);
+        }
+
+        // ── revive ───────────────────────────────────────────────────────────
+        private static object DumpRevive()
+        {
+            var sm = Object.FindFirstObjectByType<SquadManager>();
+            var cam = Camera.main;
+
+            SquadMemberController controlled = null;
+            foreach (var m in Object.FindObjectsByType<SquadMemberController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (m.IsPlayerControlled) { controlled = m; break; }
+            }
+
+            var ic = controlled != null ? controlled.GetComponent<InteractionController>() : null;
+            var pud = controlled != null ? controlled.GetComponent<PlayerbleUnitData>() : null;
+            Vector3 origin = controlled != null ? controlled.transform.position : Vector3.zero;
+            Vector3 facing = cam != null ? cam.transform.forward : Vector3.forward;
+
+            var targets = new List<object>();
+            foreach (var dai in Object.FindObjectsByType<DownedAllyInteractable>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                var member = dai.TargetMember;
+                var health = dai.TargetHealth;
+                Vector3 to = dai.transform.position - origin;
+                float dist = to.magnitude;
+                float angle = to.sqrMagnitude > 0.0001f ? Vector3.Angle(facing, to) : -1f;
+                var col = dai.GetComponentInChildren<Collider>();
+
+                targets.Add(new
+                {
+                    go = dai.name,
+                    canInteract = controlled != null && dai.CanInteract(controlled.gameObject),
+                    holdDuration = dai.HoldDuration,
+                    holdActive = dai.IsReviveHoldActive,
+                    holdProgress = dai.ReviveHoldProgress01,
+                    isSelf = controlled != null && member == controlled,
+                    memberIsAlive = member != null && member.IsAlive,
+                    memberIsDown = member != null && member.IsDown,
+                    healthIsDowned = health != null && health.IsDowned,
+                    healthCurrentHp = health != null ? health.CurrentHP : -1,
+                    healthIsDead = health != null && health.IsDead,
+                    distance = dist,
+                    angleFromCamera = angle,
+                    colliderEnabled = col != null && col.enabled,
+                    colliderType = col != null ? col.GetType().Name : "none",
+                });
+            }
+
+            return new SuccessResponse("revive diagnostic", new
+            {
+                controlled = controlled != null ? controlled.name : "none",
+                interactPressed = controlled != null && controlled.GetComponent<PlayerInputs>() != null && controlled.GetComponent<PlayerInputs>().Interact,
+                holdProgress01 = ic != null ? ic.HoldProgress01 : -1f,
+                interactionRadius = ic != null ? GetPrivate<float>(ic, "m_radius") : -1f,
+                interactionMaxAngle = ic != null ? GetPrivate<float>(ic, "m_maxAngle") : -1f,
+                currentTarget = ic != null && ic.Current is Component cc ? cc.name : "null",
+                hasReviveTarget = pud != null && pud.HasReviveInteractionTarget,
+                squadCurrentPlayerData = sm != null && sm.CurrentPlayerData != null ? sm.CurrentPlayerData.name : "none",
+                cameraForward = cam != null ? facing.ToString("F2") : "noCam",
+                targetCount = targets.Count,
+                targets,
+            });
         }
 
         // ── helpers ──────────────────────────────────────────────────────────
