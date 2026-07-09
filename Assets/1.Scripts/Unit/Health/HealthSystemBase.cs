@@ -32,6 +32,21 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     [FormerlySerializedAs("hpText")]
     [SerializeField] protected TextMeshProUGUI m_hpText;
 
+#if UNITY_EDITOR
+    private const int DebugDownDamage = 9999;
+
+    [Foldout("Debug")]
+    [Tooltip("켜면 Editor에서 피해/사망 로그를 출력합니다. Player 빌드에서는 호출 자체가 제거됩니다.")]
+    [SerializeField] private bool m_debugLogHealth = false;
+
+    [Foldout("Debug")]
+    [Button("Take 9999 Damage")]
+    private void DebugTake9999Damage()
+    {
+        TakeDamage(DebugDownDamage);
+    }
+#endif
+
     protected bool m_isDead;
 
     /// <summary>현재 HP입니다.</summary>
@@ -155,9 +170,7 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
             return false;
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log($"[HealthSystem] Hit. Current HP : {m_currentHp}", this);
-#endif
+        LogHealthDebug($"[HealthSystem] Hit. Current HP : {m_currentHp}");
 
         NotifyHPChanged();
         OnDamaged?.Invoke(actualDamage);
@@ -226,6 +239,15 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
             return false;
         }
 
+        return ReviveToHp(amount);
+    }
+
+    /// <summary>
+    /// HP를 지정한 값으로 회복하고 부활 이벤트를 발생시킵니다.
+    /// 사망 상태뿐 아니라 다운처럼 HP 0이지만 사망은 아닌 상태에서도 재사용합니다.
+    /// </summary>
+    protected bool ReviveToHp(int amount)
+    {
         m_currentHp = Mathf.Clamp(amount, 1, m_maxHp);
         m_isDead = false;
 
@@ -300,9 +322,18 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
 
         m_isDead = true;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log("[HealthSystem] Dead", this);
-#endif
+        LogHealthDebug("[HealthSystem] Dead");
         OnDeath?.Invoke();
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private void LogHealthDebug(string message)
+    {
+#if UNITY_EDITOR
+        if (m_debugLogHealth)
+        {
+            Debug.Log(message, this);
+        }
+#endif
     }
 }
