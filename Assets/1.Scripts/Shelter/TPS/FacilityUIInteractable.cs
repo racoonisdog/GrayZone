@@ -6,6 +6,12 @@ public class FacilityUIInteractable : MonoBehaviour, IInteractable
 {
     [SerializeField] private UIManager m_uiManager;
 
+    public float HoldDuration => 0f;
+
+    public bool CanInteract(GameObject interactor) => isActiveAndEnabled;
+
+    public string GetPrompt() => "Facility";
+
     private void Awake()
     {
         // 인스펙터에 지정하지 않았으면 씬에서 찾아 캐싱.
