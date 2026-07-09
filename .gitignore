@@ -83,6 +83,7 @@ Packages/unity-cli/
 # Local agent bootstrap files
 /AGENTS.md
 /CLAUDE.md
+/GEMINI.md
 /.claude/
 
 # Syncthing sync metadata
