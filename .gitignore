@@ -84,3 +84,6 @@ Packages/unity-cli/
 /AGENTS.md
 /CLAUDE.md
 /.claude/
+
+# Syncthing sync metadata
+.stfolder/
