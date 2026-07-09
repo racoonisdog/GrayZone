@@ -4147,7 +4147,8 @@ MonoBehaviour:
   animationSpeedChangeRate: 10
   gravity: -20
   groundedStickVelocity: -2
-  playerInteractor: {fileID: 0}
+  jumpHeight: 1.2
+  playerInteractor: {fileID: 631162744}
   m_moveLocked: 0
 --- !u!143 &1155638159
 CharacterController:
@@ -6584,8 +6585,7 @@ MonoBehaviour:
   roomId: medical_room
   characterManager: {fileID: 766322780}
   levelVisuals: {fileID: 1106301638}
-  patientSlotsByLevel: 010000000200000003000000
-  helperSlotsByLevel: 010000000100000002000000
+  upgradeCosts: []
   baseRecoveryPerDay: 5
   helperRecoveryBonuses:
   - type: 0
