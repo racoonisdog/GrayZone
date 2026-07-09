@@ -15428,7 +15428,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6347274503543583409}
   - component: {fileID: 8554091433417329722}
-  - component: {fileID: 7823419064517821133}
+  - component: {fileID: 8554091433417329723}
   m_Layer: 8
   m_Name: PlayerArmature
   m_TagString: Player
@@ -36148,18 +36148,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 3420192795322787727}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7823419064517821133
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038382043190765267}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d7e5e9f2f11e4a34a1f3c1814f7e246b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &7823419064517821134
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -38515,6 +38503,18 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &8554091433417329723
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2038382043190765267}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4c37afd7be2abd4f8a9452199772c07, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimationEventReceiver
 --- !u!114 &8562670621100846066
 MonoBehaviour:
   m_ObjectHideFlags: 0

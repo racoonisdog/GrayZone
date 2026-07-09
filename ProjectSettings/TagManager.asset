@@ -41,7 +41,7 @@ TagManager:
   - 
   - 
   - 
-  - 
+  - ShelterFacility
   m_SortingLayers:
   - name: Default
     uniqueID: 0
