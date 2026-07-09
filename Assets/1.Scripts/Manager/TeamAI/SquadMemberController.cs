@@ -1,5 +1,5 @@
-using StarterAssets;
-using UnityEngine;
+﻿using UnityEngine;
+using System;
 using UnityEngine.AI;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -15,6 +15,21 @@ using VInspector;
 [RequireComponent(typeof(Animator))]
 public class SquadMemberController : MonoBehaviour
 {
+    /// <summary>
+    /// 멤버 전환 시 새 조작 멤버에 이어줄 얕은 입력 상태입니다.
+    /// </summary>
+    public struct SwitchCarryoverState
+    {
+        public bool HasInput;
+        public Vector2 Move;
+        public bool Jump;
+        public bool Sprint;
+        public bool Aim;
+        public bool Shoot;
+        public bool AnalogMovement;
+        public ThirdPersonController.LocomotionCarryoverState Locomotion;
+    }
+
     /// <summary>
     /// 스쿼드 멤버의 전술 역할입니다.
     /// </summary>
@@ -52,10 +67,14 @@ public class SquadMemberController : MonoBehaviour
     [FormerlySerializedAs("isDown")]
     [SerializeField] private bool m_isDown;
 
+    private bool m_isInteractionLocked;
+    private Collider m_reviveDetectionCollider;
+
     [Foldout("Reference Options")]
     [Tooltip("입력 값을 보관하는 플레이어 입력 컴포넌트입니다.")]
     [FormerlySerializedAs("starterAssetsInputs")]
-    [SerializeField] private PlayerInputs m_starterAssetsInputs;
+    [FormerlySerializedAs("m_starterAssetsInputs")]
+    [SerializeField] private PlayerInputs m_playerInputs;
 
     [Tooltip("직접 조작 시 사용하는 3인칭 컨트롤러입니다.")]
     [FormerlySerializedAs("thirdPersonController")]
@@ -93,6 +112,9 @@ public class SquadMemberController : MonoBehaviour
     [FormerlySerializedAs("characterController")]
     [SerializeField] private CharacterController m_characterController;
 
+    [Tooltip("이 멤버의 체력 컴포넌트입니다. 사망/부활 시 생존 플래그를 동기화합니다.")]
+    [SerializeField] private PlayerHealth m_playerHealth;
+
     /// <summary>스쿼드 멤버 표시 이름입니다.</summary>
     public string MemberName => m_memberName;
 
@@ -111,6 +133,21 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>카메라가 따라갈 기준 Transform입니다.</summary>
     public Transform CameraTarget => m_cameraTarget != null ? m_cameraTarget : transform;
 
+    /// <summary>이 멤버가 생존 상태에서 사망(전투 이탈) 상태로 바뀔 때 발생합니다.</summary>
+    public event Action<SquadMemberController> OnMemberDied;
+
+    /// <summary>이 멤버가 다운(빈사) 상태로 진입할 때 발생합니다.</summary>
+    public event Action<SquadMemberController> OnMemberDowned;
+
+    private static readonly int DownHash = Animator.StringToHash("IsDown");
+    private static readonly int DeathHash = Animator.StringToHash("IsDead");
+    private static readonly int InteractionHash = Animator.StringToHash("IsInteraction");
+    private static readonly int ReviveHash = Animator.StringToHash("IsRevive");
+    private static readonly int StandingHash = Animator.StringToHash("IsStanding");
+    private static readonly int RootHash = Animator.StringToHash("IsRoot");
+    private static readonly int DownStateHash = Animator.StringToHash("Base Layer.Down");
+    private static readonly int GroundedLocomotionStateHash = Animator.StringToHash("Base Layer.Idle Walk Run Blend");
+
     /// <summary>
     /// Inspector에서 컴포넌트가 추가되거나 Reset될 때 현재 GameObject 기준으로 참조를 자동 탐색합니다.
     /// </summary>
@@ -125,7 +162,67 @@ public class SquadMemberController : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
+        EnsureDownedAllyInteractable();
+        EnsureReviveDetectionCollider();
         ApplyControlState();
+    }
+
+    /// <summary>
+    /// 체력 컴포넌트의 사망/부활 이벤트를 구독해 생존 플래그를 동기화합니다.
+    /// </summary>
+    private void OnEnable()
+    {
+        AutoFindReferences();
+
+        if (m_playerHealth == null)
+        {
+            return;
+        }
+
+        m_playerHealth.OnDown += HandleHealthDowned;
+        m_playerHealth.OnDeath += HandleHealthDeath;
+        m_playerHealth.OnRevive += HandleHealthRevive;
+    }
+
+    private void OnDisable()
+    {
+        if (m_playerHealth == null)
+        {
+            return;
+        }
+
+        m_playerHealth.OnDown -= HandleHealthDowned;
+        m_playerHealth.OnDeath -= HandleHealthDeath;
+        m_playerHealth.OnRevive -= HandleHealthRevive;
+    }
+
+    /// <summary>
+    /// HP가 0에 도달하면 다운(빈사) 상태로 전환합니다.
+    /// </summary>
+    /// <remarks>
+    /// 1차 프로토타입 기준: HP 0은 사망이 아니라 다운이며, 다운 중에는 이동/조준/사격이 제한됩니다.
+    /// 전투 이탈(사망 확정)은 구조 가능 시간이 끝났을 때 <see cref="HandleHealthDeath"/>로 처리합니다(후속 작업).
+    /// </remarks>
+    private void HandleHealthDowned()
+    {
+        SetDown(true);
+    }
+
+    /// <summary>
+    /// 특수 사망 조건(예: 구조 실패)으로 체력 컴포넌트가 사망하면 전투 이탈(사망) 상태로 전환합니다.
+    /// </summary>
+    private void HandleHealthDeath()
+    {
+        SetAlive(false);
+    }
+
+    /// <summary>
+    /// 부활 시 생존 플래그를 복구합니다.
+    /// </summary>
+    private void HandleHealthRevive()
+    {
+        SetAlive(true);
+        SetDown(false);
     }
 
     /// <summary>
@@ -133,9 +230,9 @@ public class SquadMemberController : MonoBehaviour
     /// </summary>
     private void AutoFindReferences()
     {
-        if (m_starterAssetsInputs == null)
+        if (m_playerInputs == null)
         {
-            m_starterAssetsInputs = GetComponent<PlayerInputs>();
+            m_playerInputs = GetComponent<PlayerInputs>();
         }
 
         if (m_thirdPersonController == null)
@@ -173,6 +270,11 @@ public class SquadMemberController : MonoBehaviour
             m_characterController = GetComponent<CharacterController>();
         }
 
+        if (m_playerHealth == null)
+        {
+            m_playerHealth = GetComponent<PlayerHealth>();
+        }
+
         if (m_followerAI == null)
         {
             m_followerAI = GetComponent<SquadFollowerAI>();
@@ -195,6 +297,7 @@ public class SquadMemberController : MonoBehaviour
         if (found == null)
         {
             found = transform.Find("CinemachineCameraTarget");
+
         }
 
         if (found == null)
@@ -212,6 +315,10 @@ public class SquadMemberController : MonoBehaviour
     public void SetPlayerControlled(bool value)
     {
         m_isPlayerControlled = value;
+        if (!m_isPlayerControlled)
+        {
+            m_isInteractionLocked = false;
+        }
         ApplyControlState();
     }
 
@@ -221,14 +328,22 @@ public class SquadMemberController : MonoBehaviour
     /// <param name="value">생존 상태이면 true입니다.</param>
     public void SetAlive(bool value)
     {
+        bool wasAlive = m_isAlive;
         m_isAlive = value;
 
         if (!m_isAlive)
         {
             m_isDown = false;
+            m_isInteractionLocked = false;
         }
 
         ApplyControlState();
+        UpdateDownDeathAnimator();
+
+        if (wasAlive && !m_isAlive)
+        {
+            OnMemberDied?.Invoke(this);
+        }
     }
 
     /// <summary>
@@ -242,8 +357,173 @@ public class SquadMemberController : MonoBehaviour
             return;
         }
 
+        bool wasDown = m_isDown;
         m_isDown = value;
+        if (m_isDown)
+        {
+            m_isInteractionLocked = false;
+        }
+        UpdateReviveDetectionCollider();
         ApplyControlState();
+        UpdateDownDeathAnimator();
+
+        if (!wasDown && m_isDown)
+        {
+            OnMemberDowned?.Invoke(this);
+        }
+    }
+
+    private void EnsureDownedAllyInteractable()
+    {
+        if (m_playerHealth == null)
+        {
+            return;
+        }
+
+        if (GetComponent<DownedAllyInteractable>() == null)
+        {
+            gameObject.AddComponent<DownedAllyInteractable>();
+        }
+    }
+
+    /// <summary>
+    /// 다운된 아군을 상호작용 탐지(OverlapSphere)로 찾을 수 있도록, 다운 중에만 켜지는 전용 트리거 콜라이더를 준비합니다.
+    /// </summary>
+    /// <remarks>
+    /// 비조작 팔로워는 CharacterController가 꺼져 있어(NavMeshAgent 구동) 유일한 콜라이더가 비활성이며, 이 경우
+    /// <see cref="Physics.OverlapSphere"/>가 대상을 반환하지 못합니다. 다운 상태에서만 켜는 트리거 콜라이더로 이 사각을 메웁니다.
+    /// </remarks>
+    private void EnsureReviveDetectionCollider()
+    {
+        if (m_reviveDetectionCollider != null)
+        {
+            return;
+        }
+
+        SphereCollider detection = gameObject.AddComponent<SphereCollider>();
+        detection.isTrigger = true;
+        detection.radius = 0.6f;
+        detection.center = new Vector3(0.0f, 1.0f, 0.0f);
+        m_reviveDetectionCollider = detection;
+        UpdateReviveDetectionCollider();
+    }
+
+    private void UpdateReviveDetectionCollider()
+    {
+        if (m_reviveDetectionCollider != null)
+        {
+            m_reviveDetectionCollider.enabled = m_isDown;
+        }
+    }
+
+    public void SetInteractionLocked(bool value)
+    {
+        if (m_isInteractionLocked == value)
+        {
+            if (m_isInteractionLocked)
+            {
+                SuppressNonInteractionInputs();
+            }
+
+            return;
+        }
+
+        m_isInteractionLocked = value;
+        ApplyControlState();
+
+        if (m_isInteractionLocked)
+        {
+            SuppressNonInteractionInputs();
+        }
+    }
+
+    public void RefreshInteractionLock()
+    {
+        if (!m_isInteractionLocked)
+        {
+            return;
+        }
+
+        SuppressNonInteractionInputs();
+    }
+
+    public void SetReviveInteractionAnimator(bool active)
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(InteractionHash, active);
+        m_animator.SetBool(ReviveHash, active);
+        m_animator.SetBool(RootHash, false);
+    }
+
+    public void SetAssistedStandingAnimator(bool active)
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(StandingHash, active);
+
+        if (active)
+        {
+            // 기립 전이가 'Any State→Down'(IsDown)과 Down 상태에 막히지 않도록 Down 파라미터를 선제적으로 내린다.
+            // 다운 로직 상태(m_isDown)는 유지되며(구조 완료 시 SetDown(false)로 정리) 애니메이터 파라미터만 먼저 반영한다.
+            m_animator.SetBool(DownHash, false);
+        }
+        else if (m_isAlive && m_isDown)
+        {
+            // 구조 취소: 다시 다운 포즈로 되돌린다.
+            m_animator.SetBool(DownHash, true);
+            m_animator.Play(DownStateHash, 0, 0.0f);
+            m_animator.Update(0.0f);
+        }
+    }
+
+    public void CompleteAssistedStandingAnimator()
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(StandingHash, false);
+        m_animator.SetBool(DownHash, false);
+        m_animator.SetBool(DeathHash, false);
+        m_animator.SetBool(InteractionHash, false);
+        m_animator.SetBool(ReviveHash, false);
+        m_animator.SetBool(RootHash, false);
+        m_animator.Play(GroundedLocomotionStateHash, 0, 0.0f);
+        m_animator.Update(0.0f);
+    }
+
+    /// <summary>
+    /// 현재 생존/다운 상태를 애니메이터 파라미터(Down/Death)에 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 사망이면 Death=true·Down=false, 생존 중 다운이면 Down=true·Death=false, 그 외엔 둘 다 false입니다.
+    /// </remarks>
+    private void UpdateDownDeathAnimator()
+    {
+        bool isDead = !m_isAlive;
+        bool isDown = !isDead && m_isDown;
+
+        // 다운/사망 시 상체 조준 IK와 무기 레이어를 완전히 해제해 목표(다운/사망) 모션이 IK에 의해 깨지지 않게 합니다.
+        if ((isDead || isDown) && m_aimController != null)
+        {
+            m_aimController.ReleaseCombatVisuals();
+        }
+
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(DeathHash, isDead);
+        m_animator.SetBool(DownHash, isDown);
     }
 
     /// <summary>
@@ -255,11 +535,234 @@ public class SquadMemberController : MonoBehaviour
     }
 
     /// <summary>
+    /// 직접 조작 전환 직전에 유지할 입력 상태를 캡처합니다.
+    /// </summary>
+    /// <returns>새 조작 멤버에 적용할 입력 상태입니다.</returns>
+    public SwitchCarryoverState CaptureSwitchCarryoverState()
+    {
+        if (m_playerInputs == null)
+        {
+            return default;
+        }
+
+        SwitchCarryoverState state = new()
+        {
+            HasInput = true,
+            Move = m_playerInputs.Move,
+            Jump = m_playerInputs.Jump,
+            Sprint = m_playerInputs.Sprint,
+            Aim = m_playerInputs.Aim,
+            Shoot = m_playerInputs.Shoot,
+            AnalogMovement = m_playerInputs.AnalogMovement,
+        };
+
+        if (m_thirdPersonController != null)
+        {
+            state.Locomotion = m_thirdPersonController.CaptureLocomotionCarryoverState();
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// 전환 직전 캡처한 얕은 입력 상태를 현재 조작 멤버에 적용합니다.
+    /// </summary>
+    /// <param name="state">적용할 전환 입력 상태입니다.</param>
+    public void ApplySwitchCarryoverState(SwitchCarryoverState state)
+    {
+        if (!state.HasInput)
+        {
+            return;
+        }
+
+        // 조준(ADS)은 유지하지만, 전력질주 중인 힙파이어는 sprint가 우선이므로 전환에 넘기지 않습니다.
+        bool sprintCancelsHipfire = state.Sprint && !state.Aim;
+        bool keepShoot = sprintCancelsHipfire ? false : state.Shoot;
+        // 전투 자세(백뷰)는 조준이거나 유지 가능한 사격(힙파이어) 중이면 유지합니다.
+        bool inCombat = state.Aim || keepShoot;
+
+        if (m_playerInputs != null)
+        {
+            m_playerInputs.MoveInput(state.Move);
+            m_playerInputs.JumpInput(state.Jump);
+            m_playerInputs.SprintInput(state.Sprint);
+            m_playerInputs.AimInput(state.Aim);
+            m_playerInputs.ShootInput(keepShoot);
+            m_playerInputs.SetAnalogMovement(state.AnalogMovement);
+        }
+
+        if (m_thirdPersonController != null)
+        {
+            m_thirdPersonController.SetAimMove(inCombat);
+            m_thirdPersonController.ApplyLocomotionCarryoverState(state.Locomotion);
+        }
+
+        if (m_aimController != null)
+        {
+            m_aimController.ApplySwitchCarryoverState(state.Aim, keepShoot);
+        }
+    }
+
+    /// <summary>
+    /// 현재 AI 추종 상태를 전환 유지용으로 캡처합니다.
+    /// </summary>
+    /// <returns>AI 추종 상태입니다.</returns>
+    public SquadFollowerAI.FollowCarryoverState CaptureFollowCarryoverState()
+    {
+        if (m_followerAI == null)
+        {
+            return default;
+        }
+
+        return m_followerAI.CaptureFollowCarryoverState();
+    }
+
+    /// <summary>
+    /// 전환 직전 캡처한 AI 추종 상태를 현재 멤버에 적용합니다.
+    /// </summary>
+    /// <param name="state">적용할 AI 추종 상태입니다.</param>
+    public void ApplyFollowCarryoverState(SquadFollowerAI.FollowCarryoverState state)
+    {
+        Vector3 groundReferencePosition = state.HasState ? state.Position : transform.position;
+        SnapToNavMeshGround(groundReferencePosition);
+
+        if (m_thirdPersonController != null)
+        {
+            m_thirdPersonController.ClearAirborneCarryoverState();
+        }
+
+        if (m_followerAI == null)
+        {
+            return;
+        }
+
+        m_followerAI.ApplyFollowCarryoverState(state);
+    }
+
+    /// <summary>
+    /// AI 제어로 전환된 멤버를 현재 위치 근처의 NavMesh 지면으로 보정합니다.
+    /// </summary>
+    /// <param name="referencePosition">지면 보정 기준 위치입니다.</param>
+    private void SnapToNavMeshGround(Vector3 referencePosition)
+    {
+        if (m_navMeshAgent == null)
+        {
+            return;
+        }
+
+        if (!NavMesh.SamplePosition(referencePosition, out NavMeshHit hit, 5.0f, NavMesh.AllAreas))
+        {
+            return;
+        }
+
+        bool wasCharacterControllerEnabled = m_characterController != null && m_characterController.enabled;
+        bool wasAgentEnabled = m_navMeshAgent.enabled;
+
+        if (wasCharacterControllerEnabled)
+        {
+            m_characterController.enabled = false;
+        }
+
+        if (wasAgentEnabled)
+        {
+            m_navMeshAgent.enabled = false;
+        }
+
+        transform.position = hit.position;
+
+        if (wasAgentEnabled)
+        {
+            m_navMeshAgent.enabled = true;
+
+            if (m_navMeshAgent.isOnNavMesh)
+            {
+                m_navMeshAgent.Warp(hit.position);
+            }
+        }
+
+        if (wasCharacterControllerEnabled)
+        {
+            m_characterController.enabled = true;
+        }
+    }
+
+    /// <summary>
+    /// 현재 멤버가 장착한 무기의 탄약 UI를 현재 탄약 상태로 갱신합니다.
+    /// </summary>
+    public void RefreshWeaponUI()
+    {
+        if (m_weaponController == null)
+        {
+            m_weaponController = GetComponentInChildren<WeaponController>();
+        }
+
+        if (m_weaponController != null)
+        {
+            m_weaponController.UpdateBulletUI();
+        }
+    }
+
+    /// <summary>
+    /// 카메라 타겟 회전을 지정한 월드 회전으로 동기화합니다.
+    /// </summary>
+    /// <param name="worldRotation">적용할 월드 회전입니다.</param>
+    public void SyncCameraTargetRotation(Quaternion worldRotation)
+    {
+        if (m_thirdPersonController != null)
+        {
+            m_thirdPersonController.SyncCameraTargetRotation(worldRotation);
+            return;
+        }
+
+        if (m_cameraTarget != null)
+        {
+            m_cameraTarget.rotation = worldRotation;
+        }
+    }
+
+    /// <summary>
+    /// 사망한 멤버에 남아 있을 수 있는 직접 조작 입력과 카메라 회전 상태를 정리합니다.
+    /// </summary>
+    public void ClearDeadControlState()
+    {
+        if (m_playerInputs != null)
+        {
+            m_playerInputs.ResetInputState();
+            m_playerInputs.enabled = false;
+        }
+
+        if (m_playerInput != null)
+        {
+            m_playerInput.DeactivateInput();
+            m_playerInput.enabled = false;
+        }
+
+        if (m_aimController != null)
+        {
+            m_aimController.ForceStopAim();
+            m_aimController.enabled = false;
+        }
+
+        if (m_thirdPersonController != null)
+        {
+            m_thirdPersonController.SyncCameraTargetRotation(transform.rotation);
+            m_thirdPersonController.enabled = false;
+            return;
+        }
+
+        if (m_cameraTarget != null)
+        {
+            m_cameraTarget.rotation = transform.rotation;
+        }
+    }
+
+    /// <summary>
     /// 현재 생존, 다운, 직접 조작 상태에 따라 입력, 이동, 조준, 추종 AI 컴포넌트의 활성 상태를 적용합니다.
     /// </summary>
     private void ApplyControlState()
     {
-        bool allowDirectControl = m_isAlive && !m_isDown && m_isPlayerControlled;
+        bool allowPlayerInput = m_isAlive && !m_isDown && m_isPlayerControlled;
+        bool allowDirectControl = allowPlayerInput && !m_isInteractionLocked;
         bool allowAIControl = m_isAlive && !m_isDown && !m_isPlayerControlled;
 
         if (!allowDirectControl && m_aimController != null)
@@ -267,10 +770,21 @@ public class SquadMemberController : MonoBehaviour
             m_aimController.ForceStopAim();
         }
 
-        if (m_starterAssetsInputs != null)
+        if (m_playerInputs != null)
         {
-            m_starterAssetsInputs.ResetInputState();
-            m_starterAssetsInputs.enabled = allowDirectControl;
+            if (allowPlayerInput)
+            {
+                if (!allowDirectControl)
+                {
+                    m_playerInputs.ResetNonInteractionInputState();
+                }
+            }
+            else
+            {
+                m_playerInputs.ResetInputState();
+            }
+
+            m_playerInputs.enabled = allowPlayerInput;
         }
 
         if (m_characterController != null)
@@ -295,12 +809,39 @@ public class SquadMemberController : MonoBehaviour
             m_weaponController.enabled = true;
         }
 
+        if (allowDirectControl
+            && m_thirdPersonController != null
+            && m_thirdPersonController.IsReload
+            && m_weaponController != null
+            && !m_weaponController.IsReloading)
+        {
+            m_thirdPersonController.SetReload(false);
+
+            if (m_aimController != null)
+            {
+                m_aimController.ApplySwitchCarryoverState(false, false);
+            }
+        }
+
         if (m_followerAI != null)
         {
             m_followerAI.enabled = allowAIControl;
         }
 
-        ApplyPlayerInputState(allowDirectControl);
+        ApplyPlayerInputState(allowPlayerInput);
+    }
+
+    private void SuppressNonInteractionInputs()
+    {
+        if (m_playerInputs != null)
+        {
+            m_playerInputs.ResetNonInteractionInputState();
+        }
+
+        if (m_aimController != null)
+        {
+            m_aimController.ForceStopAim();
+        }
     }
 
     /// <summary>
@@ -348,6 +889,18 @@ public class SquadMemberController : MonoBehaviour
 
         if (allowDirectControl)
         {
+            // 이미 "Player" 맵으로 활성 상태면 재설정하지 않는다.
+            // SwitchCurrentActionMap/ActivateInput은 맵을 껐다 켜므로, 이미 눌린 채인 버튼(예: 구조 홀드 중 Interaction)의
+            // 홀드 상태가 소실되어 다음 프레임에 IsPressed()가 false가 되고 홀드가 끊긴다. 상태가 이미 맞으면 건너뛴다.
+            bool alreadyActive = m_playerInput.enabled
+                && m_playerInput.inputIsActive
+                && m_playerInput.currentActionMap != null
+                && m_playerInput.currentActionMap.name == "Player";
+            if (alreadyActive)
+            {
+                return;
+            }
+
             m_playerInput.enabled = true;
             m_playerInput.ActivateInput();
             m_playerInput.SwitchCurrentActionMap("Player");

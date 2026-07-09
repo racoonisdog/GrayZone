@@ -173,7 +173,7 @@ public class WeaponController_TPZ : MonoBehaviour
     {
         if (bulletText != null)
         {
-            bulletText.text = $"{currentBullet} / {maxBullet}";
+            bulletText.text = currentBullet.ToString();
         }
     }
 

@@ -7,6 +7,12 @@ public class SleepInteractable : MonoBehaviour, IInteractable
 {
     [SerializeField] private int daysToAdvance = 1;
 
+    public float HoldDuration => 0f;
+
+    public bool CanInteract(GameObject interactor) => isActiveAndEnabled;
+
+    public string GetPrompt() => "Sleep";
+
     public void Interact(GameObject interactor)
     {
         // ToDo: 확인 팝업 후 호출로 교체 (현재는 테스트용 즉시 진행)

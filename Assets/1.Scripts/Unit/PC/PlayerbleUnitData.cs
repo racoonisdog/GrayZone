@@ -1,8 +1,559 @@
-// �÷��̾��� ���� ������ �ڵ鷯 & �����̳�
-
+﻿using System;
 using UnityEngine;
 
+/// <summary>
+/// 플레이어블 캐릭터의 고정 식별자입니다.
+/// </summary>
+public enum PlayableCharacterId
+{
+    /// <summary>아직 캐릭터가 지정되지 않은 상태입니다.</summary>
+    Unknown = 0,
+
+    /// <summary>나린입니다.</summary>
+    Narin = 1,
+
+    /// <summary>청솔입니다.</summary>
+    Cheongsol = 2,
+
+    /// <summary>서하입니다.</summary>
+    Seoha = 3
+}
+
+[DisallowMultipleComponent]
+/// <summary>
+/// 플레이어 유닛의 공용 상태를 모아두는 공개 데이터 Module입니다.
+/// 외부 시스템은 이 Module을 통해 식별 정보, 신뢰도, 생존 상태, 체력 요약값을 읽습니다.
+/// </summary>
 public class PlayerbleUnitData : MonoBehaviour
 {
-    public int Reliability { get; set; } // �ŷڵ�
+    [Header("Public Identity")]
+    [SerializeField] private string m_runtimeId;
+    [SerializeField] private PlayableCharacterId m_characterId = PlayableCharacterId.Unknown;
+    [SerializeField] private string m_displayName = "Player";
+
+    [Header("Public Runtime Data")]
+    [Range(0, 100)]
+    [SerializeField] private int m_reliability;
+
+    [Header("Observed Modules")]
+    [SerializeField] private PlayerHealth m_health;
+    [SerializeField] private SquadMemberController m_squadMember;
+    [SerializeField] private InteractionController m_interactionController;
+    [SerializeField] private WeaponController m_weaponController;
+    [SerializeField] private Transform m_publicTarget;
+
+    [Header("Weapon Public Data")]
+    [SerializeField] private Weapon m_currentWeapon;
+    [SerializeField] private string m_currentWeaponFallbackName;
+
+    [Header("Ammo Inventory")]
+    [SerializeField] private int m_reserveAmmo;
+    [SerializeField] private int m_maxReserveAmmo = 120;
+
+    /// <summary>
+    /// 공개 상태 중 외부에 노출되는 값이 바뀌었을 때 발생합니다.
+    /// </summary>
+    public event Action OnPublicDataChanged;
+
+    /// <summary>
+    /// 이 유닛을 외부 시스템에서 식별하기 위한 런타임 ID입니다.
+    /// 값이 비어 있으면 GameObject 이름을 반환합니다.
+    /// </summary>
+    public string RuntimeId => string.IsNullOrWhiteSpace(m_runtimeId)
+        ? gameObject.name
+        : m_runtimeId.Trim();
+
+    /// <summary>
+    /// 플레이어블 캐릭터의 고정 식별자입니다.
+    /// </summary>
+    public PlayableCharacterId CharacterId => m_characterId;
+
+    /// <summary>
+    /// UI나 로그에서 표시할 이름입니다.
+    /// 값이 비어 있으면 GameObject 이름을 반환합니다.
+    /// </summary>
+    public string DisplayName => string.IsNullOrWhiteSpace(m_displayName)
+        ? gameObject.name
+        : m_displayName.Trim();
+
+    /// <summary>
+    /// 셸터, 관계, 출격 판정 등에 사용할 수 있는 공용 신뢰도 값입니다.
+    /// </summary>
+    public int Reliability => m_reliability;
+
+    /// <summary>
+    /// 현재 HP입니다. 실제 원본 값은 PlayerHealth가 소유합니다.
+    /// </summary>
+    public int CurrentHp => m_health != null ? m_health.CurrentHP : 0;
+
+    /// <summary>
+    /// 최대 HP입니다. 실제 원본 값은 PlayerHealth가 소유합니다.
+    /// </summary>
+    public int MaxHp => m_health != null ? m_health.MaxHP : 0;
+
+    /// <summary>
+    /// 현재 HP를 최대 HP 기준 0~100으로 환산한 값입니다.
+    /// </summary>
+    public int HealthPercent => MaxHp > 0 ? CurrentHp * 100 / MaxHp : 0;
+
+    /// <summary>
+    /// 체력 기준으로 사망 상태인지 여부입니다.
+    /// </summary>
+    public bool IsDead => m_health != null && m_health.IsDead;
+
+    /// <summary>
+    /// 플레이어가 살아 있는지 여부입니다.
+    /// SquadMemberController 상태까지 함께 반영합니다.
+    /// </summary>
+    public bool IsAlive => !IsDead && (m_squadMember == null || m_squadMember.IsAlive);
+
+    /// <summary>
+    /// 현재 다운 상태인지 여부입니다.
+    /// </summary>
+    public bool IsDown => m_squadMember != null && m_squadMember.IsDown;
+
+    /// <summary>
+    /// 직접 조작 중인지 여부입니다.
+    /// </summary>
+    public bool IsPlayerControlled => m_squadMember != null && m_squadMember.IsPlayerControlled;
+
+    /// <summary>
+    /// 출격 또는 배치 가능한 상태인지 여부입니다.
+    /// </summary>
+    public bool CanDeploy => IsAlive && !IsDown;
+
+    public DownedAllyInteractable CurrentReviveInteractionTarget => m_interactionController != null
+        ? m_interactionController.Current as DownedAllyInteractable
+        : null;
+
+    public bool HasReviveInteractionTarget => CurrentReviveInteractionTarget != null;
+
+    public bool IsReviving => CurrentReviveInteractionTarget != null
+        && (m_interactionController.HoldProgress01 > 0.0f
+            || CurrentReviveInteractionTarget.IsReviveHoldActive);
+
+    public float ReviveGaugeAmount => CurrentReviveInteractionTarget != null
+        ? Mathf.Clamp01(Mathf.Max(m_interactionController.HoldProgress01, CurrentReviveInteractionTarget.ReviveHoldProgress01))
+        : 0.0f;
+
+    /// <summary>
+    /// 현재 부상 상태입니다.
+    /// </summary>
+    public PlayerInjuryState InjuryState => m_health != null
+        ? m_health.CurrentInjuryState
+        : PlayerInjuryState.Normal;
+
+    /// <summary>
+    /// 부상 게이지를 0~1 범위로 정규화한 값입니다.
+    /// </summary>
+    public float InjuryGaugeNormalized => m_health != null
+        ? m_health.InjuryGaugeNormalized
+        : 0.0f;
+
+    /// <summary>
+    /// 현재 장착 무기의 컨트롤러입니다.
+    /// </summary>
+    public WeaponController WeaponController => m_weaponController;
+
+    /// <summary>
+    /// 현재 장착 무기의 정의 데이터입니다.
+    /// 비어 있으면 무기 컨트롤러와 fallback 이름만 사용합니다.
+    /// </summary>
+    public Weapon CurrentWeapon => m_currentWeapon;
+
+    /// <summary>
+    /// 현재 무기 정의 데이터가 연결되어 있는지 여부입니다.
+    /// </summary>
+    public bool HasCurrentWeaponDefinition => m_currentWeapon != null;
+
+    /// <summary>
+    /// 현재 무기 ID입니다.
+    /// </summary>
+    public string CurrentWeaponId => m_currentWeapon != null
+        ? (m_currentWeapon.weaponId?.Trim() ?? string.Empty)
+        : string.Empty;
+
+    /// <summary>
+    /// 현재 무기 이름입니다. 정의 데이터, fallback 이름, 컨트롤러 오브젝트 이름 순으로 반환합니다.
+    /// </summary>
+    public string CurrentWeaponName => ResolveCurrentWeaponName();
+
+    /// <summary>
+    /// 현재 무기 타입입니다. 정의 데이터가 없으면 enum 기본값을 반환합니다.
+    /// </summary>
+    public WeaponType CurrentWeaponType => m_currentWeapon != null
+        ? m_currentWeapon.weaponType
+        : default;
+
+    /// <summary>
+    /// 현재 무기의 한 탄창 기준 장탄 수입니다.
+    /// </summary>
+    public int CurrentMagazineAmmo => m_weaponController != null ? m_weaponController.CurrentBullet : 0;
+
+    /// <summary>
+    /// 현재 무기의 탄창 용량입니다.
+    /// </summary>
+    public int MagazineCapacity => m_weaponController != null ? m_weaponController.MaxBullet : 0;
+
+    /// <summary>
+    /// 플레이어가 탄창 밖에 보유 중인 예비 탄약 수입니다.
+    /// </summary>
+    public int ReserveAmmo => m_reserveAmmo;
+
+    /// <summary>
+    /// 플레이어가 보유할 수 있는 예비 탄약 최대치입니다.
+    /// </summary>
+    public int MaxReserveAmmo => m_maxReserveAmmo;
+
+    /// <summary>
+    /// 현재 탄창과 예비 탄약을 합산한 총 보유 탄약 수입니다.
+    /// </summary>
+    public int TotalAmmo => CurrentMagazineAmmo + m_reserveAmmo;
+
+    /// <summary>
+    /// 현재 무기와 탄약 상태를 로그/UI용으로 짧게 요약한 문자열입니다.
+    /// </summary>
+    public string CurrentWeaponShortInfo => BuildCurrentWeaponShortInfo();
+
+    /// <summary>
+    /// 외부 시스템이 이 유닛을 대상으로 삼을 기준 Transform입니다.
+    /// </summary>
+    public Transform PublicTarget => m_publicTarget != null ? m_publicTarget : transform;
+
+    private void Reset()
+    {
+        CacheReferences();
+        ClampValues();
+    }
+
+    private void Awake()
+    {
+        CacheReferences();
+        ClampValues();
+    }
+
+    private void OnEnable()
+    {
+        CacheReferences();
+        SubscribeHealth();
+        SubscribeWeapon();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeHealth();
+        UnsubscribeWeapon();
+    }
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        ClampValues();
+    }
+#endif
+
+    /// <summary>
+    /// 런타임 ID를 설정합니다.
+    /// </summary>
+    /// <param name="value">새 런타임 ID입니다.</param>
+    public void SetRuntimeId(string value)
+    {
+        string nextValue = value?.Trim() ?? string.Empty;
+        if (m_runtimeId == nextValue)
+        {
+            return;
+        }
+
+        m_runtimeId = nextValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 플레이어블 캐릭터 식별자를 설정합니다.
+    /// </summary>
+    /// <param name="value">새 캐릭터 식별자입니다.</param>
+    public void SetCharacterId(PlayableCharacterId value)
+    {
+        if (m_characterId == value)
+        {
+            return;
+        }
+
+        m_characterId = value;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 표시 이름을 설정합니다.
+    /// </summary>
+    /// <param name="value">새 표시 이름입니다.</param>
+    public void SetDisplayName(string value)
+    {
+        string nextValue = value?.Trim() ?? string.Empty;
+        if (m_displayName == nextValue)
+        {
+            return;
+        }
+
+        m_displayName = nextValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 신뢰도를 0~100 범위로 설정합니다.
+    /// </summary>
+    /// <param name="value">새 신뢰도 값입니다.</param>
+    public void SetReliability(int value)
+    {
+        int clampedValue = Mathf.Clamp(value, 0, 100);
+        if (m_reliability == clampedValue)
+        {
+            return;
+        }
+
+        m_reliability = clampedValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 신뢰도를 증감합니다.
+    /// </summary>
+    /// <param name="amount">더할 값입니다. 음수도 허용됩니다.</param>
+    public void AddReliability(int amount)
+    {
+        SetReliability(m_reliability + amount);
+    }
+
+    /// <summary>
+    /// 현재 무기 정의 데이터를 설정합니다.
+    /// </summary>
+    /// <param name="weapon">새 무기 정의 데이터입니다.</param>
+    public void SetCurrentWeapon(Weapon weapon)
+    {
+        if (m_currentWeapon == weapon)
+        {
+            return;
+        }
+
+        m_currentWeapon = weapon;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 현재 무기 이름 fallback 값을 설정합니다.
+    /// </summary>
+    /// <param name="value">무기 정의 데이터가 없을 때 표시할 이름입니다.</param>
+    public void SetCurrentWeaponFallbackName(string value)
+    {
+        string nextValue = value?.Trim() ?? string.Empty;
+        if (m_currentWeaponFallbackName == nextValue)
+        {
+            return;
+        }
+
+        m_currentWeaponFallbackName = nextValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 관찰할 무기 컨트롤러를 설정합니다.
+    /// </summary>
+    /// <param name="weaponController">새 무기 컨트롤러입니다.</param>
+    public void SetWeaponController(WeaponController weaponController)
+    {
+        if (m_weaponController == weaponController)
+        {
+            return;
+        }
+
+        bool wasActive = isActiveAndEnabled;
+        if (wasActive)
+        {
+            UnsubscribeWeapon();
+        }
+
+        m_weaponController = weaponController;
+
+        if (wasActive)
+        {
+            SubscribeWeapon();
+        }
+
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 예비 탄약 수를 설정합니다.
+    /// </summary>
+    /// <param name="value">새 예비 탄약 수입니다.</param>
+    public void SetReserveAmmo(int value)
+    {
+        int clampedValue = Mathf.Clamp(value, 0, m_maxReserveAmmo);
+        if (m_reserveAmmo == clampedValue)
+        {
+            return;
+        }
+
+        m_reserveAmmo = clampedValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 예비 탄약 수를 증감합니다.
+    /// </summary>
+    /// <param name="amount">더할 값입니다. 음수도 허용됩니다.</param>
+    public void AddReserveAmmo(int amount)
+    {
+        SetReserveAmmo(m_reserveAmmo + amount);
+    }
+
+    /// <summary>
+    /// 예비 탄약 최대치를 설정합니다.
+    /// </summary>
+    /// <param name="value">새 예비 탄약 최대치입니다.</param>
+    public void SetMaxReserveAmmo(int value)
+    {
+        int nextMaxValue = Mathf.Max(0, value);
+        int nextReserveAmmo = Mathf.Clamp(m_reserveAmmo, 0, nextMaxValue);
+        if (m_maxReserveAmmo == nextMaxValue && m_reserveAmmo == nextReserveAmmo)
+        {
+            return;
+        }
+
+        m_maxReserveAmmo = nextMaxValue;
+        m_reserveAmmo = nextReserveAmmo;
+        NotifyPublicDataChanged();
+    }
+
+    private void CacheReferences()
+    {
+        if (m_health == null)
+        {
+            m_health = GetComponent<PlayerHealth>();
+        }
+
+        if (m_squadMember == null)
+        {
+            m_squadMember = GetComponent<SquadMemberController>();
+        }
+
+        if (m_interactionController == null)
+        {
+            m_interactionController = GetComponent<InteractionController>();
+        }
+
+        if (m_weaponController == null)
+        {
+            m_weaponController = GetComponentInChildren<WeaponController>(true);
+        }
+
+        if (m_publicTarget == null && m_squadMember != null)
+        {
+            m_publicTarget = m_squadMember.CameraTarget;
+        }
+    }
+
+    private void SubscribeHealth()
+    {
+        if (m_health == null)
+        {
+            return;
+        }
+
+        m_health.OnHPChanged += HandleHpChanged;
+        m_health.OnDeath += NotifyPublicDataChanged;
+        m_health.OnRevive += NotifyPublicDataChanged;
+        m_health.OnInjuryGaugeChanged += HandleInjuryGaugeChanged;
+        m_health.OnInjuryStateChanged += HandleInjuryStateChanged;
+    }
+
+    private void UnsubscribeHealth()
+    {
+        if (m_health == null)
+        {
+            return;
+        }
+
+        m_health.OnHPChanged -= HandleHpChanged;
+        m_health.OnDeath -= NotifyPublicDataChanged;
+        m_health.OnRevive -= NotifyPublicDataChanged;
+        m_health.OnInjuryGaugeChanged -= HandleInjuryGaugeChanged;
+        m_health.OnInjuryStateChanged -= HandleInjuryStateChanged;
+    }
+
+    private void SubscribeWeapon()
+    {
+        if (m_weaponController == null)
+        {
+            return;
+        }
+
+        m_weaponController.OnBulletChanged += HandleWeaponBulletChanged;
+    }
+
+    private void UnsubscribeWeapon()
+    {
+        if (m_weaponController == null)
+        {
+            return;
+        }
+
+        m_weaponController.OnBulletChanged -= HandleWeaponBulletChanged;
+    }
+
+    private void HandleHpChanged(int currentHp, int maxHp)
+    {
+        NotifyPublicDataChanged();
+    }
+
+    private void HandleInjuryGaugeChanged(int accumulatedDamage, float normalizedValue)
+    {
+        NotifyPublicDataChanged();
+    }
+
+    private void HandleInjuryStateChanged(PlayerInjuryState injuryState)
+    {
+        NotifyPublicDataChanged();
+    }
+
+    private void HandleWeaponBulletChanged(int currentBullet, int maxBullet)
+    {
+        NotifyPublicDataChanged();
+    }
+
+    private void NotifyPublicDataChanged()
+    {
+        OnPublicDataChanged?.Invoke();
+    }
+
+    private string ResolveCurrentWeaponName()
+    {
+        if (m_currentWeapon != null && !string.IsNullOrWhiteSpace(m_currentWeapon.weaponName))
+        {
+            return m_currentWeapon.weaponName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(m_currentWeaponFallbackName))
+        {
+            return m_currentWeaponFallbackName.Trim();
+        }
+
+        return m_weaponController != null ? m_weaponController.gameObject.name : string.Empty;
+    }
+
+    private string BuildCurrentWeaponShortInfo()
+    {
+        string weaponName = CurrentWeaponName;
+        string ammoInfo = $"{CurrentMagazineAmmo}/{MagazineCapacity}, reserve {m_reserveAmmo}";
+        return string.IsNullOrWhiteSpace(weaponName)
+            ? ammoInfo
+            : $"{weaponName} {ammoInfo}";
+    }
+
+    private void ClampValues()
+    {
+        m_reliability = Mathf.Clamp(m_reliability, 0, 100);
+        m_maxReserveAmmo = Mathf.Max(0, m_maxReserveAmmo);
+        m_reserveAmmo = Mathf.Clamp(m_reserveAmmo, 0, m_maxReserveAmmo);
+    }
 }

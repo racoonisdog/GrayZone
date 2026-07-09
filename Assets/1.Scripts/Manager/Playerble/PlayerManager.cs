@@ -1,17 +1,16 @@
-using StarterAssets;
-using Unity.Cinemachine;
+ï»¿using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.Animations.Rigging;
 using UnityEngine.Serialization;
 using VInspector;
 
 /// <summary>
-/// ÇÃ·¹ÀÌ¾îÀÇ Á¶ÁØ Ä«¸Ş¶ó, Á¶ÁØ UI, Á¶ÁØ ¹æÇâ È¸Àü, IK ¸®±×, »ç°İ ¹× ÀçÀåÀü ÀÔ·ÂÀ» Á¦¾îÇÏ´Â ÄÄÆ÷³ÍÆ®ÀÔ´Ï´Ù.
+/// í”Œë ˆì´ì–´ì˜ ì¡°ì¤€ ì¹´ë©”ë¼, ì¡°ì¤€ UI, ì¡°ì¤€ ë°©í–¥ íšŒì „, IK ë¦¬ê·¸, ì‚¬ê²© ë° ì¬ì¥ì „ ì…ë ¥ì„ ì œì–´í•˜ëŠ” ì»´í¬ë„ŒíŠ¸ì…ë‹ˆë‹¤.
 /// </summary>
 /// <remarks>
-/// ÀÌ ÄÄÆ÷³ÍÆ®´Â <see cref="PlayerInputs"/>, <see cref="ThirdPersonController"/>,
-/// <see cref="Animator"/>, <see cref="AudioSource"/>¸¦ °°Àº GameObjectÀÇ ÇÊ¼ö ÂüÁ¶·Î »ç¿ëÇÕ´Ï´Ù.
-/// ÇÊ¼ö ÂüÁ¶´Â <c>Awake</c>¿¡¼­ Ä³½ÌÇÏ°í, ´©¶ô ½Ã ÄÄÆ÷³ÍÆ®¸¦ ºñÈ°¼ºÈ­ÇÏ¿© ·±Å¸ÀÓ null ÂüÁ¶¸¦ ¹æÁöÇÕ´Ï´Ù.
+/// ì´ ì»´í¬ë„ŒíŠ¸ëŠ” <see cref="PlayerInputs"/>, <see cref="ThirdPersonController"/>,
+/// <see cref="Animator"/>, <see cref="AudioSource"/>ë¥¼ ê°™ì€ GameObjectì˜ í•„ìˆ˜ ì°¸ì¡°ë¡œ ì‚¬ìš©í•©ë‹ˆë‹¤.
+/// í•„ìˆ˜ ì°¸ì¡°ëŠ” <c>Awake</c>ì—ì„œ ìºì‹±í•˜ê³ , ëˆ„ë½ ì‹œ ì»´í¬ë„ŒíŠ¸ë¥¼ ë¹„í™œì„±í™”í•˜ì—¬ ëŸ°íƒ€ì„ null ì°¸ì¡°ë¥¼ ë°©ì§€í•©ë‹ˆë‹¤.
 /// </remarks>
 [RequireComponent(typeof(PlayerInputs))]
 [RequireComponent(typeof(ThirdPersonController))]
@@ -22,45 +21,45 @@ public class PlayerManager : MonoBehaviour
     private const int WeaponLayerIndex = 1;
     private const float AimRotationLerpSpeed = 50.0f;
 
-    private static readonly int AnimIDShoot = Animator.StringToHash("Shoot");
-    private static readonly int AnimIDReload = Animator.StringToHash("Reload");
+    private static readonly int AnimIDShoot = Animator.StringToHash("IsShoot");
+    private static readonly int AnimIDReload = Animator.StringToHash("DoReload");
 
     [Foldout("Aim Options")]
-    [Tooltip("Á¶ÁØ Áß È°¼ºÈ­ÇÒ Cinemachine Ä«¸Ş¶óÀÔ´Ï´Ù.")]
+    [Tooltip("ì¡°ì¤€ ì¤‘ í™œì„±í™”í•  Cinemachine ì¹´ë©”ë¼ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("aimCam")]
     [SerializeField] private CinemachineCamera m_aimCamera;
 
-    [Tooltip("Á¶ÁØ Áß Ç¥½ÃÇÒ UI ¿ÀºêÁ§Æ®ÀÔ´Ï´Ù.")]
+    [Tooltip("ì¡°ì¤€ ì¤‘ í‘œì‹œí•  UI ì˜¤ë¸Œì íŠ¸ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("aimImage")]
     [SerializeField] private GameObject m_aimImage;
 
-    [Tooltip("Á¶ÁØ ÁöÁ¡À» Ç¥½ÃÇÏ°Å³ª IK Å¸°ÙÀ¸·Î »ç¿ëÇÒ ¿ÀºêÁ§Æ®ÀÔ´Ï´Ù.")]
+    [Tooltip("ì¡°ì¤€ ì§€ì ì„ í‘œì‹œí•˜ê±°ë‚˜ IK íƒ€ê²Ÿìœ¼ë¡œ ì‚¬ìš©í•  ì˜¤ë¸Œì íŠ¸ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("aimObj")]
     [SerializeField] private GameObject m_aimTarget;
 
-    [Tooltip("Raycast°¡ ¾Æ¹« ´ë»óµµ ¸ÂÃßÁö ¾Ê¾ÒÀ» ¶§ Ä«¸Ş¶ó Àü¹æ¿¡ µÑ ±âº» Á¶ÁØ °Å¸®ÀÔ´Ï´Ù.")]
+    [Tooltip("Raycastê°€ ì•„ë¬´ ëŒ€ìƒë„ ë§ì¶”ì§€ ì•Šì•˜ì„ ë•Œ ì¹´ë©”ë¼ ì „ë°©ì— ë‘˜ ê¸°ë³¸ ì¡°ì¤€ ê±°ë¦¬ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("aimObjDis")]
     [SerializeField] private float m_aimTargetDistance = 10.0f;
 
-    [Tooltip("Á¶ÁØ Raycast°¡ Ãæµ¹ÇÒ ´ë»ó ·¹ÀÌ¾îÀÔ´Ï´Ù.")]
+    [Tooltip("ì¡°ì¤€ Raycastê°€ ì¶©ëŒí•  ëŒ€ìƒ ë ˆì´ì–´ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("targetLayer")]
     [SerializeField] private LayerMask m_targetLayer;
 
     [Foldout("IK Options")]
-    [Tooltip("¼Õ À§Ä¡ º¸Á¤¿¡ »ç¿ëÇÒ RigÀÔ´Ï´Ù.")]
+    [Tooltip("ì† ìœ„ì¹˜ ë³´ì •ì— ì‚¬ìš©í•  Rigì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("handRig")]
     [SerializeField] private Rig m_handRig;
 
-    [Tooltip("Á¶ÁØ ÀÚ¼¼ º¸Á¤¿¡ »ç¿ëÇÒ RigÀÔ´Ï´Ù.")]
+    [Tooltip("ì¡°ì¤€ ìì„¸ ë³´ì •ì— ì‚¬ìš©í•  Rigì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("aimRig")]
     [SerializeField] private Rig m_aimRig;
 
     [Foldout("Audio Options")]
-    [Tooltip("»ç°İ »ç¿îµåÀÔ´Ï´Ù. ½ÇÁ¦ »ç°İ »ç¿îµå¸¦ WeaponController°¡ Ã³¸®ÇÑ´Ù¸é ºñ¿öµÑ ¼ö ÀÖ½À´Ï´Ù.")]
+    [Tooltip("ì‚¬ê²© ì‚¬ìš´ë“œì…ë‹ˆë‹¤. ì‹¤ì œ ì‚¬ê²© ì‚¬ìš´ë“œë¥¼ WeaponControllerê°€ ì²˜ë¦¬í•œë‹¤ë©´ ë¹„ì›Œë‘˜ ìˆ˜ ìˆìŠµë‹ˆë‹¤.")]
     [FormerlySerializedAs("shootingSound")]
     [SerializeField] private AudioClip m_shootingSound;
 
-    [Tooltip("ÀçÀåÀü ¾Ö´Ï¸ŞÀÌ¼Ç ÀÌº¥Æ®¿¡¼­ »ç¿ëÇÒ »ç¿îµå ¹è¿­ÀÔ´Ï´Ù. 0: ÅºÃ¢ Á¦°Å, 1: ÅºÃ¢ »ğÀÔ, 2: ÀçÀåÀü ¿Ï·á.")]
+    [Tooltip("ì¬ì¥ì „ ì• ë‹ˆë©”ì´ì…˜ ì´ë²¤íŠ¸ì—ì„œ ì‚¬ìš©í•  ì‚¬ìš´ë“œ ë°°ì—´ì…ë‹ˆë‹¤. 0: íƒ„ì°½ ì œê±°, 1: íƒ„ì°½ ì‚½ì…, 2: ì¬ì¥ì „ ì™„ë£Œ.")]
     [FormerlySerializedAs("reloadSound")]
     [SerializeField] private AudioClip[] m_reloadSounds;
 
@@ -70,78 +69,79 @@ public class PlayerManager : MonoBehaviour
     private AudioSource m_weaponAudioSource;
     private WeaponController m_weaponController;
     private Camera m_mainCamera;
-    private Enemy m_currentAimEnemy;
+    private EnemyController m_currentAimEnemy;
     private bool m_hasRequiredReferences;
+    private bool m_isAiming;
 
-    /// <summary>Á¶ÁØ Ä«¸Ş¶ó ÂüÁ¶ÀÔ´Ï´Ù.</summary>
+    /// <summary>ì¡°ì¤€ ì¹´ë©”ë¼ ì°¸ì¡°ì…ë‹ˆë‹¤.</summary>
     public CinemachineCamera AimCamera => m_aimCamera;
 
-    /// <summary>Á¶ÁØ UI ¿ÀºêÁ§Æ® ÂüÁ¶ÀÔ´Ï´Ù.</summary>
+    /// <summary>ì¡°ì¤€ UI ì˜¤ë¸Œì íŠ¸ ì°¸ì¡°ì…ë‹ˆë‹¤.</summary>
     public GameObject AimImage => m_aimImage;
 
-    /// <summary>Á¶ÁØ Å¸°Ù ¿ÀºêÁ§Æ® ÂüÁ¶ÀÔ´Ï´Ù.</summary>
+    /// <summary>ì¡°ì¤€ íƒ€ê²Ÿ ì˜¤ë¸Œì íŠ¸ ì°¸ì¡°ì…ë‹ˆë‹¤.</summary>
     public GameObject AimTarget => m_aimTarget;
 
-    /// <summary>Raycast ¹ÌÃæµ¹ ½Ã »ç¿ëÇÒ ±âº» Á¶ÁØ °Å¸®ÀÔ´Ï´Ù.</summary>
+    /// <summary>Raycast ë¯¸ì¶©ëŒ ì‹œ ì‚¬ìš©í•  ê¸°ë³¸ ì¡°ì¤€ ê±°ë¦¬ì…ë‹ˆë‹¤.</summary>
     public float AimTargetDistance => m_aimTargetDistance;
 
-    /// <summary>Á¶ÁØ Raycast ´ë»ó ·¹ÀÌ¾îÀÔ´Ï´Ù.</summary>
+    /// <summary>ì¡°ì¤€ Raycast ëŒ€ìƒ ë ˆì´ì–´ì…ë‹ˆë‹¤.</summary>
     public LayerMask TargetLayer => m_targetLayer;
 
-    /// <summary>ÇöÀç Á¶ÁØ Raycast°¡ °¨ÁöÇÑ ÀûÀÔ´Ï´Ù.</summary>
-    public Enemy CurrentAimEnemy => m_currentAimEnemy;
+    /// <summary>í˜„ì¬ ì¡°ì¤€ Raycastê°€ ê°ì§€í•œ ì ì…ë‹ˆë‹¤.</summary>
+    public EnemyController CurrentAimEnemy => m_currentAimEnemy;
 
-    /// <summary>»ç°İ »ç¿îµå Å¬¸³ÀÔ´Ï´Ù.</summary>
+    /// <summary>ì‚¬ê²© ì‚¬ìš´ë“œ í´ë¦½ì…ë‹ˆë‹¤.</summary>
     public AudioClip ShootingSound => m_shootingSound;
 
-    /// <summary>ÀçÀåÀü »ç¿îµå Å¬¸³ ¹è¿­ÀÔ´Ï´Ù.</summary>
+    /// <summary>ì¬ì¥ì „ ì‚¬ìš´ë“œ í´ë¦½ ë°°ì—´ì…ë‹ˆë‹¤.</summary>
     public AudioClip[] ReloadSounds => m_reloadSounds;
 
     /// <summary>
-    /// Á¶ÁØ Ä«¸Ş¶ó ÂüÁ¶¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ ì¹´ë©”ë¼ ì°¸ì¡°ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ Á¶ÁØ Ä«¸Ş¶óÀÔ´Ï´Ù.</param>
+    /// <param name="value">ìƒˆ ì¡°ì¤€ ì¹´ë©”ë¼ì…ë‹ˆë‹¤.</param>
     public void SetAimCamera(CinemachineCamera value) => m_aimCamera = value;
 
     /// <summary>
-    /// Á¶ÁØ UI ¿ÀºêÁ§Æ® ÂüÁ¶¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ UI ì˜¤ë¸Œì íŠ¸ ì°¸ì¡°ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ Á¶ÁØ UI ¿ÀºêÁ§Æ®ÀÔ´Ï´Ù.</param>
+    /// <param name="value">ìƒˆ ì¡°ì¤€ UI ì˜¤ë¸Œì íŠ¸ì…ë‹ˆë‹¤.</param>
     public void SetAimImage(GameObject value) => m_aimImage = value;
 
     /// <summary>
-    /// Á¶ÁØ Å¸°Ù ¿ÀºêÁ§Æ® ÂüÁ¶¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ íƒ€ê²Ÿ ì˜¤ë¸Œì íŠ¸ ì°¸ì¡°ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ Á¶ÁØ Å¸°Ù ¿ÀºêÁ§Æ®ÀÔ´Ï´Ù.</param>
+    /// <param name="value">ìƒˆ ì¡°ì¤€ íƒ€ê²Ÿ ì˜¤ë¸Œì íŠ¸ì…ë‹ˆë‹¤.</param>
     public void SetAimTarget(GameObject value) => m_aimTarget = value;
 
     /// <summary>
-    /// Raycast ¹ÌÃæµ¹ ½Ã »ç¿ëÇÒ ±âº» Á¶ÁØ °Å¸®¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// Raycast ë¯¸ì¶©ëŒ ì‹œ ì‚¬ìš©í•  ê¸°ë³¸ ì¡°ì¤€ ê±°ë¦¬ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ Á¶ÁØ °Å¸®ÀÔ´Ï´Ù.</param>
+    /// <param name="value">ìƒˆ ì¡°ì¤€ ê±°ë¦¬ì…ë‹ˆë‹¤.</param>
     public void SetAimTargetDistance(float value) => m_aimTargetDistance = Mathf.Max(0.0f, value);
 
     /// <summary>
-    /// Á¶ÁØ Raycast ´ë»ó ·¹ÀÌ¾î¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ Raycast ëŒ€ìƒ ë ˆì´ì–´ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ ´ë»ó ·¹ÀÌ¾î ¸¶½ºÅ©ÀÔ´Ï´Ù.</param>
+    /// <param name="value">ìƒˆ ëŒ€ìƒ ë ˆì´ì–´ ë§ˆìŠ¤í¬ì…ë‹ˆë‹¤.</param>
     public void SetTargetLayer(LayerMask value) => m_targetLayer = value;
 
     /// <summary>
-    /// »ç°İ »ç¿îµå Å¬¸³À» ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì‚¬ê²© ì‚¬ìš´ë“œ í´ë¦½ì„ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ »ç°İ »ç¿îµå Å¬¸³ÀÔ´Ï´Ù.</param>
+    /// <param name="value">ìƒˆ ì‚¬ê²© ì‚¬ìš´ë“œ í´ë¦½ì…ë‹ˆë‹¤.</param>
     public void SetShootingSound(AudioClip value) => m_shootingSound = value;
 
     /// <summary>
-    /// ÀçÀåÀü »ç¿îµå ¹è¿­À» ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì¬ì¥ì „ ì‚¬ìš´ë“œ ë°°ì—´ì„ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">»õ ÀçÀåÀü »ç¿îµå ¹è¿­ÀÔ´Ï´Ù.</param>
+    /// <param name="value">ìƒˆ ì¬ì¥ì „ ì‚¬ìš´ë“œ ë°°ì—´ì…ë‹ˆë‹¤.</param>
     public void SetReloadSounds(AudioClip[] value) => m_reloadSounds = value;
 
     /// <summary>
-    /// Unity »ı¸íÁÖ±â ÃÊ±âÈ­ ÇÔ¼öÀÔ´Ï´Ù.
-    /// ÇÊ¼ö ÂüÁ¶¸¦ Ä³½ÌÇÏ°í ´©¶ô ¿©ºÎ¸¦ °ËÁõÇÕ´Ï´Ù.
+    /// Unity ìƒëª…ì£¼ê¸° ì´ˆê¸°í™” í•¨ìˆ˜ì…ë‹ˆë‹¤.
+    /// í•„ìˆ˜ ì°¸ì¡°ë¥¼ ìºì‹±í•˜ê³  ëˆ„ë½ ì—¬ë¶€ë¥¼ ê²€ì¦í•©ë‹ˆë‹¤.
     /// </summary>
     private void Awake()
     {
@@ -154,12 +154,11 @@ public class PlayerManager : MonoBehaviour
         }
 
         m_hasRequiredReferences = true;
-        SetAimState(false);
-        SetRigWeight(0.0f);
+        ApplyAimTransitionState(false, false, 0.0f);
     }
 
     /// <summary>
-    /// ¸Å ÇÁ·¹ÀÓ Á¶ÁØ, »ç°İ, ÀçÀåÀü ÀÔ·ÂÀ» Ã³¸®ÇÕ´Ï´Ù.
+    /// ë§¤ í”„ë ˆì„ ì¡°ì¤€, ì‚¬ê²©, ì¬ì¥ì „ ì…ë ¥ì„ ì²˜ë¦¬í•©ë‹ˆë‹¤.
     /// </summary>
     private void Update()
     {
@@ -172,7 +171,7 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// °°Àº GameObject ¶Ç´Â ÀÚ½Ä ¿ÀºêÁ§Æ®¿¡¼­ ÇÊ¿äÇÑ ÂüÁ¶¸¦ Ä³½ÌÇÕ´Ï´Ù.
+    /// ê°™ì€ GameObject ë˜ëŠ” ìì‹ ì˜¤ë¸Œì íŠ¸ì—ì„œ í•„ìš”í•œ ì°¸ì¡°ë¥¼ ìºì‹±í•©ë‹ˆë‹¤.
     /// </summary>
     private void CacheRequiredReferences()
     {
@@ -185,83 +184,83 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ÇÊ¼ö ÂüÁ¶°¡ Á¤»óÀûÀ¸·Î ÁØºñµÇ¾ú´ÂÁö °ËÁõÇÕ´Ï´Ù.
+    /// í•„ìˆ˜ ì°¸ì¡°ê°€ ì •ìƒì ìœ¼ë¡œ ì¤€ë¹„ë˜ì—ˆëŠ”ì§€ ê²€ì¦í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <returns>ÇÊ¼ö ÂüÁ¶°¡ ¸ğµÎ À¯È¿ÇÏ¸é trueÀÔ´Ï´Ù.</returns>
+    /// <returns>í•„ìˆ˜ ì°¸ì¡°ê°€ ëª¨ë‘ ìœ íš¨í•˜ë©´ trueì…ë‹ˆë‹¤.</returns>
     private bool ValidateRequiredReferences()
     {
         bool isValid = true;
 
         if (m_input == null)
         {
-            Debug.LogError("[AimController] PlayerInputs ÄÄÆ÷³ÍÆ®°¡ ¾ø½À´Ï´Ù. °°Àº GameObject¿¡ Ãß°¡ÇÏ¼¼¿ä.", this);
+            Debug.LogError("[AimController] PlayerInputs ì»´í¬ë„ŒíŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤. ê°™ì€ GameObjectì— ì¶”ê°€í•˜ì„¸ìš”.", this);
             isValid = false;
         }
 
         if (m_controller == null)
         {
-            Debug.LogError("[AimController] ThirdPersonController ÄÄÆ÷³ÍÆ®°¡ ¾ø½À´Ï´Ù. °°Àº GameObject¿¡ Ãß°¡ÇÏ¼¼¿ä.", this);
+            Debug.LogError("[AimController] ThirdPersonController ì»´í¬ë„ŒíŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤. ê°™ì€ GameObjectì— ì¶”ê°€í•˜ì„¸ìš”.", this);
             isValid = false;
         }
 
         if (m_animator == null)
         {
-            Debug.LogError("[AimController] Animator ÄÄÆ÷³ÍÆ®°¡ ¾ø½À´Ï´Ù. °°Àº GameObject¿¡ Ãß°¡ÇÏ¼¼¿ä.", this);
+            Debug.LogError("[AimController] Animator ì»´í¬ë„ŒíŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤. ê°™ì€ GameObjectì— ì¶”ê°€í•˜ì„¸ìš”.", this);
             isValid = false;
         }
 
         if (m_weaponAudioSource == null)
         {
-            Debug.LogError("[AimController] AudioSource ÄÄÆ÷³ÍÆ®°¡ ¾ø½À´Ï´Ù. °°Àº GameObject¿¡ Ãß°¡ÇÏ¼¼¿ä.", this);
+            Debug.LogError("[AimController] AudioSource ì»´í¬ë„ŒíŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤. ê°™ì€ GameObjectì— ì¶”ê°€í•˜ì„¸ìš”.", this);
             isValid = false;
         }
 
         if (m_mainCamera == null)
         {
-            Debug.LogError("[AimController] MainCamera ÅÂ±×¸¦ °¡Áø Ä«¸Ş¶ó¸¦ Ã£Áö ¸øÇß½À´Ï´Ù.", this);
+            Debug.LogError("[AimController] MainCamera íƒœê·¸ë¥¼ ê°€ì§„ ì¹´ë©”ë¼ë¥¼ ì°¾ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.", this);
             isValid = false;
         }
 
         if (m_aimCamera == null)
         {
-            Debug.LogError("[AimController] Aim Camera°¡ Inspector¿¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù.", this);
+            Debug.LogError("[AimController] Aim Cameraê°€ Inspectorì— í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
             isValid = false;
         }
 
         if (m_aimImage == null)
         {
-            Debug.LogError("[AimController] Aim Image°¡ Inspector¿¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù.", this);
+            Debug.LogError("[AimController] Aim Imageê°€ Inspectorì— í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
             isValid = false;
         }
 
         if (m_aimTarget == null)
         {
-            Debug.LogError("[AimController] Aim TargetÀÌ Inspector¿¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù.", this);
+            Debug.LogError("[AimController] Aim Targetì´ Inspectorì— í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
             isValid = false;
         }
 
         if (m_handRig == null)
         {
-            Debug.LogError("[AimController] Hand Rig°¡ Inspector¿¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù.", this);
+            Debug.LogError("[AimController] Hand Rigê°€ Inspectorì— í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
             isValid = false;
         }
 
         if (m_aimRig == null)
         {
-            Debug.LogError("[AimController] Aim Rig°¡ Inspector¿¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù.", this);
+            Debug.LogError("[AimController] Aim Rigê°€ Inspectorì— í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
             isValid = false;
         }
 
         if (m_weaponController == null)
         {
-            Debug.LogWarning("[AimController] WeaponController¸¦ ÀÚ½Ä ¿ÀºêÁ§Æ®¿¡¼­ Ã£Áö ¸øÇß½À´Ï´Ù. »ç°İ°ú ÀçÀåÀü ¹«±â Ã³¸®´Â »ı·«µË´Ï´Ù.", this);
+            Debug.LogWarning("[AimController] WeaponControllerë¥¼ ìì‹ ì˜¤ë¸Œì íŠ¸ì—ì„œ ì°¾ì§€ ëª»í–ˆìŠµë‹ˆë‹¤. ì‚¬ê²©ê³¼ ì¬ì¥ì „ ë¬´ê¸° ì²˜ë¦¬ëŠ” ìƒëµë©ë‹ˆë‹¤.", this);
         }
 
         return isValid;
     }
 
     /// <summary>
-    /// ÀçÀåÀü ÀÔ·Â°ú Á¶ÁØ ÀÔ·ÂÀ» ¼ø¼­´ë·Î Ã³¸®ÇÕ´Ï´Ù.
+    /// ì¬ì¥ì „ ì…ë ¥ê³¼ ì¡°ì¤€ ì…ë ¥ì„ ìˆœì„œëŒ€ë¡œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
     /// </summary>
     private void UpdateAimAndWeapon()
     {
@@ -277,17 +276,18 @@ public class PlayerManager : MonoBehaviour
 
         if (m_input.Aim)
         {
+            BeginAim();
             UpdateAiming();
             return;
         }
 
-        StopAiming();
+        EndAim();
     }
 
     /// <summary>
-    /// ÀçÀåÀü ÀÔ·ÂÀÌ µé¾î¿Â °æ¿ì ÀçÀåÀü »óÅÂ¿Í ¾Ö´Ï¸ŞÀÌ¼ÇÀ» ½ÃÀÛÇÕ´Ï´Ù.
+    /// ì¬ì¥ì „ ì…ë ¥ì´ ë“¤ì–´ì˜¨ ê²½ìš° ì¬ì¥ì „ ìƒíƒœì™€ ì• ë‹ˆë©”ì´ì…˜ì„ ì‹œì‘í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <returns>ÀçÀåÀü ÀÔ·ÂÀ» Ã³¸®ÇßÀ¸¸é trueÀÔ´Ï´Ù.</returns>
+    /// <returns>ì¬ì¥ì „ ì…ë ¥ì„ ì²˜ë¦¬í–ˆìœ¼ë©´ trueì…ë‹ˆë‹¤.</returns>
     private bool HandleReloadInput()
     {
         if (!m_input.Reload)
@@ -302,8 +302,20 @@ public class PlayerManager : MonoBehaviour
             return true;
         }
 
+        BeginReload();
+
+        return true;
+    }
+
+    /// <summary>
+    /// ì¬ì¥ì „ ì‹œì‘ ì‹œ í•œ ë²ˆë§Œ í•„ìš”í•œ ì¡°ì¤€ í•´ì œ, ì• ë‹ˆë©”ì´ì…˜, ë¬´ê¸° ìƒíƒœë¥¼ ì ìš©í•©ë‹ˆë‹¤.
+    /// </summary>
+    private void BeginReload()
+    {
+        m_isAiming = false;
         SetAimState(false);
         SetRigWeight(0.0f);
+        m_animator.SetBool(AnimIDShoot, false);
         m_animator.SetLayerWeight(WeaponLayerIndex, 1.0f);
         m_animator.SetTrigger(AnimIDReload);
         m_controller.SetReload(true);
@@ -312,39 +324,48 @@ public class PlayerManager : MonoBehaviour
         {
             m_weaponController.StartReload();
         }
-
-        return true;
     }
 
     /// <summary>
-    /// Á¶ÁØ Áß Ä«¸Ş¶ó Àü¹æ Raycast, Ä³¸¯ÅÍ È¸Àü, IK, »ç°İ ÀÔ·ÂÀ» Ã³¸®ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ ì‹œì‘ ì‹œ í•œ ë²ˆë§Œ í•„ìš”í•œ ì¹´ë©”ë¼, UI, ì´ë™, ë¦¬ê·¸, ì• ë‹ˆë©”ì´ì…˜ ìƒíƒœë¥¼ ì ìš©í•©ë‹ˆë‹¤.
+    /// </summary>
+    private void BeginAim()
+    {
+        if (m_isAiming)
+        {
+            return;
+        }
+
+        ApplyAimTransitionState(true, false, 1.0f);
+    }
+
+    /// <summary>
+    /// ì¡°ì¤€ ì¤‘ ë§¤ í”„ë ˆì„ í•„ìš”í•œ ì¡°ì¤€ ìœ„ì¹˜, íšŒì „, ì‚¬ê²© ì…ë ¥ë§Œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
     /// </summary>
     private void UpdateAiming()
     {
-        SetAimState(true);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 1.0f);
-
         Vector3 targetPosition = GetAimTargetPosition();
         RotateToAimTarget(targetPosition);
-        SetRigWeight(1.0f);
         UpdateShootState(targetPosition);
     }
 
     /// <summary>
-    /// Á¶ÁØ »óÅÂ°¡ ¾Æ´Ò ¶§ Ä«¸Ş¶ó, UI, IK, »ç°İ ¾Ö´Ï¸ŞÀÌ¼Ç »óÅÂ¸¦ ÇØÁ¦ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ ì¢…ë£Œ ì‹œ í•œ ë²ˆë§Œ í•„ìš”í•œ ì¹´ë©”ë¼, UI, ë¦¬ê·¸, ì• ë‹ˆë©”ì´ì…˜ ìƒíƒœë¥¼ í•´ì œí•©ë‹ˆë‹¤.
     /// </summary>
-    private void StopAiming()
+    private void EndAim()
     {
-        SetAimState(false);
-        SetRigWeight(0.0f);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
-        m_animator.SetBool(AnimIDShoot, false);
+        if (!m_isAiming)
+        {
+            return;
+        }
+
+        ApplyAimTransitionState(false, false, 0.0f);
     }
 
     /// <summary>
-    /// Ä«¸Ş¶ó Àü¹æÀ¸·Î Raycast¸¦ ¼öÇàÇÏ¿© ÇöÀç Á¶ÁØ À§Ä¡¸¦ °è»êÇÕ´Ï´Ù.
+    /// ì¹´ë©”ë¼ ì „ë°©ìœ¼ë¡œ Raycastë¥¼ ìˆ˜í–‰í•˜ì—¬ í˜„ì¬ ì¡°ì¤€ ìœ„ì¹˜ë¥¼ ê³„ì‚°í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <returns>ÇöÀç Á¶ÁØ ¸ñÇ¥ ¿ùµå ÁÂÇ¥ÀÔ´Ï´Ù.</returns>
+    /// <returns>í˜„ì¬ ì¡°ì¤€ ëª©í‘œ ì›”ë“œ ì¢Œí‘œì…ë‹ˆë‹¤.</returns>
     private Vector3 GetAimTargetPosition()
     {
         Transform cameraTransform = m_mainCamera.transform;
@@ -352,7 +373,7 @@ public class PlayerManager : MonoBehaviour
         if (Physics.Raycast(cameraTransform.position, cameraTransform.forward, out RaycastHit hit, Mathf.Infinity, m_targetLayer))
         {
             m_aimTarget.transform.position = hit.point;
-            m_currentAimEnemy = hit.collider.GetComponentInParent<Enemy>();
+            m_currentAimEnemy = hit.collider.GetComponentInParent<EnemyController>();
             return hit.point;
         }
 
@@ -363,9 +384,9 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ÇÃ·¹ÀÌ¾î°¡ Á¶ÁØ ¸ñÇ¥ÀÇ ¼öÆò ¹æÇâÀ» ¹Ù¶óº¸µµ·Ï È¸Àü½ÃÅµ´Ï´Ù.
+    /// í”Œë ˆì´ì–´ê°€ ì¡°ì¤€ ëª©í‘œì˜ ìˆ˜í‰ ë°©í–¥ì„ ë°”ë¼ë³´ë„ë¡ íšŒì „ì‹œí‚µë‹ˆë‹¤.
     /// </summary>
-    /// <param name="targetPosition">¹Ù¶óº¼ Á¶ÁØ ¸ñÇ¥ À§Ä¡ÀÔ´Ï´Ù.</param>
+    /// <param name="targetPosition">ë°”ë¼ë³¼ ì¡°ì¤€ ëª©í‘œ ìœ„ì¹˜ì…ë‹ˆë‹¤.</param>
     private void RotateToAimTarget(Vector3 targetPosition)
     {
         Vector3 targetAim = targetPosition;
@@ -385,9 +406,9 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// »ç°İ ÀÔ·Â »óÅÂ¸¦ ¾Ö´Ï¸ŞÀÌÅÍ¿Í ¹«±â ÄÁÆ®·Ñ·¯¿¡ ¹İ¿µÇÕ´Ï´Ù.
+    /// ì‚¬ê²© ì…ë ¥ ìƒíƒœë¥¼ ì• ë‹ˆë©”ì´í„°ì™€ ë¬´ê¸° ì»¨íŠ¸ë¡¤ëŸ¬ì— ë°˜ì˜í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="targetPosition">»ç°İ ´ë»ó À§Ä¡ÀÔ´Ï´Ù.</param>
+    /// <param name="targetPosition">ì‚¬ê²© ëŒ€ìƒ ìœ„ì¹˜ì…ë‹ˆë‹¤.</param>
     private void UpdateShootState(Vector3 targetPosition)
     {
         if (m_input.Shoot)
@@ -406,9 +427,9 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Á¶ÁØ Ä«¸Ş¶ó, Á¶ÁØ UI, ÀÌµ¿ ÄÁÆ®·Ñ·¯ÀÇ Á¶ÁØ ÀÌµ¿ »óÅÂ¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ ì¹´ë©”ë¼, ì¡°ì¤€ UI, ì´ë™ ì»¨íŠ¸ë¡¤ëŸ¬ì˜ ì¡°ì¤€ ì´ë™ ìƒíƒœë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="isAiming">Á¶ÁØ »óÅÂÀÌ¸é trueÀÔ´Ï´Ù.</param>
+    /// <param name="isAiming">ì¡°ì¤€ ìƒíƒœì´ë©´ trueì…ë‹ˆë‹¤.</param>
     private void SetAimState(bool isAiming)
     {
         if (m_aimCamera != null)
@@ -428,7 +449,7 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ÀçÀåÀü ¿Ï·á ¾Ö´Ï¸ŞÀÌ¼Ç ÀÌº¥Æ®¿¡¼­ È£ÃâÇÕ´Ï´Ù.
+    /// ì¬ì¥ì „ ì™„ë£Œ ì• ë‹ˆë©”ì´ì…˜ ì´ë²¤íŠ¸ì—ì„œ í˜¸ì¶œí•©ë‹ˆë‹¤.
     /// </summary>
     public void Reload()
     {
@@ -437,20 +458,28 @@ public class PlayerManager : MonoBehaviour
             return;
         }
 
-        m_controller.SetReload(false);
-        SetRigWeight(1.0f);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
-
-        if (m_weaponController != null)
-        {
-            m_weaponController.CompleteReload();
-        }
+        FinishReloadVisualState(true);
 
         PlayWeaponSound(GetReloadSound(2));
     }
 
     /// <summary>
-    /// ÅºÃ¢ Á¦°Å ¾Ö´Ï¸ŞÀÌ¼Ç ÀÌº¥Æ®¿¡¼­ È£ÃâÇÕ´Ï´Ù.
+    /// ì¬ì¥ì „ ì™„ë£Œ í›„ ì¡°ì‘ ì»¨íŠ¸ë¡¤ëŸ¬ì™€ ì¡°ì¤€ ë³´ì • ìƒíƒœë¥¼ ì •ë¦¬í•©ë‹ˆë‹¤.
+    /// </summary>
+    /// <param name="completeWeaponReload">ë¬´ê¸° íƒ„ì•½ë„ ì™„ë£Œ ì²˜ë¦¬í• ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.</param>
+    private void FinishReloadVisualState(bool completeWeaponReload)
+    {
+        m_controller.SetReload(false);
+        ApplyAimTransitionState(false, false, 0.0f);
+
+        if (completeWeaponReload && m_weaponController != null)
+        {
+            m_weaponController.CompleteReload();
+        }
+    }
+
+    /// <summary>
+    /// íƒ„ì°½ ì œê±° ì• ë‹ˆë©”ì´ì…˜ ì´ë²¤íŠ¸ì—ì„œ í˜¸ì¶œí•©ë‹ˆë‹¤.
     /// </summary>
     public void ReloadWeaponClip()
     {
@@ -463,7 +492,7 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ÅºÃ¢ »ğÀÔ ¾Ö´Ï¸ŞÀÌ¼Ç ÀÌº¥Æ®¿¡¼­ È£ÃâÇÕ´Ï´Ù.
+    /// íƒ„ì°½ ì‚½ì… ì• ë‹ˆë©”ì´ì…˜ ì´ë²¤íŠ¸ì—ì„œ í˜¸ì¶œí•©ë‹ˆë‹¤.
     /// </summary>
     public void ReloadInsertClip()
     {
@@ -471,10 +500,11 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ¿ÜºÎ »óÅÂ ÀüÈ¯¿¡ ÀÇÇØ Á¶ÁØÀ» °­Á¦·Î ÇØÁ¦ÇÕ´Ï´Ù.
+    /// ì™¸ë¶€ ìƒíƒœ ì „í™˜ì— ì˜í•´ ì¡°ì¤€ì„ ê°•ì œë¡œ í•´ì œí•©ë‹ˆë‹¤.
     /// </summary>
     public void ForceStopAim()
     {
+        m_isAiming = false;
         SetAimState(false);
         SetRigWeight(0.0f);
 
@@ -486,9 +516,28 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Á¶ÁØ ¹× ¼Õ IK ¸®±×ÀÇ weight¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ ì‹œì‘/ì¢…ë£Œ ì „í™˜ì—ì„œ í•œ ë²ˆë§Œ ì ìš©í•  ì¹´ë©”ë¼, UI, ì´ë™, ë¦¬ê·¸, ì• ë‹ˆë©”ì´ì…˜ ìƒíƒœë¥¼ ëª¨ìë‹ˆë‹¤.
     /// </summary>
-    /// <param name="weight">Àû¿ëÇÒ ¸®±× weightÀÔ´Ï´Ù. 0ÀÌ¸é ºñÈ°¼º, 1ÀÌ¸é È°¼ºÀÔ´Ï´Ù.</param>
+    /// <param name="isAiming">ì „í™˜ í›„ ì¡°ì¤€ ìƒíƒœì…ë‹ˆë‹¤.</param>
+    /// <param name="keepShooting">ì „í™˜ ì§í›„ ì‚¬ê²© ì• ë‹ˆë©”ì´ì…˜ì„ ìœ ì§€í• ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.</param>
+    /// <param name="weaponLayerWeight">ë¬´ê¸° ë ˆì´ì–´ì— ì ìš©í•  weightì…ë‹ˆë‹¤.</param>
+    private void ApplyAimTransitionState(bool isAiming, bool keepShooting, float weaponLayerWeight)
+    {
+        m_isAiming = isAiming;
+        SetAimState(isAiming);
+        SetRigWeight(isAiming ? 1.0f : 0.0f);
+
+        if (m_animator != null)
+        {
+            m_animator.SetLayerWeight(WeaponLayerIndex, weaponLayerWeight);
+            m_animator.SetBool(AnimIDShoot, isAiming && keepShooting);
+        }
+    }
+
+    /// <summary>
+    /// ì¡°ì¤€ ë° ì† IK ë¦¬ê·¸ì˜ weightë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
+    /// </summary>
+    /// <param name="weight">ì ìš©í•  ë¦¬ê·¸ weightì…ë‹ˆë‹¤. 0ì´ë©´ ë¹„í™œì„±, 1ì´ë©´ í™œì„±ì…ë‹ˆë‹¤.</param>
     private void SetRigWeight(float weight)
     {
         if (m_aimRig != null)
@@ -503,15 +552,15 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ÀçÀåÀü »ç¿îµå ¹è¿­¿¡¼­ ÁöÁ¤ÇÑ ÀÎµ¦½ºÀÇ Å¬¸³À» °¡Á®¿É´Ï´Ù.
+    /// ì¬ì¥ì „ ì‚¬ìš´ë“œ ë°°ì—´ì—ì„œ ì§€ì •í•œ ì¸ë±ìŠ¤ì˜ í´ë¦½ì„ ê°€ì ¸ì˜µë‹ˆë‹¤.
     /// </summary>
-    /// <param name="index">°¡Á®¿Ã ÀçÀåÀü »ç¿îµå ÀÎµ¦½ºÀÔ´Ï´Ù.</param>
-    /// <returns>À¯È¿ÇÑ ÀÎµ¦½ºÀÌ¸é ÇØ´ç AudioClip, ¾Æ´Ï¸é nullÀÔ´Ï´Ù.</returns>
+    /// <param name="index">ê°€ì ¸ì˜¬ ì¬ì¥ì „ ì‚¬ìš´ë“œ ì¸ë±ìŠ¤ì…ë‹ˆë‹¤.</param>
+    /// <returns>ìœ íš¨í•œ ì¸ë±ìŠ¤ì´ë©´ í•´ë‹¹ AudioClip, ì•„ë‹ˆë©´ nullì…ë‹ˆë‹¤.</returns>
     private AudioClip GetReloadSound(int index)
     {
         if (m_reloadSounds == null || index < 0 || index >= m_reloadSounds.Length)
         {
-            Debug.LogWarning($"[AimController] ReloadSounds[{index}]°¡ ¾ø½À´Ï´Ù.", this);
+            Debug.LogWarning($"[AimController] ReloadSounds[{index}]ê°€ ì—†ìŠµë‹ˆë‹¤.", this);
             return null;
         }
 
@@ -519,9 +568,9 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ¹«±â »ç¿îµå¸¦ AudioSource·Î Àç»ıÇÕ´Ï´Ù.
+    /// ë¬´ê¸° ì‚¬ìš´ë“œë¥¼ AudioSourceë¡œ ì¬ìƒí•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="sound">Àç»ıÇÒ »ç¿îµå Å¬¸³ÀÔ´Ï´Ù.</param>
+    /// <param name="sound">ì¬ìƒí•  ì‚¬ìš´ë“œ í´ë¦½ì…ë‹ˆë‹¤.</param>
     private void PlayWeaponSound(AudioClip sound)
     {
         if (m_weaponAudioSource == null || sound == null)

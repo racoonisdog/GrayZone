@@ -1,97 +1,115 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.Serialization;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
 /// <summary>
-/// ÇÃ·¹ÀÌ¾î ÀÔ·Â »óÅÂ¸¦ º¸°üÇÏ°í Input System ÀÌº¥Æ®¸¦ ·±Å¸ÀÓ ÀÔ·Â °ªÀ¸·Î º¯È¯ÇÏ´Â ÄÄÆ÷³ÍÆ®ÀÔ´Ï´Ù.
+/// í”Œë ˆì´ì–´ ì…ë ¥ ìƒíƒœë¥¼ ë³´ê´€í•˜ê³  Input System ì´ë²¤íŠ¸ë¥¼ ëŸ°íƒ€ì„ ì…ë ¥ ê°’ìœ¼ë¡œ ë³€í™˜í•˜ëŠ” ì»´í¬ë„ŒíŠ¸ì…ë‹ˆë‹¤.
 /// </summary>
 /// <remarks>
-/// ÀÌ Å¬·¡½º´Â ÀÔ·Â ¾×¼Ç Äİ¹é¿¡¼­ ¹ŞÀº °ªÀ» ³»ºÎ ÇÊµå¿¡ Ä³½ÌÇÏ°í,
-/// ÀÌµ¿/½ÃÁ¡/Á¡ÇÁ/Àü·ÂÁúÁÖ/Á¶ÁØ/°ø°İ/ÀçÀåÀü »óÅÂ¸¦ ´Ù¸¥ ½Ã½ºÅÛ¿¡¼­ ÀĞÀ» ¼ö ÀÖ°Ô Á¦°øÇÕ´Ï´Ù.
+/// ì´ í´ë˜ìŠ¤ëŠ” ì…ë ¥ ì•¡ì…˜ ì½œë°±ì—ì„œ ë°›ì€ ê°’ì„ ë‚´ë¶€ í•„ë“œì— ìºì‹±í•˜ê³ ,
+/// ì´ë™/ì‹œì /ì í”„/ì „ë ¥ì§ˆì£¼/ì¡°ì¤€/ê³µê²©/ì¬ì¥ì „ ìƒíƒœë¥¼ ë‹¤ë¥¸ ì‹œìŠ¤í…œì—ì„œ ì½ì„ ìˆ˜ ìˆê²Œ ì œê³µí•©ë‹ˆë‹¤.
 /// <para>
-/// º¯¼ö ÄÁº¥¼ÇÀº <c>m_</c> Á¢µÎ»ç¸¦ »ç¿ëÇÏ´Â private serialized field¸¦ ±âÁØÀ¸·Î ÇÏ¸ç,
-/// ±âÁ¸ Starter Assets ½ºÅ¸ÀÏÀÇ <c>move</c>, <c>look</c>, <c>jump</c> Á¢±Ùµµ È£È¯¿ë ÇÁ·ÎÆÛÆ¼·Î À¯ÁöÇÕ´Ï´Ù.
+/// ë³€ìˆ˜ ì»¨ë²¤ì…˜ì€ <c>m_</c> ì ‘ë‘ì‚¬ë¥¼ ì‚¬ìš©í•˜ëŠ” private serialized fieldë¥¼ ê¸°ì¤€ìœ¼ë¡œ í•˜ë©°,
+/// ê¸°ì¡´ Starter Assets ìŠ¤íƒ€ì¼ì˜ <c>move</c>, <c>look</c>, <c>jump</c> ì ‘ê·¼ë„ í˜¸í™˜ìš© í”„ë¡œí¼í‹°ë¡œ ìœ ì§€í•©ë‹ˆë‹¤.
 /// </para>
 /// </remarks>
 public class PlayerInputs : MonoBehaviour
 {
     [Header("Character Input Values")]
-    [Tooltip("ÇöÀç ÀÌµ¿ ÀÔ·Â°ªÀÔ´Ï´Ù. x´Â ÁÂ¿ì, y´Â ÀüÈÄ ÀÔ·ÂÀ» ÀÇ¹ÌÇÕ´Ï´Ù.")]
+    [Tooltip("í˜„ì¬ ì´ë™ ì…ë ¥ê°’ì…ë‹ˆë‹¤. xëŠ” ì¢Œìš°, yëŠ” ì „í›„ ì…ë ¥ì„ ì˜ë¯¸í•©ë‹ˆë‹¤.")]
     [FormerlySerializedAs("move")]
     [SerializeField] private Vector2 m_move;
 
-    [Tooltip("ÇöÀç ½ÃÁ¡ ÀÔ·Â°ªÀÔ´Ï´Ù. x´Â ÁÂ¿ì È¸Àü, y´Â »óÇÏ È¸ÀüÀ» ÀÇ¹ÌÇÕ´Ï´Ù.")]
+    [Tooltip("í˜„ì¬ ì‹œì  ì…ë ¥ê°’ì…ë‹ˆë‹¤. xëŠ” ì¢Œìš° íšŒì „, yëŠ” ìƒí•˜ íšŒì „ì„ ì˜ë¯¸í•©ë‹ˆë‹¤.")]
     [FormerlySerializedAs("look")]
     [SerializeField] private Vector2 m_look;
 
-    [Tooltip("Á¡ÇÁ ÀÔ·ÂÀÌ ´­¸° »óÅÂÀÎÁö ¿©ºÎÀÔ´Ï´Ù.")]
+    [Tooltip("ì í”„ ì…ë ¥ì´ ëˆŒë¦° ìƒíƒœì¸ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("jump")]
     [SerializeField] private bool m_jump;
 
-    [Tooltip("Àü·ÂÁúÁÖ ÀÔ·ÂÀÌ ´­¸° »óÅÂÀÎÁö ¿©ºÎÀÔ´Ï´Ù.")]
+    [Tooltip("ì „ë ¥ì§ˆì£¼ ì…ë ¥ì´ ëˆŒë¦° ìƒíƒœì¸ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("sprint")]
     [SerializeField] private bool m_sprint;
 
-    [Tooltip("Á¶ÁØ ÀÔ·ÂÀÌ ´­¸° »óÅÂÀÎÁö ¿©ºÎÀÔ´Ï´Ù.")]
+    [Tooltip("ì¡°ì¤€ ì…ë ¥ì´ ëˆŒë¦° ìƒíƒœì¸ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("aim")]
     [SerializeField] private bool m_aim;
 
-    [Tooltip("¹ß»ç ÀÔ·ÂÀÌ ´­¸° »óÅÂÀÎÁö ¿©ºÎÀÔ´Ï´Ù.")]
+    [Tooltip("ë°œì‚¬ ì…ë ¥ì´ ëˆŒë¦° ìƒíƒœì¸ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("shoot")]
     [SerializeField] private bool m_shoot;
 
-    [Tooltip("ÀçÀåÀü ÀÔ·ÂÀÌ ´­¸° »óÅÂÀÎÁö ¿©ºÎÀÔ´Ï´Ù.")]
+    [Tooltip("ì¬ì¥ì „ ì…ë ¥ì´ ëˆŒë¦° ìƒíƒœì¸ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("reload")]
     [SerializeField] private bool m_reload;
 
+    [Tooltip("ìƒí˜¸ì‘ìš© ì…ë ¥ì´ ëˆŒë¦° ìƒíƒœ(í™€ë“œ í¬í•¨)ì¸ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
+    [SerializeField] private bool m_interact;
+
+#if ENABLE_INPUT_SYSTEM
+    private PlayerInput m_playerInput;
+    private InputAction m_interactionAction;
+#endif
+
     [Header("Movement Settings")]
-    [Tooltip("¾Æ³¯·Î±× ÀÌµ¿ ÀÔ·ÂÀ» »ç¿ëÇÒÁö ¿©ºÎÀÔ´Ï´Ù. trueÀÌ¸é ÀÔ·Â ¼¼±â magnitude¸¦ ÀÌµ¿ ¼Óµµ¿¡ ¹İ¿µÇÕ´Ï´Ù.")]
+    [Tooltip("ì•„ë‚ ë¡œê·¸ ì´ë™ ì…ë ¥ì„ ì‚¬ìš©í• ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤. trueì´ë©´ ì…ë ¥ ì„¸ê¸° magnitudeë¥¼ ì´ë™ ì†ë„ì— ë°˜ì˜í•©ë‹ˆë‹¤.")]
     [FormerlySerializedAs("analogMovement")]
     [SerializeField] private bool m_analogMovement;
 
     [Header("Mouse Cursor Settings")]
-    [Tooltip("¾ÖÇÃ¸®ÄÉÀÌ¼Ç Æ÷Ä¿½º ½Ã Ä¿¼­¸¦ È­¸é Áß¾Ó¿¡ Àá±ÛÁö ¿©ºÎÀÔ´Ï´Ù.")]
+    [Tooltip("ì• í”Œë¦¬ì¼€ì´ì…˜ í¬ì»¤ìŠ¤ ì‹œ ì»¤ì„œë¥¼ í™”ë©´ ì¤‘ì•™ì— ì ê¸€ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("cursorLocked")]
     [SerializeField] private bool m_cursorLocked = true;
 
-    [Tooltip("¸¶¿ì½º Ä¿¼­ ÀÔ·ÂÀ» ½ÃÁ¡ È¸Àü¿¡ »ç¿ëÇÒÁö ¿©ºÎÀÔ´Ï´Ù.")]
+    [Tooltip("ë§ˆìš°ìŠ¤ ì»¤ì„œ ì…ë ¥ì„ ì‹œì  íšŒì „ì— ì‚¬ìš©í• ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.")]
     [FormerlySerializedAs("cursorInputForLook")]
     [SerializeField] private bool m_cursorInputForLook = true;
 
-    /// <summary>ÇöÀç ÀÌµ¿ ÀÔ·Â°ªÀÔ´Ï´Ù.</summary>
+    /// <summary>í˜„ì¬ ì´ë™ ì…ë ¥ê°’ì…ë‹ˆë‹¤.</summary>
     public Vector2 Move => m_move;
 
-    /// <summary>ÇöÀç ½ÃÁ¡ ÀÔ·Â°ªÀÔ´Ï´Ù.</summary>
+    /// <summary>í˜„ì¬ ì‹œì  ì…ë ¥ê°’ì…ë‹ˆë‹¤.</summary>
     public Vector2 Look => m_look;
 
-    /// <summary>Á¡ÇÁ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</summary>
+    /// <summary>ì í”„ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</summary>
     public bool Jump => m_jump;
 
-    /// <summary>Àü·ÂÁúÁÖ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</summary>
+    /// <summary>ì „ë ¥ì§ˆì£¼ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</summary>
     public bool Sprint => m_sprint;
 
-    /// <summary>Á¶ÁØ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</summary>
+    /// <summary>ì¡°ì¤€ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</summary>
     public bool Aim => m_aim;
 
-    /// <summary>¹ß»ç ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</summary>
+    /// <summary>ë°œì‚¬ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</summary>
     public bool Shoot => m_shoot;
 
-    /// <summary>ÀçÀåÀü ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</summary>
+    /// <summary>ì¬ì¥ì „ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</summary>
     public bool Reload => m_reload;
 
-    /// <summary>¾Æ³¯·Î±× ÀÌµ¿ ÀÔ·Â »ç¿ë ¿©ºÎÀÔ´Ï´Ù.</summary>
+    /// <summary>ìƒí˜¸ì‘ìš© ì…ë ¥ì´ ëˆŒë¦° ìƒíƒœ(í™€ë“œ í¬í•¨)ì…ë‹ˆë‹¤. íƒ­/í™€ë“œ íŒì •ì€ ì†Œë¹„ ì¸¡(InteractionController)ì—ì„œ ì²˜ë¦¬í•©ë‹ˆë‹¤.</summary>
+    public bool Interact
+    {
+        get
+        {
+            RefreshInteractionInputFromAction();
+            return m_interact;
+        }
+    }
+
+    /// <summary>ì•„ë‚ ë¡œê·¸ ì´ë™ ì…ë ¥ ì‚¬ìš© ì—¬ë¶€ì…ë‹ˆë‹¤.</summary>
     public bool AnalogMovement => m_analogMovement;
 
-    /// <summary>Ä¿¼­ Àá±İ »ç¿ë ¿©ºÎÀÔ´Ï´Ù.</summary>
+    /// <summary>ì»¤ì„œ ì ê¸ˆ ì‚¬ìš© ì—¬ë¶€ì…ë‹ˆë‹¤.</summary>
     public bool CursorLocked => m_cursorLocked;
 
-    /// <summary>Ä¿¼­ ÀÔ·ÂÀ» ½ÃÁ¡ È¸Àü¿¡ »ç¿ëÇÒÁö ¿©ºÎÀÔ´Ï´Ù.</summary>
+    /// <summary>ì»¤ì„œ ì…ë ¥ì„ ì‹œì  íšŒì „ì— ì‚¬ìš©í• ì§€ ì—¬ë¶€ì…ë‹ˆë‹¤.</summary>
     public bool CursorInputForLook => m_cursorInputForLook;
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ ÀÌµ¿ ÀÔ·Â ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì´ë™ ì…ë ¥ í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public Vector2 move
     {
@@ -100,7 +118,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ ½ÃÁ¡ ÀÔ·Â ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì‹œì  ì…ë ¥ í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public Vector2 look
     {
@@ -109,7 +127,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ Á¡ÇÁ ÀÔ·Â ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì í”„ ì…ë ¥ í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool jump
     {
@@ -118,7 +136,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ Àü·ÂÁúÁÖ ÀÔ·Â ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì „ë ¥ì§ˆì£¼ ì…ë ¥ í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool sprint
     {
@@ -127,7 +145,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ Á¶ÁØ ÀÔ·Â ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì¡°ì¤€ ì…ë ¥ í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool aim
     {
@@ -136,7 +154,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ ¹ß»ç ÀÔ·Â ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ë°œì‚¬ ì…ë ¥ í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool shoot
     {
@@ -145,7 +163,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ ÀçÀåÀü ÀÔ·Â ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì¬ì¥ì „ ì…ë ¥ í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool reload
     {
@@ -154,7 +172,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ ¾Æ³¯·Î±× ÀÌµ¿ ¼³Á¤ ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì•„ë‚ ë¡œê·¸ ì´ë™ ì„¤ì • í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool analogMovement
     {
@@ -163,7 +181,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ Ä¿¼­ Àá±İ ¼³Á¤ ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì»¤ì„œ ì ê¸ˆ ì„¤ì • í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool cursorLocked
     {
@@ -172,7 +190,7 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ±âÁ¸ Starter Assets ÄÚµå¿ÍÀÇ È£È¯À» À§ÇÑ ½ÃÁ¡ ÀÔ·Â Çã¿ë ¼³Á¤ ÇÁ·ÎÆÛÆ¼ÀÔ´Ï´Ù.
+    /// ê¸°ì¡´ Starter Assets ì½”ë“œì™€ì˜ í˜¸í™˜ì„ ìœ„í•œ ì‹œì  ì…ë ¥ í—ˆìš© ì„¤ì • í”„ë¡œí¼í‹°ì…ë‹ˆë‹¤.
     /// </summary>
     public bool cursorInputForLook
     {
@@ -181,19 +199,24 @@ public class PlayerInputs : MonoBehaviour
     }
 
 #if ENABLE_INPUT_SYSTEM
+    private void Awake()
+    {
+        CachePlayerInput();
+    }
+
     /// <summary>
-    /// ÀÌµ¿ ÀÔ·Â ¾×¼Ç Äİ¹éÀÔ´Ï´Ù.
+    /// ì´ë™ ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Input System¿¡¼­ Àü´ŞµÈ ÀÌµ¿ ÀÔ·Â°ªÀÔ´Ï´Ù.</param>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ì´ë™ ì…ë ¥ê°’ì…ë‹ˆë‹¤.</param>
     public void OnMove(InputValue value)
     {
         MoveInput(value.Get<Vector2>());
     }
 
     /// <summary>
-    /// ½ÃÁ¡ ÀÔ·Â ¾×¼Ç Äİ¹éÀÔ´Ï´Ù.
+    /// ì‹œì  ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Input System¿¡¼­ Àü´ŞµÈ ½ÃÁ¡ ÀÔ·Â°ªÀÔ´Ï´Ù.</param>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ì‹œì  ì…ë ¥ê°’ì…ë‹ˆë‹¤.</param>
     public void OnLook(InputValue value)
     {
         if (m_cursorInputForLook)
@@ -203,118 +226,177 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// Á¡ÇÁ ÀÔ·Â ¾×¼Ç Äİ¹éÀÔ´Ï´Ù.
+    /// ì í”„ ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Input System¿¡¼­ Àü´ŞµÈ Á¡ÇÁ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ì í”„ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void OnJump(InputValue value)
     {
         JumpInput(value.isPressed);
     }
 
     /// <summary>
-    /// Àü·ÂÁúÁÖ ÀÔ·Â ¾×¼Ç Äİ¹éÀÔ´Ï´Ù.
+    /// ì „ë ¥ì§ˆì£¼ ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Input System¿¡¼­ Àü´ŞµÈ Àü·ÂÁúÁÖ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ì „ë ¥ì§ˆì£¼ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void OnSprint(InputValue value)
     {
         SprintInput(value.isPressed);
     }
 
     /// <summary>
-    /// Á¶ÁØ ÀÔ·Â ¾×¼Ç Äİ¹éÀÔ´Ï´Ù.
+    /// ì¡°ì¤€ ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Input System¿¡¼­ Àü´ŞµÈ Á¶ÁØ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ì¡°ì¤€ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void OnAim(InputValue value)
     {
         AimInput(value.isPressed);
     }
 
     /// <summary>
-    /// ¹ß»ç ÀÔ·Â ¾×¼Ç Äİ¹éÀÔ´Ï´Ù.
+    /// ë°œì‚¬ ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Input System¿¡¼­ Àü´ŞµÈ ¹ß»ç ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ë°œì‚¬ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void OnShoot(InputValue value)
     {
         ShootInput(value.isPressed);
     }
 
     /// <summary>
-    /// ÀçÀåÀü ÀÔ·Â ¾×¼Ç Äİ¹éÀÔ´Ï´Ù.
+    /// ì¬ì¥ì „ ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Input System¿¡¼­ Àü´ŞµÈ ÀçÀåÀü ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ì¬ì¥ì „ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void OnReload(InputValue value)
     {
         ReloadInput(value.isPressed);
     }
+
+    /// <summary>
+    /// ìƒí˜¸ì‘ìš©(Interaction) ì…ë ¥ ì•¡ì…˜ ì½œë°±ì…ë‹ˆë‹¤.
+    /// </summary>
+    /// <param name="value">Input Systemì—ì„œ ì „ë‹¬ëœ ìƒí˜¸ì‘ìš© ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
+    /// <remarks>ë²„íŠ¼ ì•¡ì…˜ì´ë¼ ëˆ„ë¦„/ë—Œ ëª¨ë‘ í˜¸ì¶œë˜ë©°, <c>isPressed</c>ë¡œ í™€ë“œ ìƒíƒœë¥¼ ê·¸ëŒ€ë¡œ ë³´ê´€í•©ë‹ˆë‹¤.</remarks>
+    public void OnInteraction(InputValue value)
+    {
+        InteractInput(value.isPressed);
+    }
 #endif
 
     /// <summary>
-    /// ÀÌµ¿ ÀÔ·Â°ªÀ» °»½ÅÇÕ´Ï´Ù.
+    /// ì´ë™ ì…ë ¥ê°’ì„ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newMoveDirection">»õ ÀÌµ¿ ÀÔ·Â ¹æÇâÀÔ´Ï´Ù.</param>
+    /// <param name="newMoveDirection">ìƒˆ ì´ë™ ì…ë ¥ ë°©í–¥ì…ë‹ˆë‹¤.</param>
     public void MoveInput(Vector2 newMoveDirection)
     {
         m_move = newMoveDirection;
     }
 
     /// <summary>
-    /// ½ÃÁ¡ ÀÔ·Â°ªÀ» °»½ÅÇÕ´Ï´Ù.
+    /// ì‹œì  ì…ë ¥ê°’ì„ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newLookDirection">»õ ½ÃÁ¡ ÀÔ·Â ¹æÇâÀÔ´Ï´Ù.</param>
+    /// <param name="newLookDirection">ìƒˆ ì‹œì  ì…ë ¥ ë°©í–¥ì…ë‹ˆë‹¤.</param>
     public void LookInput(Vector2 newLookDirection)
     {
         m_look = newLookDirection;
     }
 
     /// <summary>
-    /// Á¡ÇÁ ÀÔ·Â »óÅÂ¸¦ °»½ÅÇÕ´Ï´Ù.
+    /// ì í”„ ì…ë ¥ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newJumpState">»õ Á¡ÇÁ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="newJumpState">ìƒˆ ì í”„ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void JumpInput(bool newJumpState)
     {
         m_jump = newJumpState;
     }
 
     /// <summary>
-    /// Àü·ÂÁúÁÖ ÀÔ·Â »óÅÂ¸¦ °»½ÅÇÕ´Ï´Ù.
+    /// ì „ë ¥ì§ˆì£¼ ì…ë ¥ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newSprintState">»õ Àü·ÂÁúÁÖ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="newSprintState">ìƒˆ ì „ë ¥ì§ˆì£¼ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void SprintInput(bool newSprintState)
     {
         m_sprint = newSprintState;
     }
 
     /// <summary>
-    /// Á¶ÁØ ÀÔ·Â »óÅÂ¸¦ °»½ÅÇÕ´Ï´Ù.
+    /// ì¡°ì¤€ ì…ë ¥ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newAimState">»õ Á¶ÁØ ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="newAimState">ìƒˆ ì¡°ì¤€ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void AimInput(bool newAimState)
     {
         m_aim = newAimState;
     }
 
     /// <summary>
-    /// ¹ß»ç ÀÔ·Â »óÅÂ¸¦ °»½ÅÇÕ´Ï´Ù.
+    /// ë°œì‚¬ ì…ë ¥ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newShootState">»õ ¹ß»ç ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="newShootState">ìƒˆ ë°œì‚¬ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void ShootInput(bool newShootState)
     {
         m_shoot = newShootState;
     }
 
     /// <summary>
-    /// ÀçÀåÀü ÀÔ·Â »óÅÂ¸¦ °»½ÅÇÕ´Ï´Ù.
+    /// ì¬ì¥ì „ ì…ë ¥ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newReloadState">»õ ÀçÀåÀü ÀÔ·Â »óÅÂÀÔ´Ï´Ù.</param>
+    /// <param name="newReloadState">ìƒˆ ì¬ì¥ì „ ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
     public void ReloadInput(bool newReloadState)
     {
         m_reload = newReloadState;
     }
 
     /// <summary>
-    /// Ä¿¼­ Àá±İ »ç¿ë ¿©ºÎ¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ìƒí˜¸ì‘ìš© ì…ë ¥ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Ä¿¼­¸¦ Àá±×·Á¸é true, ÇØÁ¦ÇÏ·Á¸é falseÀÔ´Ï´Ù.</param>
+    /// <param name="newInteractState">ìƒˆ ìƒí˜¸ì‘ìš© ì…ë ¥ ìƒíƒœì…ë‹ˆë‹¤.</param>
+    public void InteractInput(bool newInteractState)
+    {
+        m_interact = newInteractState;
+    }
+
+    private void RefreshInteractionInputFromAction()
+    {
+#if ENABLE_INPUT_SYSTEM
+        InputAction action = ResolveInteractionAction();
+        if (action != null)
+        {
+            m_interact = action.IsPressed();
+        }
+#endif
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    private void CachePlayerInput()
+    {
+        if (m_playerInput == null)
+        {
+            m_playerInput = GetComponent<PlayerInput>();
+        }
+    }
+
+    private InputAction ResolveInteractionAction()
+    {
+        if (m_interactionAction != null)
+        {
+            return m_interactionAction;
+        }
+
+        CachePlayerInput();
+        if (m_playerInput == null || m_playerInput.actions == null)
+        {
+            return null;
+        }
+
+        m_interactionAction = m_playerInput.actions.FindAction("Interaction", false)
+            ?? m_playerInput.actions.FindAction("Interact", false);
+
+        return m_interactionAction;
+    }
+#endif
+
+    /// <summary>
+    /// ì»¤ì„œ ì ê¸ˆ ì‚¬ìš© ì—¬ë¶€ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
+    /// </summary>
+    /// <param name="value">ì»¤ì„œë¥¼ ì ê·¸ë ¤ë©´ true, í•´ì œí•˜ë ¤ë©´ falseì…ë‹ˆë‹¤.</param>
     public void SetCursorLocked(bool value)
     {
         m_cursorLocked = value;
@@ -322,47 +404,47 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
-    /// ½ÃÁ¡ È¸Àü¿¡ Ä¿¼­ ÀÔ·ÂÀ» »ç¿ëÇÒÁö ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì‹œì  íšŒì „ì— ì»¤ì„œ ì…ë ¥ì„ ì‚¬ìš©í• ì§€ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">Ä¿¼­ ÀÔ·ÂÀ» ½ÃÁ¡ È¸Àü¿¡ »ç¿ëÇÏ·Á¸é trueÀÔ´Ï´Ù.</param>
+    /// <param name="value">ì»¤ì„œ ì…ë ¥ì„ ì‹œì  íšŒì „ì— ì‚¬ìš©í•˜ë ¤ë©´ trueì…ë‹ˆë‹¤.</param>
     public void SetCursorInputForLook(bool value)
     {
         m_cursorInputForLook = value;
     }
 
     /// <summary>
-    /// ¾Æ³¯·Î±× ÀÌµ¿ ÀÔ·Â »ç¿ë ¿©ºÎ¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+    /// ì•„ë‚ ë¡œê·¸ ì´ë™ ì…ë ¥ ì‚¬ìš© ì—¬ë¶€ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="value">ÀÔ·Â ¼¼±â¸¦ ÀÌµ¿ ¼Óµµ¿¡ ¹İ¿µÇÏ·Á¸é trueÀÔ´Ï´Ù.</param>
+    /// <param name="value">ì…ë ¥ ì„¸ê¸°ë¥¼ ì´ë™ ì†ë„ì— ë°˜ì˜í•˜ë ¤ë©´ trueì…ë‹ˆë‹¤.</param>
     public void SetAnalogMovement(bool value)
     {
         m_analogMovement = value;
     }
 
     /// <summary>
-    /// ¾ÖÇÃ¸®ÄÉÀÌ¼Ç Æ÷Ä¿½º »óÅÂ°¡ ¹Ù²ğ ¶§ Ä¿¼­ »óÅÂ¸¦ °»½ÅÇÕ´Ï´Ù.
+    /// ì• í”Œë¦¬ì¼€ì´ì…˜ í¬ì»¤ìŠ¤ ìƒíƒœê°€ ë°”ë€” ë•Œ ì»¤ì„œ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="hasFocus">¾ÖÇÃ¸®ÄÉÀÌ¼ÇÀÌ Æ÷Ä¿½º¸¦ ¾ò¾úÀ¸¸é trueÀÔ´Ï´Ù.</param>
+    /// <param name="hasFocus">ì• í”Œë¦¬ì¼€ì´ì…˜ì´ í¬ì»¤ìŠ¤ë¥¼ ì–»ì—ˆìœ¼ë©´ trueì…ë‹ˆë‹¤.</param>
     private void OnApplicationFocus(bool hasFocus)
     {
         SetCursorState(m_cursorLocked);
     }
 
     /// <summary>
-    /// Unity Ä¿¼­ Àá±İ »óÅÂ¸¦ Àû¿ëÇÕ´Ï´Ù.
+    /// Unity ì»¤ì„œ ì ê¸ˆ ìƒíƒœë¥¼ ì ìš©í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="newState">Ä¿¼­¸¦ Àá±×·Á¸é true, ÇØÁ¦ÇÏ·Á¸é falseÀÔ´Ï´Ù.</param>
+    /// <param name="newState">ì»¤ì„œë¥¼ ì ê·¸ë ¤ë©´ true, í•´ì œí•˜ë ¤ë©´ falseì…ë‹ˆë‹¤.</param>
     private void SetCursorState(bool newState)
     {
         Cursor.lockState = newState ? CursorLockMode.Locked : CursorLockMode.None;
     }
 
     /// <summary>
-    /// ¸ğµç ·±Å¸ÀÓ ÀÔ·Â »óÅÂ¸¦ ±âº»°ªÀ¸·Î ÃÊ±âÈ­ÇÕ´Ï´Ù.
+    /// ëª¨ë“  ëŸ°íƒ€ì„ ì…ë ¥ ìƒíƒœë¥¼ ê¸°ë³¸ê°’ìœ¼ë¡œ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
     /// </summary>
     /// <remarks>
-    /// ÀÌµ¿°ú ½ÃÁ¡ ÀÔ·ÂÀº <see cref="Vector2.zero"/>·Î ÃÊ±âÈ­ÇÏ°í,
-    /// ¹öÆ°Çü ÀÔ·ÂÀº ¸ğµÎ false·Î ÃÊ±âÈ­ÇÕ´Ï´Ù.
+    /// ì´ë™ê³¼ ì‹œì  ì…ë ¥ì€ <see cref="Vector2.zero"/>ë¡œ ì´ˆê¸°í™”í•˜ê³ ,
+    /// ë²„íŠ¼í˜• ì…ë ¥ì€ ëª¨ë‘ falseë¡œ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
     /// </remarks>
     public void ResetInputState()
     {
@@ -373,5 +455,14 @@ public class PlayerInputs : MonoBehaviour
         m_aim = false;
         m_shoot = false;
         m_reload = false;
+        m_interact = false;
+    }
+
+    public void ResetNonInteractionInputState()
+    {
+        bool wasInteracting = m_interact;
+
+        ResetInputState();
+        m_interact = wasInteracting;
     }
 }

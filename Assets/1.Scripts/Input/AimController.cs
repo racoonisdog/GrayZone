@@ -1,5 +1,4 @@
-using StarterAssets;
-using Unity.Cinemachine;
+﻿using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.Animations.Rigging;
 using UnityEngine.Serialization;
@@ -22,36 +21,100 @@ public class AimController : MonoBehaviour
     private const int WeaponLayerIndex = 1;
     private const float AimRotationLerpSpeed = 50.0f;
 
-    private static readonly int AnimIDShoot = Animator.StringToHash("Shoot");
-    private static readonly int AnimIDReload = Animator.StringToHash("Reload");
+    // 이 시간(초) 이상 사격이 끊기면 좌우 킥 번갈이 패턴을 첫 발부터 다시 시작합니다.
+    private const float KickPatternResetGap = 0.25f;
+
+    private static readonly int AnimIDShoot = Animator.StringToHash("IsShoot");
+    private static readonly int AnimIDReload = Animator.StringToHash("DoReload");
+
+    /// <summary>전투 시점 상태입니다. 조준선 디버그 캡처를 이 상태의 전환 시점에만 수행합니다.</summary>
+    private enum CombatStance
+    {
+        /// <summary>비전투 자유 TPS 시점입니다.</summary>
+        Free,
+
+        /// <summary>힙파이어(비조준 사격) 백뷰입니다.</summary>
+        Hipfire,
+
+        /// <summary>ADS(조준) 백뷰입니다.</summary>
+        Ads,
+    }
+
+    /// <summary>시각 킥(롤·FOV 펀치)의 회복 방식입니다. 실제 탄착에는 영향이 없습니다.</summary>
+    private enum VisualKickRecoveryMode
+    {
+        /// <summary>반동과 같은 회복 속도를 공유합니다. 연사 중에는 0으로 안 꺼지고 밴드로 누적됩니다.</summary>
+        MatchRecoil,
+
+        /// <summary>발사 간격(ShootDelay) 기준 N발 안에 거의 회복합니다. 다음 발 전에 대부분 리셋되어 발당 펀치가 또렷합니다.</summary>
+        PerShotReset,
+    }
 
     [Foldout("Aim Options")]
     [Tooltip("조준 중 활성화할 Cinemachine 카메라입니다.")]
     [FormerlySerializedAs("aimCam")]
     [SerializeField] private CinemachineCamera m_aimCamera;
 
-    [Tooltip("조준 중 표시할 UI 오브젝트입니다.")]
+    [Tooltip("조준선으로 사용할 UI 오브젝트입니다.")]
     [FormerlySerializedAs("aimImage")]
     [SerializeField] private GameObject m_aimImage;
 
-    [Tooltip("조준 지점을 표시하거나 IK 타겟으로 사용할 오브젝트입니다.")]
+    [Tooltip("켜면 조준/힙파이어 상태가 아니어도 조준선을 항상 표시합니다.")]
+    [SerializeField] private bool m_showAimImageAlways = true;
+
+    [Tooltip("탄퍼짐 조준선 UI 컨트롤러입니다. 비워두면 Aim Image 하위 또는 자기 하위에서 자동으로 찾습니다.")]
+    [SerializeField] private CrosshairController m_crosshairController;
+
+
+    [Tooltip("지향점(LookPoint)을 표시하거나 상체 회전 IK 타겟으로 사용할 오브젝트입니다. 캐릭터가 항상 바라보는 먼 지점을 따라갑니다.")]
+    [FormerlySerializedAs("m_aimTarget")]
     [FormerlySerializedAs("aimObj")]
-    [SerializeField] private GameObject m_aimTarget;
+    [SerializeField] private GameObject m_lookTarget;
 
-    [Tooltip("Raycast가 아무 대상도 맞추지 않았을 때 카메라 전방에 둘 기본 조준 거리입니다.")]
+    [Tooltip("지향점(LookPoint)을 카메라 전방 이 거리에 항상 둡니다. 레이캐스트와 무관하게 늘 먼 지점을 바라보며, 무기 히트스캔 사거리보다 작으면 사거리만큼으로 보정됩니다.")]
+    [FormerlySerializedAs("m_aimTargetDistance")]
     [FormerlySerializedAs("aimObjDis")]
-    [SerializeField] private float m_aimTargetDistance = 10.0f;
+    [SerializeField] private float m_lookDistance = 100.0f;
 
-    [Tooltip("조준 Raycast가 충돌할 대상 레이어입니다.")]
+    [Tooltip("조준점(카메라 트레이스) 및 탄착점(총구 히트스캔) 판정에 사용할 레이어입니다. 비어 있으면 무기 히트스캔 레이어 또는 전체를 사용합니다.")]
     [FormerlySerializedAs("targetLayer")]
     [SerializeField] private LayerMask m_targetLayer;
 
     [Foldout("Hitscan Aim Options")]
-    [SerializeField] private GameObject m_hitscanObstructionMarker;
+    [FormerlySerializedAs("m_hitscanObstructionMarker")]
+    [SerializeField] private GameObject m_hitscanBlockMarker;
 
-    [SerializeField] private float m_hitscanObstructionMarkerOffset = 0.01f;
+    [FormerlySerializedAs("m_hitscanObstructionMarkerOffset")]
+    [SerializeField] private float m_hitscanBlockMarkerOffset = 0.01f;
 
-    [SerializeField] private bool m_drawHitscanDebugRay = true;
+    [Foldout("Hipfire Options")]
+    [Tooltip("힙파이어(비조준 사격) 후 백뷰를 유지하다 자유 시점으로 복귀하기까지의 유지 시간(초)입니다.")]
+    [SerializeField] private float m_hipfireHoldDuration = 2.0f;
+
+    [Foldout("Combat Zoom Options")]
+    [Tooltip("ADS(조준) 시 백뷰 카메라 FOV입니다. 값이 작을수록 더 확대됩니다.")]
+    [SerializeField] private float m_adsFov = 20.0f;
+
+    [Tooltip("힙파이어(비조준) 시 백뷰 카메라 FOV입니다. 줌 없는 기본 시야 값(기본 30)입니다.")]
+    [SerializeField] private float m_hipfireFov = 30.0f;
+
+    [Tooltip("ADS↔힙파이어 전환 시 FOV 보간 속도입니다. 매우 크게 두면 즉시 전환에 가까워집니다.")]
+    [SerializeField] private float m_zoomLerpSpeed = 10.0f;
+
+    [Foldout("Recoil Visual Kick Options")]
+    [Tooltip("시각 킥 회복 방식입니다. MatchRecoil=반동과 같은 속도(연사 중 밴드로 누적), PerShotReset=발사 간격 기준 N발 안에 회복(발당 리셋). Play Mode에서 바꿔가며 체감을 비교할 수 있습니다.")]
+    [SerializeField] private VisualKickRecoveryMode m_visualKickRecoveryMode = VisualKickRecoveryMode.MatchRecoil;
+
+    [Tooltip("PerShotReset일 때, 시각 킥이 거의(~95%) 회복되는 데 걸리는 발수(무기 ShootDelay 기준)입니다. 1이면 다음 발 전에 거의 리셋됩니다.")]
+    [ShowIf(nameof(m_visualKickRecoveryMode), VisualKickRecoveryMode.PerShotReset)]
+    [SerializeField] private float m_visualKickRecoverShots = 1.0f;
+
+    [EndIf]
+    [Tooltip("누적될 수 있는 카메라 롤(Dutch) 상한(도)입니다. 유지 없이 발당 순간 펀치 후 회복합니다.")]
+    [SerializeField] private float m_visualKickMaxRoll = 3.0f;
+
+    [Tooltip("누적될 수 있는 FOV 펀치 상한(도)입니다.")]
+    [SerializeField] private float m_visualKickMaxFovPunch = 5.0f;
 
 
     [Foldout("IK Options")]
@@ -72,14 +135,61 @@ public class AimController : MonoBehaviour
     [FormerlySerializedAs("reloadSound")]
     [SerializeField] private AudioClip[] m_reloadSounds;
 
+    [Foldout("Debug")]
+    [Tooltip("조준 중 총구→탄착점 히트스캔 레이를 그립니다.")]
+    [SerializeField] private bool m_drawHitscanDebugRay = true;
+
+    [Tooltip("카메라에서 조준점까지의 트레이스 선을 그립니다(캠→조준점). 총구 기준 탄착점 레이와 얼마나 벌어지는지 확인용입니다.")]
+    [SerializeField] private bool m_drawAimTraceLine = false;
+
+    [Tooltip("지향점(논리 조준, 킥 제거: green) 레이와 단순 카메라 forward(렌더 방향, 킥 포함: blue) 레이를 함께 그립니다. 사격 시 두 선이 벌어지면 카메라 킥이 에임과 분리된 것이고, 안 벌어지면 킥이 활성 카메라에 안 닿은 것입니다.")]
+    [SerializeField] private bool m_drawCameraForwardRay = false;
+
+    [Tooltip("지향점(캐릭터가 항상 바라보는 먼 지점)에 디버그 스피어를 그립니다.")]
+    [SerializeField] private bool m_drawLookPointSphere = false;
+
+    [Tooltip("조준점(카메라 트레이스가 잡은 실제 사격 목표)에 디버그 스피어를 그립니다.")]
+    [SerializeField] private bool m_drawAimPointSphere = false;
+
+    [Tooltip("탄착점(총구 히트스캔이 실제로 끝나는 지점)에 디버그 스피어를 그립니다.")]
+    [SerializeField] private bool m_drawImpactPointSphere = false;
+
+    [Tooltip("디버그 스피어의 반지름입니다.")]
+    [SerializeField] private float m_debugSphereRadius = 0.15f;
+
+    [Tooltip("사격이 실제로 발사될 때 탄착점에 디버그 마커 오브젝트를 생성합니다.")]
+    [SerializeField] private bool m_spawnImpactMarkerOnShot = false;
+
+    [Tooltip("사격 시 탄착점에 생성할 디버그 오브젝트(스피어 등)입니다. 비어 있으면 생성을 생략합니다.")]
+    [SerializeField] private GameObject m_impactMarkerPrefab;
+
     private PlayerInputs m_input;
     private ThirdPersonController m_controller;
     private Animator m_animator;
     private AudioSource m_weaponAudioSource;
     private WeaponController m_weaponController;
     private Camera m_mainCamera;
-    private Enemy m_currentAimEnemy;
+    private EnemyController m_currentAimEnemy;
     private bool m_hasRequiredReferences;
+    private bool m_inCombatStance;
+    private bool m_isAds;
+    private float m_hipfireTimer;
+    private CombatStance m_lastCombatStance = CombatStance.Free;
+
+    /// <summary>시각 킥(FOV 펀치)을 얹기 전의 기준 전투 FOV입니다. ADS/힙파이어 목표로 보간됩니다.</summary>
+    private float m_baseFov = 60.0f;
+
+    /// <summary>현재 카메라 롤(Dutch) 시각 킥 오프셋(도)입니다. 0으로 회복합니다. 에임/탄 무영향.</summary>
+    private float m_visualKickRoll;
+
+    /// <summary>현재 FOV 펀치 시각 킥 오프셋(도)입니다. 0으로 회복합니다. 에임/탄 무영향.</summary>
+    private float m_visualKickFovPunch;
+
+    /// <summary>좌우 킥 번갈이 패턴의 발 인덱스입니다. 버스트 간격이 벌어지면 리셋됩니다.</summary>
+    private int m_kickShotIndex;
+
+    /// <summary>마지막 킥 시각입니다. 버스트 사이 간격이 벌어지면 좌우 패턴을 첫 발부터 다시 시작합니다.</summary>
+    private float m_lastKickTime = float.NegativeInfinity;
 
     /// <summary>조준 카메라 참조입니다.</summary>
     public CinemachineCamera AimCamera => m_aimCamera;
@@ -87,20 +197,20 @@ public class AimController : MonoBehaviour
     /// <summary>조준 UI 오브젝트 참조입니다.</summary>
     public GameObject AimImage => m_aimImage;
 
-    /// <summary>조준 타겟 오브젝트 참조입니다.</summary>
-    public GameObject AimTarget => m_aimTarget;
+    /// <summary>지향점(LookPoint)을 따라가는 상체 회전 IK 타겟 오브젝트 참조입니다.</summary>
+    public GameObject LookTarget => m_lookTarget;
 
-    /// <summary>Raycast 미충돌 시 사용할 기본 조준 거리입니다.</summary>
-    public float AimTargetDistance => m_aimTargetDistance;
+    /// <summary>지향점(LookPoint)을 둘 카메라 전방 거리입니다.</summary>
+    public float LookDistance => m_lookDistance;
 
-    /// <summary>조준 Raycast 대상 레이어입니다.</summary>
+    /// <summary>조준점/탄착점 판정 레이어입니다.</summary>
     public LayerMask TargetLayer => m_targetLayer;
 
-    /// <summary>현재 조준 Raycast가 감지한 적입니다.</summary>
-    public Enemy CurrentAimEnemy => m_currentAimEnemy;
+    /// <summary>현재 히트스캔이 조준 중인 적입니다.</summary>
+    public EnemyController CurrentAimEnemy => m_currentAimEnemy;
 
     /// <summary>총구 기준 히트스캔이 중간 장애물에 막혔을 때 표시할 월드 마커입니다.</summary>
-    public GameObject HitscanObstructionMarker => m_hitscanObstructionMarker;
+    public GameObject HitscanBlockMarker => m_hitscanBlockMarker;
 
 
     public AudioClip ShootingSound => m_shootingSound;
@@ -121,16 +231,16 @@ public class AimController : MonoBehaviour
     public void SetAimImage(GameObject value) => m_aimImage = value;
 
     /// <summary>
-    /// 조준 타겟 오브젝트 참조를 설정합니다.
+    /// 지향점 IK 타겟 오브젝트 참조를 설정합니다.
     /// </summary>
-    /// <param name="value">새 조준 타겟 오브젝트입니다.</param>
-    public void SetAimTarget(GameObject value) => m_aimTarget = value;
+    /// <param name="value">새 지향점 타겟 오브젝트입니다.</param>
+    public void SetLookTarget(GameObject value) => m_lookTarget = value;
 
     /// <summary>
-    /// Raycast 미충돌 시 사용할 기본 조준 거리를 설정합니다.
+    /// 지향점(LookPoint)을 둘 카메라 전방 거리를 설정합니다.
     /// </summary>
-    /// <param name="value">새 조준 거리입니다.</param>
-    public void SetAimTargetDistance(float value) => m_aimTargetDistance = Mathf.Max(0.0f, value);
+    /// <param name="value">새 지향점 거리입니다.</param>
+    public void SetLookDistance(float value) => m_lookDistance = Mathf.Max(0.0f, value);
 
     /// <summary>
     /// 조준 Raycast 대상 레이어를 설정합니다.
@@ -142,24 +252,24 @@ public class AimController : MonoBehaviour
     /// 총구 기준 히트스캔 장애물 마커 오브젝트를 설정합니다.
     /// </summary>
     /// <param name="value">장애물 탄착점에 표시할 월드 오브젝트입니다. <c>null</c>이면 마커 표시를 생략합니다.</param>
-    public void SetHitscanObstructionMarker(GameObject value)
+    public void SetHitscanBlockMarker(GameObject value)
     {
-        if (m_hitscanObstructionMarker != null)
+        if (m_hitscanBlockMarker != null)
         {
-            m_hitscanObstructionMarker.SetActive(false);
+            m_hitscanBlockMarker.SetActive(false);
         }
 
-        m_hitscanObstructionMarker = value;
-        HideHitscanObstructionMarker();
+        m_hitscanBlockMarker = value;
+        HideHitscanBlockMarker();
     }
 
     /// <summary>
     /// 장애물 마커가 표면과 겹치지 않도록 충돌 법선 방향으로 띄울 거리를 설정합니다.
     /// </summary>
     /// <param name="value">표면 법선 방향 오프셋입니다. 0보다 작은 값은 0으로 보정됩니다.</param>
-    public void SetHitscanObstructionMarkerOffset(float value)
+    public void SetHitscanBlockMarkerOffset(float value)
     {
-        m_hitscanObstructionMarkerOffset = Mathf.Max(0.0f, value);
+        m_hitscanBlockMarkerOffset = Mathf.Max(0.0f, value);
     }
 
     /// <summary>
@@ -194,10 +304,44 @@ public class AimController : MonoBehaviour
             return;
         }
 
+        CacheOptionalCrosshairController();
         m_hasRequiredReferences = true;
-        SetAimState(false);
-        HideHitscanObstructionMarker();
-        SetRigWeight(0.0f);
+        ApplyCombatStanceState(false, false, 0.0f);
+
+        if (m_weaponController != null)
+        {
+            m_weaponController.OnHitFeedback += OnWeaponHitFeedback;
+        }
+    }
+
+    /// <summary>
+    /// Unity 생명주기 종료 함수입니다. 구독한 무기 피드백 이벤트를 해제합니다.
+    /// </summary>
+    private void OnDestroy()
+    {
+        if (m_weaponController != null)
+        {
+            m_weaponController.OnHitFeedback -= OnWeaponHitFeedback;
+        }
+    }
+
+    /// <summary>
+    /// 히트스캔 피격 피드백을 조준선 UI로 전달합니다(히트마커 색상 구분 + 킬 시 해골 표시).
+    /// </summary>
+    /// <param name="feedback">헤드샷·킬 여부를 담은 피격 피드백입니다.</param>
+    private void OnWeaponHitFeedback(CombatDamage.HitFeedback feedback)
+    {
+        if (m_crosshairController == null)
+        {
+            return;
+        }
+
+        m_crosshairController.ShowHitMarker(feedback.Headshot);
+
+        if (feedback.Killed)
+        {
+            m_crosshairController.ShowKill();
+        }
     }
 
     /// <summary>
@@ -211,6 +355,33 @@ public class AimController : MonoBehaviour
         }
 
         UpdateAimAndWeapon();
+        UpdateCrosshairDebugOnStanceChange();
+        UpdateReloadCrosshair();
+    }
+
+    /// <summary>
+    /// 무기 재장전 상태와 탄약 게이지 채움 비율을 조준선 UI에 전달합니다(재장전 중 크로스헤어↔탄약 아이콘 스왑 + 아크 게이지).
+    /// </summary>
+    private void UpdateReloadCrosshair()
+    {
+        if (m_crosshairController == null)
+        {
+            return;
+        }
+
+        bool reloading = m_weaponController != null && m_weaponController.IsReloading;
+        m_crosshairController.SetReloading(reloading);
+
+        if (m_weaponController != null)
+        {
+            // 게이지 채움: 재장전 중에는 재장전 진행도, 평소에는 현재 탄약 비율을 표시합니다.
+            float fill = reloading
+                ? m_weaponController.ReloadProgress
+                : m_weaponController.MaxBullet > 0
+                    ? (float)m_weaponController.CurrentBullet / m_weaponController.MaxBullet
+                    : 0.0f;
+            m_crosshairController.SetAmmoGaugeFill(fill);
+        }
     }
 
     /// <summary>
@@ -224,6 +395,27 @@ public class AimController : MonoBehaviour
         m_weaponAudioSource = GetComponent<AudioSource>();
         m_weaponController = GetComponentInChildren<WeaponController>();
         m_mainCamera = Camera.main;
+    }
+
+    /// <summary>
+    /// Aim Image 또는 플레이어 하위에 배치된 선택형 조준선 컨트롤러를 캐싱합니다.
+    /// </summary>
+    private void CacheOptionalCrosshairController()
+    {
+        if (m_crosshairController != null)
+        {
+            return;
+        }
+
+        if (m_aimImage != null)
+        {
+            m_crosshairController = m_aimImage.GetComponentInChildren<CrosshairController>(true);
+        }
+
+        if (m_crosshairController == null)
+        {
+            m_crosshairController = GetComponentInChildren<CrosshairController>(true);
+        }
     }
 
     /// <summary>
@@ -276,9 +468,9 @@ public class AimController : MonoBehaviour
             isValid = false;
         }
 
-        if (m_aimTarget == null)
+        if (m_lookTarget == null)
         {
-            Debug.LogError("[AimController] Aim Target이 Inspector에 할당되지 않았습니다.", this);
+            Debug.LogError("[AimController] Look Target이 Inspector에 할당되지 않았습니다.", this);
             isValid = false;
         }
 
@@ -314,17 +506,50 @@ public class AimController : MonoBehaviour
 
         if (m_controller.IsReload)
         {
-            HideHitscanObstructionMarker();
+            ExitCombatStance();
             return;
         }
 
+        // 조준(ADS): Aim 입력이 최우선. 백뷰 + (slice②)줌.
         if (m_input.Aim)
         {
-            UpdateAiming();
+            EnterCombatStance(true);
+            UpdateCombat();
             return;
         }
 
-        StopAiming();
+        // ADS가 아닌 힙파이어/잔류 상태는 전력질주에 양보합니다.
+        if (m_input.Sprint)
+        {
+            ExitCombatStance();
+            return;
+        }
+
+        // 비조준 사격(힙파이어): Shoot 입력 시 백뷰 진입/유지하고 복귀 타이머를 리셋합니다.
+        if (m_input.Shoot)
+        {
+            EnterCombatStance(false);
+            m_hipfireTimer = m_hipfireHoldDuration;
+            UpdateCombat();
+            return;
+        }
+
+        // 힙파이어 잔류: 마지막 사격 후 유지 시간 동안 백뷰를 유지하고, 끝나면 자유 시점으로 복귀합니다.
+        // 잔류는 타이머 기준이라, 우클릭(ADS)에 잠깐 다녀와도 잔류 시간이 남아 있으면 힙파이어로 복귀해 취소되지 않습니다.
+        // (순수 ADS 후 해제는 타이머가 0이라 이 분기를 건너뛰고 즉시 복귀합니다.)
+        if (m_inCombatStance && m_hipfireTimer > 0.0f)
+        {
+            m_isAds = false;
+            m_hipfireTimer -= Time.deltaTime;
+
+            if (m_hipfireTimer > 0.0f)
+            {
+                UpdateCombat();
+                return;
+            }
+        }
+
+        ExitCombatStance();
     }
 
     /// <summary>
@@ -345,9 +570,32 @@ public class AimController : MonoBehaviour
             return true;
         }
 
+        // 풀 탄창(또는 이미 재장전 중)이면 재장전 상태(IsReload)와 애니메이션을 아예 세우지 않습니다.
+        // 무기측 StartReload는 풀 탄창을 무시하므로, 여기서 막지 않으면 조작 잠금만 걸려 헛장전/데드락이 됩니다.
+        if (m_weaponController != null && !m_weaponController.CanReload)
+        {
+            // 풀 탄창 등으로 장전이 막힌 경우 빈 장전(드라이) 피드백만 재생합니다(클립이 없으면 무음).
+            m_weaponController.PlayEmptyReloadSound();
+            return true;
+        }
+
+        BeginReload();
+
+        return true;
+    }
+
+    /// <summary>
+    /// 재장전 시작 시 한 번만 필요한 조준 해제, 애니메이션, 무기 상태를 적용합니다.
+    /// </summary>
+    private void BeginReload()
+    {
+        m_inCombatStance = false;
+        m_isAds = false;
+        m_hipfireTimer = 0.0f;
         SetAimState(false);
-        HideHitscanObstructionMarker();
+        HideHitscanBlockMarker();
         SetRigWeight(0.0f);
+        m_animator.SetBool(AnimIDShoot, false);
         m_animator.SetLayerWeight(WeaponLayerIndex, 1.0f);
         m_animator.SetTrigger(AnimIDReload);
         m_controller.SetReload(true);
@@ -356,65 +604,310 @@ public class AimController : MonoBehaviour
         {
             m_weaponController.StartReload();
         }
-
-        return true;
     }
 
     /// <summary>
-    /// 조준 중 카메라 전방 Raycast, 캐릭터 회전, IK, 사격 입력을 처리합니다.
+    /// 전투 자세(백뷰)에 진입합니다. 조준(ADS)과 힙파이어가 공유하며, ads로 줌 여부만 구분합니다.
     /// </summary>
-    private void UpdateAiming()
+    /// <param name="ads">조준(ADS)이면 true, 힙파이어면 false입니다.</param>
+    private void EnterCombatStance(bool ads)
     {
-        SetAimState(true);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 1.0f);
+        m_isAds = ads;
 
-        Vector3 targetPosition = GetAimTargetPosition();
-        WeaponController.HitscanShotInfo shotInfo = EvaluateHitscanShot(targetPosition);
-        RotateToAimTarget(targetPosition);
-        SetRigWeight(1.0f);
+        if (!m_inCombatStance)
+        {
+            // 새 교전 진입이므로 좌우 킥 번갈이 패턴을 첫 발부터 시작합니다.
+            m_kickShotIndex = 0;
+            ApplyCombatStanceState(true, false, 1.0f);
+            // 자유 카메라에서 백뷰로 막 진입한 프레임은 목표 FOV로 즉시 스냅(줌 점프 방지).
+            ApplyCombatZoom(true);
+            UpdateCrosshair(true);
+        }
+    }
+
+    /// <summary>
+    /// 전투 자세(조준/힙파이어) 중 매 프레임 지향점/조준점/탄착점, 회전, 마커, 사격 입력을 처리합니다.
+    /// </summary>
+    private void UpdateCombat()
+    {
+        // 지향점: 레이캐스트와 무관하게 항상 카메라 전방 먼 고정점. 캐릭터(몸통/상체 IK)가 일관되게 이 지점을 바라봅니다.
+        Vector3 lookPoint = ResolveLookPoint();
+        ApplyLookTarget(lookPoint);
+        RotateToLookPoint(lookPoint);
+
+        // 조준점: 카메라 트레이스가 잡은 실제 사격 목표. 총알이 겨누는 지점입니다.
+        Vector3 aimPoint = ResolveAimPoint(lookPoint);
+
+        // 탄착점: 총구에서 조준점으로 가다가 걸리는 지점(shotInfo.EndPoint). 실제 사격이 이 결과를 사용합니다.
+        WeaponController.HitscanShotInfo shotInfo = EvaluateHitscanShot(aimPoint);
+        UpdateCurrentAimEnemy(shotInfo);
+
         DrawHitscanDebugRay(shotInfo);
-        UpdateHitscanObstructionMarker(shotInfo);
+        DrawAimTraceDebugLine(shotInfo);
+        DrawCameraForwardDebugRay(lookPoint);
+        DrawAimDebugSpheres(lookPoint, shotInfo);
+        UpdateHitscanBlockMarker(shotInfo);
         UpdateShootState(shotInfo);
+        ApplyCombatZoom(false);
+        UpdateCrosshair(false);
     }
 
     /// <summary>
-    /// 조준 상태가 아닐 때 카메라, UI, IK, 사격 애니메이션 상태를 해제합니다.
+    /// 전투 자세 카메라(백뷰)의 FOV와 시각 킥(롤·FOV 펀치)을 상태에 맞춰 적용합니다. ADS는 확대(작은 FOV), 힙파이어는 기본 FOV입니다.
     /// </summary>
-    private void StopAiming()
+    /// <param name="snap"><c>true</c>면 목표 FOV로 즉시 설정하고 시각 킥을 초기화합니다. <c>false</c>면 보간하고 시각 킥을 회복시킵니다.</param>
+    /// <remarks>
+    /// 기준 FOV(<see cref="m_baseFov"/>) 위에 FOV 펀치를 얹고, 롤(Dutch)도 조준 카메라 렌즈에만 적용합니다.
+    /// 롤·FOV 펀치는 시각 전용 juice라 조준값(<see cref="ThirdPersonController.LogicalAimRotation"/>)이나 탄착에는 영향이 없습니다.
+    /// </remarks>
+    private void ApplyCombatZoom(bool snap)
     {
-        SetAimState(false);
-        HideHitscanObstructionMarker();
-        SetRigWeight(1.0f);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
-        m_animator.SetBool(AnimIDShoot, false);
+        if (m_aimCamera == null)
+        {
+            return;
+        }
+
+        float targetFov = m_isAds ? m_adsFov : m_hipfireFov;
+        m_baseFov = snap ? targetFov : Mathf.Lerp(m_baseFov, targetFov, Time.deltaTime * m_zoomLerpSpeed);
+
+        if (snap)
+        {
+            // 전투 자세 진입 등 스냅 시엔 시각 킥도 초기화(재진입 시 롤/펀치 잔상 방지).
+            m_visualKickRoll = 0.0f;
+            m_visualKickFovPunch = 0.0f;
+        }
+        else
+        {
+            // 유지(hold) 없이 발당 순간 펀치 후 회복시켜 지속 틸트/멀미를 피합니다. 회복 속도는 모드에 따라 결정합니다.
+            float recover = Mathf.Clamp01(Time.deltaTime * GetVisualKickRecoverySpeed());
+            m_visualKickRoll = Mathf.Lerp(m_visualKickRoll, 0.0f, recover);
+            m_visualKickFovPunch = Mathf.Lerp(m_visualKickFovPunch, 0.0f, recover);
+        }
+
+        // 기준 FOV 위에 펀치를 얹고, 롤은 렌즈에만 반영(에임/탄 무영향).
+        m_aimCamera.Lens.FieldOfView = m_baseFov + m_visualKickFovPunch;
+        m_aimCamera.Lens.Dutch = m_visualKickRoll;
     }
 
     /// <summary>
-    /// 카메라 전방으로 Raycast를 수행하여 현재 조준 위치를 계산합니다.
+    /// 현재 모드에 따른 시각 킥 회복 속도(초당)를 반환합니다.
     /// </summary>
-    /// <returns>현재 조준 목표 월드 좌표입니다.</returns>
-    private Vector3 GetAimTargetPosition()
+    /// <returns>
+    /// MatchRecoil이면 반동 회복 속도(<see cref="ThirdPersonController.RecoilRecoverySpeed"/>)를 공유해 연사 중 밴드로 누적합니다.
+    /// PerShotReset이면 발사 간격(ShootDelay)의 <see cref="m_visualKickRecoverShots"/>배 안에 ~95% 회복되도록 역산해(e^(-speed·T)=0.05 → speed=3/T) 발당 리셋에 가깝게 만듭니다.
+    /// </returns>
+    private float GetVisualKickRecoverySpeed()
+    {
+        if (m_visualKickRecoveryMode == VisualKickRecoveryMode.PerShotReset && m_weaponController != null)
+        {
+            float shots = Mathf.Max(0.01f, m_visualKickRecoverShots);
+            float interval = Mathf.Max(0.0001f, m_weaponController.ShootDelay * shots);
+            return 3.0f / interval;
+        }
+
+        return m_controller != null ? m_controller.RecoilRecoverySpeed : 8.0f;
+    }
+
+    /// <summary>
+    /// 현재 무기 탄퍼짐 방사각과 전투 카메라 FOV를 조준선 UI 컨트롤러에 전달합니다.
+    /// </summary>
+    /// <param name="snap"><c>true</c>면 조준선 위치를 즉시 반영합니다.</param>
+    private void UpdateCrosshair(bool snap)
+    {
+        if (m_crosshairController == null)
+        {
+            return;
+        }
+
+        float spreadDegrees = m_weaponController != null ? m_weaponController.GetCurrentSpread(m_isAds) : 0.0f;
+        WeaponController.SpreadDistribution distribution = m_weaponController != null
+            ? m_weaponController.Distribution
+            : WeaponController.SpreadDistribution.Gaussian;
+        float concentration = m_weaponController != null ? m_weaponController.SpreadConcentration : 3.0f;
+        // 시각 FOV 펀치가 아니라 기준 FOV를 써서, 크로스헤어가 발사 juice에 따라 숨쉬지 않게 합니다.
+        float fovDegrees = m_baseFov;
+        m_crosshairController.SetSpread(spreadDegrees, distribution, concentration, fovDegrees, snap);
+    }
+
+    /// <summary>
+    /// 전투 스탠스(자유시점/힙파이어/ADS)가 바뀐 프레임에만 조준선 디버그 스냅샷을 한 번 캡처합니다.
+    /// </summary>
+    /// <remarks>
+    /// 매 프레임 디버그 갱신을 피하고, 전환 시점에 상태별 목표 FOV(ADS/힙파이어)와 자유시점 카메라 FOV를 크로스헤어로 전달합니다.
+    /// 시각 표시(<see cref="UpdateCrosshair"/>)는 매 프레임 그대로 갱신되며, 이 캡처는 디버그 값에만 영향을 줍니다.
+    /// </remarks>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private void UpdateCrosshairDebugOnStanceChange()
+    {
+        if (m_crosshairController == null)
+        {
+            return;
+        }
+
+        CombatStance stance = !m_inCombatStance
+            ? CombatStance.Free
+            : (m_isAds ? CombatStance.Ads : CombatStance.Hipfire);
+
+        if (stance == m_lastCombatStance)
+        {
+            return;
+        }
+
+        m_lastCombatStance = stance;
+
+        // 값 복사가 아니라 라이브 소스 포인터를 연결만 한다. 이후 디버그 표시는 이 포인터로 현재값을 읽는다.
+        switch (stance)
+        {
+            case CombatStance.Ads:
+                m_crosshairController.BindSpreadDebug(
+                    "Ads",
+                    () => m_weaponController != null ? m_weaponController.GetCurrentSpread(true) : 0.0f,
+                    () => m_adsFov);
+                break;
+
+            case CombatStance.Hipfire:
+                m_crosshairController.BindSpreadDebug(
+                    "Hipfire",
+                    () => m_weaponController != null ? m_weaponController.GetCurrentSpread(false) : 0.0f,
+                    () => m_hipfireFov);
+                break;
+
+            default:
+                m_crosshairController.BindSpreadDebug(
+                    "Free",
+                    () => 0.0f,
+                    () => m_mainCamera != null ? m_mainCamera.fieldOfView : 60.0f);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 조준선 UI를 기본 간격 상태로 되돌립니다.
+    /// </summary>
+    private void ResetCrosshair()
+    {
+        if (m_crosshairController != null)
+        {
+            m_crosshairController.ResetSpread();
+        }
+    }
+
+    /// <summary>
+    /// 전투 자세를 해제하고 자유 TPS 시점으로 복귀합니다.
+    /// </summary>
+    private void ExitCombatStance()
+    {
+        if (!m_inCombatStance)
+        {
+            return;
+        }
+
+        m_isAds = false;
+        m_hipfireTimer = 0.0f;
+        ApplyCombatStanceState(false, false, 0.0f);
+    }
+
+    /// <summary>
+    /// 레이캐스트와 무관하게 카메라 전방 먼 고정점을 지향점(LookPoint)으로 계산합니다.
+    /// </summary>
+    /// <returns>카메라 전방 지향 거리(무기 히트스캔 사거리 이상)에 위치한 월드 지향점입니다.</returns>
+    /// <remarks>항상 먼 지점을 바라보므로 가까운 장애물이 끼어도 몸통/상체 회전이 급변하지 않습니다.</remarks>
+    private Vector3 ResolveLookPoint()
     {
         Transform cameraTransform = m_mainCamera.transform;
 
-        if (Physics.Raycast(cameraTransform.position, cameraTransform.forward, out RaycastHit hit, Mathf.Infinity, m_targetLayer))
+        // 지향점은 항상 먼 지점이어야 하므로, 무기 히트스캔 사거리보다 짧지 않게 보정합니다.
+        float lookDistance = m_lookDistance;
+        if (m_weaponController != null)
         {
-            m_aimTarget.transform.position = hit.point;
-            m_currentAimEnemy = hit.collider.GetComponentInParent<Enemy>();
-            return hit.point;
+            lookDistance = Mathf.Max(lookDistance, m_weaponController.HitscanRange);
         }
 
-        Vector3 fallbackPosition = cameraTransform.position + cameraTransform.forward * m_aimTargetDistance;
-        m_aimTarget.transform.position = fallbackPosition;
-        m_currentAimEnemy = null;
-        return fallbackPosition;
+        return cameraTransform.position + GetAimForward() * lookDistance;
     }
 
     /// <summary>
-    /// 카메라 조준점과 무기 총구를 기준으로 현재 프레임의 히트스캔 사격 정보를 계산합니다.
+    /// 조준 계산에 사용할 전방 방향을 반환합니다. 카메라 킥(시각 흔들림)이 빠진 논리 조준 방향이라 에임이 흔들림과 독립됩니다.
     /// </summary>
-    /// <param name="targetPosition">카메라 중심 조준 레이캐스트로 계산한 월드 조준점입니다.</param>
-    /// <returns>총구 원점, 발사 방향, 최종 탄착점, 충돌 및 중간 장애물 여부를 포함한 사격 정보입니다.</returns>
+    /// <returns>카메라 킥이 빠진 논리 조준의 정규화 전방 방향입니다.</returns>
+    /// <remarks>
+    /// PO 핸드오프 기준(2026-06-30 카메라 킥/AimPoint): AimPoint는 카메라 킥이 반영된 렌더 방향이 아니라 논리 조준 방향으로 계산한다.
+    /// 화면(뷰)은 카메라 킥으로 흔들리되 지향점/조준점/탄착점은 킥의 영향을 받지 않는다. 명중 영향은 탄퍼짐(과 추후 총기 반동)이 담당한다.
+    /// </remarks>
+    private Vector3 GetAimForward()
+    {
+        if (m_controller != null)
+        {
+            return m_controller.LogicalAimForward;
+        }
+
+        return m_mainCamera.transform.forward;
+    }
+
+    /// <summary>
+    /// 카메라 트레이스로 조준점(AimPoint, 실제 사격 목표)을 계산합니다.
+    /// </summary>
+    /// <param name="lookPoint">이번 프레임의 지향점입니다. 카메라 트레이스가 아무것도 못 맞히면 이 먼 지점을 조준점으로 사용합니다.</param>
+    /// <returns>카메라가 크로스헤어로 가리키는 실제 월드 지점(미충돌 시 지향점)입니다.</returns>
+    /// <remarks>총알은 총구→이 지점으로 향하므로, 가까운 적도 시차 없이 정확히 겨눕니다.</remarks>
+    private Vector3 ResolveAimPoint(Vector3 lookPoint)
+    {
+        Transform cameraTransform = m_mainCamera.transform;
+        float aimDistance = Vector3.Distance(cameraTransform.position, lookPoint);
+
+        // 레이어가 지정돼 있으면 그것을, 아니면 무기 히트스캔 레이어(없으면 전체)에서 소유(본인) 레이어를 제외해
+        // 카메라 트레이스가 자기 콜라이더를 조준점으로 잡지 않게 합니다.
+        int mask;
+        if (m_targetLayer.value != 0)
+        {
+            mask = m_targetLayer.value;
+        }
+        else
+        {
+            int baseMask = m_weaponController != null ? m_weaponController.HitscanLayerMask.value : ~0;
+            mask = baseMask & ~(1 << gameObject.layer);
+        }
+
+        if (Physics.Raycast(cameraTransform.position, GetAimForward(), out RaycastHit hit, aimDistance, mask, QueryTriggerInteraction.UseGlobal))
+        {
+            return hit.point;
+        }
+
+        return lookPoint;
+    }
+
+    /// <summary>
+    /// 히트스캔 충돌 결과로부터 현재 조준 중인 적을 갱신합니다.
+    /// </summary>
+    /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
+    /// <remarks>조준 대상 적 판정은 실제 탄착 경로(총구 히트스캔)를 기준으로 합니다.</remarks>
+    private void UpdateCurrentAimEnemy(WeaponController.HitscanShotInfo shotInfo)
+    {
+        m_currentAimEnemy = shotInfo.HasHit && shotInfo.Hit.collider != null
+            ? shotInfo.Hit.collider.GetComponentInParent<EnemyController>()
+            : null;
+    }
+
+    /// <summary>
+    /// 상체 회전 IK가 바라보는 지향점 타겟 오브젝트의 위치를 지향점으로 갱신합니다.
+    /// </summary>
+    /// <param name="lookPoint">이번 프레임의 지향점(먼 지점)입니다.</param>
+    /// <remarks>이 오브젝트는 MultiAimConstraint(상체 회전)의 source이며, 손목 IK는 별도 타겟을 사용해 영향을 받지 않습니다.</remarks>
+    private void ApplyLookTarget(Vector3 lookPoint)
+    {
+        if (m_lookTarget == null)
+        {
+            return;
+        }
+
+        m_lookTarget.transform.position = lookPoint;
+    }
+
+    /// <summary>
+    /// 조준점(카메라 트레이스 목표)과 무기 총구를 기준으로 현재 프레임의 히트스캔 사격 정보를 계산합니다.
+    /// </summary>
+    /// <param name="targetPosition">카메라 트레이스로 계산한 조준점(AimPoint)입니다. 총구가 이 지점을 향해 발사합니다.</param>
+    /// <returns>총구 원점, 발사 방향, 탄착점(EndPoint), 충돌 및 중간 장애물 여부를 포함한 사격 정보입니다.</returns>
     /// <remarks>이 결과는 조준 마커 표시와 실제 히트스캔 사격 처리에서 동일하게 사용됩니다.</remarks>
     private WeaponController.HitscanShotInfo EvaluateHitscanShot(Vector3 targetPosition)
     {
@@ -477,36 +970,62 @@ public class AimController : MonoBehaviour
     /// 히트스캔 사격 정보에 중간 장애물이 있으면 월드 마커를 탄착점에 표시합니다.
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
-    private void UpdateHitscanObstructionMarker(WeaponController.HitscanShotInfo shotInfo)
+    private void UpdateHitscanBlockMarker(WeaponController.HitscanShotInfo shotInfo)
     {
-        if (m_hitscanObstructionMarker == null || m_weaponController == null)
+        if (m_hitscanBlockMarker == null || m_weaponController == null)
         {
             return;
         }
 
         if (!shotInfo.IsValid || !shotInfo.IsObstructed)
         {
-            HideHitscanObstructionMarker();
+            HideHitscanBlockMarker();
             return;
         }
 
-        Vector3 markerPosition = shotInfo.EndPoint + shotInfo.Hit.normal * m_hitscanObstructionMarkerOffset;
-        Quaternion markerRotation = shotInfo.Hit.normal.sqrMagnitude > 0.0001f
-            ? Quaternion.LookRotation(shotInfo.Hit.normal)
-            : m_hitscanObstructionMarker.transform.rotation;
+        Vector3 markerPosition = shotInfo.EndPoint + shotInfo.Hit.normal * m_hitscanBlockMarkerOffset;
+        Quaternion markerRotation = GetHitscanBlockMarkerRotation(shotInfo.Hit.normal);
 
-        m_hitscanObstructionMarker.transform.SetPositionAndRotation(markerPosition, markerRotation);
-        m_hitscanObstructionMarker.SetActive(true);
+        m_hitscanBlockMarker.transform.SetPositionAndRotation(markerPosition, markerRotation);
+        m_hitscanBlockMarker.SetActive(true);
+    }
+
+    private Quaternion GetHitscanBlockMarkerRotation(Vector3 hitNormal)
+    {
+        if (hitNormal.sqrMagnitude <= 0.0001f)
+        {
+            return m_hitscanBlockMarker.transform.rotation;
+        }
+
+        Vector3 surfaceNormal = hitNormal.normalized;
+        Vector3 tangentForward = Vector3.ProjectOnPlane(transform.forward, surfaceNormal);
+
+        if (tangentForward.sqrMagnitude <= 0.0001f && m_aimCamera != null)
+        {
+            tangentForward = Vector3.ProjectOnPlane(m_aimCamera.transform.up, surfaceNormal);
+        }
+
+        if (tangentForward.sqrMagnitude <= 0.0001f)
+        {
+            tangentForward = Vector3.Cross(surfaceNormal, Vector3.right);
+        }
+
+        if (tangentForward.sqrMagnitude <= 0.0001f)
+        {
+            tangentForward = Vector3.Cross(surfaceNormal, Vector3.forward);
+        }
+
+        return Quaternion.LookRotation(tangentForward.normalized, surfaceNormal);
     }
 
     /// <summary>
     /// 히트스캔 장애물 마커를 숨깁니다.
     /// </summary>
-    private void HideHitscanObstructionMarker()
+    private void HideHitscanBlockMarker()
     {
-        if (m_hitscanObstructionMarker != null)
+        if (m_hitscanBlockMarker != null)
         {
-            m_hitscanObstructionMarker.SetActive(false);
+            m_hitscanBlockMarker.SetActive(false);
         }
     }
 
@@ -514,6 +1033,7 @@ public class AimController : MonoBehaviour
     /// 조준 중 계산된 히트스캔 사격 정보를 Scene 뷰 디버그 레이로 표시합니다.
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
     private void DrawHitscanDebugRay(WeaponController.HitscanShotInfo shotInfo)
     {
         if (!m_drawHitscanDebugRay || !shotInfo.IsValid)
@@ -529,13 +1049,134 @@ public class AimController : MonoBehaviour
             false);
     }
 
-
-    private void RotateToAimTarget(Vector3 targetPosition)
+    /// <summary>
+    /// 카메라에서 조준점까지의 트레이스 선을 그립니다(캠→조준점). 총구 기준 탄착점 레이와의 벌어짐 확인용입니다.
+    /// </summary>
+    /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다. <see cref="WeaponController.HitscanShotInfo.AimPoint"/>가 조준점입니다.</param>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private void DrawAimTraceDebugLine(WeaponController.HitscanShotInfo shotInfo)
     {
-        Vector3 targetAim = targetPosition;
-        targetAim.y = transform.position.y;
+        if (!m_drawAimTraceLine)
+        {
+            return;
+        }
 
-        Vector3 aimDirection = targetAim - transform.position;
+        Debug.DrawLine(m_mainCamera.transform.position, shotInfo.AimPoint, Color.cyan, 0.0f, false);
+    }
+
+    /// <summary>
+    /// 지향점(논리 조준, 킥 제거) 레이와 단순 카메라 forward(렌더 방향, 킥 포함) 레이를 함께 그려 카메라 킥의 에임 분리 여부를 확인합니다.
+    /// </summary>
+    /// <param name="lookPoint">이번 프레임의 지향점(논리 조준 먼 지점)입니다.</param>
+    /// <remarks>
+    /// green = 지향점 레이(`GetAimForward`, 킥 제거 / 실제 사격 방향), blue = 카메라 forward 레이(`Camera.main.forward`, 킥 포함 / 렌더 방향).
+    /// 사격 시 두 선이 벌어지면 킥이 카메라에만 적용되고 에임에는 분리된 것이며, 안 벌어지면 킥이 활성 카메라에 닿지 않은 것입니다.
+    /// </remarks>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private void DrawCameraForwardDebugRay(Vector3 lookPoint)
+    {
+        if (!m_drawCameraForwardRay)
+        {
+            return;
+        }
+
+        Transform cameraTransform = m_mainCamera.transform;
+        float rayLength = Vector3.Distance(cameraTransform.position, lookPoint);
+
+        // 지향점(논리 조준, 킥 제거) 레이.
+        Debug.DrawLine(cameraTransform.position, lookPoint, Color.green, 0.0f, false);
+
+        // 단순 카메라 forward(렌더 방향, 킥 포함) 레이.
+        Debug.DrawLine(
+            cameraTransform.position,
+            cameraTransform.position + cameraTransform.forward * rayLength,
+            Color.blue,
+            0.0f,
+            false);
+    }
+
+    /// <summary>
+    /// 지향점(green)/조준점(cyan)/탄착점(magenta)에 디버그 스피어를 그립니다.
+    /// </summary>
+    /// <param name="lookPoint">이번 프레임의 지향점(캐릭터가 바라보는 먼 지점)입니다.</param>
+    /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
+    /// <remarks>조준점은 <see cref="WeaponController.HitscanShotInfo.AimPoint"/>(카메라 트레이스 목표), 탄착점은 <see cref="WeaponController.HitscanShotInfo.EndPoint"/>(총구 히트스캔 최종 지점)입니다.</remarks>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private void DrawAimDebugSpheres(Vector3 lookPoint, WeaponController.HitscanShotInfo shotInfo)
+    {
+        if (m_drawLookPointSphere)
+        {
+            DrawDebugSphere(lookPoint, m_debugSphereRadius, Color.green);
+        }
+
+        if (m_drawAimPointSphere)
+        {
+            DrawDebugSphere(shotInfo.AimPoint, m_debugSphereRadius, Color.cyan);
+        }
+
+        if (m_drawImpactPointSphere)
+        {
+            DrawDebugSphere(shotInfo.EndPoint, m_debugSphereRadius, Color.magenta);
+        }
+    }
+
+    /// <summary>
+    /// 세 직교 평면의 원으로 와이어 스피어를 한 프레임 동안 그립니다.
+    /// </summary>
+    /// <param name="center">스피어 중심 월드 좌표입니다.</param>
+    /// <param name="radius">스피어 반지름입니다.</param>
+    /// <param name="color">스피어 색상입니다.</param>
+    /// <remarks><see cref="Debug.DrawLine"/> 기반이라 Scene 뷰, 그리고 Gizmos가 켜진 Game 뷰에서 표시됩니다.</remarks>
+    private static void DrawDebugSphere(Vector3 center, float radius, Color color)
+    {
+        const int segments = 16;
+        float step = 2.0f * Mathf.PI / segments;
+
+        for (int i = 0; i < segments; i++)
+        {
+            float a = i * step;
+            float b = (i + 1) * step;
+            float ca = Mathf.Cos(a);
+            float sa = Mathf.Sin(a);
+            float cb = Mathf.Cos(b);
+            float sb = Mathf.Sin(b);
+
+            Debug.DrawLine(center + new Vector3(ca, sa, 0.0f) * radius, center + new Vector3(cb, sb, 0.0f) * radius, color, 0.0f, false);
+            Debug.DrawLine(center + new Vector3(ca, 0.0f, sa) * radius, center + new Vector3(cb, 0.0f, sb) * radius, color, 0.0f, false);
+            Debug.DrawLine(center + new Vector3(0.0f, ca, sa) * radius, center + new Vector3(0.0f, cb, sb) * radius, color, 0.0f, false);
+        }
+    }
+
+    /// <summary>
+    /// 사격이 발사된 프레임에 탄착점에 디버그 마커 오브젝트를 생성합니다.
+    /// </summary>
+    /// <param name="shotInfo">발사된 사격의 히트스캔 정보입니다.</param>
+    /// <remarks>토글이 켜져 있고 마커 프리팹이 할당된 경우에만 생성합니다. 충돌 표면이 있으면 법선 방향으로 정렬합니다.</remarks>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private void SpawnImpactMarker(WeaponController.HitscanShotInfo shotInfo)
+    {
+        if (!m_spawnImpactMarkerOnShot || m_impactMarkerPrefab == null)
+        {
+            return;
+        }
+
+        Quaternion rotation = shotInfo.HasHit && shotInfo.Hit.normal.sqrMagnitude > 0.0001f
+            ? Quaternion.LookRotation(shotInfo.Hit.normal)
+            : Quaternion.identity;
+
+        Instantiate(m_impactMarkerPrefab, shotInfo.EndPoint, rotation);
+    }
+
+
+    /// <summary>
+    /// 지향점(먼 지점)을 향해 캐릭터 몸통의 수평 회전(yaw)을 보간합니다.
+    /// </summary>
+    /// <param name="lookPoint">이번 프레임의 지향점(먼 지점)입니다. 항상 멀리 있으므로 가까운 장애물에 급회전하지 않습니다.</param>
+    private void RotateToLookPoint(Vector3 lookPoint)
+    {
+        Vector3 aimDirection = lookPoint - transform.position;
+        aimDirection.y = 0.0f;
 
         if (aimDirection.sqrMagnitude <= 0.0001f)
         {
@@ -561,7 +1202,13 @@ public class AimController : MonoBehaviour
             if (m_weaponController != null)
             {
                 //m_weaponController.TryShoot(targetPosition); // 오브젝트 풀링
-                m_weaponController.TryLayShoot(shotInfo); // 히트스캔
+                bool fired = m_weaponController.TryLayShoot(shotInfo, m_isAds, out WeaponController.HitscanShotInfo firedShot); // 히트스캔(탄퍼짐 적용)
+
+                if (fired)
+                {
+                    SpawnImpactMarker(firedShot);
+                    ApplyRecoilAndVisualKick();
+                }
             }
 
             return;
@@ -571,11 +1218,75 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
+    /// 발사가 성사된 프레임에 무기별 수치를 읽어 (1) 에임에 영향을 주는 반동과 (2) 에임 무영향 시각 킥을 함께 가합니다.
+    /// </summary>
+    /// <remarks>
+    /// 반동(에임): 좌우(요)는 매 발 <c>-RecoilYawKick ~ +RecoilYawKick</c> 무작위. <see cref="ThirdPersonController.AddRecoil"/>가
+    /// 논리 조준에 얹어 탄착까지 밀며, 사격을 멈추면 자동 회복합니다.
+    /// 시각 킥(juice): 카메라 롤(Dutch)과 FOV 펀치를 누적하며, 조준/탄착에는 영향이 없습니다(<see cref="ApplyCombatZoom"/>에서 회복·적용).
+    /// </remarks>
+    private void ApplyRecoilAndVisualKick()
+    {
+        if (m_controller == null || m_weaponController == null)
+        {
+            return;
+        }
+
+        // 버스트 사이 간격이 벌어졌으면 좌우 번갈이 패턴을 첫 발부터 다시 시작합니다.
+        if (Time.time - m_lastKickTime > KickPatternResetGap)
+        {
+            m_kickShotIndex = 0;
+        }
+        m_lastKickTime = Time.time;
+
+        // 좌우 패턴에 따라 이번 발의 Yaw 반동·롤 부호(및 크기)를 각각 독립적으로 결정합니다(같은 발 인덱스 공유).
+        float yawSigned = ResolveKickValue(m_weaponController.YawKickPattern, m_weaponController.RecoilYawKick, m_kickShotIndex);
+        float rollSigned = ResolveKickValue(m_weaponController.RollKickPattern, m_weaponController.RecoilRoll, m_kickShotIndex);
+        m_kickShotIndex++;
+
+        // (1) 반동 — 실제 조준을 밀어 탄착에도 영향(세로 pitch + 좌우 yaw).
+        m_controller.AddRecoil(m_weaponController.RecoilPitchKick, yawSigned);
+
+        // (2) 시각 킥 — 롤·FOV 펀치 누적(조준/탄 무영향, 상한 클램프).
+        m_visualKickRoll = Mathf.Clamp(m_visualKickRoll + rollSigned, -m_visualKickMaxRoll, m_visualKickMaxRoll);
+        m_visualKickFovPunch = Mathf.Clamp(m_visualKickFovPunch + m_weaponController.RecoilFovPunch, 0.0f, m_visualKickMaxFovPunch);
+    }
+
+    /// <summary>
+    /// 좌우 킥 패턴에 따라 이번 발의 부호 있는 킥 값(도)을 계산합니다. 왼쪽을 음수로 둡니다.
+    /// </summary>
+    /// <param name="pattern">적용할 좌우 킥 패턴입니다.</param>
+    /// <param name="magnitude">킥 크기(도)입니다. 0 이하이면 0을 반환합니다.</param>
+    /// <param name="shotIndex">현재 발 인덱스입니다. 번갈이 패턴의 짝/홀 판정에 씁니다.</param>
+    /// <returns>Random이면 ±범위 무작위, Alternate이면 발 인덱스로 좌우 교대한 부호 있는 크기입니다.</returns>
+    /// <remarks>Yaw 반동과 시각 롤이 같은 발 인덱스를 공유하되 각자 자기 패턴으로 독립 계산됩니다.</remarks>
+    private static float ResolveKickValue(WeaponController.KickSidePattern pattern, float magnitude, int shotIndex)
+    {
+        if (magnitude <= 0.0f)
+        {
+            return 0.0f;
+        }
+
+        if (pattern == WeaponController.KickSidePattern.Random)
+        {
+            return Random.Range(-magnitude, magnitude);
+        }
+
+        // 번갈이: 발 인덱스 짝/홀로 좌우 교대. 왼쪽 = 음수.
+        bool even = (shotIndex % 2) == 0;
+        bool leftFirst = pattern == WeaponController.KickSidePattern.AlternateLeftFirst;
+        float sign = even == leftFirst ? -1.0f : 1.0f;
+        return magnitude * sign;
+    }
+
+    /// <summary>
     /// 조준 카메라, 조준 UI, 이동 컨트롤러의 조준 이동 상태를 설정합니다.
     /// </summary>
     /// <param name="isAiming">조준 상태이면 true입니다.</param>
     private void SetAimState(bool isAiming)
     {
+        bool showAimImage = isAiming || m_showAimImageAlways;
+
         if (m_aimCamera != null)
         {
             m_aimCamera.gameObject.SetActive(isAiming);
@@ -583,7 +1294,17 @@ public class AimController : MonoBehaviour
 
         if (m_aimImage != null)
         {
-            m_aimImage.SetActive(isAiming);
+            m_aimImage.SetActive(showAimImage);
+        }
+
+        if (m_crosshairController != null)
+        {
+            m_crosshairController.SetVisible(showAimImage);
+        }
+
+        if (!isAiming)
+        {
+            ResetCrosshair();
         }
 
         if (m_controller != null)
@@ -602,16 +1323,30 @@ public class AimController : MonoBehaviour
             return;
         }
 
-        m_controller.SetReload(false);
-        SetRigWeight(1.0f);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
+        FinishReloadVisualState(true);
+        PlayWeaponSound(GetReloadSound(2));
+    }
 
-        if (m_weaponController != null)
+    /// <summary>
+    /// 재장전 완료 후 조작 컨트롤러와 조준 보정 상태를 정리합니다.
+    /// </summary>
+    /// <param name="completeWeaponReload">무기 탄약도 완료 처리할지 여부입니다.</param>
+    private void FinishReloadVisualState(bool completeWeaponReload)
+    {
+        m_controller.SetReload(false);
+        m_inCombatStance = false;
+        m_isAds = false;
+        m_hipfireTimer = 0.0f;
+        SetAimState(false);
+        HideHitscanBlockMarker();
+        SetRigWeight(0.0f);
+        m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
+        m_animator.SetBool(AnimIDShoot, false);
+
+        if (completeWeaponReload && m_weaponController != null)
         {
             m_weaponController.CompleteReload();
         }
-
-        PlayWeaponSound(GetReloadSound(2));
     }
 
     /// <summary>
@@ -636,18 +1371,99 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
+    /// 스쿼드 멤버 전환 직후 얕은 조준/사격 입력 상태를 현재 멤버에 반영합니다.
+    /// </summary>
+    /// <param name="isAiming">조준 입력을 유지할지 여부입니다.</param>
+    /// <param name="isShooting">사격 입력을 유지할지 여부입니다.</param>
+    public void ApplySwitchCarryoverState(bool isAiming, bool isShooting)
+    {
+        if (!m_hasRequiredReferences)
+        {
+            return;
+        }
+
+        // ADS(isAiming)이거나 힙파이어(사격 중)면 전투 자세를 유지한 채 전환합니다.
+        bool inCombat = isAiming || isShooting;
+
+        m_isAds = isAiming;
+        // 힙파이어 carryover면 잔류 타이머를 부여해, 전환 직후 사격을 멈춰도 백뷰가 곧장 풀리지 않습니다.
+        m_hipfireTimer = inCombat && !isAiming ? m_hipfireHoldDuration : 0.0f;
+
+        ApplyCombatStanceState(inCombat, isShooting, inCombat ? 1.0f : 0.0f);
+
+        if (inCombat)
+        {
+            ApplyCombatZoom(true);
+            UpdateCrosshair(true);
+        }
+    }
+
+    /// <summary>
     /// 외부 상태 전환에 의해 조준을 강제로 해제합니다.
     /// </summary>
     public void ForceStopAim()
     {
+        bool keepReloadAnimation = m_controller != null
+                                && m_controller.IsReload
+                                && m_weaponController != null
+                                && m_weaponController.IsReloading;
+
+        ForceStopAim(keepReloadAnimation);
+    }
+
+    /// <summary>
+    /// 다운/사망 등으로 전투 비주얼(조준·손 IK 리그, 무기 상체 레이어)을 조건 없이 완전히 해제합니다.
+    /// </summary>
+    /// <remarks>
+    /// 재장전 여부와 무관하게 무기 레이어 weight까지 0으로 내려, 다운/사망 모션이 상체 IK나 무기 레이어에
+    /// 의해 깨지지 않도록 합니다.
+    /// </remarks>
+    public void ReleaseCombatVisuals()
+    {
+        ForceStopAim(false);
+    }
+
+    /// <summary>
+    /// 조준을 강제로 해제합니다.
+    /// </summary>
+    /// <param name="keepReloadAnimation">true이면 재장전 상체 애니메이션을 위해 무기 레이어 weight를 유지합니다.</param>
+    private void ForceStopAim(bool keepReloadAnimation)
+    {
+        m_inCombatStance = false;
+        m_isAds = false;
+        m_hipfireTimer = 0.0f;
         SetAimState(false);
-        HideHitscanObstructionMarker();
+        HideHitscanBlockMarker();
         SetRigWeight(0.0f);
 
         if (m_animator != null)
         {
-            m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
+            m_animator.SetLayerWeight(WeaponLayerIndex, keepReloadAnimation ? 1.0f : 0.0f);
             m_animator.SetBool(AnimIDShoot, false);
+        }
+    }
+
+    /// <summary>
+    /// 전투 자세 진입/해제 전환에서 한 번만 적용할 카메라, UI, 이동, 리그, 애니메이션 상태를 모읍니다.
+    /// </summary>
+    /// <param name="active">전환 후 전투 자세(백뷰) 활성 상태입니다.</param>
+    /// <param name="keepShooting">전환 직후 사격 애니메이션을 유지할지 여부입니다.</param>
+    /// <param name="weaponLayerWeight">무기 레이어에 적용할 weight입니다.</param>
+    private void ApplyCombatStanceState(bool active, bool keepShooting, float weaponLayerWeight)
+    {
+        m_inCombatStance = active;
+        SetAimState(active);
+        SetRigWeight(active ? 1.0f : 0.0f);
+
+        if (m_animator != null)
+        {
+            m_animator.SetLayerWeight(WeaponLayerIndex, weaponLayerWeight);
+            m_animator.SetBool(AnimIDShoot, active && keepShooting);
+        }
+
+        if (!active)
+        {
+            HideHitscanBlockMarker();
         }
     }
 

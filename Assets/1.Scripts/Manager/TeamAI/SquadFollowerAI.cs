@@ -14,6 +14,21 @@ using VInspector;
 [RequireComponent(typeof(SquadMemberController))]
 public class SquadFollowerAI : MonoBehaviour
 {
+    /// <summary>
+    /// 멤버 전환 시 이어받을 AI 추종 상태입니다.
+    /// </summary>
+    public struct FollowCarryoverState
+    {
+        public bool HasState;
+        public float NextUpdateDelay;
+        public bool AgentEnabled;
+        public bool IsStopped;
+        public bool HasPath;
+        public Vector3 Position;
+        public Vector3 Destination;
+        public Vector3 Velocity;
+    }
+
     [Foldout("Follow Options")]
     [Tooltip("리더와 이 거리보다 멀어지면 추종을 시작합니다.")]
     [FormerlySerializedAs("followDistance")]
@@ -45,6 +60,7 @@ public class SquadFollowerAI : MonoBehaviour
     private bool m_hasRequiredReferences;
 
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
+    private static readonly int MotionSpeedHash = Animator.StringToHash("MotionSpeed");
 
     /// <summary>리더 추종 시작 거리입니다.</summary>
     public float FollowDistance => m_followDistance;
@@ -60,6 +76,69 @@ public class SquadFollowerAI : MonoBehaviour
 
     /// <summary>이동 방향으로 회전하는 속도입니다.</summary>
     public float RotationSpeed => m_rotationSpeed;
+
+    /// <summary>
+    /// 현재 AI 추종 상태를 전환 유지용으로 캡처합니다.
+    /// </summary>
+    /// <returns>AI 추종 상태입니다.</returns>
+    public FollowCarryoverState CaptureFollowCarryoverState()
+    {
+        if (m_agent == null)
+        {
+            return default;
+        }
+
+        bool canReadAgentPath = m_agent.enabled && m_agent.isOnNavMesh;
+
+        return new FollowCarryoverState
+        {
+            HasState = true,
+            NextUpdateDelay = Mathf.Max(0.0f, m_nextUpdateTime - Time.time),
+            AgentEnabled = m_agent.enabled,
+            IsStopped = !m_agent.enabled || m_agent.isStopped,
+            HasPath = canReadAgentPath && m_agent.hasPath,
+            Position = transform.position,
+            Destination = canReadAgentPath ? m_agent.destination : transform.position,
+            Velocity = m_agent.enabled ? m_agent.velocity : Vector3.zero,
+        };
+    }
+
+    /// <summary>
+    /// 전환 직전 캡처한 AI 추종 상태를 현재 멤버에 적용합니다.
+    /// </summary>
+    /// <param name="state">적용할 AI 추종 상태입니다.</param>
+    public void ApplyFollowCarryoverState(FollowCarryoverState state)
+    {
+        if (!state.HasState || m_agent == null || !m_agent.enabled)
+        {
+            return;
+        }
+
+        m_nextUpdateTime = Time.time + state.NextUpdateDelay;
+
+        if (state.IsStopped || !state.AgentEnabled)
+        {
+            StopAgent();
+            return;
+        }
+
+        m_agent.isStopped = false;
+
+        if (state.HasPath && m_agent.isOnNavMesh)
+        {
+            Vector3 destination = state.Destination;
+            Vector3 velocity = state.Velocity;
+            velocity.y = 0.0f;
+
+            if (NavMesh.SamplePosition(destination, out NavMeshHit hit, 2.0f, NavMesh.AllAreas))
+            {
+                destination = hit.position;
+            }
+
+            m_agent.SetDestination(destination);
+            m_agent.velocity = velocity;
+        }
+    }
 
     /// <summary>
     /// 필요한 참조를 캐싱하고 NavMeshAgent 회전 갱신 방식을 초기화합니다.
@@ -279,6 +358,7 @@ public class SquadFollowerAI : MonoBehaviour
         }
 
         m_animator.SetFloat(SpeedHash, speed);
+        m_animator.SetFloat(MotionSpeedHash, 1.0f);
     }
 
     /// <summary>
