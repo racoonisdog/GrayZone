@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
 {
-    private const int MaxLevelIndex = 2; // 레벨 3단계 (인덱스 0,1,2)
+    private const int MaxLevelIndex = 3; // 레벨 4단계 (인덱스 0,1,2,3)
 
     [Header("Facility")]
     [SerializeField] private FacilityDefinition definition;
@@ -14,9 +14,11 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     [Header("Character Access")]
     [SerializeField] private CharacterManager characterManager;
 
-    [Header("Capacity (레벨별 슬롯)")]
-    [SerializeField] private int[] patientSlotsByLevel = { 1, 2, 3 };
-    [SerializeField] private int[] helperSlotsByLevel = { 1, 1, 2 };
+    [Header("Level Visuals")]
+    [SerializeField] private FacilityLevelVisuals levelVisuals;
+
+    [Header("Upgrade Cost (레벨 i → i+1, 시설이 자기 비용을 소유)")]
+    [SerializeField] private UpgradeCostTier[] upgradeCosts; // 길이 = 최대 업그레이드 횟수(MaxLevelIndex)
 
     [Header("Recovery")]
     [SerializeField] private int baseRecoveryPerDay = 5; // 일일 기본 회복 %
@@ -31,7 +33,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     private readonly List<MedicalTreatment> patientTreatments = new List<MedicalTreatment>();
     private readonly List<PatientStatus> patientStatuses = new List<PatientStatus>();
     private readonly List<NPCRuntimeData> helpers = new List<NPCRuntimeData>();
-    private int patientCapacityLevel = 0;
+    private bool m_isUnlocked = true; // FacilityManager가 세이브 기준으로 덮어씀(의료시설 기본 해금)
 
     public event System.Action<NPCRuntimeData> OnHelperAssigned;
     public event System.Action<NPCRuntimeData> OnHelperReleased;
@@ -51,16 +53,20 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     }
     public int CurrentPatientCount => patientTreatments.Count;
     public int MaxPatientCount => PatientCapacity;
-    public int PatientCapacity => SlotsAtLevel(patientSlotsByLevel);
-    public int MaxPatientCapacity => MaxSlots(patientSlotsByLevel);
+    public int PatientCapacity => PatientSlotsForLevel(CurrentLevel);
+    public int MaxPatientCapacity => PatientSlotsForLevel(MaxLevelIndex);
     public int UnlockedPatientSlotCount => PatientCapacity;
     public int LockedPatientSlotCount => MaxPatientCapacity - PatientCapacity;
     public int CurrentHelperCount => helpers.Count;
     public int MaxHelperCount => HelperCapacity;
-    public int HelperCapacity => SlotsAtLevel(helperSlotsByLevel);
-    public int PatientUpgrade => patientCapacityLevel;
-    public int UpgradeLevel => patientCapacityLevel;
+    public int HelperCapacity => HelperSlotsForLevel(CurrentLevel);
+    public int PatientUpgrade => CurrentLevel;
+    public int UpgradeLevel => CurrentLevel;
     public int MaxUpgradeLevel => MaxLevelIndex;
+
+    // 레벨은 FacilityManager(진실원천)에서 읽는다 — MedicalManager는 캐시하지 않는다.
+    private int CurrentLevel =>
+        FacilityManager.Instance != null ? FacilityManager.Instance.GetUpgradeLevel(FacilityId) : 0;
 
     public string FacilityId
     {
@@ -80,7 +86,6 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
 
     private void OnValidate()
     {
-        patientCapacityLevel = Mathf.Clamp(patientCapacityLevel, 0, MaxLevelIndex);
         baseRecoveryPerDay = Mathf.Max(1, baseRecoveryPerDay);
     }
 
@@ -88,29 +93,65 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     {
         if (GameDateManager.Instance != null)
             GameDateManager.Instance.DayAdvanced += OnDayAdvanced;
+
+        // 등록 즉시 FacilityManager가 세이브 기준 해금/레벨을 이 시설에 반영한다.
+        FacilityManager.Instance?.Register(this);
     }
 
     private void OnDestroy()
     {
         if (GameDateManager.Instance != null)
             GameDateManager.Instance.DayAdvanced -= OnDayAdvanced;
+
+        FacilityManager.Instance?.Unregister(this);
     }
 
-    public void LoadPatientUpgrade(int saved)
-    {
-        int previousCapacity = PatientCapacity;
-        //레벨복원
-        patientCapacityLevel = Mathf.Clamp(saved, 0, GetMaxPatientCapacityLevel());
-
-        //복원했을때 수치가 다르면 갱신
-        if (PatientCapacity != previousCapacity)
-            NotifyPatientSlotsChanged();
-    }
-
+    // FacilityManager가 레벨 변경(로드/업그레이드) 후 호출. 레벨 자체는 저장하지 않고
+    // FacilityManager(진실원천)에서 읽으므로, 여기서는 표시(비주얼·슬롯)만 갱신한다.
     public void ApplyUpgradeLevel(int level)
     {
-        LoadPatientUpgrade(level);
+        RefreshLevelVisuals();
+        NotifyPatientSlotsChanged();
     }
+
+    // FacilityManager가 세이브에서 복원한 해금 상태를 반영한다.
+    public void ApplyUnlockState(bool isUnlocked)
+    {
+        m_isUnlocked = isUnlocked;
+        RefreshLevelVisuals();
+    }
+
+    // 현재 해금/레벨 상태를 건물 비주얼에 반영한다(잠금이면 전부 숨김).
+    private void RefreshLevelVisuals()
+    {
+        if (levelVisuals == null)
+            return;
+
+        if (m_isUnlocked)
+            levelVisuals.ShowLevel(CurrentLevel);
+        else
+            levelVisuals.HideAll();
+    }
+
+    // 현재 레벨 → 다음 레벨 업그레이드 비용(FacilityManager가 차감 시 조회). 범위 밖/미설정이면 무료.
+    public CostBundle GetUpgradeCost(int currentLevel)
+    {
+        if (upgradeCosts == null || currentLevel < 0 || currentLevel >= upgradeCosts.Length)
+            return new CostBundle();
+
+        UpgradeCostEntry[] entries = upgradeCosts[currentLevel].entries;
+        if (entries == null || entries.Length == 0)
+            return new CostBundle();
+
+        CurrencyCost[] costs = new CurrencyCost[entries.Length];
+        for (int i = 0; i < entries.Length; i++)
+            costs[i] = new CurrencyCost(entries[i].type, entries[i].amount);
+
+        return new CostBundle(costs);
+    }
+
+    // 자원 이외의 업그레이드 조건. 현재는 없음(항상 허용). 비자원 조건이 생기면 여기서 판단.
+    public bool AreUpgradeRequirementsMet(int currentLevel) => true;
 
     public void FillPatientCandidates(List<NPCRuntimeData> results)
     {
@@ -207,19 +248,6 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         patientTreatments.RemoveAt(slotIndex);
         NotifyPatientSlotsChanged();
         return true;
-    }
-
-    public bool UpgradePatientCapacity(int amount)
-    {
-        if (amount <= 0) return false;
-
-        int previousCapacity = PatientCapacity;
-        patientCapacityLevel = Mathf.Clamp(patientCapacityLevel + amount, 0, GetMaxPatientCapacityLevel());
-        bool upgraded = PatientCapacity > previousCapacity;
-        if (upgraded)
-            NotifyPatientSlotsChanged();
-
-        return upgraded;
     }
 
     public int GetPatientHealDaysRemaining(NPCRuntimeData patient)
@@ -457,24 +485,24 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         return characterManager;
     }
 
-    private int SlotsAtLevel(int[] table)
+    // 레벨별 효과는 시설 특수 정보이므로 코드에 하드코딩(절대값). 확장 = case 추가 + MaxLevelIndex.
+    private static int PatientSlotsForLevel(int level) => level switch
     {
-        if (table == null || table.Length == 0)
-            return 0;
+        0 => 1,
+        1 => 2,
+        2 => 3,
+        3 => 4,
+        _ => 1
+    };
 
-        int index = Mathf.Clamp(patientCapacityLevel, 0, table.Length - 1);
-        return Mathf.Max(0, table[index]);
-    }
-
-    private int MaxSlots(int[] table)
+    private static int HelperSlotsForLevel(int level) => level switch
     {
-        return (table == null || table.Length == 0) ? 0 : Mathf.Max(0, table[table.Length - 1]);
-    }
-
-    private int GetMaxPatientCapacityLevel()
-    {
-        return MaxLevelIndex;
-    }
+        0 => 1,
+        1 => 1,
+        2 => 2,
+        3 => 2,
+        _ => 1
+    };
 
     private void NotifyPatientSlotsChanged()
     {
@@ -493,6 +521,20 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             MedicalTreatment treatment = patientTreatments[i];
             patientStatuses.Add(new PatientStatus(treatment.Patient, treatment.RemainingDays, treatment.TotalDays));
         }
+    }
+
+    // 업그레이드 비용 데이터(인스펙터 편집용). 한 단계(레벨 i→i+1)에서 요구하는 자원들.
+    [System.Serializable]
+    private struct UpgradeCostEntry
+    {
+        public CurrencyType type;
+        public int amount;
+    }
+
+    [System.Serializable]
+    private struct UpgradeCostTier
+    {
+        public UpgradeCostEntry[] entries;
     }
 
     private sealed class MedicalTreatment
