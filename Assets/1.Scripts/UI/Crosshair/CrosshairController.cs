@@ -19,6 +19,9 @@ using VInspector;
 [RequireComponent(typeof(UIDocument))]
 public class CrosshairController : MonoBehaviour
 {
+    private const float GapSnapEpsilon = 0.01f;
+    private const float LowAmmoGaugeThreshold = 0.33f;
+
     private const float RingReferenceThicknessPixels = 1.0f;
 
     /// <summary>중앙 표시(Main) 형태입니다.</summary>
@@ -51,6 +54,40 @@ public class CrosshairController : MonoBehaviour
 
         /// <summary>상하좌우 점(Dot)으로 표시합니다.</summary>
         Dot = 4,
+    }
+
+    /// <summary>
+    /// 조준선 팔 끝이 탄퍼짐 콘의 "어느 반경"을 가리킬지 정하는 표시 기준입니다.
+    /// </summary>
+    /// <remarks>
+    /// 이건 순수하게 "어떻게 보여줄까"의 표현 선택이며, 실제 탄 궤적은 바꾸지 않습니다(실제 분포는 무기가 소유).
+    /// 탄은 콘 경계(하드캡)까지 거의 안 가고 중심에 몰리므로, 팔 끝을 콘 경계에 두면 실제 탄착보다 몇 배 넓어 보입니다.
+    /// 무기의 분포·집중도(<see cref="WeaponController.Distribution"/>/<see cref="WeaponController.SpreadConcentration"/>)를
+    /// 읽어, 선택한 기준의 반경을 표시 배율(factor)로 환산합니다.
+    /// </remarks>
+    private enum SpreadDisplayBasis
+    {
+        /// <summary>콘 경계(하드캡). 이론상 최대 편향이며 탄은 극히 일부만 도달합니다(가장 넓게 보임).</summary>
+        ConeEdge,
+
+        /// <summary>대부분의 탄이 들어오는 반경입니다(Gaussian 기준 약 2σ ≈ 86%). "이 안에 거의 다 맞는다".</summary>
+        MostShots,
+
+        /// <summary>통상적으로 탄이 떨어지는 반경(RMS)입니다. 팔 밖에 박히는 탄도 꽤 있습니다.</summary>
+        Typical,
+
+        /// <summary>탄이 가장 빽빽하게 몰리는 밀집 코어 반경입니다(Gaussian 최빈 = σ). 가장 타이트하며, 실제 밀집 그룹에 딱 붙습니다.</summary>
+        Core,
+    }
+
+    /// <summary>탄약 게이지가 채워지는 방향입니다.</summary>
+    private enum AmmoGaugeFillDirection
+    {
+        /// <summary>시계 방향으로 채웁니다.</summary>
+        Clockwise,
+
+        /// <summary>반시계 방향으로 채웁니다.</summary>
+        CounterClockwise,
     }
 
     [Foldout("References")]
@@ -108,19 +145,21 @@ public class CrosshairController : MonoBehaviour
     [SerializeField] private bool m_createMissingElements = true;
 
     [Foldout("Spread")]
-    [Tooltip("켜면 무기 탄퍼짐 방사각을 조준선 벌어짐으로 표시합니다. 끄면 Center Space만 유지합니다.")]
+    [Tooltip("켜면 무기 현재 spread를 조준선 벌어짐에 반영합니다. 끄면 spread 기여분은 0이 되어 Center Space만 최종 gap으로 사용합니다.")]
     [SerializeField] private bool m_useSpreadAccuracy = true;
 
-    [Tooltip("켜면 스프레드 도(degree)를 카메라 FOV 기준 화면 픽셀로 환산합니다. 끄면 Spread Scale을 픽셀/도 값처럼 사용합니다.")]
-    [SerializeField] private bool m_projectSpreadByCameraFov = true;
+    [Tooltip("조준선 팔 끝이 탄퍼짐 콘의 어느 반경을 가리킬지 정합니다. ConeEdge=콘 경계(하드캡, 가장 넓음), MostShots=대부분 포함(≈2σ), Typical=통상 탄착(RMS), Core=밀집 코어(가장 타이트). 표시 기준만 바꾸며 실제 탄 궤적에는 영향이 없습니다. 무기의 분포·집중도를 읽어 배율로 환산합니다.")]
+    [SerializeField] private SpreadDisplayBasis m_spreadDisplayBasis = SpreadDisplayBasis.MostShots;
 
-    [Tooltip("탄퍼짐 환산값에 곱할 배율입니다. FOV 환산을 끄면 픽셀/도처럼 작동합니다.")]
-    [SerializeField] private float m_spreadScale = 1.0f;
+    [Tooltip("켜면 Max Gap Pixels를 상한(안전 클램프)으로 써서 조준선이 그 이상 벌어지지 않게 합니다. 끄면 물리 투영값을 그대로 사용합니다.")]
+    [SerializeField] private bool m_clampToMaxGap = false;
 
-    [Tooltip("중심에서 팔 안쪽까지 벌어질 수 있는 최대 간격(픽셀)입니다.")]
+    [Tooltip("조준선 최대 벌어짐 상한(픽셀)입니다. Clamp To Max Gap이 켜져 있을 때만 적용됩니다.")]
+    [ShowIf(nameof(m_clampToMaxGap))]
     [SerializeField] private float m_maxGapPixels = 220.0f;
 
-    [Tooltip("조준선이 목표 벌어짐을 따라가는 보간 속도입니다. 0 이하이면 실제 스프레드 값을 즉시 반영합니다.")]
+    [EndIf]
+    [Tooltip("현재 gap이 목표 gap을 따라가는 보간 속도입니다. 0 이하이면 목표 gap을 즉시 반영합니다.")]
     [SerializeField] private float m_lerpSpeed = 0.0f;
 
     [Foldout("Shape Options")]
@@ -163,7 +202,7 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("보조 표시 형태입니다.")]
     [SerializeField] private SubShape m_subShape = SubShape.RoundedCross;
 
-    [Tooltip("탄퍼짐이 0일 때 중심에서 상하좌우 팔 안쪽까지의 통일 간격(픽셀)입니다.")]
+    [Tooltip("기본 오프셋입니다. 최종 gap 계산의 시작값으로 항상 더해지며, 동적 크로스헤어가 켜져 있으면 최종 gap = Center Space + spread 기여분입니다.")]
     [FormerlySerializedAs("m_baseGapPixels")]
     [ShowIf(nameof(HasSubShape))]
     [SerializeField] private float m_centerSpacePixels = 1.0f;
@@ -213,19 +252,149 @@ public class CrosshairController : MonoBehaviour
     [ShowIf(nameof(m_subShape), SubShape.RoundedCross)]
     [SerializeField] private float m_cornerRadiusPixels = 0.0f;
 
+    [EndIf]
+    [Foldout("Reload Ammo")]
+    [Header("Reload Swap")]
+    [Tooltip("켜면 재장전 중 크로스헤어를 숨기고 중앙에 재장전 탄약 아이콘을 표시합니다. 끄면 재장전 중에도 크로스헤어를 유지합니다.")]
+    [SerializeField] private bool m_swapCrosshairOnReload = true;
+
+    [Tooltip("재장전 시 중앙에 표시할 탄약 아이콘 벡터 이미지(예: Reloading_Bullet.svg)입니다.")]
+    [SerializeField] private VectorImage m_reloadBulletImage;
+
+    [Tooltip("재장전 탄약 아이콘의 표시 크기(픽셀)입니다.")]
+    [SerializeField] private float m_reloadBulletSizePixels = 50.0f;
+
+    [Tooltip("재장전 중 탄약 아이콘이 페이드로 깜빡이는 속도입니다. 0 이하이면 깜빡이지 않고 항상 표시합니다.")]
+    [SerializeField] private float m_reloadBlinkSpeed = 3.0f;
+
+    [Range(0.0f, 1.0f)]
+    [Tooltip("재장전 깜빡임의 최소 불투명도입니다. 이 값과 1 사이를 오갑니다.")]
+    [SerializeField] private float m_reloadBlinkMinAlpha = 0.15f;
+
+    [Header("Ammo Gauge")]
+    [Tooltip("켜면 크로스헤어 우하단에 탄약 아크 게이지를 표시합니다.")]
+    [SerializeField] private bool m_showAmmoGauge = true;
+
+    [Tooltip("켜면 재장전 중이 아닐 때도 게이지를 항상 표시합니다(평소 = 현재 탄약 비율, 재장전 중 = 재장전 진행도). 끄면 재장전 중에만 표시합니다.")]
+    [SerializeField] private bool m_ammoGaugeAlwaysVisible = true;
+
+    [Tooltip("게이지 아크 색상입니다. Figma Gauge_Ammo 원본은 #D9D9D9입니다.")]
+    [SerializeField] private Color m_ammoGaugeColor = new Color32(217, 217, 217, 255);
+
+    [Tooltip("현재 장탄이 33% 미만일 때 게이지 아크에 사용할 경고 색상입니다.")]
+    [SerializeField] private Color m_lowAmmoGaugeColor = new Color32(226, 59, 59, 255);
+
+    [Tooltip("재장전 중 재장전 진행도 아크에 사용할 색상입니다.")]
+    [SerializeField] private Color m_reloadAmmoGaugeColor = new Color32(217, 217, 217, 255);
+
+    [Tooltip("게이지 아크의 선 두께(픽셀)입니다. Figma 원본은 100px 크기 기준 5px입니다.")]
+    [SerializeField] private float m_ammoGaugeThicknessPixels = 5.0f;
+
+    [Tooltip("아크 시작 각도(도)입니다. 0 = 3시 방향이며 시계 방향으로 진행합니다.")]
+    [SerializeField] private float m_ammoGaugeStartAngleDegrees = 0.0f;
+
+    [Tooltip("채움 아크가 시작 각도에서 진행되는 방향입니다.")]
+    [SerializeField] private AmmoGaugeFillDirection m_ammoGaugeFillDirection = AmmoGaugeFillDirection.Clockwise;
+
+    [Range(0.0f, 360.0f)]
+    [Tooltip("아크 전체 구간(도)입니다. Figma 원본은 우하단 4분원(90도)이며, 360이면 완전한 링으로 채워집니다.")]
+    [SerializeField] private float m_ammoGaugeSweepDegrees = 90.0f;
+
+    [Tooltip("켜면 진행분 아크 뒤에 전체 구간 배경 바를 표시합니다.")]
+    [FormerlySerializedAs("m_showAmmoGaugeTrack")]
+    [SerializeField] private bool m_showAmmoGaugeBackground = true;
+
+    [Range(0.0f, 1.0f)]
+    [ShowIf(nameof(m_showAmmoGaugeBackground))]
+    [Tooltip("배경 바의 불투명도 배율입니다.")]
+    [FormerlySerializedAs("m_ammoGaugeTrackAlpha")]
+    [SerializeField] private float m_ammoGaugeBackgroundAlpha = 0.25f;
+
+    [ShowIf(nameof(m_showAmmoGaugeBackground))]
+    [Tooltip("배경 바 색상입니다.")]
+    [SerializeField] private Color m_ammoGaugeBackgroundColor = new Color32(217, 217, 217, 255);
+    [EndIf]
+
+    [Tooltip("탄약 게이지의 표시 크기(픽셀)입니다.")]
+    [SerializeField] private float m_ammoGaugeSizePixels = 100.0f;
+
+    [Tooltip("크로스헤어 중심에서 우하단 대각 방향으로 탄약 게이지를 얼마나 떨어뜨릴지(픽셀)입니다. x·y 각 축에 동일 적용됩니다.")]
+    [SerializeField] private float m_ammoGaugeDiagonalOffset = 40.0f;
+
+    [Foldout("Hit Feedback")]
+    [Header("Hit Marker")]
+    [Tooltip("켜면 적을 맞혔을 때 중앙에 X자 히트마커를 잠깐 표시합니다.")]
+    [SerializeField] private bool m_showHitMarker = true;
+
+    [Tooltip("몸샷 히트마커 색상입니다. Figma Crosshair_Hit 원본은 #D9D9D9입니다.")]
+    [SerializeField] private Color m_hitMarkerColorBody = new Color32(217, 217, 217, 255);
+
+    [Tooltip("헤드샷 히트마커 색상입니다. Figma Crosshair_HeadShot 원본은 빨강 계열입니다.")]
+    [SerializeField] private Color m_hitMarkerColorHead = new Color32(226, 59, 59, 255);
+
+    [Tooltip("히트마커 각 삼각형의 길이(픽셀)입니다. 중앙에서 바깥으로 뻗는 방향 길이입니다.")]
+    [SerializeField] private float m_hitMarkerLengthPixels = 26.0f;
+
+    [Tooltip("히트마커 중앙 공간(픽셀)입니다. 중심에서 각 삼각형이 시작되기까지의 빈 간격입니다.")]
+    [SerializeField] private float m_hitMarkerCenterGapPixels = 8.0f;
+
+    [FormerlySerializedAs("m_hitMarkerThicknessPixels")]
+    [Tooltip("히트마커 각 삼각형의 밑변 길이(픽셀)입니다. 바깥 꼭짓점 반대편, 중심 쪽 두 꼭짓점 사이 변의 길이입니다. 클수록 삼각형이 넓어집니다.")]
+    [SerializeField] private float m_hitMarkerBaseLengthPixels = 12.0f;
+
+    [Tooltip("히트마커가 표시된 뒤 사라지기까지 걸리는 페이드아웃 시간(초)입니다.")]
+    [SerializeField] private float m_hitMarkerFadeDuration = 0.25f;
+
+    [Header("Kill Skull")]
+    [Tooltip("켜면 적을 처치했을 때 중앙에 해골이 떴다가 페이드아웃됩니다.")]
+    [SerializeField] private bool m_showKillSkull = true;
+
+    [Tooltip("킬 시 표시할 해골 텍스처입니다(예: KillStreak.png).")]
+    [SerializeField] private Texture2D m_killSkullTexture;
+
+    [Tooltip("해골 색조입니다. 흰색이면 텍스처 원본 색을 그대로 씁니다.")]
+    [SerializeField] private Color m_killSkullTint = Color.white;
+
+    [Tooltip("해골 표시 크기(픽셀)입니다.")]
+    [SerializeField] private float m_killSkullSizePixels = 48.0f;
+
+    [Tooltip("해골이 완전히 보이는 유지 시간(초)입니다. 이후 페이드아웃이 시작됩니다.")]
+    [SerializeField] private float m_killSkullHoldDuration = 0.35f;
+
+    [Tooltip("해골이 사라지기까지 걸리는 페이드아웃 시간(초)입니다.")]
+    [SerializeField] private float m_killSkullFadeDuration = 0.6f;
+
     [Foldout("Debug")]
     [Tooltip("(디버그) 켜면 에디트 모드(비플레이)에서도 조준선을 미리 렌더링합니다. 프리뷰 전용이며 게임 로직엔 영향이 없습니다. [ExecuteAlways]와 함께 동작합니다.")]
     [SerializeField] private bool m_editModePreview = false;
 
-    [Tooltip("(디버그) 마지막 상태 전환(자유시점/힙파이어/ADS) 시점에 캡처된 전투 스탠스입니다.")]
+    [Tooltip("(디버그) 켜면 에디트 프리뷰에서 히트마커와 킬 해골도 함께 미리 표시합니다(길이·중앙공간·밑변·색 튜닝용). Edit Mode Preview가 켜져 있어야 동작합니다.")]
+    [SerializeField] private bool m_previewHitFeedback = false;
+
+    [ShowIf(nameof(m_previewHitFeedback))]
+    [Tooltip("(디버그) 히트마커 프리뷰 색을 헤드샷 색으로 표시합니다. 끄면 몸샷 색입니다.")]
+    [SerializeField] private bool m_previewHeadshotColor = false;
+    [EndIf]
+
+    [Tooltip("(디버그) 마지막 상태 전환 기준 전투 스탠스입니다. Free, Hipfire, Ads 중 현재 디버그 소스가 어느 기준으로 연결되어 있는지 보여줍니다.")]
     [ReadOnly][SerializeField] private string m_debugStance = "Free";
 
     // (디버그) 값 복사가 아니라 전환 시점에 연결된 라이브 소스 포인터를 통해 현재값을 읽는 읽기전용 게터입니다.
     // 별도 매 프레임 업데이트 없이 인스펙터 리페인트 때마다 포인터로 현재값을 당겨옵니다.
+    [Tooltip("(디버그) WeaponController에서 읽어온 현재 spread degree입니다. 실제 탄의 랜덤 방향이 아니라 발사 cone의 현재 크기(콘 반각=하드캡)입니다.")]
     [ShowInInspector] private float DebugSpreadDegrees => m_debugSpreadSource != null ? m_debugSpreadSource() : 0.0f;
+
+    [Tooltip("(디버그) 콘 반각 대비 표시 배율(tan 공간, 수정 불가)입니다. 현재 표시 기준(basis)과 마지막으로 받은 무기 분포/집중도로 계산되는 중간값이며, 팔 끝이 탄이 실제로 몰리는 반경을 가리키게 합니다.")]
+    [ShowInInspector] private float DebugSpreadDisplayFactor => m_lastSpreadDisplayFactor;
+
+    [Tooltip("(디버그) spread degree를 화면 픽셀로 실제 투영할 때 사용하는 현재 카메라 FOV입니다.")]
     [ShowInInspector] private float DebugCameraFovDegrees => m_debugFovSource != null ? m_debugFovSource() : 0.0f;
-    [ShowInInspector] private float DebugSpreadGapPixels => CalculateSpreadGapPixels(DebugSpreadDegrees, DebugCameraFovDegrees);
-    [ShowInInspector] private float DebugCurrentGapPixels => CalculateTargetGapPixels(DebugSpreadDegrees, DebugCameraFovDegrees);
+
+    [Tooltip("(디버그) Center Space를 제외한 spread 기여분 픽셀입니다. 유효각(spread×배율)을 FOV로 물리 투영한 값입니다.")]
+    [ShowInInspector] private float DebugSpreadGapPixels => CalculateSpreadGapPixels(DebugSpreadDegrees, DebugSpreadDisplayFactor, DebugCameraFovDegrees);
+
+    [Tooltip("(디버그) 현재 계산된 최종 gap 픽셀입니다. Center Space + spread 기여분(상한 클램프가 켜져 있으면 Max Gap으로 제한)입니다.")]
+    [ShowInInspector] private float DebugCurrentGapPixels => CalculateTargetGapPixels(DebugSpreadDegrees, DebugSpreadDisplayFactor, DebugCameraFovDegrees);
 
     // 전환 시점에 연결되는 라이브 소스 포인터(값 복사 아님). null이면 미연결(0 표시).
     private System.Func<float> m_debugSpreadSource;
@@ -245,8 +414,20 @@ public class CrosshairController : MonoBehaviour
     private VisualElement m_mainStrokeElement;
     private VisualElement m_subShapeElement;
     private VisualElement m_subStrokeElement;
+    private VisualElement m_reloadBulletElement;
+    private VisualElement m_ammoGaugeElement;
+    private VisualElement m_hitMarkerElement;
+    private VisualElement m_killSkullElement;
+    private bool m_isReloading;
+    private float m_ammoGaugeFill = 1.0f;
+    private Color m_hitMarkerActiveColor;
+    private float m_hitMarkerTimer;
+    private float m_killTimer;
     private float m_currentGapPixels;
     private float m_lastSpreadDegrees;
+    private WeaponController.SpreadDistribution m_lastDistribution = WeaponController.SpreadDistribution.Gaussian;
+    private float m_lastConcentration = 3.0f;
+    private float m_lastSpreadDisplayFactor = 1.0f;
     private float m_lastCameraFovDegrees = 60.0f;
 
     /// <summary>탄퍼짐 정확도 표시 여부입니다.</summary>
@@ -266,6 +447,84 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
+    /// 매 프레임 재장전 깜빡임과 히트마커·킬 해골 페이드아웃을 갱신합니다(플레이 중에만).
+    /// </summary>
+    private void Update()
+    {
+        if (!Application.isPlaying)
+        {
+            return;
+        }
+
+        UpdateReloadBlink();
+        UpdateHitMarkerFade();
+        UpdateKillFade();
+    }
+
+    /// <summary>
+    /// 재장전 중 탄약 아이콘을 페이드로 깜빡입니다(재장전 스왑 활성 시에만).
+    /// </summary>
+    private void UpdateReloadBlink()
+    {
+        if (m_reloadBulletElement == null || !m_isReloading || !m_swapCrosshairOnReload || m_reloadBulletImage == null)
+        {
+            return;
+        }
+
+        float alpha = 1.0f;
+        if (m_reloadBlinkSpeed > 0.0f)
+        {
+            float t = (Mathf.Sin(Time.time * m_reloadBlinkSpeed) + 1.0f) * 0.5f; // 0..1
+            alpha = Mathf.Lerp(Mathf.Clamp01(m_reloadBlinkMinAlpha), 1.0f, t);
+        }
+
+        m_reloadBulletElement.style.opacity = alpha;
+    }
+
+    /// <summary>
+    /// 표시된 히트마커를 남은 시간에 비례해 페이드아웃하고, 다 사라지면 숨깁니다.
+    /// </summary>
+    private void UpdateHitMarkerFade()
+    {
+        if (m_hitMarkerElement == null || m_hitMarkerTimer <= 0.0f)
+        {
+            return;
+        }
+
+        m_hitMarkerTimer = Mathf.Max(0.0f, m_hitMarkerTimer - Time.deltaTime);
+        float duration = Mathf.Max(0.0001f, m_hitMarkerFadeDuration);
+        float alpha = Mathf.Clamp01(m_hitMarkerTimer / duration);
+        m_hitMarkerElement.style.opacity = alpha;
+
+        if (m_hitMarkerTimer <= 0.0f)
+        {
+            HideElement(m_hitMarkerElement);
+        }
+    }
+
+    /// <summary>
+    /// 킬 해골을 유지 시간 동안 완전히 보인 뒤 페이드아웃하고, 다 사라지면 숨깁니다.
+    /// </summary>
+    private void UpdateKillFade()
+    {
+        if (m_killSkullElement == null || m_killTimer <= 0.0f)
+        {
+            return;
+        }
+
+        m_killTimer = Mathf.Max(0.0f, m_killTimer - Time.deltaTime);
+        float fade = Mathf.Max(0.0001f, m_killSkullFadeDuration);
+        // 유지 구간에서는 불투명도 1, 페이드 구간에서만 0으로 선형 감소합니다.
+        float alpha = Mathf.Clamp01(m_killTimer / fade);
+        m_killSkullElement.style.opacity = alpha;
+
+        if (m_killTimer <= 0.0f)
+        {
+            HideElement(m_killSkullElement);
+        }
+    }
+
+    /// <summary>
     /// 컴포넌트 활성화 시 VisualElement 트리를 캐싱하고 조준선을 표시한 뒤 마지막 벌어짐 상태를 즉시 반영합니다.
     /// </summary>
     private void OnEnable()
@@ -278,7 +537,7 @@ public class CrosshairController : MonoBehaviour
 
         CacheVisualElements();
         SetVisible(true);
-        SetSpread(m_lastSpreadDegrees, m_lastCameraFovDegrees, true);
+        SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
     }
 
     /// <summary>
@@ -291,7 +550,7 @@ public class CrosshairController : MonoBehaviour
         if (Application.isPlaying)
         {
             CacheVisualElements();
-            SetSpread(m_lastSpreadDegrees, m_lastCameraFovDegrees, true);
+            SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
             return;
         }
 
@@ -300,7 +559,7 @@ public class CrosshairController : MonoBehaviour
         {
             CacheVisualElements();
             SetVisible(true);
-            SetSpread(m_lastSpreadDegrees, m_lastCameraFovDegrees, true);
+            SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
         }
         else
         {
@@ -323,12 +582,23 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 현재 무기 탄퍼짐 방사각과 카메라 FOV를 받아 조준선 벌어짐을 갱신합니다.
+    /// 현재 무기 탄퍼짐 방사각·분포·집중도·카메라 FOV를 받아 조준선 벌어짐을 갱신합니다.
     /// </summary>
-    /// <param name="spreadDegrees">현재 무기 탄퍼짐 방사각(도)입니다.</param>
-    /// <param name="cameraFovDegrees">현재 조준 카메라 FOV(도)입니다.</param>
+    /// <param name="spreadDegrees">현재 무기 탄퍼짐 방사각(도, 콘 반각=하드캡)입니다.</param>
+    /// <param name="distribution">콘 안에서의 탄 분포(무기 소유)입니다. 표시 배율 계산에만 씁니다.</param>
+    /// <param name="concentration">Gaussian 중심 집중도(σ=1/이 값, 무기 소유)입니다. 표시 배율 계산에만 씁니다.</param>
+    /// <param name="cameraFovDegrees">현재 조준 카메라 세로 FOV(도)입니다.</param>
     /// <param name="snap">true면 보간 없이 즉시 반영합니다.</param>
-    public void SetSpread(float spreadDegrees, float cameraFovDegrees, bool snap)
+    /// <remarks>
+    /// 표시 기준(<see cref="m_spreadDisplayBasis"/>)과 분포·집중도로 배율(factor)을 계산하고, 유효각(= spread를 tan 공간에서 factor배)을
+    /// FOV로 실제 화면 투영하므로 팔 벌어짐이 화면상 탄착 분포와 1:1이 됩니다. 분포·집중도는 읽기만 하며 실제 탄 궤적은 무기가 결정합니다.
+    /// </remarks>
+    public void SetSpread(float spreadDegrees, WeaponController.SpreadDistribution distribution, float concentration, float cameraFovDegrees, bool snap)
+    {
+        SetSpreadInternal(spreadDegrees, distribution, concentration, cameraFovDegrees, snap);
+    }
+
+    private void SetSpreadInternal(float spreadDegrees, WeaponController.SpreadDistribution distribution, float concentration, float cameraFovDegrees, bool snap)
     {
         if (!CacheVisualElements())
         {
@@ -338,15 +608,62 @@ public class CrosshairController : MonoBehaviour
         ClampSettings();
 
         m_lastSpreadDegrees = Mathf.Max(0.0f, spreadDegrees);
+        m_lastDistribution = distribution;
+        m_lastConcentration = Mathf.Max(1.0f, concentration);
+        m_lastSpreadDisplayFactor = CalculateDisplayFactor(m_lastDistribution, m_lastConcentration);
         m_lastCameraFovDegrees = Mathf.Max(1.0f, cameraFovDegrees);
 
-        float targetGap = CalculateTargetGapPixels(m_lastSpreadDegrees, m_lastCameraFovDegrees);
+        float targetGap = CalculateTargetGapPixels(m_lastSpreadDegrees, m_lastSpreadDisplayFactor, m_lastCameraFovDegrees);
         float lerpSpeed = Mathf.Max(0.0f, m_lerpSpeed);
+
         m_currentGapPixels = snap || lerpSpeed <= 0.0f
             ? targetGap
             : Mathf.Lerp(m_currentGapPixels, targetGap, Time.deltaTime * lerpSpeed);
 
+        if (Mathf.Abs(m_currentGapPixels - targetGap) <= GapSnapEpsilon)
+        {
+            m_currentGapPixels = targetGap;
+        }
+
         ApplyLayout(m_currentGapPixels);
+    }
+
+    /// <summary>
+    /// 무기의 분포·집중도와 현재 표시 기준(<see cref="m_spreadDisplayBasis"/>)으로 표시 배율(콘 반각 대비, tan 공간)을 계산합니다.
+    /// </summary>
+    /// <remarks>
+    /// ApplySpread의 편향 = 단위오프셋(크기 |·|∈[0,1]) × tan(spread)이라, 이 배율을 tan(spread)에 곱하면 선택한 기준의 반경이 됩니다.
+    /// 고정 계수의 출처:
+    /// - Gaussian: WeaponController.SampleGaussianUnitOffset이 σ = 1/concentration으로 샘플링(단위원 밖은 경계로 클램프).
+    ///   Rayleigh(σ) 기준 RMS = √2·σ = √2/concentration, 2σ(≈86% 포함) = 2/concentration.
+    ///   ※ 이 공식은 클램프를 무시한 해석적 근사입니다. concentration이 낮아 클램프가 자주 걸리면 실제 분포와 벌어집니다(기본 3에서는 클램프 ~1%로 정확).
+    ///     WeaponController.SampleGaussianUnitOffset의 σ 정의를 바꾸면 이 계수도 함께 갱신해야 합니다.
+    /// - Uniform: 반경 1 원판(pdf 2r) 기준 RMS = 1/√2 ≈ 0.707, 86% 포함 반경 = √0.86 ≈ 0.927. (클램프·concentration과 무관하게 정확)
+    /// - Core: Gaussian 최빈 반경(mode) = σ = 1/concentration(가장 타이트). Uniform은 밀집 코어가 없어 0.5로 둡니다.
+    /// - ConeEdge: 하드캡(단위오프셋 최대 = 1)이라 항상 1.
+    /// 마지막에 [0,1]로 클램프해 콘 경계를 넘지 않게 합니다.
+    /// </remarks>
+    private float CalculateDisplayFactor(WeaponController.SpreadDistribution distribution, float concentration)
+    {
+        float c = Mathf.Max(1.0f, concentration);
+
+        float factor = distribution == WeaponController.SpreadDistribution.Uniform
+            ? m_spreadDisplayBasis switch
+            {
+                SpreadDisplayBasis.Core => 0.5f,               // Uniform은 밀집 코어가 없어 임의의 타이트값
+                SpreadDisplayBasis.Typical => 0.70710678f,     // RMS = 1/√2
+                SpreadDisplayBasis.MostShots => 0.92736185f,   // ≈ √0.86 (86% 포함)
+                _ => 1.0f,                                     // ConeEdge
+            }
+            : m_spreadDisplayBasis switch                      // Gaussian
+            {
+                SpreadDisplayBasis.Core => 1.0f / c,                  // 최빈 반경(mode) = σ = 1/concentration
+                SpreadDisplayBasis.Typical => Mathf.Sqrt(2.0f) / c,   // RMS = √2·σ (σ = 1/concentration)
+                SpreadDisplayBasis.MostShots => 2.0f / c,             // 2σ ≈ 86%
+                _ => 1.0f,                                            // ConeEdge (하드캡)
+            };
+
+        return Mathf.Clamp01(factor);
     }
 
     /// <summary>
@@ -356,8 +673,8 @@ public class CrosshairController : MonoBehaviour
     /// <param name="spreadSource">현재 방사각(도)을 반환하는 라이브 소스입니다. 값을 복사하지 않고 이 포인터로 읽습니다.</param>
     /// <param name="fovSource">해당 스탠스에서 사용하는 카메라 FOV(도)를 반환하는 라이브 소스입니다.</param>
     /// <remarks>
-    /// 값 복사(스냅샷)가 아니라 소스 포인터를 연결만 합니다. 전환 때 한 번 호출하면 이후 매 프레임 업데이트 없이도
-    /// 인스펙터 게터(<see cref="DebugSpreadDegrees"/> 등)가 이 포인터로 현재값(예: 연사 중 누적되는 방사각)을 읽습니다.
+    /// 값 복사(스냅샷)가 아니라 소스 포인터를 연결만 합니다. 표시 배율(factor)은 별도 소스가 아니라 마지막으로 받은 분포/집중도와
+    /// 현재 표시 기준으로 크로스헤어가 직접 계산합니다(<see cref="DebugSpreadDisplayFactor"/>). 전투 중에는 매 프레임 SetSpread가 갱신합니다.
     /// </remarks>
     public void BindSpreadDebug(string stance, System.Func<float> spreadSource, System.Func<float> fovSource)
     {
@@ -372,7 +689,7 @@ public class CrosshairController : MonoBehaviour
     public void ResetSpread()
     {
         m_lastSpreadDegrees = 0.0f;
-        SetSpread(0.0f, m_lastCameraFovDegrees, true);
+        SetSpreadInternal(0.0f, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
     }
 
     /// <summary>
@@ -382,7 +699,52 @@ public class CrosshairController : MonoBehaviour
     public void SetSpreadAccuracyEnabled(bool enabled)
     {
         m_useSpreadAccuracy = enabled;
-        SetSpread(m_lastSpreadDegrees, m_lastCameraFovDegrees, true);
+        SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
+    }
+
+    /// <summary>
+    /// 재장전 상태를 설정합니다. 스왑 토글이 켜져 있으면 재장전 중 크로스헤어를 숨기고 중앙 탄약 아이콘을 표시합니다.
+    /// </summary>
+    /// <param name="reloading">재장전 중이면 <c>true</c>입니다.</param>
+    public void SetReloading(bool reloading)
+    {
+        if (m_isReloading == reloading)
+        {
+            return;
+        }
+
+        m_isReloading = reloading;
+
+        if (!CacheVisualElements())
+        {
+            return;
+        }
+
+        if (!reloading && m_reloadBulletElement != null)
+        {
+            m_reloadBulletElement.style.opacity = 1.0f;
+        }
+
+        ApplyLayout(m_currentGapPixels);
+    }
+
+    /// <summary>
+    /// 탄약 게이지 채움 비율(0~1)을 설정합니다. 평소에는 현재 탄약 비율, 재장전 중에는 재장전 진행도를 전달합니다.
+    /// </summary>
+    /// <param name="fill">게이지 채움 비율(0~1)입니다.</param>
+    public void SetAmmoGaugeFill(float fill)
+    {
+        fill = Mathf.Clamp01(fill);
+        if (Mathf.Approximately(m_ammoGaugeFill, fill))
+        {
+            return;
+        }
+
+        m_ammoGaugeFill = fill;
+        if (m_ammoGaugeElement != null)
+        {
+            m_ammoGaugeElement.MarkDirtyRepaint();
+        }
     }
 
     /// <summary>
@@ -438,6 +800,25 @@ public class CrosshairController : MonoBehaviour
         m_mainStrokeElement = FindOrCreateChild(m_crosshairElement, m_mainStrokeElementName);
         m_subShapeElement = FindOrCreateChild(m_crosshairElement, m_subShapeElementName);
         m_subStrokeElement = FindOrCreateChild(m_crosshairElement, m_subStrokeElementName);
+        m_ammoGaugeElement = FindOrCreateChild(m_crosshairElement, "AmmoGauge");
+        if (m_ammoGaugeElement != null)
+        {
+            // 같은 요소가 재캐싱될 수 있어 중복 구독을 막기 위해 해제 후 구독합니다.
+            m_ammoGaugeElement.generateVisualContent -= OnGenerateAmmoGauge;
+            m_ammoGaugeElement.generateVisualContent += OnGenerateAmmoGauge;
+        }
+
+        m_reloadBulletElement = FindOrCreateChild(m_crosshairElement, "ReloadBullet");
+
+        m_hitMarkerElement = FindOrCreateChild(m_crosshairElement, "HitMarker");
+        if (m_hitMarkerElement != null)
+        {
+            // 같은 요소가 재캐싱될 수 있어 중복 구독을 막기 위해 해제 후 구독합니다.
+            m_hitMarkerElement.generateVisualContent -= OnGenerateHitMarker;
+            m_hitMarkerElement.generateVisualContent += OnGenerateHitMarker;
+        }
+
+        m_killSkullElement = FindOrCreateChild(m_crosshairElement, "KillSkull");
 
         return m_rootElement != null
             && m_crosshairElement != null
@@ -513,7 +894,6 @@ public class CrosshairController : MonoBehaviour
     private void ClampSettings()
     {
         m_centerSpacePixels = Mathf.Max(0.0f, m_centerSpacePixels);
-        m_spreadScale = Mathf.Max(0.0f, m_spreadScale);
         m_maxGapPixels = Mathf.Max(m_centerSpacePixels, m_maxGapPixels);
         m_lerpSpeed = Mathf.Max(0.0f, m_lerpSpeed);
         m_mainSizePixels = Mathf.Max(0.0f, m_mainSizePixels);
@@ -530,37 +910,45 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 무기 탄퍼짐 방사각과 카메라 FOV로부터 이번 프레임 목표 벌어짐 간격(픽셀)을 계산합니다.
+    /// 탄퍼짐 방사각·표시 배율·FOV로부터 이번 프레임 목표 벌어짐 간격(픽셀)을 계산합니다.
     /// </summary>
-    /// <param name="spreadDegrees">현재 무기 탄퍼짐 방사각(도)입니다.</param>
-    /// <param name="cameraFovDegrees">현재 조준 카메라 FOV(도)입니다.</param>
-    /// <returns>Center Space에 탄퍼짐 환산값을 더한 뒤 최대 간격으로 클램프한 목표 간격(픽셀)입니다.</returns>
-    /// <remarks>탄퍼짐 표시가 꺼져 있으면 Center Space만 반환합니다.</remarks>
-    private float CalculateTargetGapPixels(float spreadDegrees, float cameraFovDegrees)
+    /// <param name="spreadDegrees">현재 무기 탄퍼짐 방사각(도, 콘 반각=하드캡)입니다.</param>
+    /// <param name="displayFactor">콘 반각 대비 표시 배율(tan 공간)입니다.</param>
+    /// <param name="cameraFovDegrees">현재 조준 카메라 세로 FOV(도)입니다.</param>
+    /// <returns>Center Space에 탄퍼짐 기여분을 더한 목표 간격(픽셀)입니다. 상한 클램프가 켜져 있으면 Max Gap Pixels로 제한합니다.</returns>
+    private float CalculateTargetGapPixels(float spreadDegrees, float displayFactor, float cameraFovDegrees)
     {
-        float spreadGap = CalculateSpreadGapPixels(spreadDegrees, cameraFovDegrees);
-        return Mathf.Clamp(m_centerSpacePixels + spreadGap, 0.0f, m_maxGapPixels);
+        float spreadGap = CalculateSpreadGapPixels(spreadDegrees, displayFactor, cameraFovDegrees);
+        float target = m_centerSpacePixels + spreadGap;
+
+        if (m_clampToMaxGap)
+        {
+            target = Mathf.Min(target, m_maxGapPixels);
+        }
+
+        return Mathf.Max(0.0f, target);
     }
 
     /// <summary>
-    /// 탄퍼짐이 벌어짐 간격에 더할 기여분(픽셀)을 계산합니다. 중심 간격과 최대 간격 클램프는 포함하지 않습니다.
+    /// 탄퍼짐이 벌어짐 간격에 더할 기여분(픽셀)을 계산합니다. 중심 간격은 포함하지 않습니다.
     /// </summary>
-    /// <param name="spreadDegrees">현재 무기 탄퍼짐 방사각(도)입니다.</param>
-    /// <param name="cameraFovDegrees">현재 조준 카메라 FOV(도)입니다.</param>
-    /// <returns>FOV 투영(켜짐) 또는 도 값(꺼짐)에 Spread Scale을 곱한 기여분입니다. 탄퍼짐 표시가 꺼져 있으면 0입니다.</returns>
-    /// <remarks><see cref="CalculateTargetGapPixels"/>와 디버그 표시가 동일한 값을 쓰도록 이 헬퍼를 공유합니다.</remarks>
-    private float CalculateSpreadGapPixels(float spreadDegrees, float cameraFovDegrees)
+    /// <param name="spreadDegrees">현재 무기 탄퍼짐 방사각(도, 콘 반각=하드캡)입니다.</param>
+    /// <param name="displayFactor">콘 반각 대비 표시 배율(tan 공간)입니다.</param>
+    /// <param name="cameraFovDegrees">현재 조준 카메라 세로 FOV(도)입니다.</param>
+    /// <returns>유효각(= spread를 tan 공간에서 배율만큼 축소한 값)을 FOV로 실제 화면 투영한 픽셀 기여분입니다.</returns>
+    /// <remarks>
+    /// A(유효각): 탄은 콘 경계가 아니라 중심에 몰리므로, 배율로 "탄이 실제로 몰리는 반경"을 구합니다.
+    /// C(물리 투영): 그 각도를 FOV로 실제 화면 투영해, 팔 벌어짐이 화면상 탄착 분포와 1:1이 되게 합니다.
+    /// <see cref="CalculateTargetGapPixels"/>와 디버그 표시가 동일한 값을 쓰도록 이 헬퍼를 공유합니다.
+    /// </remarks>
+    private float CalculateSpreadGapPixels(float spreadDegrees, float displayFactor, float cameraFovDegrees)
     {
         if (!m_useSpreadAccuracy)
         {
             return 0.0f;
         }
 
-        float spreadGap = m_projectSpreadByCameraFov
-            ? CalculateProjectedSpreadPixels(spreadDegrees, cameraFovDegrees)
-            : spreadDegrees;
-
-        return spreadGap * m_spreadScale;
+        return CalculateProjectedSpreadPixels(spreadDegrees, cameraFovDegrees) * Mathf.Max(0.0f, displayFactor);
     }
 
     /// <summary>
@@ -635,6 +1023,359 @@ public class CrosshairController : MonoBehaviour
                 HideSubShapeElements();
                 break;
         }
+
+        // 재장전 스왑: 재장전 중이고 토글이 켜져 있으면 크로스헤어를 숨기고 중앙에 재장전 탄약 아이콘을 표시합니다.
+        bool reloadSwap = m_isReloading && m_swapCrosshairOnReload;
+        if (reloadSwap)
+        {
+            HideElement(m_centerElement);
+            HideElement(m_mainStrokeElement);
+            HideSubDirectionElements();
+            HideSubShapeElements();
+        }
+
+        ApplyReloadBullet(center, reloadSwap);
+        ApplyAmmoGauge(center);
+        LayoutHitMarker(center);
+        LayoutKillSkull(center);
+    }
+
+    /// <summary>
+    /// 재장전 중 중앙에 표시할 탄약 아이콘을 배치합니다. 활성 상태가 아니거나 이미지/크기가 없으면 숨깁니다.
+    /// </summary>
+    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
+    /// <param name="active">재장전 스왑이 활성 상태인지 여부입니다.</param>
+    private void ApplyReloadBullet(float center, bool active)
+    {
+        if (m_reloadBulletElement == null)
+        {
+            return;
+        }
+
+        if (!active || m_reloadBulletImage == null || m_reloadBulletSizePixels <= 0.0f)
+        {
+            HideElement(m_reloadBulletElement);
+            return;
+        }
+
+        float size = m_reloadBulletSizePixels;
+        ApplyVectorImage(m_reloadBulletElement, m_reloadBulletImage, center - size * 0.5f, center - size * 0.5f, size);
+    }
+
+    /// <summary>
+    /// 탄약 아크 게이지를 크로스헤어 중심에서 우하단 대각으로 오프셋해 배치합니다.
+    /// 항상 표시가 꺼져 있으면 재장전 중에만 보이고, 표시 자체가 꺼져 있으면 숨깁니다(에디트 프리뷰에서는 전체 아크를 표시).
+    /// </summary>
+    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
+    private void ApplyAmmoGauge(float center)
+    {
+        if (m_ammoGaugeElement == null)
+        {
+            return;
+        }
+
+        bool visible = m_showAmmoGauge
+                    && m_ammoGaugeSizePixels > 0.0f
+                    && (m_ammoGaugeAlwaysVisible || m_isReloading || !Application.isPlaying);
+        if (!visible)
+        {
+            HideElement(m_ammoGaugeElement);
+            return;
+        }
+
+        float size = m_ammoGaugeSizePixels;
+        float offset = m_ammoGaugeDiagonalOffset;
+        // 게이지 중심을 크로스헤어 중심에서 (offset, offset)만큼 우하단으로 이동(각 축 동일 = 대각).
+        float position = center + offset - size * 0.5f;
+        m_ammoGaugeElement.pickingMode = PickingMode.Ignore;
+        m_ammoGaugeElement.style.display = DisplayStyle.Flex;
+        m_ammoGaugeElement.style.position = Position.Absolute;
+        m_ammoGaugeElement.style.left = position;
+        m_ammoGaugeElement.style.top = position;
+        m_ammoGaugeElement.style.width = size;
+        m_ammoGaugeElement.style.height = size;
+        m_ammoGaugeElement.style.backgroundColor = Color.clear;
+        m_ammoGaugeElement.style.backgroundImage = new StyleBackground(StyleKeyword.None);
+        m_ammoGaugeElement.MarkDirtyRepaint();
+    }
+
+    /// <summary>
+    /// 탄약 게이지 아크를 Painter2D로 그립니다. 전체 구간 트랙을 옅게 깐 뒤 채움 비율(평소 탄약 비율, 재장전 중 진행도)만큼 아크를 채웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 각도는 UI Toolkit 좌표 기준(0도 = 3시 방향, 시계 방향)입니다. 벡터 에셋 대신 프로시저럴로 그려
+    /// 어떤 크기에서도 선명하고, 진행도에 따른 부분 아크를 임의 각도로 표현할 수 있습니다.
+    /// 에디트 프리뷰(비플레이)에서는 크기·두께·각도 튜닝을 위해 전체 아크를 표시합니다.
+    /// </remarks>
+    private void OnGenerateAmmoGauge(MeshGenerationContext context)
+    {
+        VisualElement element = context.visualElement;
+        float size = Mathf.Min(element.resolvedStyle.width, element.resolvedStyle.height);
+        float thickness = Mathf.Clamp(m_ammoGaugeThicknessPixels, 0.0f, size * 0.5f);
+        float radius = (size - thickness) * 0.5f;
+        if (thickness <= 0.0f || radius <= 0.0f)
+        {
+            return;
+        }
+
+        Vector2 arcCenter = new Vector2(size * 0.5f, size * 0.5f);
+        float startAngle = m_ammoGaugeStartAngleDegrees;
+        float sweep = Mathf.Clamp(m_ammoGaugeSweepDegrees, 0.0f, 360.0f);
+        Painter2D painter = context.painter2D;
+        painter.lineCap = LineCap.Butt;
+        painter.lineWidth = thickness;
+
+        if (m_showAmmoGaugeBackground && m_ammoGaugeBackgroundAlpha > 0.0f)
+        {
+            Color backgroundColor = m_ammoGaugeBackgroundColor;
+            backgroundColor.a *= m_ammoGaugeBackgroundAlpha;
+            DrawGaugeArc(painter, arcCenter, radius, startAngle, sweep, m_ammoGaugeFillDirection, backgroundColor);
+        }
+
+        float fill = Application.isPlaying ? m_ammoGaugeFill : 1.0f;
+        Color fillColor = GetAmmoGaugeFillColor(fill);
+        DrawGaugeArc(painter, arcCenter, radius, startAngle, sweep * fill, m_ammoGaugeFillDirection, fillColor);
+    }
+
+    /// <summary>
+    /// 재장전 중이면 재장전 색, 현재 장탄 비율이 낮으면 경고 색, 아니면 기본 게이지 색을 반환합니다.
+    /// </summary>
+    private Color GetAmmoGaugeFillColor(float fill)
+    {
+        if (Application.isPlaying && m_isReloading)
+        {
+            return m_reloadAmmoGaugeColor;
+        }
+
+        if (Application.isPlaying && fill < LowAmmoGaugeThreshold)
+        {
+            return m_lowAmmoGaugeColor;
+        }
+
+        return m_ammoGaugeColor;
+    }
+
+    /// <summary>
+    /// 시작 각도에서 지정한 방향과 구간만큼 스트로크 아크를 그립니다. 구간이 0이면 그리지 않습니다.
+    /// </summary>
+    private static void DrawGaugeArc(Painter2D painter, Vector2 center, float radius, float startAngle, float sweep, AmmoGaugeFillDirection fillDirection, Color color)
+    {
+        if (sweep <= 0.0f)
+        {
+            return;
+        }
+
+        ArcDirection arcDirection = fillDirection == AmmoGaugeFillDirection.CounterClockwise
+            ? ArcDirection.CounterClockwise
+            : ArcDirection.Clockwise;
+
+        painter.strokeColor = color;
+        painter.BeginPath();
+        painter.Arc(center, radius, startAngle, startAngle + sweep, arcDirection);
+        painter.Stroke();
+    }
+
+    /// <summary>
+    /// 히트마커 요소의 위치·크기를 잡습니다. 가시성은 페이드 타이머가 제어하므로, 타이머가 없으면 숨깁니다.
+    /// </summary>
+    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
+    private void LayoutHitMarker(float center)
+    {
+        if (m_hitMarkerElement == null)
+        {
+            return;
+        }
+
+        if (!m_showHitMarker || m_hitMarkerLengthPixels <= 0.0f)
+        {
+            HideElement(m_hitMarkerElement);
+            m_hitMarkerTimer = 0.0f;
+            return;
+        }
+
+        // 중심에서 삼각형 바깥 끝(gap+length)에 밑변 절반 길이까지 감싸도록 여유를 둔 정사각형 요소.
+        float half = m_hitMarkerCenterGapPixels + m_hitMarkerLengthPixels + m_hitMarkerBaseLengthPixels;
+        float size = half * 2.0f;
+        float position = center - half;
+
+        m_hitMarkerElement.pickingMode = PickingMode.Ignore;
+        m_hitMarkerElement.style.position = Position.Absolute;
+        m_hitMarkerElement.style.left = position;
+        m_hitMarkerElement.style.top = position;
+        m_hitMarkerElement.style.width = size;
+        m_hitMarkerElement.style.height = size;
+        m_hitMarkerElement.style.backgroundColor = Color.clear;
+
+        if (IsHitFeedbackPreview())
+        {
+            // 에디트 프리뷰: 페이드 타이머와 무관하게 선택한 색으로 상시 표시합니다.
+            m_hitMarkerActiveColor = m_previewHeadshotColor ? m_hitMarkerColorHead : m_hitMarkerColorBody;
+            m_hitMarkerElement.style.display = DisplayStyle.Flex;
+            m_hitMarkerElement.style.opacity = 1.0f;
+        }
+        else if (m_hitMarkerTimer <= 0.0f)
+        {
+            HideElement(m_hitMarkerElement);
+        }
+
+        m_hitMarkerElement.MarkDirtyRepaint();
+    }
+
+    /// <summary>
+    /// 킬 해골 요소의 위치·크기·텍스처를 잡습니다. 가시성은 페이드 타이머가 제어하므로, 타이머가 없으면 숨깁니다.
+    /// </summary>
+    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
+    private void LayoutKillSkull(float center)
+    {
+        if (m_killSkullElement == null)
+        {
+            return;
+        }
+
+        if (!m_showKillSkull || m_killSkullTexture == null || m_killSkullSizePixels <= 0.0f)
+        {
+            HideElement(m_killSkullElement);
+            m_killTimer = 0.0f;
+            return;
+        }
+
+        float size = m_killSkullSizePixels;
+        float position = center - size * 0.5f;
+
+        m_killSkullElement.pickingMode = PickingMode.Ignore;
+        m_killSkullElement.style.position = Position.Absolute;
+        m_killSkullElement.style.left = position;
+        m_killSkullElement.style.top = position;
+        m_killSkullElement.style.width = size;
+        m_killSkullElement.style.height = size;
+        m_killSkullElement.style.backgroundColor = Color.clear;
+        m_killSkullElement.style.backgroundImage = new StyleBackground(m_killSkullTexture);
+        m_killSkullElement.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
+        m_killSkullElement.style.unityBackgroundImageTintColor = m_killSkullTint;
+
+        if (IsHitFeedbackPreview())
+        {
+            // 에디트 프리뷰: 페이드 타이머와 무관하게 상시 표시합니다.
+            m_killSkullElement.style.display = DisplayStyle.Flex;
+            m_killSkullElement.style.opacity = 1.0f;
+        }
+        else if (m_killTimer <= 0.0f)
+        {
+            HideElement(m_killSkullElement);
+        }
+    }
+
+    /// <summary>
+    /// 에디트 모드 프리뷰에서 히트마커/킬 해골을 상시 표시하는 디버그 상태인지 여부입니다.
+    /// </summary>
+    private bool IsHitFeedbackPreview()
+    {
+        return !Application.isPlaying && m_editModePreview && m_previewHitFeedback;
+    }
+
+    /// <summary>
+    /// 히트마커 4개 삼각형을 Painter2D로 그립니다. 각 삼각형은 바깥 쪽이 뾰족하고 중심 쪽 밑변이 넓은 X자 형태입니다.
+    /// </summary>
+    /// <remarks>
+    /// 색상은 표시 시점(<see cref="ShowHitMarker"/>)에 몸샷/헤드샷으로 결정된 <see cref="m_hitMarkerActiveColor"/>를 씁니다.
+    /// 정적 이미지 대신 프로시저럴로 그려 길이·중앙 공간·두께·색을 파라미터로 자유롭게 조절합니다.
+    /// </remarks>
+    private void OnGenerateHitMarker(MeshGenerationContext context)
+    {
+        VisualElement element = context.visualElement;
+        float width = element.resolvedStyle.width;
+        float height = element.resolvedStyle.height;
+        float gap = Mathf.Max(0.0f, m_hitMarkerCenterGapPixels);
+        float length = Mathf.Max(0.0f, m_hitMarkerLengthPixels);
+        float halfBase = Mathf.Max(0.0f, m_hitMarkerBaseLengthPixels) * 0.5f;
+        if (length <= 0.0f || width <= 0.0f || height <= 0.0f)
+        {
+            return;
+        }
+
+        Vector2 markerCenter = new Vector2(width * 0.5f, height * 0.5f);
+        Painter2D painter = context.painter2D;
+        painter.fillColor = m_hitMarkerActiveColor;
+
+        // 네 대각선(↖ ↗ ↙ ↘) 방향으로 삼각형을 배치합니다.
+        Vector2[] diagonals =
+        {
+            new Vector2(-1.0f, -1.0f),
+            new Vector2(1.0f, -1.0f),
+            new Vector2(-1.0f, 1.0f),
+            new Vector2(1.0f, 1.0f),
+        };
+
+        foreach (Vector2 raw in diagonals)
+        {
+            Vector2 dir = raw.normalized;
+            Vector2 perp = new Vector2(-dir.y, dir.x);
+            Vector2 apex = markerCenter + dir * (gap + length);      // 바깥 쪽 뾰족한 끝
+            Vector2 inner = markerCenter + dir * gap;                // 중심 쪽 밑변 중심
+            Vector2 baseA = inner + perp * halfBase;
+            Vector2 baseB = inner - perp * halfBase;
+
+            painter.BeginPath();
+            painter.MoveTo(apex);
+            painter.LineTo(baseA);
+            painter.LineTo(baseB);
+            painter.ClosePath();
+            painter.Fill();
+        }
+    }
+
+    /// <summary>
+    /// 적중 시 히트마커를 표시합니다. 몸샷/헤드샷에 따라 색을 정하고 페이드아웃 타이머를 리셋합니다.
+    /// </summary>
+    /// <param name="headshot">헤드샷이면 <c>true</c>(헤드샷 색), 아니면 몸샷 색입니다.</param>
+    public void ShowHitMarker(bool headshot)
+    {
+        if (!m_showHitMarker || !CacheVisualElements() || m_hitMarkerElement == null)
+        {
+            return;
+        }
+
+        m_hitMarkerActiveColor = headshot ? m_hitMarkerColorHead : m_hitMarkerColorBody;
+        m_hitMarkerTimer = Mathf.Max(0.0001f, m_hitMarkerFadeDuration);
+        m_hitMarkerElement.style.display = DisplayStyle.Flex;
+        m_hitMarkerElement.style.opacity = 1.0f;
+        LayoutHitMarker(0.0f);
+        m_hitMarkerElement.MarkDirtyRepaint();
+    }
+
+    /// <summary>
+    /// 처치 시 중앙에 해골을 표시하고, 유지 후 페이드아웃되도록 타이머를 리셋합니다.
+    /// </summary>
+    public void ShowKill()
+    {
+        if (!m_showKillSkull || m_killSkullTexture == null || !CacheVisualElements() || m_killSkullElement == null)
+        {
+            return;
+        }
+
+        m_killTimer = Mathf.Max(0.0001f, m_killSkullHoldDuration) + Mathf.Max(0.0f, m_killSkullFadeDuration);
+        m_killSkullElement.style.display = DisplayStyle.Flex;
+        m_killSkullElement.style.opacity = 1.0f;
+        LayoutKillSkull(0.0f);
+    }
+
+    /// <summary>
+    /// VisualElement에 벡터 이미지 배경을 절대 배치로 적용합니다(크기에 맞춰 축소, 배경색 투명).
+    /// </summary>
+    private static void ApplyVectorImage(VisualElement element, VectorImage image, float left, float top, float size)
+    {
+        size = Mathf.Max(0.0f, size);
+
+        element.pickingMode = PickingMode.Ignore;
+        element.style.display = DisplayStyle.Flex;
+        element.style.position = Position.Absolute;
+        element.style.left = left;
+        element.style.top = top;
+        element.style.width = size;
+        element.style.height = size;
+        element.style.backgroundColor = Color.clear;
+        element.style.backgroundImage = new StyleBackground(image);
+        element.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
     }
 
     /// <summary>

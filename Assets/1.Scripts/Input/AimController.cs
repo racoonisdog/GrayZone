@@ -21,6 +21,9 @@ public class AimController : MonoBehaviour
     private const int WeaponLayerIndex = 1;
     private const float AimRotationLerpSpeed = 50.0f;
 
+    // 이 시간(초) 이상 사격이 끊기면 좌우 킥 번갈이 패턴을 첫 발부터 다시 시작합니다.
+    private const float KickPatternResetGap = 0.25f;
+
     private static readonly int AnimIDShoot = Animator.StringToHash("IsShoot");
     private static readonly int AnimIDReload = Animator.StringToHash("DoReload");
 
@@ -35,6 +38,16 @@ public class AimController : MonoBehaviour
 
         /// <summary>ADS(조준) 백뷰입니다.</summary>
         Ads,
+    }
+
+    /// <summary>시각 킥(롤·FOV 펀치)의 회복 방식입니다. 실제 탄착에는 영향이 없습니다.</summary>
+    private enum VisualKickRecoveryMode
+    {
+        /// <summary>반동과 같은 회복 속도를 공유합니다. 연사 중에는 0으로 안 꺼지고 밴드로 누적됩니다.</summary>
+        MatchRecoil,
+
+        /// <summary>발사 간격(ShootDelay) 기준 N발 안에 거의 회복합니다. 다음 발 전에 대부분 리셋되어 발당 펀치가 또렷합니다.</summary>
+        PerShotReset,
     }
 
     [Foldout("Aim Options")]
@@ -87,6 +100,21 @@ public class AimController : MonoBehaviour
 
     [Tooltip("ADS↔힙파이어 전환 시 FOV 보간 속도입니다. 매우 크게 두면 즉시 전환에 가까워집니다.")]
     [SerializeField] private float m_zoomLerpSpeed = 10.0f;
+
+    [Foldout("Recoil Visual Kick Options")]
+    [Tooltip("시각 킥 회복 방식입니다. MatchRecoil=반동과 같은 속도(연사 중 밴드로 누적), PerShotReset=발사 간격 기준 N발 안에 회복(발당 리셋). Play Mode에서 바꿔가며 체감을 비교할 수 있습니다.")]
+    [SerializeField] private VisualKickRecoveryMode m_visualKickRecoveryMode = VisualKickRecoveryMode.MatchRecoil;
+
+    [Tooltip("PerShotReset일 때, 시각 킥이 거의(~95%) 회복되는 데 걸리는 발수(무기 ShootDelay 기준)입니다. 1이면 다음 발 전에 거의 리셋됩니다.")]
+    [ShowIf(nameof(m_visualKickRecoveryMode), VisualKickRecoveryMode.PerShotReset)]
+    [SerializeField] private float m_visualKickRecoverShots = 1.0f;
+
+    [EndIf]
+    [Tooltip("누적될 수 있는 카메라 롤(Dutch) 상한(도)입니다. 유지 없이 발당 순간 펀치 후 회복합니다.")]
+    [SerializeField] private float m_visualKickMaxRoll = 3.0f;
+
+    [Tooltip("누적될 수 있는 FOV 펀치 상한(도)입니다.")]
+    [SerializeField] private float m_visualKickMaxFovPunch = 5.0f;
 
 
     [Foldout("IK Options")]
@@ -147,6 +175,21 @@ public class AimController : MonoBehaviour
     private bool m_isAds;
     private float m_hipfireTimer;
     private CombatStance m_lastCombatStance = CombatStance.Free;
+
+    /// <summary>시각 킥(FOV 펀치)을 얹기 전의 기준 전투 FOV입니다. ADS/힙파이어 목표로 보간됩니다.</summary>
+    private float m_baseFov = 60.0f;
+
+    /// <summary>현재 카메라 롤(Dutch) 시각 킥 오프셋(도)입니다. 0으로 회복합니다. 에임/탄 무영향.</summary>
+    private float m_visualKickRoll;
+
+    /// <summary>현재 FOV 펀치 시각 킥 오프셋(도)입니다. 0으로 회복합니다. 에임/탄 무영향.</summary>
+    private float m_visualKickFovPunch;
+
+    /// <summary>좌우 킥 번갈이 패턴의 발 인덱스입니다. 버스트 간격이 벌어지면 리셋됩니다.</summary>
+    private int m_kickShotIndex;
+
+    /// <summary>마지막 킥 시각입니다. 버스트 사이 간격이 벌어지면 좌우 패턴을 첫 발부터 다시 시작합니다.</summary>
+    private float m_lastKickTime = float.NegativeInfinity;
 
     /// <summary>조준 카메라 참조입니다.</summary>
     public CinemachineCamera AimCamera => m_aimCamera;
@@ -264,6 +307,41 @@ public class AimController : MonoBehaviour
         CacheOptionalCrosshairController();
         m_hasRequiredReferences = true;
         ApplyCombatStanceState(false, false, 0.0f);
+
+        if (m_weaponController != null)
+        {
+            m_weaponController.OnHitFeedback += OnWeaponHitFeedback;
+        }
+    }
+
+    /// <summary>
+    /// Unity 생명주기 종료 함수입니다. 구독한 무기 피드백 이벤트를 해제합니다.
+    /// </summary>
+    private void OnDestroy()
+    {
+        if (m_weaponController != null)
+        {
+            m_weaponController.OnHitFeedback -= OnWeaponHitFeedback;
+        }
+    }
+
+    /// <summary>
+    /// 히트스캔 피격 피드백을 조준선 UI로 전달합니다(히트마커 색상 구분 + 킬 시 해골 표시).
+    /// </summary>
+    /// <param name="feedback">헤드샷·킬 여부를 담은 피격 피드백입니다.</param>
+    private void OnWeaponHitFeedback(CombatDamage.HitFeedback feedback)
+    {
+        if (m_crosshairController == null)
+        {
+            return;
+        }
+
+        m_crosshairController.ShowHitMarker(feedback.Headshot);
+
+        if (feedback.Killed)
+        {
+            m_crosshairController.ShowKill();
+        }
     }
 
     /// <summary>
@@ -278,6 +356,32 @@ public class AimController : MonoBehaviour
 
         UpdateAimAndWeapon();
         UpdateCrosshairDebugOnStanceChange();
+        UpdateReloadCrosshair();
+    }
+
+    /// <summary>
+    /// 무기 재장전 상태와 탄약 게이지 채움 비율을 조준선 UI에 전달합니다(재장전 중 크로스헤어↔탄약 아이콘 스왑 + 아크 게이지).
+    /// </summary>
+    private void UpdateReloadCrosshair()
+    {
+        if (m_crosshairController == null)
+        {
+            return;
+        }
+
+        bool reloading = m_weaponController != null && m_weaponController.IsReloading;
+        m_crosshairController.SetReloading(reloading);
+
+        if (m_weaponController != null)
+        {
+            // 게이지 채움: 재장전 중에는 재장전 진행도, 평소에는 현재 탄약 비율을 표시합니다.
+            float fill = reloading
+                ? m_weaponController.ReloadProgress
+                : m_weaponController.MaxBullet > 0
+                    ? (float)m_weaponController.CurrentBullet / m_weaponController.MaxBullet
+                    : 0.0f;
+            m_crosshairController.SetAmmoGaugeFill(fill);
+        }
     }
 
     /// <summary>
@@ -414,6 +518,13 @@ public class AimController : MonoBehaviour
             return;
         }
 
+        // ADS가 아닌 힙파이어/잔류 상태는 전력질주에 양보합니다.
+        if (m_input.Sprint)
+        {
+            ExitCombatStance();
+            return;
+        }
+
         // 비조준 사격(힙파이어): Shoot 입력 시 백뷰 진입/유지하고 복귀 타이머를 리셋합니다.
         if (m_input.Shoot)
         {
@@ -505,6 +616,8 @@ public class AimController : MonoBehaviour
 
         if (!m_inCombatStance)
         {
+            // 새 교전 진입이므로 좌우 킥 번갈이 패턴을 첫 발부터 시작합니다.
+            m_kickShotIndex = 0;
             ApplyCombatStanceState(true, false, 1.0f);
             // 자유 카메라에서 백뷰로 막 진입한 프레임은 목표 FOV로 즉시 스냅(줌 점프 방지).
             ApplyCombatZoom(true);
@@ -540,9 +653,13 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
-    /// 전투 자세 카메라(백뷰)의 FOV를 상태에 맞춰 적용합니다. ADS는 확대(작은 FOV), 힙파이어는 기본 FOV입니다.
+    /// 전투 자세 카메라(백뷰)의 FOV와 시각 킥(롤·FOV 펀치)을 상태에 맞춰 적용합니다. ADS는 확대(작은 FOV), 힙파이어는 기본 FOV입니다.
     /// </summary>
-    /// <param name="snap"><c>true</c>면 목표 FOV로 즉시 설정, <c>false</c>면 보간합니다.</param>
+    /// <param name="snap"><c>true</c>면 목표 FOV로 즉시 설정하고 시각 킥을 초기화합니다. <c>false</c>면 보간하고 시각 킥을 회복시킵니다.</param>
+    /// <remarks>
+    /// 기준 FOV(<see cref="m_baseFov"/>) 위에 FOV 펀치를 얹고, 롤(Dutch)도 조준 카메라 렌즈에만 적용합니다.
+    /// 롤·FOV 펀치는 시각 전용 juice라 조준값(<see cref="ThirdPersonController.LogicalAimRotation"/>)이나 탄착에는 영향이 없습니다.
+    /// </remarks>
     private void ApplyCombatZoom(bool snap)
     {
         if (m_aimCamera == null)
@@ -551,9 +668,44 @@ public class AimController : MonoBehaviour
         }
 
         float targetFov = m_isAds ? m_adsFov : m_hipfireFov;
-        m_aimCamera.Lens.FieldOfView = snap
-            ? targetFov
-            : Mathf.Lerp(m_aimCamera.Lens.FieldOfView, targetFov, Time.deltaTime * m_zoomLerpSpeed);
+        m_baseFov = snap ? targetFov : Mathf.Lerp(m_baseFov, targetFov, Time.deltaTime * m_zoomLerpSpeed);
+
+        if (snap)
+        {
+            // 전투 자세 진입 등 스냅 시엔 시각 킥도 초기화(재진입 시 롤/펀치 잔상 방지).
+            m_visualKickRoll = 0.0f;
+            m_visualKickFovPunch = 0.0f;
+        }
+        else
+        {
+            // 유지(hold) 없이 발당 순간 펀치 후 회복시켜 지속 틸트/멀미를 피합니다. 회복 속도는 모드에 따라 결정합니다.
+            float recover = Mathf.Clamp01(Time.deltaTime * GetVisualKickRecoverySpeed());
+            m_visualKickRoll = Mathf.Lerp(m_visualKickRoll, 0.0f, recover);
+            m_visualKickFovPunch = Mathf.Lerp(m_visualKickFovPunch, 0.0f, recover);
+        }
+
+        // 기준 FOV 위에 펀치를 얹고, 롤은 렌즈에만 반영(에임/탄 무영향).
+        m_aimCamera.Lens.FieldOfView = m_baseFov + m_visualKickFovPunch;
+        m_aimCamera.Lens.Dutch = m_visualKickRoll;
+    }
+
+    /// <summary>
+    /// 현재 모드에 따른 시각 킥 회복 속도(초당)를 반환합니다.
+    /// </summary>
+    /// <returns>
+    /// MatchRecoil이면 반동 회복 속도(<see cref="ThirdPersonController.RecoilRecoverySpeed"/>)를 공유해 연사 중 밴드로 누적합니다.
+    /// PerShotReset이면 발사 간격(ShootDelay)의 <see cref="m_visualKickRecoverShots"/>배 안에 ~95% 회복되도록 역산해(e^(-speed·T)=0.05 → speed=3/T) 발당 리셋에 가깝게 만듭니다.
+    /// </returns>
+    private float GetVisualKickRecoverySpeed()
+    {
+        if (m_visualKickRecoveryMode == VisualKickRecoveryMode.PerShotReset && m_weaponController != null)
+        {
+            float shots = Mathf.Max(0.01f, m_visualKickRecoverShots);
+            float interval = Mathf.Max(0.0001f, m_weaponController.ShootDelay * shots);
+            return 3.0f / interval;
+        }
+
+        return m_controller != null ? m_controller.RecoilRecoverySpeed : 8.0f;
     }
 
     /// <summary>
@@ -568,8 +720,13 @@ public class AimController : MonoBehaviour
         }
 
         float spreadDegrees = m_weaponController != null ? m_weaponController.GetCurrentSpread(m_isAds) : 0.0f;
-        float fovDegrees = m_aimCamera != null ? m_aimCamera.Lens.FieldOfView : 60.0f;
-        m_crosshairController.SetSpread(spreadDegrees, fovDegrees, snap);
+        WeaponController.SpreadDistribution distribution = m_weaponController != null
+            ? m_weaponController.Distribution
+            : WeaponController.SpreadDistribution.Gaussian;
+        float concentration = m_weaponController != null ? m_weaponController.SpreadConcentration : 3.0f;
+        // 시각 FOV 펀치가 아니라 기준 FOV를 써서, 크로스헤어가 발사 juice에 따라 숨쉬지 않게 합니다.
+        float fovDegrees = m_baseFov;
+        m_crosshairController.SetSpread(spreadDegrees, distribution, concentration, fovDegrees, snap);
     }
 
     /// <summary>
@@ -1050,7 +1207,7 @@ public class AimController : MonoBehaviour
                 if (fired)
                 {
                     SpawnImpactMarker(firedShot);
-                    ApplyCameraKick();
+                    ApplyRecoilAndVisualKick();
                 }
             }
 
@@ -1061,23 +1218,65 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
-    /// 발사가 성사된 프레임에 무기별 반동 수치를 읽어 카메라에 킥(시각 오프셋)을 가합니다.
+    /// 발사가 성사된 프레임에 무기별 수치를 읽어 (1) 에임에 영향을 주는 반동과 (2) 에임 무영향 시각 킥을 함께 가합니다.
     /// </summary>
     /// <remarks>
-    /// 좌우(요) 킥은 매 발 <c>-RecoilYawKick ~ +RecoilYawKick</c> 사이로 무작위 적용합니다.
-    /// 실제 적용·복귀는 <see cref="ThirdPersonController.AddCameraKick"/>가 담당하며 플레이어 조준값은 바뀌지 않습니다.
+    /// 반동(에임): 좌우(요)는 매 발 <c>-RecoilYawKick ~ +RecoilYawKick</c> 무작위. <see cref="ThirdPersonController.AddRecoil"/>가
+    /// 논리 조준에 얹어 탄착까지 밀며, 사격을 멈추면 자동 회복합니다.
+    /// 시각 킥(juice): 카메라 롤(Dutch)과 FOV 펀치를 누적하며, 조준/탄착에는 영향이 없습니다(<see cref="ApplyCombatZoom"/>에서 회복·적용).
     /// </remarks>
-    private void ApplyCameraKick()
+    private void ApplyRecoilAndVisualKick()
     {
         if (m_controller == null || m_weaponController == null)
         {
             return;
         }
 
-        float yawKick = m_weaponController.RecoilYawKick;
-        float randomYaw = yawKick > 0.0f ? Random.Range(-yawKick, yawKick) : 0.0f;
+        // 버스트 사이 간격이 벌어졌으면 좌우 번갈이 패턴을 첫 발부터 다시 시작합니다.
+        if (Time.time - m_lastKickTime > KickPatternResetGap)
+        {
+            m_kickShotIndex = 0;
+        }
+        m_lastKickTime = Time.time;
 
-        m_controller.AddCameraKick(m_weaponController.RecoilPitchKick, randomYaw);
+        // 좌우 패턴에 따라 이번 발의 Yaw 반동·롤 부호(및 크기)를 각각 독립적으로 결정합니다(같은 발 인덱스 공유).
+        float yawSigned = ResolveKickValue(m_weaponController.YawKickPattern, m_weaponController.RecoilYawKick, m_kickShotIndex);
+        float rollSigned = ResolveKickValue(m_weaponController.RollKickPattern, m_weaponController.RecoilRoll, m_kickShotIndex);
+        m_kickShotIndex++;
+
+        // (1) 반동 — 실제 조준을 밀어 탄착에도 영향(세로 pitch + 좌우 yaw).
+        m_controller.AddRecoil(m_weaponController.RecoilPitchKick, yawSigned);
+
+        // (2) 시각 킥 — 롤·FOV 펀치 누적(조준/탄 무영향, 상한 클램프).
+        m_visualKickRoll = Mathf.Clamp(m_visualKickRoll + rollSigned, -m_visualKickMaxRoll, m_visualKickMaxRoll);
+        m_visualKickFovPunch = Mathf.Clamp(m_visualKickFovPunch + m_weaponController.RecoilFovPunch, 0.0f, m_visualKickMaxFovPunch);
+    }
+
+    /// <summary>
+    /// 좌우 킥 패턴에 따라 이번 발의 부호 있는 킥 값(도)을 계산합니다. 왼쪽을 음수로 둡니다.
+    /// </summary>
+    /// <param name="pattern">적용할 좌우 킥 패턴입니다.</param>
+    /// <param name="magnitude">킥 크기(도)입니다. 0 이하이면 0을 반환합니다.</param>
+    /// <param name="shotIndex">현재 발 인덱스입니다. 번갈이 패턴의 짝/홀 판정에 씁니다.</param>
+    /// <returns>Random이면 ±범위 무작위, Alternate이면 발 인덱스로 좌우 교대한 부호 있는 크기입니다.</returns>
+    /// <remarks>Yaw 반동과 시각 롤이 같은 발 인덱스를 공유하되 각자 자기 패턴으로 독립 계산됩니다.</remarks>
+    private static float ResolveKickValue(WeaponController.KickSidePattern pattern, float magnitude, int shotIndex)
+    {
+        if (magnitude <= 0.0f)
+        {
+            return 0.0f;
+        }
+
+        if (pattern == WeaponController.KickSidePattern.Random)
+        {
+            return Random.Range(-magnitude, magnitude);
+        }
+
+        // 번갈이: 발 인덱스 짝/홀로 좌우 교대. 왼쪽 = 음수.
+        bool even = (shotIndex % 2) == 0;
+        bool leftFirst = pattern == WeaponController.KickSidePattern.AlternateLeftFirst;
+        float sign = even == leftFirst ? -1.0f : 1.0f;
+        return magnitude * sign;
     }
 
     /// <summary>

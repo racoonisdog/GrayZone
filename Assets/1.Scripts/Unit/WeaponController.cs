@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using VInspector;
@@ -36,7 +36,11 @@ public class WeaponController : MonoBehaviour
     /// <summary>
     /// 탄퍼짐 콘 안에서 발사 방향을 흩뜨리는 분포 방식입니다.
     /// </summary>
-    private enum SpreadDistribution
+    /// <remarks>
+    /// 탄퍼짐 콘 "안에서의 분포 모양"만 결정합니다. 콘의 각도 크기는 min/max spread가, 조준선에 어느 반경까지
+    /// 표시할지는 크로스헤어(CrosshairController)의 표시 기준이 담당합니다. 크로스헤어가 표시 배율을 계산할 때 이 값을 읽습니다.
+    /// </remarks>
+    public enum SpreadDistribution
     {
         /// <summary>원판 전체에 고르게(면적 균일) 흩뜨립니다.</summary>
         Uniform,
@@ -45,6 +49,21 @@ public class WeaponController : MonoBehaviour
         Gaussian,
 
         // Shotgun(콘 3분할) 등은 추후 추가 예정입니다.
+    }
+
+    /// <summary>
+    /// 좌우 반동(Yaw)과 시각 롤(Dutch)의 좌우 방향 패턴입니다. 세로 반동(Pitch)에는 영향이 없습니다.
+    /// </summary>
+    public enum KickSidePattern
+    {
+        /// <summary>매 발 무작위 방향·크기(±범위 내).</summary>
+        Random,
+
+        /// <summary>좌·우 번갈아, 첫 발이 왼쪽입니다. 설정 크기를 그대로 좌우로 씁니다.</summary>
+        AlternateLeftFirst,
+
+        /// <summary>우·좌 번갈아, 첫 발이 오른쪽입니다. 설정 크기를 그대로 좌우로 씁니다.</summary>
+        AlternateRightFirst,
     }
 
     [Foldout("Bullet Options")]
@@ -145,6 +164,8 @@ public class WeaponController : MonoBehaviour
     [Tooltip("힙파이어(비조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
     [SerializeField] private float m_hipfireMaxSpread = 10.0f;
 
+    [ReadOnly][SerializeField] private float m_hipfireCurrentSpread;
+
     [Tooltip("힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
     [FormerlySerializedAs("m_accurateShotCount")]
     [FormerlySerializedAs("m_minSpreadShotCount")]
@@ -173,6 +194,8 @@ public class WeaponController : MonoBehaviour
     [Tooltip("ADS(조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
     [SerializeField] private float m_adsMaxSpread = 6.0f;
 
+    [ReadOnly][SerializeField] private float m_adsCurrentSpread;
+
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
     [SerializeField] private int m_adsMinSpreadShotCount = 3;
 
@@ -193,16 +216,37 @@ public class WeaponController : MonoBehaviour
     [SerializeField] private float m_spreadConcentration = 3.0f;
 
     [Foldout("Recoil Options")]
-    [Tooltip("발사 1회당 카메라에 가할 세로(피치) 킥 각도(도)입니다. 양수면 시점이 위로 솟습니다(머즐 클라임). 카메라 측에서 0으로 복귀하는 시각 전용 오프셋이며 실제 조준값은 바뀌지 않습니다.")]
+    [Header("Aim Recoil (탄착에 영향)")]
+    [Tooltip("발사 1회당 세로(피치) 반동 각도(도)입니다. 양수면 조준이 위로 솟습니다(머즐 클라임). 실제 조준을 밀어 탄착에도 영향을 주며(LogicalAim), 사격을 멈추면 자동 회복됩니다.")]
     [SerializeField] private float m_recoilPitchKick = 0.6f;
 
-    [Tooltip("발사 1회당 카메라에 가할 좌우(요) 킥 각도(도)의 최대 크기입니다. 매 발 -이 값 ~ +이 값 사이로 무작위 적용됩니다. 0이면 좌우 흔들림이 없습니다.")]
+    [Tooltip("발사 1회당 좌우(요) 반동 각도(도)의 크기입니다. 실제 조준을 밀어 탄착에도 영향을 줍니다. 0이면 좌우 반동이 없습니다.")]
     [SerializeField] private float m_recoilYawKick = 0.2f;
+
+    [Tooltip("좌우 반동(Yaw)의 방향 패턴입니다. Random=매 발 ±범위 무작위, AlternateLeftFirst=좌·우 번갈아(첫 발 왼쪽), AlternateRightFirst=우·좌 번갈아(첫 발 오른쪽). Alternate는 위 크기를 그대로 좌우로 씁니다.")]
+    [SerializeField] private KickSidePattern m_yawKickPattern = KickSidePattern.Random;
+
+    [Header("Visual Kick (에임 무영향, juice)")]
+    [Tooltip("발사 1회당 카메라 롤(Dutch) 크기(도)입니다. 화면만 살짝 기울입니다. 조준/탄착에는 영향이 없습니다.")]
+    [SerializeField] private float m_recoilRoll = 0.5f;
+
+    [Tooltip("카메라 롤(Dutch)의 방향 패턴입니다. Random=매 발 ±범위 무작위, AlternateLeftFirst=좌·우 번갈아(첫 발 왼쪽), AlternateRightFirst=우·좌 번갈아(첫 발 오른쪽). Yaw 반동과 독립적으로 설정됩니다.")]
+    [SerializeField] private KickSidePattern m_rollKickPattern = KickSidePattern.Random;
+
+    [Tooltip("발사 1회당 카메라 FOV 펀치(도)입니다. 순간적으로 시야가 벌어졌다 회복되는 시각 반동 연출입니다. 조준/탄착에는 영향이 없습니다.")]
+    [SerializeField] private float m_recoilFovPunch = 1.0f;
+
+#if UNITY_EDITOR
+    [Foldout("Debug")]
+    [Tooltip("Editor-only SpreadDebug console log. Calls are stripped from Player builds.")]
+    [SerializeField] private bool m_debugLogSpread = false;
+#endif
 
     public const float HitscanAimTolerance = 0.05f;
 
     private bool m_canShoot = true;
     private bool m_isReloading;
+    private float m_reloadStartTime;
     private bool m_hasRequiredReferences;
     private Faction m_ownerFaction = Faction.Player;
     private float m_hipfireCurrentSpreadAdd;
@@ -221,8 +265,19 @@ public class WeaponController : MonoBehaviour
     /// <summary>현재 사격 가능한 상태인지 여부입니다.</summary>
     public bool CanShoot => m_canShoot;
 
+    /// <summary>
+    /// 히트스캔 피격이 확정되어 피해가 적용됐을 때 발생합니다. 인자는 헤드샷·킬 여부를 담은 피드백입니다.
+    /// </summary>
+    /// <remarks>조준선 히트마커/킬 표시가 구독합니다.</remarks>
+    public event System.Action<CombatDamage.HitFeedback> OnHitFeedback;
+
     /// <summary>현재 재장전 중인지 여부입니다.</summary>
     public bool IsReloading => m_isReloading;
+
+    /// <summary>현재 재장전 진행도(0~1)입니다. 재장전 중이 아니면 0입니다.</summary>
+    public float ReloadProgress => !m_isReloading ? 0.0f
+        : m_reloadTime <= 0.0f ? 1.0f
+        : Mathf.Clamp01((Time.time - m_reloadStartTime) / m_reloadTime);
 
     /// <summary>
     /// 지금 재장전을 시작할 수 있는 상태인지 여부입니다.
@@ -263,11 +318,23 @@ public class WeaponController : MonoBehaviour
     /// <summary>히트스캔 레이캐스트가 충돌 검사할 레이어 마스크입니다.</summary>
     public LayerMask HitscanLayerMask => m_hitscanLayerMask;
 
-    /// <summary>발사 1회당 카메라에 가할 세로(피치) 킥 각도(도)입니다.</summary>
+    /// <summary>발사 1회당 세로(피치) 반동 각도(도)입니다. 실제 조준을 밀어 탄착에도 영향을 줍니다.</summary>
     public float RecoilPitchKick => m_recoilPitchKick;
 
-    /// <summary>발사 1회당 카메라에 가할 좌우(요) 킥 각도(도)의 최대 크기입니다.</summary>
+    /// <summary>발사 1회당 좌우(요) 반동 각도(도)의 최대 크기입니다. 실제 조준을 밀어 탄착에도 영향을 줍니다.</summary>
     public float RecoilYawKick => Mathf.Max(0.0f, m_recoilYawKick);
+
+    /// <summary>발사 1회당 카메라 롤(Dutch) 최대 크기(도)입니다. 시각 전용 juice이며 조준/탄착에는 영향이 없습니다.</summary>
+    public float RecoilRoll => Mathf.Max(0.0f, m_recoilRoll);
+
+    /// <summary>발사 1회당 카메라 FOV 펀치(도)입니다. 시각 전용 juice이며 조준/탄착에는 영향이 없습니다.</summary>
+    public float RecoilFovPunch => Mathf.Max(0.0f, m_recoilFovPunch);
+
+    /// <summary>좌우 반동(Yaw)의 좌우 방향 패턴입니다.</summary>
+    public KickSidePattern YawKickPattern => m_yawKickPattern;
+
+    /// <summary>시각 롤(Dutch)의 좌우 방향 패턴입니다. Yaw 반동과 독립입니다.</summary>
+    public KickSidePattern RollKickPattern => m_rollKickPattern;
 
     /// <summary>
     /// 현재 모드의 표시용 탄퍼짐 방사각(도)을 반환합니다.
@@ -280,6 +347,18 @@ public class WeaponController : MonoBehaviour
             ? GetCurrentSpread(m_adsMinSpread, m_adsMaxSpread, m_adsCurrentSpreadAdd)
             : GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
     }
+
+    public void GetSpreadRange(bool isAds, out float minSpread, out float maxSpread)
+    {
+        minSpread = Mathf.Max(0.0f, isAds ? m_adsMinSpread : m_hipfireMinSpread);
+        maxSpread = Mathf.Max(minSpread, isAds ? m_adsMaxSpread : m_hipfireMaxSpread);
+    }
+
+    /// <summary>탄퍼짐 콘 안에서의 분포 방식입니다. 크로스헤어가 표시 배율을 계산할 때 읽습니다(읽기 전용).</summary>
+    public SpreadDistribution Distribution => m_spreadDistribution;
+
+    /// <summary>Gaussian 분포의 중심 집중도(σ=1/이 값)입니다. 크로스헤어가 표시 배율을 계산할 때 읽습니다(읽기 전용, 최소 1).</summary>
+    public float SpreadConcentration => Mathf.Max(1.0f, m_spreadConcentration);
 
     /// <summary>
     /// 컴포넌트 참조를 캐싱하고 필수 참조를 검증합니다.
@@ -308,6 +387,7 @@ public class WeaponController : MonoBehaviour
         }
 
         ClampBulletValues();
+        UpdateCurrentSpreadInspectorFields();
         UpdateBulletUI();
     }
 
@@ -327,6 +407,7 @@ public class WeaponController : MonoBehaviour
     {
         RecoverSpread(ref m_hipfireCurrentSpreadAdd, m_hipfireLastShotTime, m_hipfireSpreadRecoveryDelay, m_hipfireSpreadRecoveryPerSecond);
         RecoverSpread(ref m_adsCurrentSpreadAdd, m_adsLastShotTime, m_adsSpreadRecoveryDelay, m_adsSpreadRecoveryPerSecond);
+        UpdateCurrentSpreadInspectorFields();
     }
 
     /// <summary>
@@ -407,6 +488,12 @@ public class WeaponController : MonoBehaviour
         m_hipfireSpreadRecoveryDelay = Mathf.Max(0.0f, m_hipfireSpreadRecoveryDelay);
         m_adsSpreadRecoveryDelay = Mathf.Max(0.0f, m_adsSpreadRecoveryDelay);
         m_spreadConcentration = Mathf.Max(1.0f, m_spreadConcentration);
+    }
+
+    private void OnValidate()
+    {
+        ClampBulletValues();
+        UpdateCurrentSpreadInspectorFields();
     }
 
     /// <summary>
@@ -623,6 +710,12 @@ public class WeaponController : MonoBehaviour
         return Mathf.Clamp(minSpread + currentSpreadAdd, minSpread, maxSpread);
     }
 
+    private void UpdateCurrentSpreadInspectorFields()
+    {
+        m_hipfireCurrentSpread = GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
+        m_adsCurrentSpread = GetCurrentSpread(m_adsMinSpread, m_adsMaxSpread, m_adsCurrentSpreadAdd);
+    }
+
     /// <summary>
     /// 발사 방향을 총구 기준 콘(cone) 안에서 무작위로 흩뜨립니다.
     /// </summary>
@@ -630,9 +723,12 @@ public class WeaponController : MonoBehaviour
     /// <param name="spreadDegrees">콘의 최대 편향 각도(도)입니다. 0 이하면 그대로 반환합니다.</param>
     /// <returns>콘 안에서 무작위로 편향된 정규화 방향입니다. 빗나감 거리는 사거리에 비례합니다.</returns>
     /// <remarks>
+    /// 편향 = 단위오프셋 × tan(<paramref name="spreadDegrees"/>). 즉 콘의 "각도 크기"(min/max spread)와 콘 "안에서의 분포 모양"
+    /// (<see cref="m_spreadDistribution"/>·<see cref="m_spreadConcentration"/>)은 서로 직교하며 곱으로 합성됩니다. 서로 상쇄되지 않고,
+    /// 하나가 크기·이상치 사거리(하드 캡)를, 다른 하나가 중심 몰림 정도(코어 조임)를 담당합니다.
     /// 콘 안에서의 편향 분포는 <see cref="m_spreadDistribution"/>가 결정합니다. 기본값 Gaussian은 콘 반각(<paramref name="spreadDegrees"/>)을
     /// <see cref="m_spreadConcentration"/> σ로 보고 중심 가중 정규분포로 샘플링한 뒤 콘 경계로 클램프하므로, 탄이 대부분 중심 근처에 몰립니다.
-    /// 어느 분포든 콘 반각은 최대 편향(하드 캡)으로 유지됩니다.
+    /// 어느 분포든 콘 반각은 최대 편향(하드 캡)으로 유지됩니다. (spreadDegrees=0이면 편향 0이라 분포/집중도는 작용할 대상이 없습니다.)
     /// </remarks>
     private Vector3 ApplySpread(Vector3 direction, float spreadDegrees)
     {
@@ -694,6 +790,7 @@ public class WeaponController : MonoBehaviour
         }
 
         m_isReloading = true;
+        m_reloadStartTime = Time.time;
         PlayReloadSound();
         CancelInvoke(nameof(CompleteReload));
         Invoke(nameof(CompleteReload), m_reloadTime);
@@ -763,24 +860,36 @@ public class WeaponController : MonoBehaviour
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
     private void LogSpreadDebug(bool isAds, float spread, Vector3 aimDirection, Vector3 firedDirection)
     {
+#if UNITY_EDITOR
+        if (!m_debugLogSpread)
+        {
+            return;
+        }
+
         float deviationDeg = Vector3.Angle(aimDirection, firedDirection);
         Debug.Log($"[SpreadDebug] isAds={isAds} spread={spread:F3}° deviation={deviationDeg:F3}° " +
                   $"(ads[{m_adsMinSpread:F2}~{m_adsMaxSpread:F2}] add={m_adsCurrentSpreadAdd:F2} / " +
                   $"hip[{m_hipfireMinSpread:F2}~{m_hipfireMaxSpread:F2}] add={m_hipfireCurrentSpreadAdd:F2})", this);
+#endif
     }
 
     /// <summary>
     /// 히트스캔 충돌 대상이 적대 진영이면 공용 피해 경로로 피해를 전달합니다.
     /// </summary>
     /// <param name="shotInfo">사격으로 발생한 히트스캔 충돌 정보입니다.</param>
-    /// <remarks>대상 구체 타입을 모른 채 <see cref="CombatDamage"/>가 진영 판정 후 적용합니다.</remarks>
+    /// <remarks>대상 구체 타입을 모른 채 <see cref="CombatDamage"/>가 진영·부위 판정 후 적용하고, 피격 확정 시 <see cref="OnHitFeedback"/>를 발생시킵니다.</remarks>
     private void ApplyHitscanDamage(HitscanShotInfo shotInfo)
     {
         if (m_hitscanDamage <= 0 || shotInfo.Hit.collider == null)
         {
             return;
         }
-        CombatDamage.TryApplyDamage(shotInfo.Hit.collider, m_ownerFaction, m_hitscanDamage);
+
+        CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(shotInfo.Hit.collider, m_ownerFaction, m_hitscanDamage);
+        if (feedback.Applied)
+        {
+            OnHitFeedback?.Invoke(feedback);
+        }
     }
 
     /// <summary>

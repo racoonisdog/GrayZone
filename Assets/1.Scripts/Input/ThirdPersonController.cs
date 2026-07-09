@@ -120,19 +120,46 @@ public class ThirdPersonController : MonoBehaviour
 
 
 
-    /// <summary>사격 반동에 따른 카메라 킥(시각 오프셋) 설정값입니다.</summary>
-    [Foldout("Camera Kick Options")]
-    [Tooltip("킥 오프셋이 0(원래 시점)으로 복귀하는 속도입니다. 클수록 빠르게 제자리로 돌아옵니다.")]
-    [SerializeField] private float m_cameraKickRecoverySpeed = 8.0f;
+    /// <summary>사격 반동(에임을 실제로 밀어 탄착에 영향을 주는 오프셋) 설정값입니다.</summary>
+    [Foldout("Recoil Options")]
+    [Tooltip("반동 오프셋이 0(원래 조준)으로 복귀하는 속도입니다. 클수록 빠르게 제자리로 돌아옵니다.")]
+    [FormerlySerializedAs("m_cameraKickRecoverySpeed")]
+    [SerializeField] private float m_recoilRecoverySpeed = 8.0f;
 
-    [Tooltip("마지막 킥(발사) 이후 이 시간(초)이 지나야 킥 오프셋 회복을 시작합니다. 사격 중에는 오프셋을 유지하고, 멈춘 뒤에야 복귀시키기 위한 지연입니다. 무기 풀오토 사격 간격(ShootDelay)보다 커야 연사 중 오프셋이 유지됩니다.")]
-    [SerializeField] private float m_cameraKickRecoveryDelay = 0.15f;
+    [Tooltip("마지막 발사 이후 이 시간(초)이 지나야 반동 회복을 시작합니다. 사격 중에는 오프셋을 유지하고, 멈춘 뒤에야 복귀시키기 위한 지연입니다. 무기 풀오토 사격 간격(ShootDelay)보다 커야 연사 중 반동이 유지·누적됩니다.")]
+    [FormerlySerializedAs("m_cameraKickRecoveryDelay")]
+    [SerializeField] private float m_recoilRecoveryDelay = 0.15f;
 
-    [Tooltip("누적될 수 있는 세로(피치) 킥 오프셋의 상한 각도(도)입니다. 풀오토 연사 시 시점이 과하게 솟구치지 않도록 제한합니다.")]
-    [SerializeField] private float m_cameraKickMaxPitch = 4.0f;
+    [Tooltip("켜면 발사 순간의 반동 상승을 즉시 계단식이 아니라 보간(앞쪽으로 쏠린 이징 — 빠르게 확 올랐다 정착)으로 넣습니다. 끄면(기본) 기존처럼 즉시 반영합니다.")]
+    [SerializeField] private bool m_recoilOnsetInterp = false;
 
-    [Tooltip("누적될 수 있는 좌우(요) 킥 오프셋의 상한 각도(도)입니다.")]
-    [SerializeField] private float m_cameraKickMaxYaw = 3.0f;
+    [Tooltip("반동 온셋 보간 속도입니다. 클수록 더 빠르게(앞쪽으로 더 쏠려) 목표에 도달합니다. Recoil Onset Interp가 켜져 있을 때만 적용됩니다.")]
+    [SerializeField] private float m_recoilOnsetSpeed = 35.0f;
+
+    [Tooltip("켜면(기본) 반동 반대 방향으로 넣은 조준 입력이 조준을 움직이기 전에 반동을 먼저 상쇄합니다. 자동회복이 플레이어의 되잡기를 이중으로 걷어가 시점이 과하게 쳐지는(오버 컴펜세이션) 현상을 막습니다. 반동과 같은 방향 입력(의도적 재조준·트래킹)은 그대로 통과합니다.")]
+    [SerializeField] private bool m_recoilCompensationAbsorb = true;
+
+    [Tooltip("켜면 세로 반동 회복분을 고정 상한(Recoil Max Pitch)으로 제한합니다. 끄면(기본) 조준 상하 한계까지 쌓여 천장까지 상승 후 회복하며, 그 한계로만 제한됩니다. 대개 꺼두는 걸 권장.")]
+    [SerializeField] private bool m_usePitchOffsetCap = false;
+
+    [Tooltip("세로(피치) 반동 회복분 오프셋의 고정 상한 각도(도)입니다. Use Pitch Offset Cap이 켜져 있을 때만 적용됩니다.")]
+    [FormerlySerializedAs("m_cameraKickMaxPitch")]
+    [SerializeField] private float m_recoilMaxPitch = 4.0f;
+
+    [Tooltip("켜면(기본) 좌우 반동 회복분을 고정 상한(Recoil Max Yaw)으로 제한합니다. yaw는 조준 클램프가 없어(360 자유) 끄면 무제한으로 쌓일 수 있으니 보통 켜둡니다.")]
+    [SerializeField] private bool m_useYawOffsetCap = true;
+
+    [Tooltip("좌우(요) 반동 회복분 오프셋의 고정 상한 각도(도)입니다. Use Yaw Offset Cap이 켜져 있을 때만 적용됩니다(회복분에만).")]
+    [FormerlySerializedAs("m_cameraKickMaxYaw")]
+    [SerializeField] private float m_recoilMaxYaw = 3.0f;
+
+    [Tooltip("세로(pitch) 반동 회복 비율입니다. 1=자동(멈추면 완전 회복), 0=하드(조준에 영구 반영·안 돌아옴 → 상하 조준 한계까지 상승), 중간=부분(일부만 회복). 영구분은 상하 조준 한계로 제한됩니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_pitchRecoveryRatio = 1.0f;
+
+    [Tooltip("좌우(yaw) 반동 회복 비율입니다. 1=자동(완전 회복), 0=하드(영구 반영·안 돌아옴 → 플레이어가 되잡음, Strinova식), 중간=부분. 하드는 Alternate 패턴과 궁합이 좋습니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_yawRecoveryRatio = 1.0f;
 
 
 
@@ -154,14 +181,20 @@ public class ThirdPersonController : MonoBehaviour
     /// <summary>카메라 회전 보간에 사용하는 현재 pitch 값입니다.</summary>
     private float m_cinemachineTargetPitch;
 
-    /// <summary>사격 반동으로 카메라 타겟 회전에 가산할 세로(피치) 킥 오프셋입니다. 매 프레임 0으로 복귀합니다.</summary>
-    private float m_cameraKickPitchOffset;
+    /// <summary>실제 소비되는 세로(피치) 반동 오프셋입니다. 온셋 보간 ON이면 <see cref="m_recoilPitchTarget"/>를 향해 이징하고, OFF면 목표와 동일합니다.</summary>
+    private float m_recoilPitchOffset;
 
-    /// <summary>사격 반동으로 카메라 타겟 회전에 가산할 좌우(요) 킥 오프셋입니다. 매 프레임 0으로 복귀합니다.</summary>
-    private float m_cameraKickYawOffset;
+    /// <summary>실제 소비되는 좌우(요) 반동 오프셋입니다. 온셋 보간 ON이면 <see cref="m_recoilYawTarget"/>를 향해 이징하고, OFF면 목표와 동일합니다.</summary>
+    private float m_recoilYawOffset;
 
-    /// <summary>마지막으로 카메라 킥이 가해진 시각입니다. 회복 시작 지연 판정에 사용합니다.</summary>
-    private float m_lastCameraKickTime = float.NegativeInfinity;
+    /// <summary>세로(피치) 반동 목표값입니다. AddRecoil이 즉시 누적하고 지연 후 0으로 회복하며, 소비 오프셋이 이 값을 추종합니다.</summary>
+    private float m_recoilPitchTarget;
+
+    /// <summary>좌우(요) 반동 목표값입니다. AddRecoil이 즉시 누적하고 지연 후 0으로 회복하며, 소비 오프셋이 이 값을 추종합니다.</summary>
+    private float m_recoilYawTarget;
+
+    /// <summary>마지막으로 반동이 가해진 시각입니다. 회복 시작 지연 판정에 사용합니다.</summary>
+    private float m_lastRecoilTime = float.NegativeInfinity;
 
     /// <summary>현재 프레임 이동에 사용할 수평 속도입니다.</summary>
     private float m_speed;
@@ -414,46 +447,89 @@ public class ThirdPersonController : MonoBehaviour
     public void SetLockCameraPosition(bool value) => m_lockCameraPosition = value;
 
     /// <summary>
-    /// 사격 반동 등으로 카메라에 순간 킥(시각 오프셋)을 누적합니다.
+    /// 사격 반동을 누적합니다. 논리 조준(pitch/yaw)에 함께 얹혀 실제 조준이 밀리고 탄착에도 영향을 줍니다.
     /// </summary>
-    /// <param name="pitchDegrees">세로(피치) 킥 각도(도)입니다. 양수면 시점이 위로 솟습니다.</param>
-    /// <param name="yawDegrees">좌우(요) 킥 각도(도)입니다.</param>
+    /// <param name="pitchDegrees">세로(피치) 반동 각도(도)입니다. 양수면 조준이 위로 솟습니다.</param>
+    /// <param name="yawDegrees">좌우(요) 반동 각도(도)입니다.</param>
     /// <remarks>
-    /// 플레이어의 실제 조준값(<see cref="m_cinemachineTargetYaw"/>/<see cref="m_cinemachineTargetPitch"/>)은 바꾸지 않고,
-    /// 카메라 타겟 회전에만 더해지는 시각 오프셋입니다. <see cref="CameraRotation"/>에서 매 프레임 0으로 복귀하므로 조준은 원래 위치로 되돌아옵니다.
+    /// 축별 회복 비율 r(<see cref="m_pitchRecoveryRatio"/>/<see cref="m_yawRecoveryRatio"/>)로 반동을 두 몫으로 나눕니다.
+    /// - 회복분(= 반동 × r): 별도 오프셋에 쌓았다가 <see cref="CameraRotation"/>에서 지연 후 0으로 회복(자동). 플레이어 입력을 안 먹도록 오프셋으로 처리.
+    /// - 영구분(= 반동 × (1−r)): 실제 조준값(<see cref="m_cinemachineTargetPitch"/>/<see cref="m_cinemachineTargetYaw"/>)에 박아 안 돌아옴 → 플레이어가 되잡음(누적/walking).
+    /// r=1이면 전부 회복분(자동), r=0이면 전부 영구분(하드). pitch 영구분은 <see cref="CameraRotation"/>의 상하 한계로 클램프되고, 회복분은 <see cref="RecoilAdjustedPitch"/>로 제한됩니다.
+    /// 오프셋이 <see cref="LogicalAimRotation"/>(탄 판정)·렌더 카메라 양쪽에 반영됩니다. 시각 전용 juice(롤·FOV)는 <see cref="AimController"/>가 별도로 처리합니다.
     /// </remarks>
-    public void AddCameraKick(float pitchDegrees, float yawDegrees)
+    public void AddRecoil(float pitchDegrees, float yawDegrees)
     {
-        m_cameraKickPitchOffset = Mathf.Clamp(
-            m_cameraKickPitchOffset + pitchDegrees,
-            -m_cameraKickMaxPitch,
-            m_cameraKickMaxPitch);
+        float pitchR = Mathf.Clamp01(m_pitchRecoveryRatio);
+        float yawR = Mathf.Clamp01(m_yawRecoveryRatio);
 
-        m_cameraKickYawOffset = Mathf.Clamp(
-            m_cameraKickYawOffset + yawDegrees,
-            -m_cameraKickMaxYaw,
-            m_cameraKickMaxYaw);
+        // 회복분(= 반동 × r) → 오프셋(멈추면 0으로 회복).
+        // pitch 상한: Use Pitch Offset Cap이 켜지면 고정 캡, 꺼지면(기본) "조준 헤드룸"으로 클램프한다.
+        //   헤드룸 = 현재 조준에서 상하 한계까지 남은 거리. 이렇게 하면 소비 pitch가 look 한계를 넘지 않는 선까지만
+        //   오프셋이 쌓여 (a) 천장까지 자연스럽게 상승하고, (b) 화면 너머로 과누적돼 멈춘 뒤 회복이 지연되는 현상(dead-lag)을 방지한다.
+        // 목표(target)에 즉시 누적한다. 실제 소비 오프셋은 CameraRotation에서 이 목표를 (즉시 or 보간으로) 추종한다.
+        float pitchAdd = pitchDegrees * pitchR;
+        if (m_usePitchOffsetCap)
+        {
+            m_recoilPitchTarget = Mathf.Clamp(m_recoilPitchTarget + pitchAdd, -m_recoilMaxPitch, m_recoilMaxPitch);
+        }
+        else
+        {
+            float offsetMin = m_cinemachineTargetPitch - m_topClamp;      // 아래쪽 여유(음수)
+            float offsetMax = m_cinemachineTargetPitch - m_bottomClamp;   // 위쪽 여유(반동은 주로 이쪽)
+            m_recoilPitchTarget = Mathf.Clamp(m_recoilPitchTarget + pitchAdd, offsetMin, offsetMax);
+        }
 
-        m_lastCameraKickTime = Time.time;
+        // yaw는 조준 클램프가 없어(360 자유) 캡을 켜두는 게 기본. 끄면 무제한 누적.
+        float yawAdd = yawDegrees * yawR;
+        m_recoilYawTarget = m_useYawOffsetCap
+            ? Mathf.Clamp(m_recoilYawTarget + yawAdd, -m_recoilMaxYaw, m_recoilMaxYaw)
+            : m_recoilYawTarget + yawAdd;
+
+        // 영구분(= 반동 × (1−r), 회복 안 하는 몫) → 실제 조준값에 박음(안 돌아옴). pitch는 위로(빼기 규약), yaw는 더함.
+        // pitch 영구분은 CameraRotation의 상하 한계로 클램프되고, yaw는 무제한(좌우로 걸어감).
+        m_cinemachineTargetPitch -= pitchDegrees * (1.0f - pitchR);
+        m_cinemachineTargetYaw += yawDegrees * (1.0f - yawR);
+
+        m_lastRecoilTime = Time.time;
     }
 
     /// <summary>
-    /// 논리 조준 회전입니다. 카메라 킥(시각 흔들림)이 빠진, 플레이어 시점 입력(+추후 총기 반동) 기준의 회전입니다.
+    /// 반동을 적용한 시점 pitch입니다. 단, 기본 마우스 조준과 동일한 상하 한계(<see cref="m_bottomClamp"/>~<see cref="m_topClamp"/>)를 넘지 않도록 클램프합니다.
     /// </summary>
     /// <remarks>
-    /// 사격 판정(AimPoint 계산)은 이 회전을 기준으로 해야 하며, 카메라 킥이 반영된 렌더 카메라 방향을 쓰면 안 됩니다.
-    /// 화면 출력(<see cref="CameraRotation"/>)은 이 논리 회전 위에 킥 오프셋을 얹어(<c>Euler(pitch - kickPitch, yaw + kickYaw, 0)</c>) 흔들림만 표현합니다.
-    /// 총기 반동을 추가할 때는 이 논리 회전(시점 yaw/pitch)에 반영하고, 카메라 킥은 렌더에만 반영합니다.
+    /// 반동 pitch는 위(작은 값)로 밀지만, 기본 조준으로 올려다볼 수 있는 최대치를 넘어 하늘/바닥으로 튀지 않게 같은 범위로 제한합니다(그대로 두면 −30°를 넘겨 시점이 뒤집혀 기괴해짐).
+    /// 좌우(yaw) 반동은 항상 회복되므로 이런 제한이 필요 없어 클램프하지 않습니다. 클램프는 소비되는 시점 값에만 걸고 누적 오프셋 자체는 회복 로직에 맡깁니다.
+    /// </remarks>
+    private float RecoilAdjustedPitch => Mathf.Clamp(m_cinemachineTargetPitch - m_recoilPitchOffset, m_bottomClamp, m_topClamp);
+
+    /// <summary>
+    /// 논리적 "시선(뷰) 방향" 회전입니다. 이름의 Aim은 전투 소유가 아니라 "플레이어가 어디를 보는가"라는 시점 의도를 뜻합니다.
+    /// 시각 전용 juice(카메라 롤·FOV 펀치)는 빠지고, 플레이어 시점 입력에 사격 반동 오프셋을 더한 회전입니다.
+    /// </summary>
+    /// <remarks>
+    /// 책임 소재: 이 값은 <b>ThirdPersonController가 소유한 뷰 회전 상태</b>(<see cref="m_cinemachineTargetPitch"/>/<see cref="m_cinemachineTargetYaw"/>,
+    /// 상하 클램프, 반동 오프셋, <see cref="m_cameraAngleOverride"/>)만으로 계산되는 순수 파생값이라 여기 둡니다(계산 재료가 여기 있음).
+    /// 같은 재료를 <see cref="CameraRotation"/>(렌더)도 씁니다. <see cref="AimController"/>는 이 방향을 <b>소비</b>하는 쪽입니다
+    /// — "어디를 보는가"(여기) → "그 방향으로 쏘면 어디 맞나"(AimController의 조준점·히트스캔). 소유를 AimController로 옮기면 뷰 상태를 역참조해야 해 의존이 꼬입니다.
+    ///
+    /// 동작: 사격 판정(AimPoint 계산)은 이 회전을 기준으로 하며, 반동(<see cref="AddRecoil"/>)은 여기 반영되어 탄착을 실제로 밉니다.
+    /// 시각 전용 juice(롤·FOV)는 <see cref="AimController"/>가 조준 카메라 렌즈에만 얹으므로 이 회전에는 들어오지 않습니다.
+    /// 피치는 렌더 규약(값이 커질수록 아래)에 맞춰 오프셋을 빼서 "위로 솟는" 반동이 되며, <see cref="RecoilAdjustedPitch"/>로 상하 한계를 넘지 않습니다.
     /// </remarks>
     public Quaternion LogicalAimRotation => Quaternion.Euler(
-        m_cinemachineTargetPitch + m_cameraAngleOverride,
-        m_cinemachineTargetYaw,
+        RecoilAdjustedPitch + m_cameraAngleOverride,
+        m_cinemachineTargetYaw + m_recoilYawOffset,
         0.0f);
 
     /// <summary>
-    /// 논리 조준 전방 방향입니다. 카메라 킥이 빠진, 사격 판정에 사용할 정규화 방향입니다.
+    /// 논리적 시선(뷰) 전방 방향입니다. 시각 킥이 빠진, 사격 판정에 쓰는 정규화 방향으로, <see cref="AimController"/>가 조준점·발사 계산에 소비합니다.
     /// </summary>
+    /// <remarks>소유·책임 근거는 <see cref="LogicalAimRotation"/> 참고(뷰 상태의 순수 파생값이라 ThirdPersonController가 소유, AimController는 소비자).</remarks>
     public Vector3 LogicalAimForward => LogicalAimRotation * Vector3.forward;
+
+    /// <summary>반동 오프셋이 0으로 복귀하는 속도입니다. 시각 킥(AimController)이 회복 속도를 이 값에 맞춰 이질감을 줄일 때 읽습니다.</summary>
+    public float RecoilRecoverySpeed => Mathf.Max(0.0f, m_recoilRecoverySpeed);
 
     /// <summary>
     /// 착지 효과음 클립을 설정합니다.
@@ -769,6 +845,35 @@ public class ThirdPersonController : MonoBehaviour
     }
 
     /// <summary>
+    /// 반동 반대 방향 조준 입력을 반동 목표에서 먼저 상쇄하고, 남은 입력만 반환합니다(컴펜세이션 흡수).
+    /// </summary>
+    /// <param name="lookDelta">이번 프레임 조준 입력 변화량입니다.</param>
+    /// <param name="recoilTarget">해당 축의 반동 목표값입니다. 상쇄한 만큼 크기가 줄어듭니다(ref).</param>
+    /// <param name="sameSignOpposes">입력과 목표의 부호가 같을 때 "반동 반대"인지 여부입니다. pitch(view=target−offset)=true, yaw(view=target+offset)=false.</param>
+    /// <returns>반동을 상쇄하고 남은, 실제로 조준을 움직일 입력량입니다.</returns>
+    /// <remarks>플레이어가 반동을 되잡는 입력을 조준 이동이 아니라 반동 해소에 먼저 쓰게 해, 자동회복 시 시점이 과하게 쳐지는 오버 컴펜세이션을 막습니다. 반동과 같은 방향(의도적 재조준·트래킹)은 그대로 통과시킵니다.</remarks>
+    private static float AbsorbRecoil(float lookDelta, ref float recoilTarget, bool sameSignOpposes)
+    {
+        if (lookDelta == 0.0f || recoilTarget == 0.0f)
+        {
+            return lookDelta;
+        }
+
+        bool opposes = sameSignOpposes
+            ? Mathf.Sign(lookDelta) == Mathf.Sign(recoilTarget)
+            : Mathf.Sign(lookDelta) != Mathf.Sign(recoilTarget);
+
+        if (!opposes)
+        {
+            return lookDelta;
+        }
+
+        float absorbed = Mathf.Min(Mathf.Abs(lookDelta), Mathf.Abs(recoilTarget));
+        recoilTarget -= absorbed * Mathf.Sign(recoilTarget);
+        return lookDelta - absorbed * Mathf.Sign(lookDelta);
+    }
+
+    /// <summary>
     /// 입력값을 바탕으로 카메라 타겟의 yaw/pitch 회전을 갱신합니다.
     /// </summary>
     private void CameraRotation()
@@ -777,28 +882,56 @@ public class ThirdPersonController : MonoBehaviour
         {
             float deltaTimeMultiplier = IsCurrentDeviceMouse ? 1.0f : Time.deltaTime;
 
-            m_cinemachineTargetYaw += m_input.look.x * deltaTimeMultiplier;
-            m_cinemachineTargetPitch += m_input.look.y * deltaTimeMultiplier;
+            float yawDelta = m_input.look.x * deltaTimeMultiplier;
+            float pitchDelta = m_input.look.y * deltaTimeMultiplier;
+
+            if (m_recoilCompensationAbsorb)
+            {
+                // 반동 반대 방향 조준 입력은 조준을 움직이기 전에 반동 목표부터 상쇄한다(되잡기 흡수 → 오버 컴펜세이션 방지).
+                // pitch: view = target − offset → 반동과 "같은 부호" 입력이 반동 반대(아래로). yaw: view = target + offset → "반대 부호"가 반동 반대.
+                pitchDelta = AbsorbRecoil(pitchDelta, ref m_recoilPitchTarget, sameSignOpposes: true);
+                yawDelta = AbsorbRecoil(yawDelta, ref m_recoilYawTarget, sameSignOpposes: false);
+            }
+
+            m_cinemachineTargetYaw += yawDelta;
+            m_cinemachineTargetPitch += pitchDelta;
         }
 
         m_cinemachineTargetYaw = ClampAngle(m_cinemachineTargetYaw, float.MinValue, float.MaxValue);
         m_cinemachineTargetPitch = ClampAngle(m_cinemachineTargetPitch, m_bottomClamp, m_topClamp);
 
-        // 사격 킥 오프셋 처리: 사격 중(마지막 킥 이후 지연 이내)에는 벌어진 오프셋을 유지하고,
-        // 사격을 멈춰 지연이 지난 뒤에야 원래 시점(0)으로 부드럽게 복귀시킵니다. 실제 조준값은 건드리지 않습니다.
-        if (Time.time - m_lastCameraKickTime > m_cameraKickRecoveryDelay)
+        // 사격 반동 오프셋 처리: 사격 중(마지막 발사 이후 지연 이내)에는 벌어진 오프셋을 유지·누적하고,
+        // 사격을 멈춰 지연이 지난 뒤에야 원래 조준(0)으로 부드럽게 복귀(자동 회복)시킵니다.
+        // 플레이어 입력값(m_cinemachineTarget*) 자체는 건드리지 않으므로 조준 입력이 회복에 먹히지 않습니다.
+        // 회복: 반동 목표를 지연 후 0으로 되돌립니다(자동 회복). 실제 소비 오프셋은 아래에서 목표를 추종합니다.
+        if (Time.time - m_lastRecoilTime > m_recoilRecoveryDelay)
         {
-            float recoveryFactor = Mathf.Clamp01(Time.deltaTime * m_cameraKickRecoverySpeed);
-            m_cameraKickPitchOffset = Mathf.Lerp(m_cameraKickPitchOffset, 0.0f, recoveryFactor);
-            m_cameraKickYawOffset = Mathf.Lerp(m_cameraKickYawOffset, 0.0f, recoveryFactor);
+            float recoveryFactor = Mathf.Clamp01(Time.deltaTime * m_recoilRecoverySpeed);
+            m_recoilPitchTarget = Mathf.Lerp(m_recoilPitchTarget, 0.0f, recoveryFactor);
+            m_recoilYawTarget = Mathf.Lerp(m_recoilYawTarget, 0.0f, recoveryFactor);
+        }
+
+        // 온셋 보간: 소비 오프셋이 목표를 향해 지수 이징(앞쪽으로 쏠려 빠르게 붙었다 정착). 끄면 즉시 목표와 동일(기존 계단식).
+        if (m_recoilOnsetInterp)
+        {
+            float onsetFactor = Mathf.Clamp01(Time.deltaTime * Mathf.Max(0.0f, m_recoilOnsetSpeed));
+            m_recoilPitchOffset = Mathf.Lerp(m_recoilPitchOffset, m_recoilPitchTarget, onsetFactor);
+            m_recoilYawOffset = Mathf.Lerp(m_recoilYawOffset, m_recoilYawTarget, onsetFactor);
+        }
+        else
+        {
+            m_recoilPitchOffset = m_recoilPitchTarget;
+            m_recoilYawOffset = m_recoilYawTarget;
         }
 
         if (m_cinemachineCameraTarget != null)
         {
-            // 피치 킥은 위로 솟는 느낌이 되도록 뺍니다(StarterAssets pitch 규약: 값이 커질수록 아래를 봄).
+            // 렌더 카메라도 논리 조준과 동일한 반동 오프셋을 얹어 화면과 탄착이 함께 움직입니다.
+            // 피치는 위로 솟는 느낌이 되도록 뺍니다(StarterAssets pitch 규약: 값이 커질수록 아래를 봄).
+            // RecoilAdjustedPitch로 기본 조준과 같은 상하 한계에 물려, 반동이 하늘/바닥을 넘어 시점이 뒤집히지 않게 합니다.
             m_cinemachineCameraTarget.transform.rotation = Quaternion.Euler(
-                m_cinemachineTargetPitch + m_cameraAngleOverride - m_cameraKickPitchOffset,
-                m_cinemachineTargetYaw + m_cameraKickYawOffset,
+                RecoilAdjustedPitch + m_cameraAngleOverride,
+                m_cinemachineTargetYaw + m_recoilYawOffset,
                 0.0f);
         }
     }
