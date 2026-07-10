@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+/// <summary>
+/// 의료 시설 UI의 열기/닫기, 환자 슬롯 표시, 환자/헬퍼 후보 목록을 조율
+/// </summary>
 public class MedicalUI : MonoBehaviour
 {
     [Header("Root")]
@@ -26,8 +29,10 @@ public class MedicalUI : MonoBehaviour
     private bool m_isTreatmentCandidateListOpen;
     private bool m_helperMode;   // 후보 목록 모드: false=환자, true=헬퍼
 
+    /// <summary>의료 UI가 현재 열린 상태인지 여부</summary>
     public bool IsOpen => m_isOpen;
 
+    /// <summary>의료 UI가 닫힐 때 발생</summary>
     public event Action Closed;
 
     private void Awake()
@@ -68,6 +73,10 @@ public class MedicalUI : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// 지정한 의료 매니저와 바인딩하고 의료 UI를 열기.
+    /// </summary>
+    /// <param name="manager">UI가 표시하고 조작할 의료 시설 매니저</param>
     public void Open(MedicalManager manager)
     {
         UnbindManager();
@@ -92,6 +101,9 @@ public class MedicalUI : MonoBehaviour
         Refresh();
     }
 
+    /// <summary>
+    /// 의료 UI를 닫고 연결된 매니저/캐릭터 이벤트 구독을 해제
+    /// </summary>
     public void Close()
     {
         HideTreatmentCandidateList();
@@ -101,6 +113,9 @@ public class MedicalUI : MonoBehaviour
         SetOpenState(false);
     }
 
+    /// <summary>
+    /// 환자 슬롯과 후보 목록 표시 갱신
+    /// </summary>
     public void Refresh()
     {
         CacheChildViews();
@@ -170,7 +185,9 @@ public class MedicalUI : MonoBehaviour
         }
     }
 
-    // 헬퍼 배치 진입점 — 환자 슬롯 클릭과 별개의 버튼에서 호출.
+    /// <summary>
+    /// 헬퍼 배치 모드로 후보 목록을 열기.
+    /// </summary>
     public void BeginHelperAssignment()
     {
         if (m_currentManager == null)

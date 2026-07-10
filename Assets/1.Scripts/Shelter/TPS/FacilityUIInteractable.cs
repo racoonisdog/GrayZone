@@ -1,15 +1,23 @@
 using UnityEngine;
 
-// UI를 여는 시설용 상호작용. PlayerInteractor는 IInteractable로만 호출하고,
-// UIManager 의존은 이 컴포넌트가 대신 가진다(= UI 소통 창구는 여기서 연결).
+/// <summary>
+/// 시설 오브젝트에서 UI 열기 요청을 <see cref="UIManager"/>로 전달하는 상호작용 컴포넌트
+/// </summary>
 public class FacilityUIInteractable : MonoBehaviour, IInteractable
 {
     [SerializeField] private UIManager m_uiManager;
 
+    /// <summary>탭 상호작용이므로 홀드 시간이 없음</summary>
     public float HoldDuration => 0f;
 
+    /// <summary>
+    /// 이 컴포넌트가 활성 상태일 때만 상호작용을 허용
+    /// </summary>
+    /// <param name="interactor">상호작용을 시도한 오브젝트</param>
+    /// <returns>상호작용 가능하면 <c>true</c></returns>
     public bool CanInteract(GameObject interactor) => isActiveAndEnabled;
 
+    /// <summary>상호작용 프롬프트 텍스트</summary>
     public string GetPrompt() => "Facility";
 
     private void Awake()
@@ -19,6 +27,10 @@ public class FacilityUIInteractable : MonoBehaviour, IInteractable
             m_uiManager = FindFirstObjectByType<UIManager>();
     }
 
+    /// <summary>
+    /// 현재 시설 오브젝트에 연결된 UI를 열도록 요청
+    /// </summary>
+    /// <param name="interactor">상호작용을 실행한 오브젝트</param>
     public void Interact(GameObject interactor)
     {
         if (m_uiManager == null)

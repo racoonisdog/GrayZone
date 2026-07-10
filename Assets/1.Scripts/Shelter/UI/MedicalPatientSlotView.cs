@@ -3,6 +3,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// 의료 UI의 단일 환자 슬롯 표시와 클릭 상태를 관리
+/// </summary>
 public class MedicalPatientSlotView : MonoBehaviour
 {
     [SerializeField] private Button m_button;
@@ -33,11 +36,13 @@ public class MedicalPatientSlotView : MonoBehaviour
     private string m_patientId;                  // null/공백 = 비점유
     private Action<MedicalPatientSlotView> m_clicked;
 
-    // 세이브/로드 시에만 사용하는 슬롯 식별자
+    /// <summary>세이브/로드 시에만 사용하는 슬롯 식별자</summary>
     public string SlotId => m_slotId;
 
-    // 점유 환자 식별 (런타임 분기/표시/매칭용)
+    /// <summary>현재 슬롯을 점유 중인 환자 정의 ID</summary>
     public string PatientId => m_patientId;
+
+    /// <summary>슬롯에 환자가 배치되어 있는지 여부</summary>
     public bool HasPatient => !string.IsNullOrWhiteSpace(m_patientId);
 
     private void Awake()
@@ -50,7 +55,11 @@ public class MedicalPatientSlotView : MonoBehaviour
         CacheReferences();
     }
 
-    // 잠금/해금 상태 + 클릭 콜백만 설정한다. 환자 배치는 SetPatient로 별도 처리(Refresh가 점유를 건드리지 않음).
+    /// <summary>
+    /// 슬롯의 잠금 상태와 클릭 콜백을 설정 환자 점유 상태는 변경하지 않음
+    /// </summary>
+    /// <param name="isUnlocked">슬롯 해금 여부</param>
+    /// <param name="onClicked">슬롯 또는 취소 버튼 클릭 시 호출할 콜백</param>
     public void Bind(bool isUnlocked, Action<MedicalPatientSlotView> onClicked)
     {
         CacheReferences();
@@ -77,7 +86,10 @@ public class MedicalPatientSlotView : MonoBehaviour
         UpdateButtonStates();
     }
 
-    // 환자 배치 — 이 슬롯에 id를 박아두고 유지(시각적 고정).
+    /// <summary>
+    /// 이 슬롯에 환자 정의 ID를 배치하고 표시를 갱신
+    /// </summary>
+    /// <param name="definitionId">배치할 환자 정의 ID</param>
     public void SetPatient(string definitionId)
     {
         m_patientId = definitionId;
@@ -85,7 +97,9 @@ public class MedicalPatientSlotView : MonoBehaviour
         UpdateButtonStates();
     }
 
-    // 환자 해제(완치/취소) — 슬롯을 비운다.
+    /// <summary>
+    /// 환자 배치를 해제하고 슬롯 표시를 초기화
+    /// </summary>
     public void ClearPatient()
     {
         m_patientId = null;
@@ -123,8 +137,11 @@ public class MedicalPatientSlotView : MonoBehaviour
             m_daysText.text = string.Empty;
     }
 
-    // 게이지/부상상태/남은 일수 표시 갱신. 참조가 없는 항목은 무시(null-safe).
-    // showGauge=false면 게이지 바를 숨긴다(레벨1 등).
+    /// <summary>
+    /// 게이지, 부상 상태, 남은 일수 표시를 갱신
+    /// </summary>
+    /// <param name="status">표시할 환자 상태 투영본</param>
+    /// <param name="showGauge">게이지 바를 표시할지 여부</param>
     public void ApplyStatus(PatientStatus status, bool showGauge)
     {
         if (m_gaugeRoot != null)

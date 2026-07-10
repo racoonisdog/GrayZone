@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 public interface IFacilityUpgradeable
 {
     string FacilityId { get; }
@@ -14,4 +16,7 @@ public interface IFacilityUpgradeable
 
     // 자원 이외의 업그레이드 조건(선행 시설·일차·플래그 등). 조건 없으면 true. — 확장 자리(seam).
     bool AreUpgradeRequirementsMet(int currentLevel);
+
+    // 다음 레벨이 제공하는 기능 표시 줄들(표시 전용). 최대 레벨이면 빈 리스트.
+    IReadOnlyList<FacilityFeatureLine> GetUpgradeFeatureLines(int currentLevel);
 }

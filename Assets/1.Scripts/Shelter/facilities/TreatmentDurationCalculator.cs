@@ -12,6 +12,7 @@ public static class TreatmentDurationCalculator
     /// <param name="currentGauge">현재 부상게이지</param>
     /// <param name="maxGauge">완치 기준(최대) 게이지</param>
     /// <param name="dailyRecovery">일일 회복량(게이지/일). 내부적으로 최소 1로 보정한다.</param>
+    /// <returns>총 치료 일수와 첫날 회복 보정량을 담은 치료 계획</returns>
     public static TreatmentPlan Calculate(float currentGauge, float maxGauge, float dailyRecovery)
     {
         float daily = Mathf.Max(1f, dailyRecovery);
@@ -38,6 +39,12 @@ public static class TreatmentDurationCalculator
 /// </summary>
 public readonly struct TreatmentPlan
 {
+    /// <summary>
+    /// 치료 계획 값을 생성
+    /// </summary>
+    /// <param name="totalDays">완치까지 필요한 총 일수</param>
+    /// <param name="dailyRecovery">보정된 일일 회복량</param>
+    /// <param name="firstTickRecovery">첫날 적용할 회복량</param>
     public TreatmentPlan(int totalDays, float dailyRecovery, float firstTickRecovery)
     {
         TotalDays = totalDays;

@@ -2,6 +2,9 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// NPC 후보 목록에서 초상화와 부상 아이콘을 표시하는 임시 행 버튼
+/// </summary>
 public class TestButton : MonoBehaviour, INPCListItemView
 {
     [Header("Catalogs")]
@@ -27,6 +30,11 @@ public class TestButton : MonoBehaviour, INPCListItemView
         CacheReferences();
     }
 
+    /// <summary>
+    /// NPC 데이터를 버튼 행에 표시하고 클릭 콜백을 연결
+    /// </summary>
+    /// <param name="npcData">표시할 NPC 런타임 데이터</param>
+    /// <param name="onClicked">클릭 시 NPC 정의 ID를 전달할 콜백</param>
     public void Bind(NPCRuntimeData npcData, Action<string> onClicked)
     {
         CacheReferences();
@@ -65,6 +73,9 @@ public class TestButton : MonoBehaviour, INPCListItemView
         }
     }
 
+    /// <summary>
+    /// 표시 중인 NPC 데이터와 버튼 클릭 상태를 비우고 비활성화
+    /// </summary>
     public void Clear()
     {
         CacheReferences();

@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
+/// <summary>
+/// 셸터 플레이어의 카메라 기준 이동, 점프, 중력, 이동 애니메이션 값을 처리
+/// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMove : MonoBehaviour
 {
@@ -47,10 +50,19 @@ public class PlayerMove : MonoBehaviour
     private int freeFallAnimationId;
     private int motionSpeedAnimationId;
 
+    /// <summary>현재 프레임에 적용되는 이동 입력값</summary>
     public Vector2 MoveInput { get; private set; }
+
+    /// <summary>월드 기준 현재 이동 방향</summary>
     public Vector3 CurrentMoveDirection => currentMoveDirection;
+
+    /// <summary>캐릭터 컨트롤러가 지면에 닿아 있는지 여부</summary>
     public bool IsGrounded => characterController != null && characterController.isGrounded;
+
+    /// <summary>데드존을 넘는 이동 입력이 있는지 여부</summary>
     public bool HasMoveInput => MoveInput.sqrMagnitude > inputDeadZone * inputDeadZone;
+
+    /// <summary>이동 입력이 잠겨 있는지 여부</summary>
     public bool IsMoveLocked => m_moveLocked;
 
     private void Reset()
@@ -91,6 +103,10 @@ public class PlayerMove : MonoBehaviour
         UpdateAnimator();
     }
 
+    /// <summary>
+    /// UI 열림 등으로 플레이어 이동 입력 잠금 상태를 변경
+    /// </summary>
+    /// <param name="locked">이동 입력을 잠그려면 <c>true</c></param>
     public void SetMoveLocked(bool locked)
     {
         if (m_moveLocked == locked)
@@ -103,6 +119,10 @@ public class PlayerMove : MonoBehaviour
     }
 
 #if ENABLE_INPUT_SYSTEM
+    /// <summary>
+    /// Unity Input System의 이동 입력 콜백
+    /// </summary>
+    /// <param name="value">입력 시스템에서 전달한 이동 입력값</param>
     public void OnMove(InputValue value)
     {
         playerInputMove = value.Get<Vector2>();
