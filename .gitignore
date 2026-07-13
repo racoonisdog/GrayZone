@@ -88,3 +88,4 @@ Packages/unity-cli/
 
 # Syncthing sync metadata
 .stfolder/
+/Assets/ProgrammerResource
