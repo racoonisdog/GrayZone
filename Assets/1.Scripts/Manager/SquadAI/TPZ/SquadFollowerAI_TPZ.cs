@@ -50,11 +50,11 @@ public class SquadFollowerAI_TPZ : MonoBehaviour
         if (!memberController.IsAlive) return;
         if (memberController.IsDown) return;
         if (squadManager == null) return;
-        if (squadManager.CurrentMember == null) return;
+        if (squadManager.PlayerSquadMember == null) return;
         if (agent == null) return;
         if (!agent.enabled) return;
 
-        Transform leader = squadManager.CurrentMember.transform;
+        Transform leader = squadManager.PlayerSquadMember.transform;
 
         if (leader == transform)
         {

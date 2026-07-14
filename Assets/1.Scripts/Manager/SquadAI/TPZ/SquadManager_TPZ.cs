@@ -3,14 +3,16 @@ using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 public class SquadManager_TPZ : MonoBehaviour
 {
     [Header("Squad Members")]
     [SerializeField] private List<SquadMemberController_TPZ> squadMembers = new List<SquadMemberController_TPZ>();
 
-    [Header("Current Control")]
-    [SerializeField] private int currentMemberIndex = 0;
+    [Header("Player Squad Member")]
+    [FormerlySerializedAs("currentMemberIndex")]
+    [SerializeField] private int playerSquadMemberIndex = 0;
 
     [Header("Camera")]
     [SerializeField] private CinemachineCamera followCamera;
@@ -22,42 +24,44 @@ public class SquadManager_TPZ : MonoBehaviour
     [SerializeField] private Key member2Key = Key.Digit2;
     [SerializeField] private Key member3Key = Key.Digit3;
 
-    public int CurrentMemberIndex => currentMemberIndex;
+    /// <summary>í˜„ì¬ PlayerSquadMemberì˜ ìŠ¤ì¿¼ë“œ ëª©ë¡ ì¸ë±ìŠ¤ì…ë‹ˆë‹¤.</summary>
+    public int PlayerSquadMemberIndex => playerSquadMemberIndex;
 
-    public SquadMemberController_TPZ CurrentMember
+    /// <summary>í˜„ì¬ í”Œë ˆì´ì–´ê°€ ì§ì ‘ ì¡°ì‘í•˜ëŠ” ìŠ¤ì¿¼ë“œ ë©¤ë²„ì…ë‹ˆë‹¤.</summary>
+    public SquadMemberController_TPZ PlayerSquadMember
     {
         get
         {
             if (squadMembers == null || squadMembers.Count == 0) return null;
-            if (currentMemberIndex < 0 || currentMemberIndex >= squadMembers.Count) return null;
-            return squadMembers[currentMemberIndex];
+            if (playerSquadMemberIndex < 0 || playerSquadMemberIndex >= squadMembers.Count) return null;
+            return squadMembers[playerSquadMemberIndex];
         }
     }
 
     private IEnumerator Start()
     {
-        // ½ÃÀÛ ½Ã ¸ğµÎ ºñÁ¶ÀÛ »óÅÂ·Î ³»·Á¼­ ÃÊ±âÈ­
+        // ì‹œì‘ ì‹œ ëª¨ë‘ ë¹„ì¡°ì‘ ìƒíƒœë¡œ ë‚´ë ¤ì„œ ì´ˆê¸°í™”
         for (int i = 0; i < squadMembers.Count; i++)
         {
             if (squadMembers[i] == null) continue;
-            squadMembers[i].SetPlayerControlled(false);
+            squadMembers[i].SetPlayerSquadMember(false);
         }
 
         UpdateCameraTarget();
 
-        // PlayerInput / Controller / Agent ÃÊ±âÈ­ ´ë±â
+        // PlayerInput / Controller / Agent ì´ˆê¸°í™” ëŒ€ê¸°
         yield return null;
         yield return null;
 
-        // ÇöÀç ¸â¹ö¸¸ Á¶ÀÛ »óÅÂ·Î ¿Ã¸²
-        if (CurrentMember != null)
+        // í˜„ì¬ ë©¤ë²„ë§Œ ì¡°ì‘ ìƒíƒœë¡œ ì˜¬ë¦¼
+        if (PlayerSquadMember != null)
         {
-            CurrentMember.SetPlayerControlled(true);
+            PlayerSquadMember.SetPlayerSquadMember(true);
         }
 
         UpdateCameraTarget();
 
-        // follower / input / animation »óÅÂ ÇÑ ¹ø ´õ °­Á¦ Àû¿ë
+        // follower / input / animation ìƒíƒœ í•œ ë²ˆ ë” ê°•ì œ ì ìš©
         yield return null;
 
         for (int i = 0; i < squadMembers.Count; i++)
@@ -103,8 +107,8 @@ public class SquadManager_TPZ : MonoBehaviour
     {
         if (squadMembers == null || squadMembers.Count == 0) return;
 
-        int startIndex = currentMemberIndex;
-        int nextIndex = currentMemberIndex;
+        int startIndex = playerSquadMemberIndex;
+        int nextIndex = playerSquadMemberIndex;
 
         do
         {
@@ -126,21 +130,21 @@ public class SquadManager_TPZ : MonoBehaviour
         if (squadMembers == null || squadMembers.Count == 0) return;
         if (index < 0 || index >= squadMembers.Count) return;
         if (!CanSwitchTo(index)) return;
-        if (index == currentMemberIndex) return;
+        if (index == playerSquadMemberIndex) return;
 
-        SquadMemberController_TPZ previousMember = CurrentMember;
+        SquadMemberController_TPZ previousMember = PlayerSquadMember;
         SquadMemberController_TPZ nextMember = squadMembers[index];
 
         if (previousMember != null)
         {
-            previousMember.SetPlayerControlled(false);
+            previousMember.SetPlayerSquadMember(false);
         }
 
-        currentMemberIndex = index;
+        playerSquadMemberIndex = index;
 
         if (nextMember != null)
         {
-            nextMember.SetPlayerControlled(true);
+            nextMember.SetPlayerSquadMember(true);
         }
 
         UpdateCameraTarget();
@@ -160,9 +164,9 @@ public class SquadManager_TPZ : MonoBehaviour
 
     private void UpdateCameraTarget()
     {
-        if (CurrentMember == null) return;
+        if (PlayerSquadMember == null) return;
 
-        Transform target = CurrentMember.CameraTarget;
+        Transform target = PlayerSquadMember.CameraTarget;
 
         if (followCamera != null)
         {

@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Binds the Normal HUD player status widgets to the currently controlled player data.
+/// Normal HUD 상태 위젯을 현재 PlayerSquadMember 데이터에 연결합니다.
 /// </summary>
 [DisallowMultipleComponent]
 public class NormalHudPlayerStatusBinder : MonoBehaviour
@@ -135,7 +135,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         new HealthGaugeSlot("Gauge_HP-2", 176.0f, 404.0f),
     };
 
-    private PlayerbleUnitData m_currentPlayerData;
+    private PlayerbleUnitData m_playerSquadMemberData;
     private readonly List<PlayerbleUnitData> m_sortedTeamData = new();
 
     private void Reset()
@@ -155,7 +155,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
         ValidateReferences();
         RefreshPlayerDataSources();
-        SetCurrentPlayerData(ResolveControlledPlayerData());
+        SetPlayerSquadMemberData(ResolvePlayerSquadMemberData());
         UpdateHud();
     }
 
@@ -186,13 +186,13 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     private void OnEnable()
     {
         RefreshPlayerDataSources();
-        SetCurrentPlayerData(ResolveControlledPlayerData());
+        SetPlayerSquadMemberData(ResolvePlayerSquadMemberData());
         UpdateHud();
     }
 
     private void OnDisable()
     {
-        SetCurrentPlayerData(null);
+        SetPlayerSquadMemberData(null);
     }
 
     private void LateUpdate()
@@ -202,10 +202,10 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             return;
         }
 
-        PlayerbleUnitData nextData = ResolveControlledPlayerData();
-        if (nextData != m_currentPlayerData)
+        PlayerbleUnitData nextData = ResolvePlayerSquadMemberData();
+        if (nextData != m_playerSquadMemberData)
         {
-            SetCurrentPlayerData(nextData);
+            SetPlayerSquadMemberData(nextData);
         }
 
         UpdateHud();
@@ -323,7 +323,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         return result;
     }
 
-    private PlayerbleUnitData ResolveControlledPlayerData()
+    private PlayerbleUnitData ResolvePlayerSquadMemberData()
     {
         if (m_playerDataSources == null || m_playerDataSources.Length == 0)
         {
@@ -338,7 +338,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         for (int i = 0; i < m_playerDataSources.Length; i++)
         {
             PlayerbleUnitData data = m_playerDataSources[i];
-            if (data != null && data.IsPlayerControlled)
+            if (data != null && data.IsPlayerSquadMember)
             {
                 return data;
             }
@@ -356,23 +356,23 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         return null;
     }
 
-    private void SetCurrentPlayerData(PlayerbleUnitData nextData)
+    private void SetPlayerSquadMemberData(PlayerbleUnitData nextData)
     {
-        if (m_currentPlayerData == nextData)
+        if (m_playerSquadMemberData == nextData)
         {
             return;
         }
 
-        if (m_currentPlayerData != null)
+        if (m_playerSquadMemberData != null)
         {
-            m_currentPlayerData.OnPublicDataChanged -= HandlePlayerDataChanged;
+            m_playerSquadMemberData.OnPublicDataChanged -= HandlePlayerDataChanged;
         }
 
-        m_currentPlayerData = nextData;
+        m_playerSquadMemberData = nextData;
 
-        if (m_currentPlayerData != null)
+        if (m_playerSquadMemberData != null)
         {
-            m_currentPlayerData.OnPublicDataChanged += HandlePlayerDataChanged;
+            m_playerSquadMemberData.OnPublicDataChanged += HandlePlayerDataChanged;
         }
     }
 
@@ -383,8 +383,8 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
     private void UpdateHud()
     {
-        int currentHp = m_currentPlayerData != null ? m_currentPlayerData.CurrentHp : 0;
-        int maxHp = m_currentPlayerData != null ? m_currentPlayerData.MaxHp : 0;
+        int currentHp = m_playerSquadMemberData != null ? m_playerSquadMemberData.CurrentHp : 0;
+        int maxHp = m_playerSquadMemberData != null ? m_playerSquadMemberData.MaxHp : 0;
         float normalizedHp = maxHp > 0 ? Mathf.Clamp01((float)currentHp / maxHp) : 0.0f;
 
         if (m_currentHpText != null)
@@ -394,12 +394,12 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
         if (m_magCountText != null)
         {
-            m_magCountText.text = (m_currentPlayerData != null ? m_currentPlayerData.CurrentMagazineAmmo : 0).ToString();
+            m_magCountText.text = (m_playerSquadMemberData != null ? m_playerSquadMemberData.CurrentMagazineAmmo : 0).ToString();
         }
 
         if (m_magAllText != null)
         {
-            m_magAllText.text = (m_currentPlayerData != null ? m_currentPlayerData.ReserveAmmo : 0).ToString();
+            m_magAllText.text = (m_playerSquadMemberData != null ? m_playerSquadMemberData.ReserveAmmo : 0).ToString();
         }
 
         UpdateGauge(normalizedHp);
@@ -466,7 +466,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         for (int i = 0; i < m_playerDataSources.Length; i++)
         {
             PlayerbleUnitData data = m_playerDataSources[i];
-            if (data == null || data == m_currentPlayerData)
+            if (data == null || data == m_playerSquadMemberData)
             {
                 continue;
             }

@@ -2,6 +2,7 @@ using StarterAssets;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.AI;
+using UnityEngine.Serialization;
 
 public class SquadMemberController_TPZ : MonoBehaviour
 {
@@ -17,7 +18,8 @@ public class SquadMemberController_TPZ : MonoBehaviour
     [SerializeField] private SquadRole role = SquadRole.Support;
 
     [Header("State")]
-    [SerializeField] private bool isPlayerControlled = false;
+    [FormerlySerializedAs("isPlayerControlled")]
+    [SerializeField] private bool isPlayerSquadMember = false;
     [SerializeField] private bool isAlive = true;
     [SerializeField] private bool isDown = false;
 
@@ -35,7 +37,12 @@ public class SquadMemberController_TPZ : MonoBehaviour
 
     public string MemberName => memberName;
     public SquadRole Role => role;
-    public bool IsPlayerControlled => isPlayerControlled;
+
+    /// <summary>현재 플레이어가 직접 조작하는 PlayerSquadMember인지 여부입니다.</summary>
+    public bool IsPlayerSquadMember => isPlayerSquadMember;
+
+    /// <summary>현재 스쿼드 AI가 조작하는 AiSquadMember인지 여부입니다.</summary>
+    public bool IsAiSquadMember => !isPlayerSquadMember;
     public bool IsAlive => isAlive;
     public bool IsDown => isDown;
     public Transform CameraTarget => cameraTarget != null ? cameraTarget : transform;
@@ -91,9 +98,13 @@ public class SquadMemberController_TPZ : MonoBehaviour
         }
     }
 
-    public void SetPlayerControlled(bool value)
+    /// <summary>
+    /// 이 멤버의 현재 역할을 PlayerSquadMember 또는 AiSquadMember로 설정합니다.
+    /// </summary>
+    /// <param name="value">PlayerSquadMember로 설정하면 true입니다.</param>
+    public void SetPlayerSquadMember(bool value)
     {
-        isPlayerControlled = value;
+        isPlayerSquadMember = value;
         ApplyControlState();
     }
 
@@ -122,8 +133,8 @@ public class SquadMemberController_TPZ : MonoBehaviour
 
     private void ApplyControlState()
     {
-        bool allowDirectControl = isAlive && !isDown && isPlayerControlled;
-        bool allowAIControl = isAlive && !isDown && !isPlayerControlled;
+        bool allowDirectControl = isAlive && !isDown && isPlayerSquadMember;
+        bool allowAiSquadMember = isAlive && !isDown && !isPlayerSquadMember;
 
         if (!allowDirectControl && playerManager != null)
         {
@@ -143,7 +154,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
 
         if (navMeshAgent != null)
         {
-            if (allowAIControl)
+            if (allowAiSquadMember)
             {
                 if (!navMeshAgent.enabled)
                     navMeshAgent.enabled = true;
@@ -171,7 +182,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
             weaponController.enabled = true;
 
         if (followerAI != null)
-            followerAI.enabled = allowAIControl;
+            followerAI.enabled = allowAiSquadMember;
 
         // PlayerInput�� ��������
         if (playerInput != null)

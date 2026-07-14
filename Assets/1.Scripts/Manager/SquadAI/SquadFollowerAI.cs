@@ -253,7 +253,7 @@ public class SquadFollowerAI : MonoBehaviour
             return false;
         }
 
-        if (m_squadManager == null || m_squadManager.CurrentMember == null)
+        if (m_squadManager == null || m_squadManager.PlayerSquadMember == null)
         {
             return false;
         }
@@ -263,7 +263,7 @@ public class SquadFollowerAI : MonoBehaviour
             return false;
         }
 
-        leader = m_squadManager.CurrentMember.transform;
+        leader = m_squadManager.PlayerSquadMember.transform;
         return leader != null;
     }
 

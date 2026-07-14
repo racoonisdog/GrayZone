@@ -6,8 +6,11 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/0.Scenes/Final/SampleScene.unity
-    guid: 99c9720ab356a0642a771bea13969a05
+    path: Assets/0.Scenes/JangHu/PlayerTest.unity
+    guid: a89b475f83864d94b9fe4c971a8099a2
+  - enabled: 1
+    path: Assets/0.Scenes/JungHyeon/Scenes/TEst.unity
+    guid: df0923c90418f524b87aff75196465a8
   m_configObjects:
     com.unity.input.settings: {fileID: 11400000, guid: 14deb1616566f0b428187a79baf051d4, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 1321a8de26509e24eb3d26cfc7e4e556, type: 3}

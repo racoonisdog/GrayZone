@@ -40,6 +40,7 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
 
     private GameObject m_activeInteractor;
     private SquadMemberController m_activeInteractorMember;
+    private ThirdPersonController m_activeInteractorThirdPerson;
     private bool m_holdActive;
     private float m_holdProgress01;
 
@@ -139,6 +140,9 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         m_activeInteractorMember = interactor != null
             ? interactor.GetComponentInParent<SquadMemberController>()
             : null;
+        m_activeInteractorThirdPerson = interactor != null
+            ? interactor.GetComponentInParent<ThirdPersonController>()
+            : null;
 
         m_playerHealth.SetDownTimerPaused(true);
         m_memberController.SetAssistedStandingAnimator(true);
@@ -151,6 +155,21 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
 
         // 구조 시작 시 구조자가 피구조자를 바라보도록 몸을 돌립니다.
         FaceInteractorToTarget(interactor);
+
+        // 몸이 돌아가도 화면(카메라)은 E를 누르기 시작한 시점 그대로 고정합니다.
+        LockCameraToHoldStart();
+    }
+
+    /// <summary>
+    /// 구조 홀드 중 카메라가 <see cref="FaceInteractorToTarget"/>의 몸 회전에 끌려가지 않도록,
+    /// 저장된 조준 yaw/pitch로 카메라 타겟의 절대 회전만 다시 눌러줍니다.
+    /// </summary>
+    private void LockCameraToHoldStart()
+    {
+        if (m_activeInteractorThirdPerson != null)
+        {
+            m_activeInteractorThirdPerson.ReapplyCameraRotation();
+        }
     }
 
     /// <summary>
@@ -194,6 +213,7 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         m_holdProgress01 = Mathf.Clamp01(progress01);
         m_playerHealth.SetDownTimerPaused(true);
         FaceInteractorToTarget(interactor);
+        LockCameraToHoldStart();
 
         if (m_activeInteractorMember != null)
         {
@@ -311,11 +331,15 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
             m_playerHealth.SetDownTimerPaused(false);
         }
 
-        if (m_memberController != null && completed)
+        // 부활 횟수 초과로 구조 시도가 되살리지 못하고 전투 이탈(사망)로 끝난 경우, 기립 처리를 하면
+        // 방금 재생된 사망 애니메이션(DoDeath)을 로코모션으로 덮어써버립니다. 그 경우엔 건너뜁니다.
+        bool revivedAlive = completed && m_playerHealth != null && !m_playerHealth.IsDead;
+
+        if (m_memberController != null && revivedAlive)
         {
             m_memberController.CompleteAssistedStandingAnimator();
         }
-        else if (m_memberController != null)
+        else if (m_memberController != null && !completed)
         {
             m_memberController.SetAssistedStandingAnimator(false);
         }
@@ -328,6 +352,7 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
 
         m_activeInteractor = null;
         m_activeInteractorMember = null;
+        m_activeInteractorThirdPerson = null;
         m_holdActive = false;
         m_holdProgress01 = completed ? 1.0f : 0.0f;
     }

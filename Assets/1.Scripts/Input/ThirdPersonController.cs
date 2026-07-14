@@ -425,6 +425,28 @@ public class ThirdPersonController : MonoBehaviour
             m_cinemachineTargetYaw,
             0.0f);
     }
+
+    /// <summary>
+    /// 저장된 yaw/pitch(입력 누적값)를 바꾸지 않고, 카메라 타겟의 절대 월드 회전만 다시 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 이 컴포넌트가 비활성화된 동안(예: 상호작용 락으로 조작이 잠긴 구간)에는 <see cref="CameraRotation"/>이
+    /// 돌지 않아 카메라 타겟의 절대 회전이 더 이상 매 프레임 재적용되지 않습니다. 그 상태에서 부모(플레이어 루트)가
+    /// 다른 이유로 회전하면(예: 구조 중 대상을 바라보도록 몸을 돌리는 처리) 자식인 카메라 타겟도 같이 돌아간 것처럼
+    /// 보입니다(부모-자식 회전 합성). 비활성 상태에서도 매 틱 이 메서드를 호출하면 카메라가 눌러 고정된 것처럼 유지됩니다.
+    /// </remarks>
+    public void ReapplyCameraRotation()
+    {
+        if (m_cinemachineCameraTarget == null)
+        {
+            return;
+        }
+
+        m_cinemachineCameraTarget.transform.rotation = Quaternion.Euler(
+            RecoilAdjustedPitch + m_cameraAngleOverride,
+            m_cinemachineTargetYaw + m_recoilYawOffset,
+            0.0f);
+    }
     /// <summary>
     /// 카메라 상단 회전 제한 각도를 설정합니다.
     /// </summary>

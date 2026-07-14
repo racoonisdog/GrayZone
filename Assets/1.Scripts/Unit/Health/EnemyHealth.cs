@@ -1,3 +1,6 @@
+using UnityEngine;
+using VInspector;
+
 /// <summary>
 /// Enemy 전용 체력 컴포넌트입니다.
 /// </summary>
@@ -6,5 +9,11 @@
 /// </remarks>
 public class EnemyHealth : HealthSystemBase
 {
+#if UNITY_EDITOR
+    [Foldout("Debug")]
+    [Tooltip("켜면 Editor에서 피해/사망 로그를 출력합니다. Player 빌드에서는 호출 자체가 제거됩니다.")]
+    [SerializeField] private bool m_debugLogHealth = false;
 
+    protected override bool DebugLogHealthEnabled => m_debugLogHealth;
+#endif
 }

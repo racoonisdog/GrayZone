@@ -7,11 +7,11 @@ using UnityEngine.Serialization;
 using VInspector;
 
 /// <summary>
-/// 스쿼드 멤버의 현재 조작 대상과 카메라 타겟 전환을 관리하는 컴포넌트입니다.
+/// 스쿼드 멤버의 PlayerSquadMember 역할과 카메라 타겟 전환을 관리하는 컴포넌트입니다.
 /// </summary>
 /// <remarks>
 /// 지정된 입력 키를 통해 조작 중인 스쿼드 멤버를 전환하고,
-/// 현재 멤버의 카메라 타겟을 follow/aim 카메라에 반영합니다.
+/// PlayerSquadMember의 카메라 타겟을 follow/aim 카메라에 반영합니다.
 /// </remarks>
 public class SquadManager : MonoBehaviour
 {
@@ -20,18 +20,19 @@ public class SquadManager : MonoBehaviour
     [FormerlySerializedAs("squadMembers")]
     [SerializeField] private List<SquadMemberController> m_squadMembers = new List<SquadMemberController>();
 
-    [Tooltip("현재 플레이어가 직접 조작 중인 멤버 인덱스입니다.")]
+    [Tooltip("현재 PlayerSquadMember의 스쿼드 목록 인덱스입니다.")]
     [FormerlySerializedAs("currentMemberIndex")]
-    [SerializeField] private int m_currentMemberIndex;
+    [FormerlySerializedAs("m_currentMemberIndex")]
+    [SerializeField] private int m_playerSquadMemberIndex;
 
     [Tooltip("스쿼드 멤버 순서와 같은 플레이어 공개 데이터 목록입니다.")]
     [SerializeField] private List<PlayerbleUnitData> m_playerDataSources = new List<PlayerbleUnitData>();
 
     [Foldout("Switch Options")]
-    [Tooltip("카메라 타겟을 새 멤버로 넘기는 대신 현재 조작 멤버와 전환 대상 멤버의 Transform을 스왑하는 전환 방식을 사용할지 여부입니다.")]
+    [Tooltip("카메라 타겟을 새 멤버로 넘기는 대신 PlayerSquadMember와 전환 대상 멤버의 Transform을 스왑하는 전환 방식을 사용할지 여부입니다.")]
     [SerializeField] private bool m_swapMemberTransforms;
 
-    [Tooltip("현재 조작 멤버가 사망해 자동 전환될 때도 Transform 스왑 방식을 사용할지 여부입니다.")]
+    [Tooltip("PlayerSquadMember가 사망해 자동 전환될 때도 Transform 스왑 방식을 사용할지 여부입니다.")]
     [SerializeField] private bool m_swapMemberTransformsOnDeath;
 
     [Tooltip("멤버 전환 직후 각 멤버의 제어 주체, 위치, NavMeshAgent, Animator 상태를 콘솔에 출력합니다.")]
@@ -66,24 +67,26 @@ public class SquadManager : MonoBehaviour
     private bool m_hasInitialized;
     private readonly List<SquadMemberController> m_subscribedMemberDeathEvents = new List<SquadMemberController>();
 
-    /// <summary>현재 플레이어가 직접 조작 중인 멤버 인덱스입니다.</summary>
-    public int CurrentMemberIndex => m_currentMemberIndex;
+    /// <summary>현재 PlayerSquadMember의 스쿼드 목록 인덱스입니다.</summary>
+    public int PlayerSquadMemberIndex => m_playerSquadMemberIndex;
 
     /// <summary>멤버 전환 시 카메라 타겟 전환 대신 Transform 스왑 방식을 사용할지 여부입니다.</summary>
     public bool SwapMemberTransforms => m_swapMemberTransforms;
 
-    /// <summary>현재 조작 멤버 사망으로 자동 전환될 때 Transform 스왑 방식을 사용할지 여부입니다.</summary>
+    /// <summary>PlayerSquadMember 사망으로 자동 전환될 때 Transform 스왑 방식을 사용할지 여부입니다.</summary>
     public bool SwapMemberTransformsOnDeath => m_swapMemberTransformsOnDeath;
 
     /// <summary>관리 중인 스쿼드 멤버 목록입니다.</summary>
     public IReadOnlyList<SquadMemberController> SquadMembers => m_squadMembers;
 
+    /// <summary>스쿼드 멤버 순서에 대응하는 플레이어 공개 데이터 목록입니다.</summary>
     public IReadOnlyList<PlayerbleUnitData> PlayerDataSources => m_playerDataSources;
 
-    public PlayerbleUnitData CurrentPlayerData => GetPlayerData(m_currentMemberIndex);
+    /// <summary>현재 PlayerSquadMember에 대응하는 플레이어 공개 데이터입니다.</summary>
+    public PlayerbleUnitData PlayerSquadMemberData => GetPlayerData(m_playerSquadMemberIndex);
 
     /// <summary>현재 플레이어가 직접 조작 중인 스쿼드 멤버입니다.</summary>
-    public SquadMemberController CurrentMember
+    public SquadMemberController PlayerSquadMember
     {
         get
         {
@@ -92,15 +95,18 @@ public class SquadManager : MonoBehaviour
                 return null;
             }
 
-            if (m_currentMemberIndex < 0 || m_currentMemberIndex >= m_squadMembers.Count)
+            if (m_playerSquadMemberIndex < 0 || m_playerSquadMemberIndex >= m_squadMembers.Count)
             {
                 return null;
             }
 
-            return m_squadMembers[m_currentMemberIndex];
+            return m_squadMembers[m_playerSquadMemberIndex];
         }
     }
 
+    /// <summary>지정한 스쿼드 목록 인덱스에 대응하는 플레이어 공개 데이터를 반환합니다.</summary>
+    /// <param name="index">조회할 스쿼드 목록 인덱스입니다.</param>
+    /// <returns>대응하는 데이터가 없으면 null입니다.</returns>
     public PlayerbleUnitData GetPlayerData(int index)
     {
         SyncPlayerDataSources();
@@ -160,26 +166,26 @@ public class SquadManager : MonoBehaviour
     /// <returns>Unity 코루틴 실행을 위한 IEnumerator입니다.</returns>
     private IEnumerator Start()
     {
-        SetAllMembersPlayerControlled(false);
+        SetAllMembersAsAiSquadMembers();
         UpdateCameraTarget();
 
         // PlayerInput, Controller, NavMeshAgent의 초기 활성 상태가 안정화될 때까지 대기합니다.
         yield return null;
         yield return null;
 
-        if (CurrentMember != null)
+        if (PlayerSquadMember != null)
         {
-            CurrentMember.SetPlayerControlled(true);
+            PlayerSquadMember.SetPlayerSquadMember(true);
         }
 
         UpdateCameraTarget();
-        RefreshCurrentMemberWeaponUI();
+        RefreshPlayerSquadMemberWeaponUI();
 
         // follower, input, animation 상태를 한 번 더 강제로 동기화합니다.
         yield return null;
         ForceRefreshMembers();
         UpdateCameraTarget();
-        RefreshCurrentMemberWeaponUI();
+        RefreshPlayerSquadMemberWeaponUI();
 
         m_hasInitialized = true;
     }
@@ -271,11 +277,11 @@ public class SquadManager : MonoBehaviour
     {
         if (m_squadMembers == null || m_squadMembers.Count == 0)
         {
-            m_currentMemberIndex = 0;
+            m_playerSquadMemberIndex = 0;
             return;
         }
 
-        m_currentMemberIndex = Mathf.Clamp(m_currentMemberIndex, 0, m_squadMembers.Count - 1);
+        m_playerSquadMemberIndex = Mathf.Clamp(m_playerSquadMemberIndex, 0, m_squadMembers.Count - 1);
     }
 
     /// <summary>
@@ -324,8 +330,8 @@ public class SquadManager : MonoBehaviour
             return false;
         }
 
-        int startIndex = m_currentMemberIndex;
-        int nextIndex = m_currentMemberIndex;
+        int startIndex = m_playerSquadMemberIndex;
+        int nextIndex = m_playerSquadMemberIndex;
 
         do
         {
@@ -373,14 +379,14 @@ public class SquadManager : MonoBehaviour
             return;
         }
 
-        if (index == m_currentMemberIndex)
+        if (index == m_playerSquadMemberIndex)
         {
             UpdateCameraTarget();
-            RefreshCurrentMemberWeaponUI();
+            RefreshPlayerSquadMemberWeaponUI();
             return;
         }
 
-        SquadMemberController previousMember = CurrentMember;
+        SquadMemberController previousMember = PlayerSquadMember;
         SquadMemberController nextMember = m_squadMembers[index];
         bool carrySwitchState = useTransformSwap && previousMember != null && nextMember != null;
         SquadMemberController.SwitchCarryoverState switchState = carrySwitchState
@@ -392,14 +398,14 @@ public class SquadManager : MonoBehaviour
 
         if (previousMember != null)
         {
-            previousMember.SetPlayerControlled(false);
+            previousMember.SetPlayerSquadMember(false);
         }
 
-        m_currentMemberIndex = index;
+        m_playerSquadMemberIndex = index;
 
         if (nextMember != null)
         {
-            nextMember.SetPlayerControlled(true);
+            nextMember.SetPlayerSquadMember(true);
 
             if (carrySwitchState)
             {
@@ -418,7 +424,7 @@ public class SquadManager : MonoBehaviour
         }
 
         UpdateCameraTarget();
-        RefreshCurrentMemberWeaponUI();
+        RefreshPlayerSquadMemberWeaponUI();
 
         if (useTransformSwap)
         {
@@ -474,12 +480,12 @@ public class SquadManager : MonoBehaviour
             return;
         }
 
-        bool wasCurrentMember = member == CurrentMember;
-        bool switched = !wasCurrentMember || TrySwitchToNextMember(m_swapMemberTransformsOnDeath, false);
+        bool wasPlayerSquadMember = member == PlayerSquadMember;
+        bool switched = !wasPlayerSquadMember || TrySwitchToNextMember(m_swapMemberTransformsOnDeath, false);
 
         member.ClearDeadControlState();
 
-        if (wasCurrentMember && !switched && m_logSwitchDebug)
+        if (wasPlayerSquadMember && !switched && m_logSwitchDebug)
         {
             Debug.Log("[SquadManager] No available squad member remains after current member death.", this);
         }
@@ -494,7 +500,7 @@ public class SquadManager : MonoBehaviour
     /// </remarks>
     private void HandleMemberDowned(SquadMemberController member)
     {
-        if (member == null || member != CurrentMember)
+        if (member == null || member != PlayerSquadMember)
         {
             return;
         }
@@ -543,7 +549,7 @@ public class SquadManager : MonoBehaviour
     /// 모든 스쿼드 멤버의 직접 조작 상태를 일괄 설정합니다.
     /// </summary>
     /// <param name="value">직접 조작 상태로 설정하려면 true입니다.</param>
-    private void SetAllMembersPlayerControlled(bool value)
+    private void SetAllMembersAsAiSquadMembers()
     {
         if (m_squadMembers == null)
         {
@@ -557,7 +563,7 @@ public class SquadManager : MonoBehaviour
                 continue;
             }
 
-            m_squadMembers[i].SetPlayerControlled(value);
+            m_squadMembers[i].SetPlayerSquadMember(false);
         }
     }
 
@@ -585,11 +591,11 @@ public class SquadManager : MonoBehaviour
     /// <summary>
     /// 현재 조작 중인 멤버의 무기 탄약 UI를 현재 무기 상태로 갱신합니다.
     /// </summary>
-    private void RefreshCurrentMemberWeaponUI()
+    private void RefreshPlayerSquadMemberWeaponUI()
     {
-        if (CurrentMember != null)
+        if (PlayerSquadMember != null)
         {
-            CurrentMember.RefreshWeaponUI();
+            PlayerSquadMember.RefreshWeaponUI();
         }
     }
 
@@ -697,10 +703,10 @@ public class SquadManager : MonoBehaviour
     {
         string previousName = previousMember != null ? previousMember.name : "null";
         string nextName = nextMember != null ? nextMember.name : "null";
-        string currentName = CurrentMember != null ? CurrentMember.name : "null";
+        string playerSquadMemberName = PlayerSquadMember != null ? PlayerSquadMember.name : "null";
 
         Debug.Log(
-            $"[SquadSwitchDebug] {label} previous={previousName} next={nextName} current={currentName} currentIndex={m_currentMemberIndex} swap={m_swapMemberTransforms}",
+            $"[SquadSwitchDebug] {label} previous={previousName} next={nextName} playerSquadMember={playerSquadMemberName} playerSquadMemberIndex={m_playerSquadMemberIndex} swap={m_swapMemberTransforms}",
             this);
 
         if (m_squadMembers == null)
@@ -733,7 +739,7 @@ public class SquadManager : MonoBehaviour
             Vector3 agentVelocity = agentEnabled ? navMeshAgent.velocity : Vector3.zero;
 
             Debug.Log(
-                $"[SquadSwitchDebug] {label} [{i}] name={member.name} player={member.IsPlayerControlled} pos={member.transform.position} " +
+                $"[SquadSwitchDebug] {label} [{i}] name={member.name} playerSquadMember={member.IsPlayerSquadMember} pos={member.transform.position} " +
                 $"cc={(characterController != null && characterController.enabled)} tpc={(thirdPersonController != null && thirdPersonController.enabled)} " +
                 $"agent={agentEnabled} onNav={agentOnNavMesh} agentVel={agentVelocity} " +
                 $"grounded={grounded} jump={jump} freeFall={freeFall} speed={speed:F3} motion={motionSpeed:F3}",
@@ -746,12 +752,12 @@ public class SquadManager : MonoBehaviour
     /// </summary>
     private void UpdateCameraTarget()
     {
-        if (CurrentMember == null)
+        if (PlayerSquadMember == null)
         {
             return;
         }
 
-        Transform target = CurrentMember.CameraTarget;
+        Transform target = PlayerSquadMember.CameraTarget;
 
         if (target == null)
         {
@@ -784,18 +790,18 @@ public class SquadManager : MonoBehaviour
         NormalizeMemberIndex();
         SubscribeMemberDeathEvents();
         UpdateCameraTarget();
-        RefreshCurrentMemberWeaponUI();
+        RefreshPlayerSquadMemberWeaponUI();
     }
 
     /// <summary>
     /// 현재 조작 멤버 인덱스를 설정합니다.
     /// </summary>
     /// <param name="value">설정할 멤버 인덱스입니다.</param>
-    public void SetCurrentMemberIndex(int value)
+    public void SetPlayerSquadMemberIndex(int value)
     {
         if (m_squadMembers == null || m_squadMembers.Count == 0)
         {
-            m_currentMemberIndex = 0;
+            m_playerSquadMemberIndex = 0;
             return;
         }
 

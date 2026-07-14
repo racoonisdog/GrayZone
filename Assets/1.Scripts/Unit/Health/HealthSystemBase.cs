@@ -35,9 +35,7 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
 #if UNITY_EDITOR
     private const int DebugDownDamage = 9999;
 
-    [Foldout("Debug")]
-    [Tooltip("켜면 Editor에서 피해/사망 로그를 출력합니다. Player 빌드에서는 호출 자체가 제거됩니다.")]
-    [SerializeField] private bool m_debugLogHealth = false;
+    protected virtual bool DebugLogHealthEnabled => false;
 
     [Foldout("Debug")]
     [Button("Take 9999 Damage")]
@@ -170,6 +168,8 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
             return false;
         }
 
+        OnDamageApplied(actualDamage, previousHp);
+
         LogHealthDebug($"[HealthSystem] Hit. Current HP : {m_currentHp}");
 
         NotifyHPChanged();
@@ -288,7 +288,11 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     {
         if (m_currentHp <= 0)
         {
-            OnHpDepleted();
+            if (!m_isDead)
+            {
+                OnHpDepleted();
+            }
+
             return;
         }
 
@@ -305,6 +309,15 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     protected virtual void OnHpDepleted()
     {
         Death();
+    }
+
+    /// <summary>
+    /// 실제 피해가 HP에 반영된 직후 호출되는 확장 지점입니다.
+    /// </summary>
+    /// <param name="actualDamage">이번 피격으로 실제 감소한 HP입니다.</param>
+    /// <param name="previousHp">피격 전 HP입니다.</param>
+    protected virtual void OnDamageApplied(int actualDamage, int previousHp)
+    {
     }
 
     /// <summary>
@@ -330,7 +343,7 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     private void LogHealthDebug(string message)
     {
 #if UNITY_EDITOR
-        if (m_debugLogHealth)
+        if (DebugLogHealthEnabled)
         {
             Debug.Log(message, this);
         }
