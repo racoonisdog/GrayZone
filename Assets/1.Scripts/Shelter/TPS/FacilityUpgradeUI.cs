@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
@@ -19,6 +19,7 @@ public class FacilityUpgradeUI : MonoBehaviour
     [SerializeField] private Transform m_featureRoot;
     [SerializeField] private LabelValueRow m_featureRowPrefab;
 
+    //ToDo : 제공하는 기능, 코스트는 기획안에 따라 프리팹/스크립트 변경이 필요함
     [Header("Cost List")]
     [SerializeField] private Transform m_costRoot;
     [SerializeField] private LabelValueRow m_costRowPrefab;
@@ -33,14 +34,15 @@ public class FacilityUpgradeUI : MonoBehaviour
 
     private string m_facilityId;
 
+    /// <summary>시설 업그레이드 UI가 닫힐 때 발생</summary>
+    public event System.Action Closed;
+
     private void Awake()
     {
         if (m_upgradeButton != null)
             m_upgradeButton.onClick.AddListener(OnUpgradeClicked);
         if (m_closeButton != null)
             m_closeButton.onClick.AddListener(Close);
-
-        gameObject.SetActive(false);
     }
 
     /// <summary>지정한 시설의 업그레이드 창을 연다(여는 쪽이 자기 FacilityId 전달).</summary>
@@ -54,7 +56,11 @@ public class FacilityUpgradeUI : MonoBehaviour
     /// <summary>창을 닫는다(상시 존재하므로 비활성화).</summary>
     public void Close()
     {
+        if (!gameObject.activeSelf)
+            return;
+
         gameObject.SetActive(false);
+        Closed?.Invoke();
     }
 
     private void Refresh()

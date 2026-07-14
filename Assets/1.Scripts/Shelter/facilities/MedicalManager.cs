@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Serialization;
 using System.Collections.Generic;
 
@@ -202,12 +202,14 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IInjuryThresh
     /// </summary>
     /// <param name="currentLevel">검사할 현재 업그레이드 레벨</param>
     /// <returns>현재는 별도 조건이 없으므로 항상 <c>true</c></returns>
+
+    //NOTE : 업그레이드 조건이 자원이 아닌 특수조건일 경우 아래와 같이 구현해서 사용
     public bool AreUpgradeRequirementsMet(int currentLevel) => true;
 
     // ── 부상 임계 완화 (IInjuryThresholdModifier) ──
-    // 경계별 임계 완화 기여(레벨 기준). FacilityManager가 집계해 NPC 부상상태 평가 함수에 넘긴다.
+    // 의료시설의 현재 해금/레벨 상태를 기준으로 경계별 임계 완화값을 제공한다.
     // 값 계약: 정상/경상/중상 상한을 각각 델타만큼 완화. 잠김이면 None.
-    public InjuryThresholdRelief GetThresholdRelief()
+    public InjuryThresholdRelief GetInjuryThresholdRelief()
         => m_isUnlocked ? InjuryThresholdReliefForLevel(CurrentLevel) : InjuryThresholdRelief.None;
 
     private static InjuryThresholdRelief InjuryThresholdReliefForLevel(int level) => level switch

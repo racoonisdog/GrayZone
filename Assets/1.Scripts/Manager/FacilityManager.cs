@@ -72,24 +72,6 @@ public class FacilityManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 등록된 모든 시설의 부상 임계 완화 기여를 합산해 반환한다.
-    /// </summary>
-    /// <remarks>
-    /// 셸터가 시설 기여를 집계해 하나의 값으로 노출하는 "통". NPC 부상상태 평가 함수에 인자로 넘겨 사용한다.
-    /// </remarks>
-    /// <returns>모든 시설 기여를 경계별로 합산한 값. 기여 시설이 없으면 None.</returns>
-    public InjuryThresholdRelief GetInjuryThresholdRelief()
-    {
-        InjuryThresholdRelief total = InjuryThresholdRelief.None;
-        foreach (IFacilityUpgradeable facility in m_facilities.Values)
-        {
-            if (facility is IInjuryThresholdModifier modifier)
-                total += modifier.GetThresholdRelief();
-        }
-        return total;
-    }
-
-    /// <summary>
     /// 씬의 시설 인스턴스를 등록하고 저장된 해금/레벨 상태를 즉시 반영
     /// </summary>
     /// <param name="facility">등록할 시설 인스턴스</param>

@@ -10,7 +10,10 @@ public enum ShelterUIType
     None,
 
     /// <summary>의료 시설 UI가 열려 있음</summary>
-    Medical
+    Medical,
+
+    /// <summary>시설 업그레이드 UI가 열려 있음</summary>
+    FacilityUpgrade
 }
 
 /// <summary>
@@ -25,11 +28,15 @@ public class UIManager : MonoBehaviour
     [Header("Medical UI")]
     [SerializeField] private MedicalUI m_medicalUI;
 
+    [Header("Facility Upgrade UI")]
+    [SerializeField] private FacilityUpgradeUI m_facilityUpgradeUI;
+
     [Header("Debug")]
     [SerializeField] private bool m_logMessages = true;
 
     private GameObject m_currentInteractionTarget;
     private ShelterUIType m_activeUI = ShelterUIType.None;
+    private ShelterUIType m_returnUIAfterFacilityUpgrade = ShelterUIType.None;
 
     /// <summary>현재 상호작용 프롬프트가 가리키는 대상 오브젝트</summary>
     public GameObject CurrentInteractionTarget => m_currentInteractionTarget;
@@ -54,6 +61,9 @@ public class UIManager : MonoBehaviour
     {
         if (m_medicalUI != null)
             m_medicalUI.Closed += HandleMedicalUIClosed;
+
+        if (m_facilityUpgradeUI != null)
+            m_facilityUpgradeUI.Closed += HandleFacilityUpgradeUIClosed;
     }
 
     private void OnDisable()
@@ -61,6 +71,10 @@ public class UIManager : MonoBehaviour
         if (m_medicalUI != null)
             m_medicalUI.Closed -= HandleMedicalUIClosed;
 
+        if (m_facilityUpgradeUI != null)
+            m_facilityUpgradeUI.Closed -= HandleFacilityUpgradeUIClosed;
+
+        m_returnUIAfterFacilityUpgrade = ShelterUIType.None;
         SetActiveUI(ShelterUIType.None);
     }
 
@@ -181,10 +195,73 @@ public class UIManager : MonoBehaviour
         SetActiveUI(ShelterUIType.None);
     }
 
+    /// <summary>
+    /// 시설 ID에 해당하는 공용 업그레이드 UI를 연다.
+    /// </summary>
+    /// <param name="facilityId">업그레이드 정보를 표시할 시설 ID</param>
+    public void OpenFacilityUpgradeUI(string facilityId)
+    {
+        if (m_facilityUpgradeUI == null)
+        {
+            Debug.LogWarning("[UI] Facility Upgrade UI is not assigned.", this);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(facilityId))
+        {
+            Debug.LogWarning("[UI] Facility ID is empty. Cannot open upgrade UI.", this);
+            return;
+        }
+
+        if (m_activeUI != ShelterUIType.FacilityUpgrade)
+            m_returnUIAfterFacilityUpgrade = m_activeUI;
+
+        SetInteractionUIActive(false);
+        m_facilityUpgradeUI.Open(facilityId);
+        SetActiveUI(ShelterUIType.FacilityUpgrade);
+
+        if (m_logMessages)
+            Debug.Log($"[UI] Open Facility Upgrade UI : {facilityId}", this);
+    }
+
+    /// <summary>
+    /// 시설 업그레이드 UI를 닫고 이전에 열려 있던 UI 상태로 돌아간다.
+    /// </summary>
+    public void CloseFacilityUpgradeUI()
+    {
+        if (m_facilityUpgradeUI != null)
+        {
+            m_facilityUpgradeUI.Close();
+            return;
+        }
+
+        RestoreUIAfterFacilityUpgrade();
+    }
+
     private void HandleMedicalUIClosed()
     {
         if (m_activeUI == ShelterUIType.Medical)
             SetActiveUI(ShelterUIType.None);
+    }
+
+    private void HandleFacilityUpgradeUIClosed()
+    {
+        if (m_activeUI == ShelterUIType.FacilityUpgrade)
+            RestoreUIAfterFacilityUpgrade();
+    }
+
+    private void RestoreUIAfterFacilityUpgrade()
+    {
+        ShelterUIType returnUI = m_returnUIAfterFacilityUpgrade;
+        m_returnUIAfterFacilityUpgrade = ShelterUIType.None;
+
+        if (returnUI == ShelterUIType.Medical
+            && (m_medicalUI == null || !m_medicalUI.IsOpen))
+        {
+            returnUI = ShelterUIType.None;
+        }
+
+        SetActiveUI(returnUI);
     }
 
     private void SetInteractionUIActive(bool active)
