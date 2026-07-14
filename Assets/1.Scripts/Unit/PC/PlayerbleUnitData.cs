@@ -50,6 +50,51 @@ public class PlayerbleUnitData : MonoBehaviour
     [SerializeField] private int m_reserveAmmo;
     [SerializeField] private int m_maxReserveAmmo = 120;
 
+#if UNITY_EDITOR
+    [Header("Debug")]
+    [Tooltip("켜면 예비 탄약(탄창)이 줄어들지 않습니다(무한 탄창). Player 빌드에서는 항상 꺼진 것으로 취급됩니다.")]
+    [SerializeField] private bool m_debugInfiniteReserveAmmo = false;
+
+    /// <summary>무한 탄창(예비 탄약) 디버그 플래그입니다. 디버그 트레이너 창에서 사용합니다.</summary>
+    public bool DebugInfiniteReserveAmmo
+    {
+        get => m_debugInfiniteReserveAmmo;
+        set => m_debugInfiniteReserveAmmo = value;
+    }
+
+    /// <summary>
+    /// 무한 체력 디버그 플래그입니다. 실제 저장·판정은 <see cref="PlayerHealth"/>가 소유하며,
+    /// 이 프로퍼티는 디버그 트레이너 창이 단일 진입점(<c>PlayerbleUnitData</c>)으로만 접근하도록 하는 패스스루입니다.
+    /// </summary>
+    public bool DebugInfiniteHealth
+    {
+        get => m_health != null && m_health.DebugInfiniteHealth;
+        set
+        {
+            if (m_health != null)
+            {
+                m_health.DebugInfiniteHealth = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 무한 장탄수(현재 탄창) 디버그 플래그입니다. 실제 저장·판정은 <see cref="WeaponController"/>가 소유하며,
+    /// 이 프로퍼티는 디버그 트레이너 창이 단일 진입점(<c>PlayerbleUnitData</c>)으로만 접근하도록 하는 패스스루입니다.
+    /// </summary>
+    public bool DebugInfiniteMagazine
+    {
+        get => m_weaponController != null && m_weaponController.DebugInfiniteMagazine;
+        set
+        {
+            if (m_weaponController != null)
+            {
+                m_weaponController.DebugInfiniteMagazine = value;
+            }
+        }
+    }
+#endif
+
     /// <summary>
     /// 공개 상태 중 외부에 노출되는 값이 바뀌었을 때 발생합니다.
     /// </summary>
@@ -115,7 +160,10 @@ public class PlayerbleUnitData : MonoBehaviour
     /// <summary>
     /// 직접 조작 중인지 여부입니다.
     /// </summary>
-    public bool IsPlayerControlled => m_squadMember != null && m_squadMember.IsPlayerControlled;
+    public bool IsPlayerSquadMember => m_squadMember != null && m_squadMember.IsPlayerSquadMember;
+
+    /// <summary>현재 스쿼드 AI가 조작하는 AiSquadMember인지 여부입니다.</summary>
+    public bool IsAiSquadMember => m_squadMember != null && m_squadMember.IsAiSquadMember;
 
     /// <summary>
     /// 출격 또는 배치 가능한 상태인지 여부입니다.
@@ -236,12 +284,14 @@ public class PlayerbleUnitData : MonoBehaviour
     {
         CacheReferences();
         SubscribeHealth();
+        SubscribeSquadMember();
         SubscribeWeapon();
     }
 
     private void OnDisable()
     {
         UnsubscribeHealth();
+        UnsubscribeSquadMember();
         UnsubscribeWeapon();
     }
 
@@ -389,6 +439,15 @@ public class PlayerbleUnitData : MonoBehaviour
     public void SetReserveAmmo(int value)
     {
         int clampedValue = Mathf.Clamp(value, 0, m_maxReserveAmmo);
+
+#if UNITY_EDITOR
+        if (m_debugInfiniteReserveAmmo && clampedValue < m_reserveAmmo)
+        {
+            // 무한 탄창 디버그가 켜져 있으면 소모(감소) 호출은 무시합니다. 증가(예: 보급)는 그대로 반영됩니다.
+            return;
+        }
+#endif
+
         if (m_reserveAmmo == clampedValue)
         {
             return;
@@ -461,6 +520,7 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_health.OnHPChanged += HandleHpChanged;
+        m_health.OnDown += NotifyPublicDataChanged;
         m_health.OnDeath += NotifyPublicDataChanged;
         m_health.OnRevive += NotifyPublicDataChanged;
         m_health.OnInjuryGaugeChanged += HandleInjuryGaugeChanged;
@@ -475,10 +535,29 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_health.OnHPChanged -= HandleHpChanged;
+        m_health.OnDown -= NotifyPublicDataChanged;
         m_health.OnDeath -= NotifyPublicDataChanged;
         m_health.OnRevive -= NotifyPublicDataChanged;
         m_health.OnInjuryGaugeChanged -= HandleInjuryGaugeChanged;
         m_health.OnInjuryStateChanged -= HandleInjuryStateChanged;
+    }
+
+    /// <summary>스쿼드 조작 역할 변경을 공개 데이터 변경 이벤트로 전달하도록 구독합니다.</summary>
+    private void SubscribeSquadMember()
+    {
+        if (m_squadMember != null)
+        {
+            m_squadMember.OnPlayerSquadMemberChanged += HandlePlayerSquadMemberChanged;
+        }
+    }
+
+    /// <summary>스쿼드 조작 역할 변경 이벤트 구독을 해제합니다.</summary>
+    private void UnsubscribeSquadMember()
+    {
+        if (m_squadMember != null)
+        {
+            m_squadMember.OnPlayerSquadMemberChanged -= HandlePlayerSquadMemberChanged;
+        }
     }
 
     private void SubscribeWeapon()
@@ -506,12 +585,18 @@ public class PlayerbleUnitData : MonoBehaviour
         NotifyPublicDataChanged();
     }
 
-    private void HandleInjuryGaugeChanged(int accumulatedDamage, float normalizedValue)
+    private void HandleInjuryGaugeChanged(float currentGauge, float normalizedValue)
     {
         NotifyPublicDataChanged();
     }
 
     private void HandleInjuryStateChanged(PlayerInjuryState injuryState)
+    {
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>PlayerSquadMember 또는 AiSquadMember 역할 변경을 공개 상태 변경으로 전달합니다.</summary>
+    private void HandlePlayerSquadMemberChanged(bool isPlayerSquadMember)
     {
         NotifyPublicDataChanged();
     }

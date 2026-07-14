@@ -63,7 +63,7 @@ namespace GrayZone.EditorTools
                 {
                     name = m.MemberName,
                     go = m.name,
-                    playerControlled = m.IsPlayerControlled,
+                    playerSquadMember = m.IsPlayerSquadMember,
                     alive = m.IsAlive,
                     down = m.IsDown,
                     tpc = tpc == null ? null : new
@@ -169,15 +169,15 @@ namespace GrayZone.EditorTools
             var sm = Object.FindFirstObjectByType<SquadManager>();
             var cam = Camera.main;
 
-            SquadMemberController controlled = null;
+            SquadMemberController playerSquadMember = null;
             foreach (var m in Object.FindObjectsByType<SquadMemberController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
-                if (m.IsPlayerControlled) { controlled = m; break; }
+                if (m.IsPlayerSquadMember) { playerSquadMember = m; break; }
             }
 
-            var ic = controlled != null ? controlled.GetComponent<InteractionController>() : null;
-            var pud = controlled != null ? controlled.GetComponent<PlayerbleUnitData>() : null;
-            Vector3 origin = controlled != null ? controlled.transform.position : Vector3.zero;
+            var ic = playerSquadMember != null ? playerSquadMember.GetComponent<InteractionController>() : null;
+            var pud = playerSquadMember != null ? playerSquadMember.GetComponent<PlayerbleUnitData>() : null;
+            Vector3 origin = playerSquadMember != null ? playerSquadMember.transform.position : Vector3.zero;
             Vector3 facing = cam != null ? cam.transform.forward : Vector3.forward;
 
             var targets = new List<object>();
@@ -193,11 +193,11 @@ namespace GrayZone.EditorTools
                 targets.Add(new
                 {
                     go = dai.name,
-                    canInteract = controlled != null && dai.CanInteract(controlled.gameObject),
+                    canInteract = playerSquadMember != null && dai.CanInteract(playerSquadMember.gameObject),
                     holdDuration = dai.HoldDuration,
                     holdActive = dai.IsReviveHoldActive,
                     holdProgress = dai.ReviveHoldProgress01,
-                    isSelf = controlled != null && member == controlled,
+                    isSelf = playerSquadMember != null && member == playerSquadMember,
                     memberIsAlive = member != null && member.IsAlive,
                     memberIsDown = member != null && member.IsDown,
                     healthIsDowned = health != null && health.IsDowned,
@@ -212,14 +212,14 @@ namespace GrayZone.EditorTools
 
             return new SuccessResponse("revive diagnostic", new
             {
-                controlled = controlled != null ? controlled.name : "none",
-                interactPressed = controlled != null && controlled.GetComponent<PlayerInputs>() != null && controlled.GetComponent<PlayerInputs>().Interact,
+                playerSquadMember = playerSquadMember != null ? playerSquadMember.name : "none",
+                interactPressed = playerSquadMember != null && playerSquadMember.GetComponent<PlayerInputs>() != null && playerSquadMember.GetComponent<PlayerInputs>().Interact,
                 holdProgress01 = ic != null ? ic.HoldProgress01 : -1f,
                 interactionRadius = ic != null ? GetPrivate<float>(ic, "m_radius") : -1f,
                 interactionMaxAngle = ic != null ? GetPrivate<float>(ic, "m_maxAngle") : -1f,
                 currentTarget = ic != null && ic.Current is Component cc ? cc.name : "null",
                 hasReviveTarget = pud != null && pud.HasReviveInteractionTarget,
-                squadCurrentPlayerData = sm != null && sm.CurrentPlayerData != null ? sm.CurrentPlayerData.name : "none",
+                playerSquadMemberData = sm != null && sm.PlayerSquadMemberData != null ? sm.PlayerSquadMemberData.name : "none",
                 cameraForward = cam != null ? facing.ToString("F2") : "noCam",
                 targetCount = targets.Count,
                 targets,

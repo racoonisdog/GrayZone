@@ -151,6 +151,9 @@ public class WeaponController : MonoBehaviour
     [Foldout("Hitscan Options")]
     [SerializeField] private int m_hitscanDamage = 1;
 
+    [Tooltip("Multiplier applied by this weapon when a hitscan shot hits a headshot hitbox.")]
+    [SerializeField] private float m_headshotDamageMultiplier = 2.0f;
+
     [SerializeField] private float m_hitscanRange = 100.0f;
 
     [SerializeField] private LayerMask m_hitscanLayerMask = ~0;
@@ -240,7 +243,31 @@ public class WeaponController : MonoBehaviour
     [Foldout("Debug")]
     [Tooltip("Editor-only SpreadDebug console log. Calls are stripped from Player builds.")]
     [SerializeField] private bool m_debugLogSpread = false;
+
+    [Foldout("Debug")]
+    [Tooltip("켜면 사격해도 현재 장전된 탄약이 줄지 않습니다(무한 장탄수). Player 빌드에서는 항상 꺼진 것으로 취급됩니다.")]
+    [SerializeField] private bool m_debugInfiniteMagazine = false;
+
+    /// <summary>무한 장탄수 디버그 플래그입니다. 디버그 트레이너 창에서 사용합니다.</summary>
+    public bool DebugInfiniteMagazine
+    {
+        get => m_debugInfiniteMagazine;
+        set => m_debugInfiniteMagazine = value;
+    }
 #endif
+
+    /// <summary>무한 장탄수 디버그 플래그입니다. Player 빌드에서는 항상 false로 컴파일됩니다.</summary>
+    private bool IsInfiniteMagazineDebugActive
+    {
+        get
+        {
+#if UNITY_EDITOR
+            return m_debugInfiniteMagazine;
+#else
+            return false;
+#endif
+        }
+    }
 
     public const float HitscanAimTolerance = 0.05f;
 
@@ -314,6 +341,9 @@ public class WeaponController : MonoBehaviour
 
     /// <summary>히트스캔 사격이 적에게 적용할 피해량입니다.</summary>
     public int HitscanDamage => m_hitscanDamage;
+
+    /// <summary>헤드샷 히트박스에 명중했을 때 이 무기가 적용할 피해 배율입니다.</summary>
+    public float HeadshotDamageMultiplier => m_headshotDamageMultiplier;
 
     /// <summary>히트스캔 레이캐스트가 충돌 검사할 레이어 마스크입니다.</summary>
     public LayerMask HitscanLayerMask => m_hitscanLayerMask;
@@ -474,6 +504,7 @@ public class WeaponController : MonoBehaviour
         m_shootDelay = Mathf.Max(0.0f, m_shootDelay);
         m_reloadTime = Mathf.Max(0.0f, m_reloadTime);
         m_hitscanDamage = Mathf.Max(0, m_hitscanDamage);
+        m_headshotDamageMultiplier = Mathf.Max(0.0f, m_headshotDamageMultiplier);
         m_hitscanRange = Mathf.Max(0.0f, m_hitscanRange);
         m_adsMinSpread = Mathf.Max(0.0f, m_adsMinSpread);
         m_hipfireMinSpread = Mathf.Max(0.0f, m_hipfireMinSpread);
@@ -508,7 +539,7 @@ public class WeaponController : MonoBehaviour
             return false;
         }
 
-        if (!m_canShoot || m_isReloading || m_currentBullet <= 0)
+        if (!m_canShoot || m_isReloading || (m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive))
         {
             return false;
         }
@@ -519,7 +550,10 @@ public class WeaponController : MonoBehaviour
             return false;
         }
 
-        m_currentBullet--;
+        if (!IsInfiniteMagazineDebugActive)
+        {
+            m_currentBullet--;
+        }
         m_canShoot = false;
         // 오브젝트 풀링
         SpawnBullet(targetPosition);
@@ -555,12 +589,15 @@ public class WeaponController : MonoBehaviour
             return false;
         }
 
-        if (!m_canShoot || m_isReloading || m_currentBullet <= 0)
+        if (!m_canShoot || m_isReloading || (m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive))
         {
             return false;
         }
 
-        m_currentBullet--;
+        if (!IsInfiniteMagazineDebugActive)
+        {
+            m_currentBullet--;
+        }
         m_canShoot = false;
 
         firedShot = BuildFiredShot(shotInfo, isAds);
@@ -885,7 +922,11 @@ public class WeaponController : MonoBehaviour
             return;
         }
 
-        CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(shotInfo.Hit.collider, m_ownerFaction, m_hitscanDamage);
+        CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
+            shotInfo.Hit.collider,
+            m_ownerFaction,
+            m_hitscanDamage,
+            m_headshotDamageMultiplier);
         if (feedback.Applied)
         {
             OnHitFeedback?.Invoke(feedback);

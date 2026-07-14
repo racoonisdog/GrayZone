@@ -55,9 +55,10 @@ public class SquadMemberController : MonoBehaviour
     [SerializeField] private SquadRole m_role = SquadRole.Support;
 
     [Foldout("State Options")]
-    [Tooltip("현재 플레이어가 직접 조작 중인지 여부입니다.")]
+    [Tooltip("현재 PlayerSquadMember 역할인지 여부입니다. false이면 AiSquadMember 역할입니다.")]
     [FormerlySerializedAs("isPlayerControlled")]
-    [SerializeField] private bool m_isPlayerControlled;
+    [FormerlySerializedAs("m_isPlayerControlled")]
+    [SerializeField] private bool m_isPlayerSquadMember;
 
     [Tooltip("현재 멤버가 생존 상태인지 여부입니다.")]
     [FormerlySerializedAs("isAlive")]
@@ -121,8 +122,11 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>스쿼드 멤버의 역할입니다.</summary>
     public SquadRole Role => m_role;
 
-    /// <summary>현재 플레이어가 직접 조작 중인지 여부입니다.</summary>
-    public bool IsPlayerControlled => m_isPlayerControlled;
+    /// <summary>현재 플레이어가 직접 조작하는 PlayerSquadMember인지 여부입니다.</summary>
+    public bool IsPlayerSquadMember => m_isPlayerSquadMember;
+
+    /// <summary>현재 스쿼드 AI가 조작하는 AiSquadMember인지 여부입니다.</summary>
+    public bool IsAiSquadMember => !m_isPlayerSquadMember;
 
     /// <summary>현재 멤버가 생존 상태인지 여부입니다.</summary>
     public bool IsAlive => m_isAlive;
@@ -139,8 +143,12 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>이 멤버가 다운(빈사) 상태로 진입할 때 발생합니다.</summary>
     public event Action<SquadMemberController> OnMemberDowned;
 
+    /// <summary>이 멤버의 직접 조작 역할이 PlayerSquadMember와 AiSquadMember 사이에서 변경될 때 발생합니다.</summary>
+    public event Action<bool> OnPlayerSquadMemberChanged;
+
     private static readonly int DownHash = Animator.StringToHash("IsDown");
     private static readonly int DeathHash = Animator.StringToHash("IsDead");
+    private static readonly int DoDeathHash = Animator.StringToHash("DoDeath");
     private static readonly int InteractionHash = Animator.StringToHash("IsInteraction");
     private static readonly int ReviveHash = Animator.StringToHash("IsRevive");
     private static readonly int StandingHash = Animator.StringToHash("IsStanding");
@@ -309,17 +317,23 @@ public class SquadMemberController : MonoBehaviour
     }
 
     /// <summary>
-    /// 이 멤버가 플레이어 직접 조작 대상인지 설정합니다.
+    /// 이 멤버의 현재 역할을 PlayerSquadMember 또는 AiSquadMember로 설정합니다.
     /// </summary>
     /// <param name="value">직접 조작 대상이면 true입니다.</param>
-    public void SetPlayerControlled(bool value)
+    public void SetPlayerSquadMember(bool value)
     {
-        m_isPlayerControlled = value;
-        if (!m_isPlayerControlled)
+        bool wasPlayerSquadMember = m_isPlayerSquadMember;
+        m_isPlayerSquadMember = value;
+        if (!m_isPlayerSquadMember)
         {
             m_isInteractionLocked = false;
         }
         ApplyControlState();
+
+        if (wasPlayerSquadMember != m_isPlayerSquadMember)
+        {
+            OnPlayerSquadMemberChanged?.Invoke(m_isPlayerSquadMember);
+        }
     }
 
     /// <summary>
@@ -342,6 +356,12 @@ public class SquadMemberController : MonoBehaviour
 
         if (wasAlive && !m_isAlive)
         {
+            // 사망 진입 순간에만 1회 발동(트리거는 자동 소비되어 재진입 문제가 없습니다).
+            if (m_animator != null)
+            {
+                m_animator.SetTrigger(DoDeathHash);
+            }
+
             OnMemberDied?.Invoke(this);
         }
     }
@@ -761,9 +781,9 @@ public class SquadMemberController : MonoBehaviour
     /// </summary>
     private void ApplyControlState()
     {
-        bool allowPlayerInput = m_isAlive && !m_isDown && m_isPlayerControlled;
+        bool allowPlayerInput = m_isAlive && !m_isDown && m_isPlayerSquadMember;
         bool allowDirectControl = allowPlayerInput && !m_isInteractionLocked;
-        bool allowAIControl = m_isAlive && !m_isDown && !m_isPlayerControlled;
+        bool allowAiSquadMember = m_isAlive && !m_isDown && !m_isPlayerSquadMember;
 
         if (!allowDirectControl && m_aimController != null)
         {
@@ -792,7 +812,7 @@ public class SquadMemberController : MonoBehaviour
             m_characterController.enabled = allowDirectControl;
         }
 
-        ApplyNavMeshAgentState(allowAIControl);
+        ApplyNavMeshAgentState(allowAiSquadMember);
 
         if (m_thirdPersonController != null)
         {
@@ -825,7 +845,7 @@ public class SquadMemberController : MonoBehaviour
 
         if (m_followerAI != null)
         {
-            m_followerAI.enabled = allowAIControl;
+            m_followerAI.enabled = allowAiSquadMember;
         }
 
         ApplyPlayerInputState(allowPlayerInput);
@@ -847,15 +867,15 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>
     /// AI 제어 가능 여부에 따라 NavMeshAgent 상태를 전환합니다.
     /// </summary>
-    /// <param name="allowAIControl">AI 이동을 허용하면 true입니다.</param>
-    private void ApplyNavMeshAgentState(bool allowAIControl)
+    /// <param name="allowAiSquadMember">AiSquadMember 이동을 허용하면 true입니다.</param>
+    private void ApplyNavMeshAgentState(bool allowAiSquadMember)
     {
         if (m_navMeshAgent == null)
         {
             return;
         }
 
-        if (allowAIControl)
+        if (allowAiSquadMember)
         {
             if (!m_navMeshAgent.enabled)
             {

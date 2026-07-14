@@ -2,7 +2,7 @@
 using UnityEngine.UI;
 
 /// <summary>
-/// Toggles the revive HUD panels from the currently controlled player data.
+/// 현재 PlayerSquadMember 데이터에 따라 구조 HUD 패널을 전환합니다.
 /// </summary>
 [DisallowMultipleComponent]
 public class ReviveHudController : MonoBehaviour
@@ -73,7 +73,7 @@ public class ReviveHudController : MonoBehaviour
 
     private void UpdateHud()
     {
-        PlayerbleUnitData playerData = ResolveCurrentPlayerData();
+        PlayerbleUnitData playerData = ResolvePlayerSquadMemberData();
         DownedAllyInteractable reviveTarget = playerData != null ? playerData.CurrentReviveInteractionTarget : null;
         if (reviveTarget == null)
         {
@@ -87,7 +87,7 @@ public class ReviveHudController : MonoBehaviour
         SetGauge(isReviving ? playerData.ReviveGaugeAmount : 0.0f);
     }
 
-    private PlayerbleUnitData ResolveCurrentPlayerData()
+    private PlayerbleUnitData ResolvePlayerSquadMemberData()
     {
         if (m_squadManager == null)
         {
@@ -96,7 +96,7 @@ public class ReviveHudController : MonoBehaviour
 
         if (m_squadManager != null)
         {
-            return m_squadManager.CurrentPlayerData;
+            return m_squadManager.PlayerSquadMemberData;
         }
 
         PlayerbleUnitData[] dataSources = FindObjectsByType<PlayerbleUnitData>(
@@ -106,7 +106,7 @@ public class ReviveHudController : MonoBehaviour
         for (int i = 0; i < dataSources.Length; i++)
         {
             PlayerbleUnitData data = dataSources[i];
-            if (data != null && data.IsPlayerControlled)
+            if (data != null && data.IsPlayerSquadMember)
             {
                 return data;
             }
