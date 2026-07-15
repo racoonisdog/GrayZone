@@ -1,28 +1,111 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
+/// <summary>GameDataManager가 평탄하게 보관하는 셸터 전용 캐릭터 시설 배치 정보입니다.</summary>
 [Serializable]
-public class ShelterRuntimeData
+public sealed class ShelterCharacterAssignmentData
+{
+    [SerializeField] private string runtimeId = string.Empty;
+    [SerializeField] private string facilityId = string.Empty;
+    [SerializeField] private string roomId = string.Empty;
+    [SerializeField] private FacilityAssignmentKind kind;
+
+    public string RuntimeId => runtimeId ?? string.Empty;
+    public string FacilityId => facilityId ?? string.Empty;
+    public string RoomId => roomId ?? string.Empty;
+    public FacilityAssignmentKind Kind => kind;
+    public bool IsAssigned => !string.IsNullOrWhiteSpace(RuntimeId)
+        && !string.IsNullOrWhiteSpace(FacilityId)
+        && Kind != FacilityAssignmentKind.None;
+
+    public ShelterCharacterAssignmentData(
+        string runtimeId,
+        string facilityId,
+        string roomId,
+        FacilityAssignmentKind kind)
+    {
+        this.runtimeId = runtimeId?.Trim() ?? string.Empty;
+        this.facilityId = facilityId?.Trim() ?? string.Empty;
+        this.roomId = string.IsNullOrWhiteSpace(roomId) ? this.facilityId : roomId.Trim();
+        this.kind = kind;
+    }
+
+    public ShelterCharacterAssignmentData(ShelterMemberRuntimeData character)
+        : this(
+            character?.RuntimeId,
+            character?.AssignedFacilityId,
+            character?.AssignedRoomId,
+            character?.AssignmentKind ?? FacilityAssignmentKind.None)
+    {
+    }
+
+    public ShelterCharacterAssignmentData Clone()
+        => new ShelterCharacterAssignmentData(RuntimeId, FacilityId, RoomId, Kind);
+}
+
+/// <summary>GameDataManager에서 셸터 씬으로 전달하는 진입 패킷입니다.</summary>
+[Serializable]
+public sealed class ShelterEntryData
+{
+    [SerializeField] private ShelterRuntimeData initialState = new();
+
+    public ShelterEntryData(ShelterRuntimeData source)
+    {
+        initialState = source?.Clone() ?? new ShelterRuntimeData();
+    }
+
+    public ShelterRuntimeData CreateRuntimeData() => initialState?.Clone() ?? new ShelterRuntimeData();
+    public ShelterEntryData Clone() => new ShelterEntryData(initialState);
+}
+
+/// <summary>GameDataManager의 평탄 정본에서 셸터 씬이 사용할 값만 복사해 담는 작업 데이터입니다.</summary>
+[Serializable]
+public sealed class ShelterRuntimeData
 {
     public const int MinBattleSquadSize = 1;
     public const int MaxBattleSquadSize = 3;
 
+    [SerializeField] private int shelterStability = 100;
     [SerializeField] private int currentDay = 1;
-    [SerializeField] private List<string> battleSquadNpcDefinitionIds = new List<string>();
-    [SerializeField] private List<FacilityRuntimeState> facilityStates = new List<FacilityRuntimeState>();
+    [FormerlySerializedAs("battleSquadNpcDefinitionIds")]
+    [SerializeField] private List<string> battleSquadRuntimeIds = new();
+    [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
+    [SerializeField] private List<ShelterMemberRuntimeData> characters = new();
 
+    private ResourceStorage resources;
+
+    public int ShelterStability => Mathf.Clamp(shelterStability, 0, 100);
+    public int PlayableCharacterCount => CharacterCount;
+    public int NonPlayableNpcCount => 0;
+    public int TotalOwnedCharacterCount => CharacterCount;
+    public int CharacterCount => Characters.Count;
     public int CurrentDay => Mathf.Max(1, currentDay);
-    public IReadOnlyList<string> BattleSquadNpcDefinitionIds => battleSquadNpcDefinitionIds;
+    public IReadOnlyList<string> BattleSquadRuntimeIds => battleSquadRuntimeIds;
     public IReadOnlyList<FacilityRuntimeState> FacilityStates => facilityStates;
+    public IReadOnlyList<ShelterMemberRuntimeData> Characters => characters;
+
+    public ResourceStorage Resources
+    {
+        get
+        {
+            resources ??= new ResourceStorage();
+            return resources;
+        }
+    }
 
     public void EnsureRuntimeContainers()
     {
+        shelterStability = Mathf.Clamp(shelterStability, 0, 100);
         currentDay = Mathf.Max(1, currentDay);
-        battleSquadNpcDefinitionIds ??= new List<string>();
+        battleSquadRuntimeIds ??= new List<string>();
         facilityStates ??= new List<FacilityRuntimeState>();
-        NormalizeBattleSquad();
+        characters ??= new List<ShelterMemberRuntimeData>();
+        _ = Resources;
 
+        NormalizeCharacters();
+        NormalizeBattleSquad();
         for (int i = facilityStates.Count - 1; i >= 0; i--)
         {
             if (facilityStates[i] == null)
@@ -35,14 +118,15 @@ public class ShelterRuntimeData
     public ShelterRuntimeData Clone()
     {
         EnsureRuntimeContainers();
-
         ShelterRuntimeData clone = new ShelterRuntimeData
         {
+            shelterStability = ShelterStability,
             currentDay = CurrentDay,
-            battleSquadNpcDefinitionIds = new List<string>(battleSquadNpcDefinitionIds),
-            facilityStates = CloneFacilityStates(facilityStates)
+            battleSquadRuntimeIds = new List<string>(battleSquadRuntimeIds),
+            facilityStates = CloneFacilityStates(facilityStates),
+            characters = CloneCharacters(characters)
         };
-
+        clone.Resources.CopyFrom(Resources);
         return clone;
     }
 
@@ -52,182 +136,249 @@ public class ShelterRuntimeData
             return;
 
         source.EnsureRuntimeContainers();
-        EnsureRuntimeContainers();
-
-        SetCurrentDay(source.CurrentDay);
-        battleSquadNpcDefinitionIds = new List<string>(source.battleSquadNpcDefinitionIds);
-        NormalizeBattleSquad();
+        shelterStability = source.ShelterStability;
+        currentDay = source.CurrentDay;
+        battleSquadRuntimeIds = new List<string>(source.battleSquadRuntimeIds);
         facilityStates = CloneFacilityStates(source.facilityStates);
+        characters = CloneCharacters(source.characters);
+        Resources.CopyFrom(source.Resources);
+        EnsureRuntimeContainers();
     }
 
-    public void SetCurrentDay(int day)
-    {
-        currentDay = Mathf.Max(1, day);
-    }
+    public void SetShelterStability(int stability) => shelterStability = Mathf.Clamp(stability, 0, 100);
 
-    public void ApplySavedState(int day, IEnumerable<string> battleSquadDefinitionIds, IEnumerable<FacilityRuntimeState> savedFacilityStates)
+    public void SetCurrentDay(int day) => currentDay = Mathf.Max(1, day);
+
+    public void ApplySavedState(
+        int day,
+        IEnumerable<string> squadRuntimeIds,
+        IEnumerable<FacilityRuntimeState> savedFacilityStates)
     {
         SetCurrentDay(day);
-
-        battleSquadNpcDefinitionIds.Clear();
-        if (battleSquadDefinitionIds != null)
+        battleSquadRuntimeIds.Clear();
+        if (squadRuntimeIds != null)
         {
-            foreach (string definitionId in battleSquadDefinitionIds)
-            {
-                TryAddBattleSquadNpc(definitionId);
-            }
+            foreach (string runtimeId in squadRuntimeIds)
+                TryAddBattleSquadCharacter(runtimeId);
         }
 
         facilityStates.Clear();
-        if (savedFacilityStates != null)
+        if (savedFacilityStates == null)
+            return;
+
+        foreach (FacilityRuntimeState state in savedFacilityStates)
         {
-            foreach (FacilityRuntimeState state in savedFacilityStates)
-            {
-                if (state == null)
-                    continue;
+            if (state == null)
+                continue;
 
-                state.EnsureValid();
-                if (string.IsNullOrWhiteSpace(state.facilityId))
-                    continue;
-
+            state.EnsureValid();
+            if (!string.IsNullOrWhiteSpace(state.facilityId))
                 facilityStates.Add(new FacilityRuntimeState(state.facilityId, state.isUnlocked, state.upgradeLevel));
-            }
         }
+    }
+
+    public void SetCharacters(IEnumerable<CharacterSnapshotData> snapshots)
+    {
+        characters.Clear();
+        if (snapshots == null)
+            return;
+
+        foreach (CharacterSnapshotData snapshot in snapshots)
+            TryAddCharacter(snapshot, out _);
+    }
+
+    public bool TryAddCharacter(CharacterSnapshotData snapshot, out ShelterMemberRuntimeData character)
+    {
+        character = null;
+        if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.DefinitionId))
+            return false;
+
+        ShelterMemberRuntimeData created = new ShelterMemberRuntimeData(snapshot);
+        if (!AddCharacter(created))
+            return false;
+
+        character = created;
+        return true;
+    }
+
+    public bool AddCharacter(ShelterMemberRuntimeData character)
+    {
+        if (character == null || string.IsNullOrWhiteSpace(character.RuntimeId))
+            return false;
+        if (TryGetCharacter(character.RuntimeId, out _))
+            return false;
+
+        characters.Add(character);
+        return true;
+    }
+
+    public bool RemoveCharacter(string runtimeId)
+    {
+        if (!TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
+            return false;
+
+        characters.Remove(character);
+        RemoveCharacterReferences(character.RuntimeId);
+        return true;
+    }
+
+    public bool TryGetCharacter(string runtimeId, out ShelterMemberRuntimeData character)
+    {
+        character = null;
+        if (string.IsNullOrWhiteSpace(runtimeId))
+            return false;
+
+        string id = runtimeId.Trim();
+        character = characters.Find(item => item != null && item.RuntimeId == id);
+        if (character != null)
+            return true;
+
+        // schemaVersion 6 이하 정의 ID 기반 호출을 읽는 동안만 사용하는 호환 조회입니다.
+        character = characters.Find(item => item != null && item.DefinitionId == id);
+        return character != null;
     }
 
     public FacilityRuntimeState GetOrCreateFacilityState(string facilityId, bool isUnlockedByDefault)
     {
         EnsureRuntimeContainers();
-
-        string normalizedFacilityId = string.IsNullOrWhiteSpace(facilityId) ? string.Empty : facilityId.Trim();
-        if (string.IsNullOrEmpty(normalizedFacilityId))
+        string id = string.IsNullOrWhiteSpace(facilityId) ? string.Empty : facilityId.Trim();
+        if (string.IsNullOrEmpty(id))
             return null;
 
         foreach (FacilityRuntimeState state in facilityStates)
         {
             if (state == null)
                 continue;
-
             state.EnsureValid();
-            if (state.facilityId == normalizedFacilityId)
+            if (state.facilityId == id)
                 return state;
         }
 
-        FacilityRuntimeState created = new FacilityRuntimeState(normalizedFacilityId, isUnlockedByDefault);
+        FacilityRuntimeState created = new FacilityRuntimeState(id, isUnlockedByDefault);
         facilityStates.Add(created);
         return created;
     }
 
-    public bool TrySetBattleSquad(IEnumerable<string> definitionIds)
+    public bool TrySetBattleSquad(IEnumerable<string> runtimeIds)
     {
-        if (definitionIds == null)
+        if (runtimeIds == null)
             return false;
 
-        List<string> normalizedIds = new List<string>();
-        foreach (string definitionId in definitionIds)
+        List<string> normalized = new List<string>();
+        foreach (string runtimeId in runtimeIds)
         {
-            if (string.IsNullOrWhiteSpace(definitionId))
+            if (string.IsNullOrWhiteSpace(runtimeId))
                 continue;
 
-            string trimmedDefinitionId = definitionId.Trim();
-            if (normalizedIds.Contains(trimmedDefinitionId))
+            string id = ResolveRuntimeId(runtimeId);
+            if (string.IsNullOrEmpty(id) || normalized.Contains(id))
                 continue;
 
-            normalizedIds.Add(trimmedDefinitionId);
-            if (normalizedIds.Count > MaxBattleSquadSize)
+            normalized.Add(id);
+            if (normalized.Count > MaxBattleSquadSize)
                 return false;
         }
 
-        if (normalizedIds.Count < MinBattleSquadSize)
+        if (normalized.Count < MinBattleSquadSize)
             return false;
 
-        battleSquadNpcDefinitionIds = normalizedIds;
+        battleSquadRuntimeIds = normalized;
         return true;
     }
 
-    public bool TryAddBattleSquadNpc(string definitionId)
+    public bool TryAddBattleSquadCharacter(string runtimeId)
     {
-        if (string.IsNullOrWhiteSpace(definitionId))
+        string id = ResolveRuntimeId(runtimeId);
+        if (string.IsNullOrEmpty(id))
             return false;
-
-        string trimmedDefinitionId = definitionId.Trim();
-        if (battleSquadNpcDefinitionIds.Contains(trimmedDefinitionId))
+        if (battleSquadRuntimeIds.Contains(id))
             return true;
-
-        if (battleSquadNpcDefinitionIds.Count >= MaxBattleSquadSize)
+        if (battleSquadRuntimeIds.Count >= MaxBattleSquadSize)
             return false;
 
-        battleSquadNpcDefinitionIds.Add(trimmedDefinitionId);
+        battleSquadRuntimeIds.Add(id);
         return true;
     }
 
-    public bool TryRemoveBattleSquadNpc(string definitionId)
+    public bool TryRemoveBattleSquadCharacter(string runtimeId)
     {
-        if (string.IsNullOrWhiteSpace(definitionId))
+        if (battleSquadRuntimeIds.Count <= MinBattleSquadSize)
             return false;
 
-        if (battleSquadNpcDefinitionIds.Count <= MinBattleSquadSize)
-            return false;
-
-        return battleSquadNpcDefinitionIds.Remove(definitionId.Trim());
+        string id = ResolveRuntimeId(runtimeId);
+        return !string.IsNullOrEmpty(id) && battleSquadRuntimeIds.Remove(id);
     }
 
-    public void ClearBattleSquad()
+    public void ClearBattleSquad() => battleSquadRuntimeIds.Clear();
+
+    public void RemoveCharacterReferences(string runtimeId)
     {
-        battleSquadNpcDefinitionIds.Clear();
+        string id = ResolveRuntimeId(runtimeId);
+        if (!string.IsNullOrEmpty(id))
+            battleSquadRuntimeIds.RemoveAll(value => value == id);
     }
 
-    public void RemoveNpcReferences(string definitionId)
+    private string ResolveRuntimeId(string id)
     {
-        if (string.IsNullOrWhiteSpace(definitionId))
-            return;
+        return TryGetCharacter(id, out ShelterMemberRuntimeData character)
+            ? character.RuntimeId
+            : id?.Trim() ?? string.Empty;
+    }
 
-        battleSquadNpcDefinitionIds.RemoveAll(id => id == definitionId.Trim());
+    private void NormalizeCharacters()
+    {
+        HashSet<string> runtimeIds = new HashSet<string>();
+        for (int i = characters.Count - 1; i >= 0; i--)
+        {
+            ShelterMemberRuntimeData character = characters[i];
+            if (character == null
+                || string.IsNullOrWhiteSpace(character.RuntimeId)
+                || !runtimeIds.Add(character.RuntimeId))
+            {
+                characters.RemoveAt(i);
+            }
+        }
     }
 
     private void NormalizeBattleSquad()
     {
-        for (int i = battleSquadNpcDefinitionIds.Count - 1; i >= 0; i--)
+        List<string> normalized = new List<string>();
+        foreach (string value in battleSquadRuntimeIds)
         {
-            string definitionId = battleSquadNpcDefinitionIds[i];
-            if (string.IsNullOrWhiteSpace(definitionId))
-            {
-                battleSquadNpcDefinitionIds.RemoveAt(i);
-                continue;
-            }
-
-            battleSquadNpcDefinitionIds[i] = definitionId.Trim();
+            string id = ResolveRuntimeId(value);
+            if (!string.IsNullOrEmpty(id) && !normalized.Contains(id))
+                normalized.Add(id);
+            if (normalized.Count == MaxBattleSquadSize)
+                break;
         }
-
-        for (int i = battleSquadNpcDefinitionIds.Count - 1; i >= 0; i--)
-        {
-            if (battleSquadNpcDefinitionIds.IndexOf(battleSquadNpcDefinitionIds[i]) != i)
-            {
-                battleSquadNpcDefinitionIds.RemoveAt(i);
-            }
-        }
-
-        if (battleSquadNpcDefinitionIds.Count > MaxBattleSquadSize)
-        {
-            battleSquadNpcDefinitionIds.RemoveRange(MaxBattleSquadSize, battleSquadNpcDefinitionIds.Count - MaxBattleSquadSize);
-        }
+        battleSquadRuntimeIds = normalized;
     }
 
-    private static List<FacilityRuntimeState> CloneFacilityStates(List<FacilityRuntimeState> source)
+    private static List<ShelterMemberRuntimeData> CloneCharacters(IEnumerable<ShelterMemberRuntimeData> source)
+    {
+        List<ShelterMemberRuntimeData> clone = new List<ShelterMemberRuntimeData>();
+        if (source == null)
+            return clone;
+        foreach (ShelterMemberRuntimeData character in source)
+        {
+            if (character != null)
+                clone.Add(character.Clone());
+        }
+        return clone;
+    }
+
+    private static List<FacilityRuntimeState> CloneFacilityStates(IEnumerable<FacilityRuntimeState> source)
     {
         List<FacilityRuntimeState> clone = new List<FacilityRuntimeState>();
         if (source == null)
             return clone;
-
         foreach (FacilityRuntimeState state in source)
         {
             if (state == null)
                 continue;
-
             state.EnsureValid();
             clone.Add(new FacilityRuntimeState(state.facilityId, state.isUnlocked, state.upgradeLevel));
         }
-
         return clone;
     }
 }

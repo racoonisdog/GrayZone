@@ -1,27 +1,39 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
-//�̰� TestScene�뵵 ��������뵵 ���߿� ����
+/// <summary>
+/// 셸터 씬의 주요 매니저 참조를 연결하고 UI 상태에 따라 플레이어 조작 잠금을 적용하는 씬 조립 루트
+/// </summary>
 [DefaultExecutionOrder(-100)]
 public class ShelterSceneManager : MonoBehaviour
 {
+    /// <summary>현재 셸터 씬 매니저 싱글톤 인스턴스</summary>
     public static ShelterSceneManager Instance { get; private set; }
 
     [Header("Managers")]
-    [SerializeField] private ShelterDataManager m_ShelterDataManager;
+    [FormerlySerializedAs("m_ShelterDataManager")]
+    [SerializeField] private ShelterSceneDataManager m_ShelterSceneDataManager;
     [SerializeField] private UIManager m_UIManager;
     [SerializeField] private MedicalManager m_MedicalManager;
     [SerializeField] private bool m_copyDataFromGameDataManagerOnAwake = true;
 
 
-    //ToDo : ĳ���� ��Ʈ�ѷ� �Ŵ��� ũ�� ���� �ʿ�
+    // ToDo : 캐릭터 컨트롤러 매니저 크게 렙핑 필요
     [Header("Player Control")]
     [SerializeField] private PlayerMove m_PlayerMove;
     [SerializeField] private CameraLook m_CameraLook;
     [SerializeField] private bool m_autoFindReferences = true;
 
-    public ShelterDataManager ShelterDataManager => m_ShelterDataManager;
+    /// <summary>셸터 씬의 작업 데이터 매니저 참조</summary>
+    public ShelterSceneDataManager ShelterSceneDataManager => m_ShelterSceneDataManager;
+
+    /// <summary>셸터 씬 UI 매니저 참조</summary>
     public UIManager UIManager => m_UIManager;
+
+    /// <summary>셸터 씬 의료 시설 매니저 참조</summary>
     public MedicalManager MedicalManager => m_MedicalManager;
+
+    /// <summary>UI 등으로 플레이어 이동/시점 조작이 잠겨 있는지 여부</summary>
     public bool IsPlayerControlLocked { get; private set; }
 
     private void Reset()
@@ -72,18 +84,21 @@ public class ShelterSceneManager : MonoBehaviour
             Instance = null;
     }
 
+    /// <summary>
+    /// 글로벌 게임 데이터 매니저의 현재 스냅샷을 셸터 작업 데이터로 복사
+    /// </summary>
     public void CopyShelterDataFromGameDataManager()
     {
-        if (m_ShelterDataManager == null)
-            m_ShelterDataManager = ShelterDataManager.Instance;
+        if (m_ShelterSceneDataManager == null)
+            m_ShelterSceneDataManager = ShelterSceneDataManager.Instance;
 
-        if (m_ShelterDataManager == null)
+        if (m_ShelterSceneDataManager == null)
         {
-            Debug.LogWarning("[ShelterSceneManager] ShelterDataManager is not available.", this);
+            Debug.LogWarning("[ShelterSceneManager] ShelterSceneDataManager is not available.", this);
             return;
         }
 
-        m_ShelterDataManager.CopyFromDataManager();
+        m_ShelterSceneDataManager.InitializeFromGameData();
     }
 
     private void HandleActiveUIChanged(ShelterUIType activeUI)
@@ -109,8 +124,8 @@ public class ShelterSceneManager : MonoBehaviour
 
     private void CacheSceneReferences()
     {
-        if (m_ShelterDataManager == null)
-            m_ShelterDataManager = FindFirstObjectByType<ShelterDataManager>();
+        if (m_ShelterSceneDataManager == null)
+            m_ShelterSceneDataManager = FindFirstObjectByType<ShelterSceneDataManager>();
 
         if (m_UIManager == null)
             m_UIManager = FindFirstObjectByType<UIManager>();

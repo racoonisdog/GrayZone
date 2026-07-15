@@ -11,7 +11,7 @@ public enum SaveSlotType
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
 
     public int schemaVersion = CurrentSchemaVersion;
     public string profileId = "default";
@@ -34,9 +34,14 @@ public class SaveData
     {
         public string lastStageId = string.Empty;
         public int shelterStability = 100;
+        /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>
         public int playableCharacterCount;
+        /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>
         public int nonPlayableNpcCount;
         public List<ResourceAmountData> resources = new List<ResourceAmountData>();
+        /// <summary>schemaVersion 7 이상에서 사용하는 Battle 공용 캐릭터 정본입니다.</summary>
+        public List<CharacterSnapshotData> characters = new List<CharacterSnapshotData>();
+        /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 NPC 목록입니다.</summary>
         public List<NpcSaveData> npcs = new List<NpcSaveData>();
     }
 
@@ -44,7 +49,11 @@ public class SaveData
     public class ShelterSaveData
     {
         public int currentDay = 1;
+        /// <summary>schemaVersion 7 이상에서 사용하는 출전 캐릭터 런타임 ID 목록입니다.</summary>
+        public List<string> battleSquadRuntimeIds = new List<string>();
+        /// <summary>schemaVersion 6 이하 정의 ID 기반 출전 목록입니다.</summary>
         public List<string> battleSquadNpcDefinitionIds = new List<string>();
+        public List<CharacterAssignmentSaveData> characterAssignments = new List<CharacterAssignmentSaveData>();
         public List<FacilitySaveData> facilities = new List<FacilitySaveData>();
     }
 
@@ -62,6 +71,7 @@ public class SaveData
         public CharacterSnapshotData characterSnapshot = new CharacterSnapshotData();
 
         // schemaVersion 4 이하 저장 파일을 불러오기 위한 호환 필드입니다.
+        // injuryGauge는 최대값이 건강한 기존 회복 게이지 의미를 유지합니다.
         public string definitionId = string.Empty;
         public NPCType type;
         public int maxHp = 1;
@@ -78,5 +88,14 @@ public class SaveData
         public string facilityId = string.Empty;
         public bool isUnlocked;
         public int upgradeLevel;
+    }
+
+    [Serializable]
+    public class CharacterAssignmentSaveData
+    {
+        public string runtimeId = string.Empty;
+        public string facilityId = string.Empty;
+        public string roomId = string.Empty;
+        public FacilityAssignmentKind kind;
     }
 }

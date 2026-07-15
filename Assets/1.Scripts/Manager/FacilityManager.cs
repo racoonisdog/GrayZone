@@ -1,6 +1,9 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+/// <summary>
+/// 셸터 시설 정의와 런타임 상태를 연결하고 해금/업그레이드 명령을 처리하는 시설 관리자
+/// </summary>
 public class FacilityManager : MonoBehaviour
 {
     [SerializeField] private List<FacilityDefinition> m_definitions = new();
@@ -10,8 +13,10 @@ public class FacilityManager : MonoBehaviour
     // 씬의 시설 인스턴스(각자 Register로 등록). facilityId → 시설.
     private readonly Dictionary<string, IFacilityUpgradeable> m_facilities = new();
 
+    /// <summary>현재 씬의 시설 관리자 싱글톤 인스턴스</summary>
     public static FacilityManager Instance { get; private set; }
 
+    /// <summary>시설 ID별 런타임 시설 상태</summary>
     public IReadOnlyDictionary<string, FacilityState> States => m_states;
 
     private void Awake()
@@ -47,18 +52,29 @@ public class FacilityManager : MonoBehaviour
             Instance = null;
     }
 
+    /// <summary>
+    /// 시설 ID에 해당하는 시설 상태를 반환
+    /// </summary>
+    /// <param name="facilityId">조회할 시설 ID</param>
+    /// <returns>등록된 시설 상태가 있으면 해당 상태, 없으면 <c>null</c></returns>
     public FacilityState GetState(string facilityId)
         => m_states.TryGetValue(facilityId, out FacilityState state) ? state : null;
 
-    // 시설의 현재 업그레이드 레벨(진실원천). 상태가 없으면 0.
+    /// <summary>
+    /// 시설의 현재 업그레이드 레벨을 반환
+    /// </summary>
+    /// <param name="facilityId">조회할 시설 ID</param>
+    /// <returns>시설 상태가 있으면 해당 레벨, 없으면 0</returns>
     public int GetUpgradeLevel(string facilityId)
     {
         FacilityState state = GetState(facilityId);
         return state != null ? state.UpgradeLevel : 0;
     }
 
-    // 시설 인스턴스가 스스로 등록한다(보통 자신의 Start에서). 등록 즉시
-    // 세이브에서 복원된 해금/레벨 상태를 그 시설에 밀어준다.
+    /// <summary>
+    /// 씬의 시설 인스턴스를 등록하고 저장된 해금/레벨 상태를 즉시 반영
+    /// </summary>
+    /// <param name="facility">등록할 시설 인스턴스</param>
     public void Register(IFacilityUpgradeable facility)
     {
         if (facility == null)
@@ -75,6 +91,10 @@ public class FacilityManager : MonoBehaviour
         ApplyPersistedState(facility);
     }
 
+    /// <summary>
+    /// 씬의 시설 인스턴스 등록을 해제
+    /// </summary>
+    /// <param name="facility">해제할 시설 인스턴스</param>
     public void Unregister(IFacilityUpgradeable facility)
     {
         if (facility == null)
@@ -105,6 +125,11 @@ public class FacilityManager : MonoBehaviour
         facility.ApplyUpgradeLevel(state.UpgradeLevel);
     }
 
+    /// <summary>
+    /// 잠긴 시설을 해금하고 필요한 자원을 차감
+    /// </summary>
+    /// <param name="facilityId">해금할 시설 ID</param>
+    /// <returns>해금에 성공하면 <c>true</c></returns>
     public bool TryUnlock(string facilityId)
     {
         FacilityState state = GetState(facilityId);
@@ -113,22 +138,26 @@ public class FacilityManager : MonoBehaviour
         CostBundle cost = state.Definition.BuildUnlockCost();
         if (!cost.IsFree)
         {
-            if (ShelterDataManager.Instance == null)
+            if (ShelterSceneDataManager.Instance == null)
             {
-                Debug.LogWarning("[FacilityManager] ShelterDataManager is not available. Cannot spend unlock cost.", this);
+                Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Cannot spend unlock cost.", this);
                 return false;
             }
 
-            if (!ShelterDataManager.Instance.TrySpendResources(cost))
+            if (!ShelterSceneDataManager.Instance.TrySpendResources(cost))
                 return false;
         }
 
         state.Unlock();
-        ShelterDataManager.Instance?.MarkDirty();
+        ShelterSceneDataManager.Instance?.MarkDirty();
         return true;
     }
 
-    // 업그레이드 구조/조건 상태(자원 제외): 해금됨 && 레벨<최대 && 시설 고유 비자원 조건 충족.
+    /// <summary>
+    /// 자원 보유 여부를 제외한 시설 업그레이드 가능 조건을 검사
+    /// </summary>
+    /// <param name="facilityId">검사할 시설 ID</param>
+    /// <returns>시설이 해금되어 있고 최대 레벨 전이며 고유 조건을 만족하면 <c>true</c></returns>
     public bool CanUpgrade(string facilityId)
     {
         FacilityState state = GetState(facilityId);
@@ -144,7 +173,11 @@ public class FacilityManager : MonoBehaviour
         return facility.AreUpgradeRequirementsMet(state.UpgradeLevel);
     }
 
-    // 현재 레벨에서 다음 레벨로 올리는 비용(UI 표시용). 대상이 없으면 무료 번들.
+    /// <summary>
+    /// 현재 레벨에서 다음 레벨로 올리는 비용을 반환
+    /// </summary>
+    /// <param name="facilityId">비용을 조회할 시설 ID</param>
+    /// <returns>시설이 등록되어 있으면 해당 업그레이드 비용, 없으면 무료 묶음</returns>
     public CostBundle GetUpgradeCost(string facilityId)
     {
         FacilityState state = GetState(facilityId);
@@ -154,7 +187,25 @@ public class FacilityManager : MonoBehaviour
         return facility.GetUpgradeCost(state.UpgradeLevel);
     }
 
-    // 구조/조건 + 자원까지 충족되는가(UI 버튼 활성화 판단용).
+    /// <summary>
+    /// 다음 레벨이 제공하는 기능 표시 줄들을 반환한다(표시 전용).
+    /// </summary>
+    /// <param name="facilityId">조회할 시설 ID</param>
+    /// <returns>시설이 등록돼 있으면 해당 기능 줄들, 없거나 최대 레벨이면 빈 리스트</returns>
+    public IReadOnlyList<FacilityFeatureLine> GetUpgradeFeatureLines(string facilityId)
+    {
+        FacilityState state = GetState(facilityId);
+        if (state == null || !m_facilities.TryGetValue(facilityId, out IFacilityUpgradeable facility))
+            return System.Array.Empty<FacilityFeatureLine>();
+
+        return facility.GetUpgradeFeatureLines(state.UpgradeLevel);
+    }
+
+    /// <summary>
+    /// 업그레이드 조건과 자원 보유 여부를 모두 검사
+    /// </summary>
+    /// <param name="facilityId">검사할 시설 ID</param>
+    /// <returns>지금 업그레이드 비용까지 지불 가능하면 <c>true</c></returns>
     public bool CanAffordUpgrade(string facilityId)
     {
         if (!CanUpgrade(facilityId))
@@ -164,11 +215,15 @@ public class FacilityManager : MonoBehaviour
         if (cost.IsFree)
             return true;
 
-        return ShelterDataManager.Instance != null
-            && ShelterDataManager.Instance.CanSpendResources(cost);
+        return ShelterSceneDataManager.Instance != null
+            && ShelterSceneDataManager.Instance.CanSpendResources(cost);
     }
 
-    // 실제 업그레이드 실행: 조건 검사 → 비용 차감 → 레벨+1(진실 갱신) → 시설 반영 → 저장 표시.
+    /// <summary>
+    /// 시설 업그레이드를 실행하고 비용 차감, 레벨 증가, 시설 반영, dirty 표시를 수행
+    /// </summary>
+    /// <param name="facilityId">업그레이드할 시설 ID</param>
+    /// <returns>업그레이드에 성공하면 <c>true</c></returns>
     public bool TryUpgrade(string facilityId)
     {
         if (!CanUpgrade(facilityId))
@@ -180,32 +235,32 @@ public class FacilityManager : MonoBehaviour
         CostBundle cost = facility.GetUpgradeCost(state.UpgradeLevel);
         if (!cost.IsFree)
         {
-            if (ShelterDataManager.Instance == null)
+            if (ShelterSceneDataManager.Instance == null)
             {
-                Debug.LogWarning("[FacilityManager] ShelterDataManager is not available. Cannot spend upgrade cost.", this);
+                Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Cannot spend upgrade cost.", this);
                 return false;
             }
 
-            if (!ShelterDataManager.Instance.TrySpendResources(cost))
+            if (!ShelterSceneDataManager.Instance.TrySpendResources(cost))
                 return false;
         }
 
         state.SetUpgradeLevel(state.UpgradeLevel + 1);
         facility.ApplyUpgradeLevel(state.UpgradeLevel);
-        ShelterDataManager.Instance?.MarkDirty();
+        ShelterSceneDataManager.Instance?.MarkDirty();
         return true;
     }
 
     private FacilityRuntimeState GetOrCreateRuntimeState(FacilityDefinition definition)
     {
-        if (ShelterDataManager.Instance != null)
+        if (ShelterSceneDataManager.Instance != null)
         {
-            return ShelterDataManager.Instance.GetOrCreateFacilityState(
+            return ShelterSceneDataManager.Instance.GetOrCreateFacilityState(
                 definition.FacilityId,
                 definition.UnlockedByDefault);
         }
 
-        Debug.LogWarning("[FacilityManager] ShelterDataManager is not available. Facility state will not be persistent.", this);
+        Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Facility state will not be persistent.", this);
         return new FacilityRuntimeState(definition.FacilityId, definition.UnlockedByDefault);
     }
 }

@@ -6,6 +6,9 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
+/// <summary>
+/// 셸터 플레이어 주변의 상호작용 대상 감지, 현재 대상 선택, 상호작용 입력 실행을 담당
+/// </summary>
 public class PlayerInteractor : MonoBehaviour
 {
     [Header("Target Filter")]
@@ -14,14 +17,17 @@ public class PlayerInteractor : MonoBehaviour
     [Header("UI")]
     [SerializeField] private UIManager m_uiManager;
 
-    // Other systems can subscribe later without changing the trigger logic.
+    /// <summary>현재 상호작용 대상이 변경될 때 발생</summary>
     public event Action<GameObject> TargetChanged;
 
     private readonly List<GameObject> m_interactionTargets = new List<GameObject>();
     private GameObject m_currentTarget;
     private int m_targetLayerIndex = -1;
 
+    /// <summary>현재 감지 범위 안에 등록된 상호작용 대상 목록</summary>
     public IReadOnlyList<GameObject> InteractionTargets => m_interactionTargets;
+
+    /// <summary>현재 가장 가까운 유효 상호작용 대상</summary>
     public GameObject CurrentTarget => m_currentTarget;
 
     private void Reset()

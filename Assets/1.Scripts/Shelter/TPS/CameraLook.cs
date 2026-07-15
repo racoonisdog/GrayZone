@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
+/// <summary>
+/// 셸터 3인칭 카메라의 마우스 회전과 커서 잠금 상태를 제어
+/// </summary>
 public class CameraLook : MonoBehaviour
 {
     [Header("Look")]
@@ -21,8 +24,13 @@ public class CameraLook : MonoBehaviour
     private float yaw;
     private float pitch;
 
+    /// <summary>현재 카메라 좌우 회전각</summary>
     public float Yaw => yaw;
+
+    /// <summary>현재 카메라 상하 회전각</summary>
     public float Pitch => pitch;
+
+    /// <summary>카메라 회전 입력이 잠겨 있는지 여부</summary>
     public bool IsLookLocked => m_lookLocked;
 
     private void Start()
@@ -61,6 +69,10 @@ public class CameraLook : MonoBehaviour
         transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
     }
 
+    /// <summary>
+    /// UI 열림 등으로 카메라 회전 입력 잠금 상태를 변경
+    /// </summary>
+    /// <param name="locked">회전 입력을 잠그려면 <c>true</c></param>
     public void SetLookLocked(bool locked)
     {
         if (m_lookLocked == locked)

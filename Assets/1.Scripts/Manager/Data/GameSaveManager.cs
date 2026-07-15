@@ -56,7 +56,7 @@ public class GameSaveManager : MonoBehaviour
         }
 
         string resolvedProfileId = ResolveProfileId(profileId);
-        if (GameDataManager.Instance.HasActiveShelterDataManager
+        if (GameDataManager.Instance.HasActiveShelterSceneDataManager
             && !GameDataManager.Instance.SyncFromShelter())
         {
             Debug.LogWarning("[GameSaveManager] 저장 전에 셸터 작업 데이터를 전역 정본에 반영하지 못했습니다.");
@@ -86,9 +86,9 @@ public class GameSaveManager : MonoBehaviour
 
         saveData.schemaVersion = saveData.schemaVersion <= 0 ? SaveData.CurrentSchemaVersion : saveData.schemaVersion;
         GameDataManager.Instance.ApplySaveData(saveData);
-        if (ShelterDataManager.Instance != null)
+        if (ShelterSceneDataManager.Instance != null)
         {
-            ShelterDataManager.Instance.CopyFromDataManager();
+            ShelterSceneDataManager.Instance.InitializeFromGameData();
         }
 
         return true;

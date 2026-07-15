@@ -1,18 +1,29 @@
 using UnityEngine;
 
-// 잠자기 상호작용 — 하루를 넘긴다(→ GameDateManager.DayAdvanced → 각 시설 OnDayAdvanced).
-// ToDo(임시 테스트): 지금은 E 누르면 즉시 하루 넘김. 추후 "주무시겠습니까?" 확인 팝업 →
-//                    확인 콜백에서 AdvanceDay 호출하도록 변경, 암전/페이드 연출 + 전환 중 입력 잠금 추가.
+/// <summary>
+/// 잠자기 상호작용으로 셸터 날짜를 진행시키는 테스트용 상호작용 컴포넌트
+/// </summary>
 public class SleepInteractable : MonoBehaviour, IInteractable
 {
     [SerializeField] private int daysToAdvance = 1;
 
+    /// <summary>탭 상호작용이므로 홀드 시간이 없음</summary>
     public float HoldDuration => 0f;
 
+    /// <summary>
+    /// 이 컴포넌트가 활성 상태일 때만 상호작용을 허용
+    /// </summary>
+    /// <param name="interactor">상호작용을 시도한 오브젝트</param>
+    /// <returns>상호작용 가능하면 <c>true</c></returns>
     public bool CanInteract(GameObject interactor) => isActiveAndEnabled;
 
+    /// <summary>상호작용 프롬프트 텍스트</summary>
     public string GetPrompt() => "Sleep";
 
+    /// <summary>
+    /// 날짜 매니저에 지정 일수만큼 날짜 진행을 요청
+    /// </summary>
+    /// <param name="interactor">상호작용을 실행한 오브젝트</param>
     public void Interact(GameObject interactor)
     {
         // ToDo: 확인 팝업 후 호출로 교체 (현재는 테스트용 즉시 진행)

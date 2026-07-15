@@ -2,7 +2,13 @@ using UnityEngine;
 using UnityEngine.Serialization;
 using System.Collections.Generic;
 
-public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
+/// <summary>
+/// 의료 시설의 환자 치료, 헬퍼 배치, 시설 업그레이드 반영을 담당
+/// </summary>
+/// <remarks>
+/// 시설 해금/레벨의 진실원천은 <see cref="FacilityManager"/>이며, 이 컴포넌트는 의료 시설의 표시와 치료 진행 상태를 관리
+/// </remarks>
+public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IInjuryThresholdModifier
 {
     private const int MaxLevelIndex = 3; // 레벨 4단계 (인덱스 0,1,2,3)
 
@@ -32,17 +38,24 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
 
     private readonly List<MedicalTreatment> patientTreatments = new List<MedicalTreatment>();
     private readonly List<PatientStatus> patientStatuses = new List<PatientStatus>();
-    private readonly List<NPCRuntimeData> helpers = new List<NPCRuntimeData>();
+    private readonly List<ShelterMemberRuntimeData> helpers = new List<ShelterMemberRuntimeData>();
     private bool m_isUnlocked = true; // FacilityManager가 세이브 기준으로 덮어씀(의료시설 기본 해금)
 
-    public event System.Action<NPCRuntimeData> OnHelperAssigned;
-    public event System.Action<NPCRuntimeData> OnHelperReleased;
-    public event System.Action<NPCRuntimeData> OnPatientHealed;
+    /// <summary>헬퍼가 새로 배치됐을 때 발생</summary>
+    public event System.Action<ShelterMemberRuntimeData> OnHelperAssigned;
+
+    /// <summary>헬퍼 배치가 해제됐을 때 발생</summary>
+    public event System.Action<ShelterMemberRuntimeData> OnHelperReleased;
+
+    /// <summary>환자 치료가 완료되어 슬롯에서 제거됐을 때 발생</summary>
+    public event System.Action<ShelterMemberRuntimeData> OnPatientHealed;
+
     /// <summary>
-    /// MedicalUI.Refresh() 호출 함수 ( UI 갱신용 )
+    /// 환자 슬롯 표시를 다시 그려야 할 때 발생
     /// </summary>
     public event System.Action OnPatientSlotsChanged;
 
+    /// <summary>현재 치료 중인 환자 표시 상태 목록</summary>
     public IReadOnlyList<PatientStatus> PatientStatuses
     {
         get
@@ -51,23 +64,48 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             return patientStatuses;
         }
     }
+
+    /// <summary>현재 치료 중인 환자 수</summary>
     public int CurrentPatientCount => patientTreatments.Count;
+
+    /// <summary>현재 레벨에서 수용 가능한 최대 환자 수</summary>
     public int MaxPatientCount => PatientCapacity;
+
+    /// <summary>현재 업그레이드 레벨 기준 환자 슬롯 수</summary>
     public int PatientCapacity => PatientSlotsForLevel(CurrentLevel);
+
+    /// <summary>최대 업그레이드 레벨에서 가능한 환자 슬롯 수</summary>
     public int MaxPatientCapacity => PatientSlotsForLevel(MaxLevelIndex);
+
+    /// <summary>현재 해금된 환자 슬롯 수</summary>
     public int UnlockedPatientSlotCount => PatientCapacity;
+
+    /// <summary>아직 잠겨 있는 환자 슬롯 수</summary>
     public int LockedPatientSlotCount => MaxPatientCapacity - PatientCapacity;
+
+    /// <summary>현재 배치된 헬퍼 수</summary>
     public int CurrentHelperCount => helpers.Count;
+
+    /// <summary>현재 레벨에서 배치 가능한 최대 헬퍼 수</summary>
     public int MaxHelperCount => HelperCapacity;
+
+    /// <summary>현재 업그레이드 레벨 기준 헬퍼 슬롯 수</summary>
     public int HelperCapacity => HelperSlotsForLevel(CurrentLevel);
+
+    /// <summary>환자 슬롯 업그레이드 레벨</summary>
     public int PatientUpgrade => CurrentLevel;
+
+    /// <summary>의료 시설 업그레이드 레벨</summary>
     public int UpgradeLevel => CurrentLevel;
+
+    /// <summary>의료 시설의 최대 업그레이드 레벨</summary>
     public int MaxUpgradeLevel => MaxLevelIndex;
 
     // 레벨은 FacilityManager(진실원천)에서 읽는다 — MedicalManager는 캐시하지 않는다.
     private int CurrentLevel =>
         FacilityManager.Instance != null ? FacilityManager.Instance.GetUpgradeLevel(FacilityId) : 0;
 
+    /// <summary>시설 정의 또는 대체값으로 결정한 의료 시설 ID</summary>
     public string FacilityId
     {
         //fallbackFacilityId 나중에 통일 필요( 방지용 ID임 이건 )
@@ -106,15 +144,20 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         FacilityManager.Instance?.Unregister(this);
     }
 
-    // FacilityManager가 레벨 변경(로드/업그레이드) 후 호출. 레벨 자체는 저장하지 않고
-    // FacilityManager(진실원천)에서 읽으므로, 여기서는 표시(비주얼·슬롯)만 갱신한다.
+    /// <summary>
+    /// <see cref="FacilityManager"/>가 레벨 변경 후 호출하는 시설 반영 콜백
+    /// </summary>
+    /// <param name="level">새 업그레이드 레벨. 실제 값은 <see cref="FacilityManager"/> 기준</param>
     public void ApplyUpgradeLevel(int level)
     {
         RefreshLevelVisuals();
         NotifyPatientSlotsChanged();
     }
 
-    // FacilityManager가 세이브에서 복원한 해금 상태를 반영한다.
+    /// <summary>
+    /// <see cref="FacilityManager"/>가 저장 데이터에서 복원한 시설 해금 상태를 반영
+    /// </summary>
+    /// <param name="isUnlocked">시설 해금 여부</param>
     public void ApplyUnlockState(bool isUnlocked)
     {
         m_isUnlocked = isUnlocked;
@@ -133,7 +176,11 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             levelVisuals.HideAll();
     }
 
-    // 현재 레벨 → 다음 레벨 업그레이드 비용(FacilityManager가 차감 시 조회). 범위 밖/미설정이면 무료.
+    /// <summary>
+    /// 현재 레벨에서 다음 레벨로 올릴 때 필요한 비용을 반환
+    /// </summary>
+    /// <param name="currentLevel">비용을 조회할 현재 업그레이드 레벨</param>
+    /// <returns>해당 레벨의 업그레이드 비용 묶음 범위 밖이면 무료 묶음</returns>
     public CostBundle GetUpgradeCost(int currentLevel)
     {
         if (upgradeCosts == null || currentLevel < 0 || currentLevel >= upgradeCosts.Length)
@@ -150,10 +197,33 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         return new CostBundle(costs);
     }
 
-    // 자원 이외의 업그레이드 조건. 현재는 없음(항상 허용). 비자원 조건이 생기면 여기서 판단.
+    /// <summary>
+    /// 자원 이외의 업그레이드 조건을 검사
+    /// </summary>
+    /// <param name="currentLevel">검사할 현재 업그레이드 레벨</param>
+    /// <returns>현재는 별도 조건이 없으므로 항상 <c>true</c></returns>
+
+    //NOTE : 업그레이드 조건이 자원이 아닌 특수조건일 경우 아래와 같이 구현해서 사용
     public bool AreUpgradeRequirementsMet(int currentLevel) => true;
 
-    public void FillPatientCandidates(List<NPCRuntimeData> results)
+    // ── 부상 임계 완화 (IInjuryThresholdModifier) ──
+    // 의료시설의 현재 해금/레벨 상태를 기준으로 경계별 임계 완화값을 제공한다.
+    // 값 계약: 정상/경상/중상 상한을 각각 델타만큼 완화. 잠김이면 None.
+    public InjuryThresholdRelief GetInjuryThresholdRelief()
+        => m_isUnlocked ? InjuryThresholdReliefForLevel(CurrentLevel) : InjuryThresholdRelief.None;
+
+    private static InjuryThresholdRelief InjuryThresholdReliefForLevel(int level) => level switch
+    {
+        // Lv.4(index 3): 정상/경상/중상 상한 각각 완화 — 플레이스홀더, 경계별로 다르게 조정 가능
+        3 => new InjuryThresholdRelief(10, 10, 10),
+        _ => InjuryThresholdRelief.None,
+    };
+
+    /// <summary>
+    /// 치료 대상 NPC 후보 채우기
+    /// </summary>
+    /// <param name="results">후보 결과 목록. 호출 시 기존 내용 비움</param>
+    public void FillPatientCandidates(List<ShelterMemberRuntimeData> results)
     {
         if (results == null)
             throw new System.ArgumentNullException(nameof(results));
@@ -163,14 +233,19 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         if (!TryGetCharacterManager(out CharacterManager manager))
             return;
 
-        foreach (NPCRuntimeData character in manager.Characters)
+        foreach (ShelterMemberRuntimeData character in manager.Characters)
         {
             if (CanAssignPatient(character))
                 results.Add(character);
         }
     }
 
-    public bool CanAssignPatient(NPCRuntimeData character)
+    /// <summary>
+    /// 지정한 NPC가 환자로 배치 가능한지 검사
+    /// </summary>
+    /// <param name="character">검사할 NPC 런타임 데이터</param>
+    /// <returns>환자로 배치 가능하면 <c>true</c></returns>
+    public bool CanAssignPatient(ShelterMemberRuntimeData character)
     {
         if (character == null)
             return false;
@@ -181,23 +256,36 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         if (FindPatientSlotIndex(character) >= 0)
             return false;
 
-        // 완치(Healthy)면 치료 불필요 (enum 기준).
-        if (character.GetCurrentInjuryState() == NPCInjuryState.Healthy)
+        if (character.IsDead)
             return false;
 
-        return !character.GetIsAssignedToShelter();
+        // 완치(Healthy)면 치료 불필요 (enum 기준).
+        if (character.InjuryState == PlayerInjuryState.Normal)
+            return false;
+
+        return !character.IsAssignedToFacility;
     }
 
-    public bool TryAssignPatient(NPCRuntimeData target)
+    /// <summary>
+    /// 지정한 NPC를 환자로 배치
+    /// </summary>
+    /// <param name="target">배치할 NPC 런타임 데이터</param>
+    /// <returns>배치에 성공했거나 이미 배치되어 있으면 <c>true</c></returns>
+    public bool TryAssignPatient(ShelterMemberRuntimeData target)
     {
-        return target != null && TryAssignPatient(target.DefinitionId);
+        return target != null && TryAssignPatient(target.RuntimeId);
     }
 
-    public bool TryAssignPatient(string definitionId)
+    /// <summary>
+    /// NPC 식별자로 환자를 배치
+    /// </summary>
+    /// <param name="runtimeId">배치할 NPC 정의 ID</param>
+    /// <returns>배치에 성공했거나 이미 배치되어 있으면 <c>true</c></returns>
+    public bool TryAssignPatient(string runtimeId)
     {
-        if (string.IsNullOrWhiteSpace(definitionId)) return false;
+        if (string.IsNullOrWhiteSpace(runtimeId)) return false;
         //몇번째 슬롯에 있는지(슬롯에 없는 id면 -1 return)
-        if (FindPatientSlotIndex(definitionId) >= 0) return true;
+        if (FindPatientSlotIndex(runtimeId) >= 0) return true;
 
         //목록에 있는 숫자가 최대치 보다 높을경우 오류상태
         if (patientTreatments.Count >= PatientCapacity) return false;
@@ -205,14 +293,14 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         if (!TryGetCharacterManager(out CharacterManager manager)) return false;
 
         //셸터 데이터에서 NPC를 관리하는 CharacterManager로 부터 데이터를 가져오는 함수
-        if (!manager.TryGetCharacter(definitionId, out NPCRuntimeData target))
+        if (!manager.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData target))
             return false;
 
         if (!CanAssignPatient(target))
             return false;
 
         if (!manager.TryAssignToFacility(
-                definitionId,
+                runtimeId,
                 FacilityId,
                 roomId,
                 CharacterAssignmentFilter.AvailableAlive,
@@ -228,35 +316,52 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         return true;
     }
 
-    public bool TryReleasePatient(NPCRuntimeData target)
+    /// <summary>
+    /// 지정한 NPC의 환자 배치를 해제
+    /// </summary>
+    /// <param name="target">해제할 NPC 런타임 데이터</param>
+    /// <returns>실제로 해제됐으면 <c>true</c></returns>
+    public bool TryReleasePatient(ShelterMemberRuntimeData target)
     {
-        return target != null && TryReleasePatient(target.DefinitionId);
+        return target != null && TryReleasePatient(target.RuntimeId);
     }
 
-    public bool TryReleasePatient(string definitionId)
+    /// <summary>
+    /// NPC 식별자로 환자 배치를 해제
+    /// </summary>
+    /// <param name="runtimeId">해제할 NPC 정의 ID</param>
+    /// <returns>실제로 해제됐으면 <c>true</c></returns>
+    public bool TryReleasePatient(string runtimeId)
     {
-        int slotIndex = FindPatientSlotIndex(definitionId);
+        int slotIndex = FindPatientSlotIndex(runtimeId);
         if (slotIndex < 0) return false;
         if (!TryGetCharacterManager(out CharacterManager manager)) return false;
 
         MedicalTreatment treatment = patientTreatments[slotIndex];
-        if (!manager.TryReleaseFromFacility(treatment.Patient.DefinitionId, out _))
+        if (!manager.TryReleaseFromFacility(treatment.Patient.RuntimeId, out _))
             return false;
 
-        // 중도 해제 → 현재 게이지 기준으로 부상상태 갱신
-        manager.TryRefreshInjuryState(treatment.Patient.DefinitionId, out _);
         patientTreatments.RemoveAt(slotIndex);
         NotifyPatientSlotsChanged();
         return true;
     }
 
-    public int GetPatientHealDaysRemaining(NPCRuntimeData patient)
+    /// <summary>
+    /// 지정한 환자의 남은 치료 일수를 반환
+    /// </summary>
+    /// <param name="patient">조회할 환자 NPC</param>
+    /// <returns>치료 중이면 남은 일수, 치료 중이 아니면 0</returns>
+    public int GetPatientHealDaysRemaining(ShelterMemberRuntimeData patient)
     {
         int slotIndex = FindPatientSlotIndex(patient);
         return slotIndex >= 0 ? patientTreatments[slotIndex].RemainingDays : 0;
     }
 
-    public void FillHelperCandidates(List<NPCRuntimeData> results)
+    /// <summary>
+    /// 의료 헬퍼 NPC 후보 채우기
+    /// </summary>
+    /// <param name="results">후보 결과 목록. 호출 시 기존 내용 비움</param>
+    public void FillHelperCandidates(List<ShelterMemberRuntimeData> results)
     {
         if (results == null)
             throw new System.ArgumentNullException(nameof(results));
@@ -266,14 +371,19 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         if (!TryGetCharacterManager(out CharacterManager manager))
             return;
 
-        foreach (NPCRuntimeData character in manager.Characters)
+        foreach (ShelterMemberRuntimeData character in manager.Characters)
         {
             if (CanAssignHelper(character))
                 results.Add(character);
         }
     }
 
-    public bool CanAssignHelper(NPCRuntimeData character)
+    /// <summary>
+    /// 지정한 NPC가 의료 헬퍼로 배치 가능한지 검사
+    /// </summary>
+    /// <param name="character">검사할 NPC 런타임 데이터</param>
+    /// <returns>헬퍼로 배치 가능하면 <c>true</c></returns>
+    public bool CanAssignHelper(ShelterMemberRuntimeData character)
     {
         if (character == null)
             return false;
@@ -284,35 +394,48 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         if (FindHelperIndex(character) >= 0)
             return false;
 
-        // 도우미는 건강 또는 경상만 가능 (중상·위독 제외).
-        NPCInjuryState state = character.GetCurrentInjuryState();
-        if (state != NPCInjuryState.Healthy && state != NPCInjuryState.LightInjury)
+        if (character.IsDead)
             return false;
 
-        return !character.GetIsAssignedToShelter();
+        // 도우미는 건강 또는 경상만 가능 (중상·위독 제외).
+        PlayerInjuryState state = character.InjuryState;
+        if (state != PlayerInjuryState.Normal && state != PlayerInjuryState.Minor)
+            return false;
+
+        return !character.IsAssignedToFacility;
     }
 
-    public bool TryAssignHelper(NPCRuntimeData target)
+    /// <summary>
+    /// 지정한 NPC를 의료 헬퍼로 배치
+    /// </summary>
+    /// <param name="target">배치할 NPC 런타임 데이터</param>
+    /// <returns>배치에 성공했거나 이미 배치되어 있으면 <c>true</c></returns>
+    public bool TryAssignHelper(ShelterMemberRuntimeData target)
     {
-        return target != null && TryAssignHelper(target.DefinitionId);
+        return target != null && TryAssignHelper(target.RuntimeId);
     }
 
-    public bool TryAssignHelper(string definitionId)
+    /// <summary>
+    /// NPC 식별자로 의료 헬퍼를 배치
+    /// </summary>
+    /// <param name="runtimeId">배치할 NPC 정의 ID</param>
+    /// <returns>배치에 성공했거나 이미 배치되어 있으면 <c>true</c></returns>
+    public bool TryAssignHelper(string runtimeId)
     {
-        if (string.IsNullOrWhiteSpace(definitionId)) return false;
-        if (FindHelperIndex(definitionId) >= 0) return true;
+        if (string.IsNullOrWhiteSpace(runtimeId)) return false;
+        if (FindHelperIndex(runtimeId) >= 0) return true;
 
         if (helpers.Count >= HelperCapacity) return false;
         if (!TryGetCharacterManager(out CharacterManager manager)) return false;
 
-        if (!manager.TryGetCharacter(definitionId, out NPCRuntimeData target))
+        if (!manager.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData target))
             return false;
 
         if (!CanAssignHelper(target))
             return false;
 
         if (!manager.TryAssignToFacility(
-                definitionId,
+                runtimeId,
                 FacilityId,
                 roomId,
                 CharacterAssignmentFilter.AvailableAlive,
@@ -330,19 +453,29 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         return true;
     }
 
-    public bool TryReleaseHelper(NPCRuntimeData target)
+    /// <summary>
+    /// 지정한 NPC의 헬퍼 배치를 해제
+    /// </summary>
+    /// <param name="target">해제할 NPC 런타임 데이터</param>
+    /// <returns>실제로 해제됐으면 <c>true</c></returns>
+    public bool TryReleaseHelper(ShelterMemberRuntimeData target)
     {
-        return target != null && TryReleaseHelper(target.DefinitionId);
+        return target != null && TryReleaseHelper(target.RuntimeId);
     }
 
-    public bool TryReleaseHelper(string definitionId)
+    /// <summary>
+    /// NPC 식별자로 헬퍼 배치를 해제
+    /// </summary>
+    /// <param name="runtimeId">해제할 NPC 정의 ID</param>
+    /// <returns>실제로 해제됐으면 <c>true</c></returns>
+    public bool TryReleaseHelper(string runtimeId)
     {
-        int index = FindHelperIndex(definitionId);
+        int index = FindHelperIndex(runtimeId);
         if (index < 0) return false;
         if (!TryGetCharacterManager(out CharacterManager manager)) return false;
 
-        NPCRuntimeData helper = helpers[index];
-        if (!manager.TryReleaseFromFacility(helper.DefinitionId, out _))
+        ShelterMemberRuntimeData helper = helpers[index];
+        if (!manager.TryReleaseFromFacility(helper.RuntimeId, out _))
             return false;
 
         helpers.RemoveAt(index);
@@ -352,21 +485,21 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         return true;
     }
 
-    private int FindHelperIndex(NPCRuntimeData helper)
+    private int FindHelperIndex(ShelterMemberRuntimeData helper)
     {
-        return helper == null ? -1 : FindHelperIndex(helper.DefinitionId);
+        return helper == null ? -1 : FindHelperIndex(helper.RuntimeId);
     }
 
-    private int FindHelperIndex(string definitionId)
+    private int FindHelperIndex(string runtimeId)
     {
-        if (string.IsNullOrWhiteSpace(definitionId))
+        if (string.IsNullOrWhiteSpace(runtimeId))
             return -1;
 
-        string normalizedDefinitionId = definitionId.Trim();
+        string normalizedRuntimeId = runtimeId.Trim();
         for (int i = 0; i < helpers.Count; i++)
         {
-            NPCRuntimeData helper = helpers[i];
-            if (helper != null && helper.DefinitionId == normalizedDefinitionId)
+            ShelterMemberRuntimeData helper = helpers[i];
+            if (helper != null && helper.RuntimeId == normalizedRuntimeId)
                 return i;
         }
 
@@ -386,14 +519,14 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         for (int i = patientTreatments.Count - 1; i >= 0; i--)
         {
             MedicalTreatment treatment = patientTreatments[i];
-            NPCRuntimeData patient = treatment.Patient;
+            ShelterMemberRuntimeData patient = treatment.Patient;
 
             float amount = treatment.ConsumeDailyRecovery();
-            manager.TrySetInjuryGauge(patient.DefinitionId, patient.InjuryGauge + amount, out _);
+            manager.TrySetInjuryGauge(patient.RuntimeId, patient.InjuryGauge - amount, out _);
             changed = true;
 
-            // 완치 판정은 게이지 기준(진실원천). 아이템 등 치료 외 경로로 게이지가 차도 즉시 완치된다.
-            if (patient.InjuryGauge >= patient.MaxInjuryGauge)
+            // 완치 판정은 0이 건강한 심각도 게이지 기준(진실원천).
+            if (patient.InjuryGauge <= 0.0f)
                 CompleteHealing(i);
         }
 
@@ -404,12 +537,12 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     private void CompleteHealing(int slotIndex)
     {
         MedicalTreatment treatment = patientTreatments[slotIndex];
-        NPCRuntimeData patient = treatment.Patient;
+        ShelterMemberRuntimeData patient = treatment.Patient;
 
         if (!TryGetCharacterManager(out CharacterManager manager))
             return;
 
-        if (!manager.TryCompleteRecovery(patient.DefinitionId, out _))
+        if (!manager.TryCompleteRecovery(patient.RuntimeId, out _))
             return;
 
         patientTreatments.RemoveAt(slotIndex);
@@ -420,7 +553,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     private float GetDailyRecovery()
     {
         int bonus = 0;
-        foreach (NPCRuntimeData helper in helpers)
+        foreach (ShelterMemberRuntimeData helper in helpers)
             bonus += GetHelperBonus(helper.Type);
         return Mathf.Max(1, baseRecoveryPerDay + bonus);
     }
@@ -440,24 +573,24 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             patientTreatments[i].Recalculate(daily);
     }
 
-    private int FindPatientSlotIndex(NPCRuntimeData patient)
+    private int FindPatientSlotIndex(ShelterMemberRuntimeData patient)
     {
         if (patient == null)
             return -1;
 
-        return FindPatientSlotIndex(patient.DefinitionId);
+        return FindPatientSlotIndex(patient.RuntimeId);
     }
 
-    private int FindPatientSlotIndex(string definitionId)
+    private int FindPatientSlotIndex(string runtimeId)
     {
-        if (string.IsNullOrWhiteSpace(definitionId))
+        if (string.IsNullOrWhiteSpace(runtimeId))
             return -1;
 
-        string normalizedDefinitionId = definitionId.Trim();
+        string normalizedRuntimeId = runtimeId.Trim();
         for (int i = 0; i < patientTreatments.Count; i++)
         {
             MedicalTreatment treatment = patientTreatments[i];
-            if (treatment.Patient != null && treatment.Patient.DefinitionId == normalizedDefinitionId)
+            if (treatment.Patient != null && treatment.Patient.RuntimeId == normalizedRuntimeId)
                 return i;
         }
 
@@ -504,6 +637,25 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         _ => 1
     };
 
+    // 다음 레벨이 제공하는 기능 표시 줄들. 값이 바뀌는 항목만 노출(shown=actual — 슬롯 함수에서 파생).
+    public System.Collections.Generic.IReadOnlyList<FacilityFeatureLine> GetUpgradeFeatureLines(int currentLevel)
+    {
+        var lines = new System.Collections.Generic.List<FacilityFeatureLine>();
+        int next = currentLevel + 1;
+        if (next > MaxLevelIndex)
+            return lines;
+
+        if (PatientSlotsForLevel(next) != PatientSlotsForLevel(currentLevel))
+            lines.Add(new FacilityFeatureLine("환자 슬롯",
+                $"{PatientSlotsForLevel(currentLevel)} → {PatientSlotsForLevel(next)}"));
+
+        if (HelperSlotsForLevel(next) != HelperSlotsForLevel(currentLevel))
+            lines.Add(new FacilityFeatureLine("헬퍼 슬롯",
+                $"{HelperSlotsForLevel(currentLevel)} → {HelperSlotsForLevel(next)}"));
+
+        return lines;
+    }
+
     private void NotifyPatientSlotsChanged()
     {
         RefreshPatientStatuses();
@@ -539,7 +691,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
 
     private sealed class MedicalTreatment
     {
-        public NPCRuntimeData Patient { get; }
+        public ShelterMemberRuntimeData Patient { get; }
         public int RemainingDays { get; private set; }
         public int TotalDays { get; private set; }
 
@@ -547,7 +699,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         private float dailyRecovery;
         private float nextRecoveryAmount;
 
-        public MedicalTreatment(NPCRuntimeData patient, float dailyRecovery)
+        public MedicalTreatment(ShelterMemberRuntimeData patient, float dailyRecovery)
         {
             Patient = patient;
             maxGauge = patient.MaxInjuryGauge;
@@ -578,33 +730,57 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
 
 public readonly struct PatientStatus
 {
-    public PatientStatus(NPCRuntimeData patient, int remainingDays, int totalDays)
+    /// <summary>
+    /// 의료 UI에 표시할 환자 상태 투영본을 생성
+    /// </summary>
+    /// <param name="patient">표시할 환자 NPC</param>
+    /// <param name="remainingDays">남은 치료 일수</param>
+    /// <param name="totalDays">총 치료 일수</param>
+    public PatientStatus(ShelterMemberRuntimeData patient, int remainingDays, int totalDays)
     {
         Patient = patient;
         RemainingDays = remainingDays;
         TotalDays = totalDays;
     }
 
-    public NPCRuntimeData Patient { get; }
+    /// <summary>표시 대상 환자 NPC</summary>
+    public ShelterMemberRuntimeData Patient { get; }
+
+    /// <summary>남은 치료 일수</summary>
     public int RemainingDays { get; }
+
+    /// <summary>처음 산출된 총 치료 일수</summary>
     public int TotalDays { get; }
 
-    // UI 게이지/상태 표시용 (게이지가 진실원천).
+    /// <summary>현재 환자 부상 게이지</summary>
     public float InjuryGauge => Patient != null ? Patient.InjuryGauge : 0f;
+
+    /// <summary>환자 부상 게이지의 최대값</summary>
     public float MaxInjuryGauge => Patient != null ? Patient.MaxInjuryGauge : 1f;
+
+    /// <summary>UI 게이지 표시용 0~1 정규화 값</summary>
     public float GaugeNormalized => MaxInjuryGauge > 0f ? Mathf.Clamp01(InjuryGauge / MaxInjuryGauge) : 0f;
-    public NPCInjuryState InjuryState => Patient != null ? Patient.GetCurrentInjuryState() : NPCInjuryState.Healthy;
+
+    /// <summary>현재 환자 부상 상태</summary>
+    public PlayerInjuryState InjuryState => Patient != null ? Patient.InjuryState : PlayerInjuryState.Normal;
+
+    /// <summary>UI에 표시할 환자 이름</summary>
     public string DisplayName => Patient != null
-        ? (Patient.NPCData != null ? Patient.NPCData.name : Patient.DefinitionId)
+        ? Patient.DisplayName
         : string.Empty;
 }
 
 
-// 헬퍼 타입별 일일 회복 보너스(%)
+/// <summary>
+/// NPC 타입별 의료 헬퍼 일일 회복 보너스 설정
+/// </summary>
 [System.Serializable]
 public struct HelperRecoveryBonus
 {
+    /// <summary>보너스를 적용할 NPC 타입</summary>
     public NPCType type;
+
+    /// <summary>일일 회복량에 더할 보너스 수치</summary>
     [FormerlySerializedAs("daysReduction")]
     public int bonusPercent;
 }
