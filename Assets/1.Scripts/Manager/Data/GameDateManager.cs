@@ -11,9 +11,9 @@ public class GameDateManager : MonoBehaviour
     {
         get
         {
-            if (ShelterDataManager.Instance != null)
+            if (ShelterSceneDataManager.Instance != null)
             {
-                return ShelterDataManager.Instance.CurrentDay;
+                return ShelterSceneDataManager.Instance.CurrentDay;
             }
 
             return 1;
@@ -45,16 +45,16 @@ public class GameDateManager : MonoBehaviour
             return false;
         }
 
-        if (ShelterDataManager.Instance == null)
+        if (ShelterSceneDataManager.Instance == null)
         {
-            Debug.LogWarning("[GameDateManager] ShelterDataManager.Instance is null.");
+            Debug.LogWarning("[GameDateManager] ShelterSceneDataManager.Instance is null.");
             return false;
         }
 
         int previousDay = CurrentDay;
         int nextDay = previousDay + days;
 
-        ShelterDataManager.Instance.SetCurrentDay(nextDay);
+        ShelterSceneDataManager.Instance.SetCurrentDay(nextDay);
         DayAdvanced?.Invoke(previousDay, nextDay);
         return true;
     }

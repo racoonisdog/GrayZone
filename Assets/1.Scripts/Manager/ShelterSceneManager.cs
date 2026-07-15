@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 셸터 씬의 주요 매니저 참조를 연결하고 UI 상태에 따라 플레이어 조작 잠금을 적용하는 씬 조립 루트
@@ -10,7 +11,8 @@ public class ShelterSceneManager : MonoBehaviour
     public static ShelterSceneManager Instance { get; private set; }
 
     [Header("Managers")]
-    [SerializeField] private ShelterDataManager m_ShelterDataManager;
+    [FormerlySerializedAs("m_ShelterDataManager")]
+    [SerializeField] private ShelterSceneDataManager m_ShelterSceneDataManager;
     [SerializeField] private UIManager m_UIManager;
     [SerializeField] private MedicalManager m_MedicalManager;
     [SerializeField] private bool m_copyDataFromGameDataManagerOnAwake = true;
@@ -23,7 +25,7 @@ public class ShelterSceneManager : MonoBehaviour
     [SerializeField] private bool m_autoFindReferences = true;
 
     /// <summary>셸터 씬의 작업 데이터 매니저 참조</summary>
-    public ShelterDataManager ShelterDataManager => m_ShelterDataManager;
+    public ShelterSceneDataManager ShelterSceneDataManager => m_ShelterSceneDataManager;
 
     /// <summary>셸터 씬 UI 매니저 참조</summary>
     public UIManager UIManager => m_UIManager;
@@ -87,16 +89,16 @@ public class ShelterSceneManager : MonoBehaviour
     /// </summary>
     public void CopyShelterDataFromGameDataManager()
     {
-        if (m_ShelterDataManager == null)
-            m_ShelterDataManager = ShelterDataManager.Instance;
+        if (m_ShelterSceneDataManager == null)
+            m_ShelterSceneDataManager = ShelterSceneDataManager.Instance;
 
-        if (m_ShelterDataManager == null)
+        if (m_ShelterSceneDataManager == null)
         {
-            Debug.LogWarning("[ShelterSceneManager] ShelterDataManager is not available.", this);
+            Debug.LogWarning("[ShelterSceneManager] ShelterSceneDataManager is not available.", this);
             return;
         }
 
-        m_ShelterDataManager.CopyFromDataManager();
+        m_ShelterSceneDataManager.InitializeFromGameData();
     }
 
     private void HandleActiveUIChanged(ShelterUIType activeUI)
@@ -122,8 +124,8 @@ public class ShelterSceneManager : MonoBehaviour
 
     private void CacheSceneReferences()
     {
-        if (m_ShelterDataManager == null)
-            m_ShelterDataManager = FindFirstObjectByType<ShelterDataManager>();
+        if (m_ShelterSceneDataManager == null)
+            m_ShelterSceneDataManager = FindFirstObjectByType<ShelterSceneDataManager>();
 
         if (m_UIManager == null)
             m_UIManager = FindFirstObjectByType<UIManager>();

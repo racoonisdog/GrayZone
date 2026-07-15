@@ -138,18 +138,18 @@ public class FacilityManager : MonoBehaviour
         CostBundle cost = state.Definition.BuildUnlockCost();
         if (!cost.IsFree)
         {
-            if (ShelterDataManager.Instance == null)
+            if (ShelterSceneDataManager.Instance == null)
             {
-                Debug.LogWarning("[FacilityManager] ShelterDataManager is not available. Cannot spend unlock cost.", this);
+                Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Cannot spend unlock cost.", this);
                 return false;
             }
 
-            if (!ShelterDataManager.Instance.TrySpendResources(cost))
+            if (!ShelterSceneDataManager.Instance.TrySpendResources(cost))
                 return false;
         }
 
         state.Unlock();
-        ShelterDataManager.Instance?.MarkDirty();
+        ShelterSceneDataManager.Instance?.MarkDirty();
         return true;
     }
 
@@ -215,8 +215,8 @@ public class FacilityManager : MonoBehaviour
         if (cost.IsFree)
             return true;
 
-        return ShelterDataManager.Instance != null
-            && ShelterDataManager.Instance.CanSpendResources(cost);
+        return ShelterSceneDataManager.Instance != null
+            && ShelterSceneDataManager.Instance.CanSpendResources(cost);
     }
 
     /// <summary>
@@ -235,32 +235,32 @@ public class FacilityManager : MonoBehaviour
         CostBundle cost = facility.GetUpgradeCost(state.UpgradeLevel);
         if (!cost.IsFree)
         {
-            if (ShelterDataManager.Instance == null)
+            if (ShelterSceneDataManager.Instance == null)
             {
-                Debug.LogWarning("[FacilityManager] ShelterDataManager is not available. Cannot spend upgrade cost.", this);
+                Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Cannot spend upgrade cost.", this);
                 return false;
             }
 
-            if (!ShelterDataManager.Instance.TrySpendResources(cost))
+            if (!ShelterSceneDataManager.Instance.TrySpendResources(cost))
                 return false;
         }
 
         state.SetUpgradeLevel(state.UpgradeLevel + 1);
         facility.ApplyUpgradeLevel(state.UpgradeLevel);
-        ShelterDataManager.Instance?.MarkDirty();
+        ShelterSceneDataManager.Instance?.MarkDirty();
         return true;
     }
 
     private FacilityRuntimeState GetOrCreateRuntimeState(FacilityDefinition definition)
     {
-        if (ShelterDataManager.Instance != null)
+        if (ShelterSceneDataManager.Instance != null)
         {
-            return ShelterDataManager.Instance.GetOrCreateFacilityState(
+            return ShelterSceneDataManager.Instance.GetOrCreateFacilityState(
                 definition.FacilityId,
                 definition.UnlockedByDefault);
         }
 
-        Debug.LogWarning("[FacilityManager] ShelterDataManager is not available. Facility state will not be persistent.", this);
+        Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Facility state will not be persistent.", this);
         return new FacilityRuntimeState(definition.FacilityId, definition.UnlockedByDefault);
     }
 }

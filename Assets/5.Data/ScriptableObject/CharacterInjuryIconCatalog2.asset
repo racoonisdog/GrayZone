@@ -10,8 +10,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d4c166dbb1880f149bf3fa72a30303c4, type: 3}
-  m_Name: NpcInjuryIconCatalog2
-  m_EditorClassIdentifier: Assembly-CSharp::NpcInjuryIconCatalog
+  m_Name: CharacterInjuryIconCatalog2
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterInjuryIconCatalog
   entries:
   - state: 0
     icon: {fileID: 21300000, guid: 8887db11ce90ff44c816328ee7fc3d6b, type: 3}

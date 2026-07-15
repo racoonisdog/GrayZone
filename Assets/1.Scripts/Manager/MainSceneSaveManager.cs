@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class MainSceneSaveManager : MonoBehaviour
 {
@@ -9,7 +10,8 @@ public class MainSceneSaveManager : MonoBehaviour
     [SerializeField] private string defaultProfileId = SaveFilePaths.DefaultProfileId;
     [SerializeField] private int newGameStartDay = 1;
     [SerializeField] private string newGameStartStageId = string.Empty;
-    [SerializeField] private NPCChar[] startingNpcChars;
+    [FormerlySerializedAs("startingNpcChars")]
+    [SerializeField] private PlayableCharacterDefinition[] startingCharacterDefinitions;
     [SerializeField] private FacilityDefinition[] startingFacilityDefinitions;
 
     private void Awake()
@@ -51,9 +53,9 @@ public class MainSceneSaveManager : MonoBehaviour
         GameDataManager.Instance.ApplySaveData(newGameSaveData);
 
         // Temporary test-scene sync. Scene managers should copy from GameDataManager on scene load later.
-        if (ShelterDataManager.Instance != null)
+        if (ShelterSceneDataManager.Instance != null)
         {
-            ShelterDataManager.Instance.CopyFromDataManager();
+            ShelterSceneDataManager.Instance.InitializeFromGameData();
         }
 
         return true;
@@ -80,31 +82,29 @@ public class MainSceneSaveManager : MonoBehaviour
             }
         };
 
-        AddStartingNpcs(saveData.shared);
+        AddStartingCharacters(saveData.shared);
         AddStartingFacilities(saveData.shelter);
         return saveData;
     }
 
-    private void AddStartingNpcs(SaveData.SharedSaveData sharedSaveData)
+    private void AddStartingCharacters(SaveData.SharedSaveData sharedSaveData)
     {
-        if (sharedSaveData == null || startingNpcChars == null)
+        if (sharedSaveData == null || startingCharacterDefinitions == null)
         {
             return;
         }
 
-        for (int i = 0; i < startingNpcChars.Length; i++)
+        for (int i = 0; i < startingCharacterDefinitions.Length; i++)
         {
-            SaveData.NpcSaveData npcSaveData = NpcSaveDataMapper.FromNpcChar(startingNpcChars[i]);
-            if (npcSaveData == null)
+            PlayableCharacterDefinition definition = startingCharacterDefinitions[i];
+            if (definition == null)
             {
                 continue;
             }
 
-            sharedSaveData.npcs.Add(npcSaveData);
+            sharedSaveData.characters.Add(definition.CreateSnapshot());
         }
 
-        sharedSaveData.playableCharacterCount = sharedSaveData.npcs.Count;
-        sharedSaveData.nonPlayableNpcCount = 0;
     }
 
     private void AddStartingFacilities(SaveData.ShelterSaveData shelterSaveData)

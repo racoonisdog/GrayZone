@@ -11,7 +11,7 @@ public class RecoveryComponent
     /// <param name="target">회복 대상 NPC 런타임 데이터</param>
     /// <param name="amount">회복할 HP 수치</param>
     /// <returns>회복 처리가 성공하면 <c>true</c></returns>
-    public bool Heal(NPCRuntimeData target, int amount)
+    public bool Heal(ShelterMemberRuntimeData target, int amount)
     {
         return target.RecoverHp(amount);
     }
@@ -22,7 +22,7 @@ public class RecoveryComponent
     /// <param name="target">부활 대상 NPC 런타임 데이터</param>
     /// <param name="hpPercent">부활 후 적용할 HP 비율</param>
     /// <returns>부활 처리가 성공하면 <c>true</c></returns>
-    public bool Revive(NPCRuntimeData target, int hpPercent)
+    public bool Revive(ShelterMemberRuntimeData target, int hpPercent)
     {
         return target.ReviveToPercent(hpPercent);
     }

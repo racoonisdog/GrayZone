@@ -1577,7 +1577,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8d9c47e3269a4cd1a15df2c1d011ed63, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::NPCListScript
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterListView
   contentRoot: {fileID: 1615427548}
   rowPrefab: {fileID: 7179024387286601439, guid: edc35e87afbb89a42984e4e8ccdd888a, type: 3}
 --- !u!114 &467619346
@@ -1591,7 +1591,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a26e089e43608b54daa9ad2086c37bcf, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::NpcCandidateListPanel
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterCandidateListPanel
   m_root: {fileID: 467619340}
   m_listScript: {fileID: 467619345}
   m_hideOnAwake: 1
@@ -9567,7 +9567,7 @@ GameObject:
   - component: {fileID: 1713639376}
   - component: {fileID: 1713639377}
   m_Layer: 0
-  m_Name: ShelterDataManager
+  m_Name: ShelterSceneDataManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9599,7 +9599,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 32fd6491ce9a30a43806d31f970f3be9, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ShelterDataManager
+  m_EditorClassIdentifier: Assembly-CSharp::ShelterSceneDataManager
   sharedWorkingData:
     lastStageId: 
     shelterStability: 100
@@ -9944,7 +9944,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 122740119089b544189ecba1fd8971bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShelterSceneManager
-  m_ShelterDataManager: {fileID: 0}
+  m_ShelterSceneDataManager: {fileID: 0}
   m_UIManager: {fileID: 0}
   m_MedicalManager: {fileID: 0}
   m_copyDataFromGameDataManagerOnAwake: 1

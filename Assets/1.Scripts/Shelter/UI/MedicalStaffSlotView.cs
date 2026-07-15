@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 /// <summary>
@@ -12,23 +13,25 @@ public class MedicalStaffSlotView : MonoBehaviour
     [SerializeField] private Image m_slotImage;
     [SerializeField] private Sprite m_unlockedSprite;
     [SerializeField] private Sprite m_lockedSprite;
-    [SerializeField] private NpcPortraitCatalog m_npccatalog;
+    [FormerlySerializedAs("m_npccatalog")]
+    [SerializeField] private CharacterPortraitCatalog m_characterCatalog;
 
     //ToDo : 추후 세이브전용 ID 필요
     [SerializeField] private string m_slotId;   // 세이브/로드 전용 고정 식별자 (런타임 로직에서는 미사용)
 
     private bool m_isUnlocked;
-    private string m_helperId;   // null/공백 = 비점유
+    private string m_helperRuntimeId;   // null/공백 = 비점유
+    private string m_helperDefinitionId;
     private Action<MedicalStaffSlotView> m_clicked;
 
     /// <summary>세이브/로드 시에만 사용하는 슬롯 식별자</summary>
     public string SlotId => m_slotId;
 
-    /// <summary>현재 슬롯을 점유 중인 헬퍼 정의 ID</summary>
-    public string HelperId => m_helperId;
+    /// <summary>현재 슬롯을 점유 중인 헬퍼 런타임 ID</summary>
+    public string HelperRuntimeId => m_helperRuntimeId;
 
     /// <summary>슬롯에 헬퍼가 배치되어 있는지 여부</summary>
-    public bool HasHelper => !string.IsNullOrWhiteSpace(m_helperId);
+    public bool HasHelper => !string.IsNullOrWhiteSpace(m_helperRuntimeId);
 
     private void Awake()
     {
@@ -63,12 +66,12 @@ public class MedicalStaffSlotView : MonoBehaviour
     }
 
     /// <summary>
-    /// 이 슬롯에 헬퍼 정의 ID를 배치하고 표시를 갱신
+    /// 이 슬롯에 헬퍼 런타임 ID와 정의 ID를 배치하고 표시를 갱신
     /// </summary>
-    /// <param name="definitionId">배치할 헬퍼 정의 ID</param>
-    public void SetHelper(string definitionId)
+    public void SetHelper(string runtimeId, string definitionId)
     {
-        m_helperId = definitionId;
+        m_helperRuntimeId = runtimeId;
+        m_helperDefinitionId = definitionId;
         UpdateVisual();
         UpdateButtonStates();
     }
@@ -78,7 +81,8 @@ public class MedicalStaffSlotView : MonoBehaviour
     /// </summary>
     public void ClearHelper()
     {
-        m_helperId = null;
+        m_helperRuntimeId = null;
+        m_helperDefinitionId = null;
         UpdateVisual();
         UpdateButtonStates();
     }
@@ -107,9 +111,9 @@ public class MedicalStaffSlotView : MonoBehaviour
             return;
         }
 
-        if (HasHelper && m_npccatalog != null)
+        if (HasHelper && m_characterCatalog != null)
         {
-            Sprite portrait = m_npccatalog.GetPortrait(m_helperId);
+            Sprite portrait = m_characterCatalog.GetPortrait(m_helperDefinitionId);
             m_slotImage.sprite = portrait != null ? portrait : m_unlockedSprite;
         }
         else

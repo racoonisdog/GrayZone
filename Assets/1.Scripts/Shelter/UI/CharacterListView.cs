@@ -3,16 +3,16 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// NPC 목록 행 프리팹이 구현해야 하는 바인딩 계약
+/// 캐릭터 목록 행 프리팹이 구현해야 하는 바인딩 계약
 /// </summary>
-public interface INPCListItemView
+public interface ICharacterListItemView
 {
     /// <summary>
-    /// NPC 런타임 데이터와 클릭 콜백을 행 UI에 바인딩
+    /// 셸터 캐릭터 런타임 데이터와 클릭 콜백을 행 UI에 바인딩
     /// </summary>
-    /// <param name="npcData">표시할 NPC 런타임 데이터</param>
-    /// <param name="onClicked">행 클릭 시 NPC 정의 ID를 전달할 콜백</param>
-    void Bind(NPCRuntimeData npcData, Action<string> onClicked);
+    /// <param name="character">표시할 셸터 캐릭터 런타임 데이터</param>
+    /// <param name="onClicked">행 클릭 시 캐릭터 런타임 ID를 전달할 콜백</param>
+    void Bind(ShelterMemberRuntimeData character, Action<string> onClicked);
 
     /// <summary>
     /// 행 UI에 표시된 데이터와 클릭 상태를 비움.
@@ -21,9 +21,9 @@ public interface INPCListItemView
 }
 
 /// <summary>
-/// NPC 후보 목록을 행 프리팹으로 생성하고 제거하는 UI 목록 컨트롤러
+/// 캐릭터 후보 목록을 행 프리팹으로 생성하고 제거하는 UI 목록 컨트롤러
 /// </summary>
-public class NPCListScript : MonoBehaviour
+public class CharacterListView : MonoBehaviour
 {
     [SerializeField] private Transform contentRoot;
     [SerializeField] private GameObject rowPrefab;
@@ -31,11 +31,11 @@ public class NPCListScript : MonoBehaviour
     private readonly List<GameObject> spawnedRows = new List<GameObject>();
 
     /// <summary>
-    /// NPC 목록을 다시 만들고 각 행에 클릭 콜백을 연결
+    /// 캐릭터 목록을 다시 만들고 각 행에 클릭 콜백을 연결
     /// </summary>
-    /// <param name="characters">표시할 NPC 후보 목록</param>
+    /// <param name="characters">표시할 캐릭터 후보 목록</param>
     /// <param name="onClicked">행 클릭 시 호출할 콜백</param>
-    public void Bind(IReadOnlyList<NPCRuntimeData> characters, Action<string> onClicked)
+    public void Bind(IReadOnlyList<ShelterMemberRuntimeData> characters, Action<string> onClicked)
     {
         Clear();
 
@@ -45,14 +45,14 @@ public class NPCListScript : MonoBehaviour
         Transform parent = ResolveContentRoot();
         for (int i = 0; i < characters.Count; i++)
         {
-            NPCRuntimeData character = characters[i];
-            if (character == null || string.IsNullOrWhiteSpace(character.DefinitionId))
+            ShelterMemberRuntimeData character = characters[i];
+            if (character == null || string.IsNullOrWhiteSpace(character.RuntimeId))
                 continue;
 
             GameObject rowObject = Instantiate(rowPrefab, parent);
-            if (!TryGetItemView(rowObject, out INPCListItemView rowView))
+            if (!TryGetItemView(rowObject, out ICharacterListItemView rowView))
             {
-                Debug.LogWarning($"[{nameof(NPCListScript)}] Row prefab must contain a component implementing {nameof(INPCListItemView)}.", this);
+                Debug.LogWarning($"[{nameof(CharacterListView)}] Row prefab must contain a component implementing {nameof(ICharacterListItemView)}.", this);
                 Destroy(rowObject);
                 continue;
             }
@@ -64,7 +64,7 @@ public class NPCListScript : MonoBehaviour
     }
 
     /// <summary>
-    /// 현재 생성된 모든 NPC 행을 제거
+    /// 현재 생성된 모든 캐릭터 행을 제거
     /// </summary>
     public void Clear()
     {
@@ -82,7 +82,7 @@ public class NPCListScript : MonoBehaviour
         return contentRoot != null ? contentRoot : transform;
     }
 
-    private static bool TryGetItemView(GameObject rowObject, out INPCListItemView itemView)
+    private static bool TryGetItemView(GameObject rowObject, out ICharacterListItemView itemView)
     {
         itemView = null;
         if (rowObject == null)
@@ -91,7 +91,7 @@ public class NPCListScript : MonoBehaviour
         MonoBehaviour[] components = rowObject.GetComponentsInChildren<MonoBehaviour>(true);
         for (int i = 0; i < components.Length; i++)
         {
-            if (components[i] is INPCListItemView view)
+            if (components[i] is ICharacterListItemView view)
             {
                 itemView = view;
                 return true;

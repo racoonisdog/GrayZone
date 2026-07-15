@@ -1,6 +1,7 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 /// <summary>
@@ -13,14 +14,15 @@ public class MedicalPatientSlotView : MonoBehaviour
     [SerializeField] private Sprite m_unlockedSprite;
     [SerializeField] private Sprite m_lockedSprite;
     [SerializeField] private Button m_cancelButton;   // 점유 시 표시되는 배치취소 버튼 (슬롯과 형제, 배경 아래)
-    [SerializeField] private NpcPortraitCatalog m_npccatalog;
+    [FormerlySerializedAs("m_npccatalog")]
+    [SerializeField] private CharacterPortraitCatalog m_characterCatalog;
 
     [Header("Status Display (선택 — 없으면 무시)")]
     [SerializeField] private GameObject m_gaugeRoot;     // 레벨별 게이지 바 표시/숨김 대상
     [SerializeField] private Image m_gaugeFill;          // 부상게이지 (Image.fillAmount 방식, 0~1)
     [SerializeField] private Slider m_gaugeSlider;       // 부상게이지 (Slider 방식, 표시 전용·드래그 불가. Min=0/Max=1 권장)
     [SerializeField] private Image m_injuryIcon;
-    [SerializeField] private NpcInjuryIconCatalog m_injuryCatalog;
+    [SerializeField] private CharacterInjuryIconCatalog m_injuryCatalog;
     [SerializeField] private TextMeshProUGUI m_daysText;            // 남은 일수
     [SerializeField] private TextMeshProUGUI m_nameText;            // 이름
     [SerializeField] private TextMeshProUGUI m_injuryStateText;     // 부상상태
@@ -33,17 +35,18 @@ public class MedicalPatientSlotView : MonoBehaviour
 
 
     private bool m_isUnlocked;
-    private string m_patientId;                  // null/공백 = 비점유
+    private string m_patientRuntimeId;           // null/공백 = 비점유
+    private string m_patientDefinitionId;
     private Action<MedicalPatientSlotView> m_clicked;
 
     /// <summary>세이브/로드 시에만 사용하는 슬롯 식별자</summary>
     public string SlotId => m_slotId;
 
-    /// <summary>현재 슬롯을 점유 중인 환자 정의 ID</summary>
-    public string PatientId => m_patientId;
+    /// <summary>현재 슬롯을 점유 중인 환자 런타임 ID</summary>
+    public string PatientRuntimeId => m_patientRuntimeId;
 
     /// <summary>슬롯에 환자가 배치되어 있는지 여부</summary>
-    public bool HasPatient => !string.IsNullOrWhiteSpace(m_patientId);
+    public bool HasPatient => !string.IsNullOrWhiteSpace(m_patientRuntimeId);
 
     private void Awake()
     {
@@ -87,12 +90,12 @@ public class MedicalPatientSlotView : MonoBehaviour
     }
 
     /// <summary>
-    /// 이 슬롯에 환자 정의 ID를 배치하고 표시를 갱신
+    /// 이 슬롯에 환자 런타임 ID와 정의 ID를 배치하고 표시를 갱신
     /// </summary>
-    /// <param name="definitionId">배치할 환자 정의 ID</param>
-    public void SetPatient(string definitionId)
+    public void SetPatient(string runtimeId, string definitionId)
     {
-        m_patientId = definitionId;
+        m_patientRuntimeId = runtimeId;
+        m_patientDefinitionId = definitionId;
         UpdateVisual();
         UpdateButtonStates();
     }
@@ -102,7 +105,8 @@ public class MedicalPatientSlotView : MonoBehaviour
     /// </summary>
     public void ClearPatient()
     {
-        m_patientId = null;
+        m_patientRuntimeId = null;
+        m_patientDefinitionId = null;
         UpdateVisual();
         UpdateButtonStates();
         ClearStatusDisplay();
@@ -165,7 +169,7 @@ public class MedicalPatientSlotView : MonoBehaviour
             m_nameText.text = string.Format(m_nameFormat, status.DisplayName);
 
         if (m_injuryStateText != null)
-            m_injuryStateText.text = string.Format(m_stateFormat, NpcInjuryStateText.ToWord(status.InjuryState));
+            m_injuryStateText.text = string.Format(m_stateFormat, CharacterInjuryStateText.ToWord(status.InjuryState));
 
         if (m_daysText != null)
             m_daysText.text = string.Format(m_daysFormat, status.RemainingDays);
@@ -200,9 +204,9 @@ public class MedicalPatientSlotView : MonoBehaviour
             return;
         }
 
-        if (HasPatient && m_npccatalog != null)
+        if (HasPatient && m_characterCatalog != null)
         {
-            Sprite portrait = m_npccatalog.GetPortrait(m_patientId);
+            Sprite portrait = m_characterCatalog.GetPortrait(m_patientDefinitionId);
             m_slotImage.sprite = portrait != null ? portrait : m_unlockedSprite;
         }
         else

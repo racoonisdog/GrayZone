@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// StaffSlot 아래의 헬퍼 슬롯(<see cref="MedicalStaffSlotView"/>)들을 관리하는 컨트롤러.
-/// 슬롯 클릭 → 후보를 공용 패널(<see cref="NpcCandidateListPanel"/>)에 넘겨 표시 → 후보 클릭 → 헬퍼 배치.
+/// 슬롯 클릭 → 후보를 공용 패널(<see cref="CharacterCandidateListPanel"/>)에 넘겨 표시 → 후보 클릭 → 헬퍼 배치.
 /// 후보 필터: 부상상태가 Light 이상 Healthy 미만(= 경상만).
 /// 슬롯 해금은 계층 순서(=배열 순서)와 <see cref="MedicalManager.HelperCapacity"/>로 판정한다.
 /// </summary>
@@ -15,11 +15,11 @@ public class MedicalStaffSlotController : MonoBehaviour
     [Header("Candidates")]
     [SerializeField] private MedicalManager m_medicalManager;
     [SerializeField] private CharacterManager m_characterManager;
-    [SerializeField] private NpcCandidateListPanel m_candidateListPanel;
+    [SerializeField] private CharacterCandidateListPanel m_candidateListPanel;
 
-    private readonly List<NPCRuntimeData> m_candidates = new List<NPCRuntimeData>();
+    private readonly List<ShelterMemberRuntimeData> m_candidates = new List<ShelterMemberRuntimeData>();
 
-    private NpcCandidateListPanel m_boundPanel;
+    private CharacterCandidateListPanel m_boundPanel;
     private MedicalStaffSlotView m_pendingSlot;   // 배치 대상으로 클릭해 둔 빈 슬롯
 
     private void Awake()
@@ -95,7 +95,7 @@ public class MedicalStaffSlotController : MonoBehaviour
         if (slot.HasHelper)
         {
             // 점유 슬롯 → 배치 취소 (별도 취소 버튼 없음)
-            if (manager.TryReleaseHelper(slot.HelperId))
+            if (manager.TryReleaseHelper(slot.HelperRuntimeId))
             {
                 slot.ClearHelper();
                 HideCandidateList();
@@ -113,14 +113,14 @@ public class MedicalStaffSlotController : MonoBehaviour
         m_candidates.Clear();
 
         MedicalManager manager = CacheMedicalManager();
-        NpcCandidateListPanel panel = CacheCandidateListPanel();
+        CharacterCandidateListPanel panel = CacheCandidateListPanel();
         if (manager == null || panel == null)
             return;
 
         if (manager.CurrentHelperCount < manager.HelperCapacity &&
             TryGetCharacterManager(out CharacterManager characterManager))
         {
-            foreach (NPCRuntimeData character in characterManager.Characters)
+            foreach (ShelterMemberRuntimeData character in characterManager.Characters)
             {
                 if (IsStaffCandidate(character))
                     m_candidates.Add(character);
@@ -131,27 +131,29 @@ public class MedicalStaffSlotController : MonoBehaviour
     }
 
     // 후보 조건: Light 이상 Healthy 미만 → enum 순서(Healthy<Light<Heavy<...)상 경상(LightInjury)만 해당.
-    private bool IsStaffCandidate(NPCRuntimeData character)
+    private bool IsStaffCandidate(ShelterMemberRuntimeData character)
     {
         if (character == null)
             return false;
 
-        if (character.GetCurrentInjuryState() != NPCInjuryState.LightInjury)
+        if (character.InjuryState != PlayerInjuryState.Minor)
             return false;
 
-        return !character.GetIsAssignedToShelter();
+        return !character.IsAssignedToFacility;
     }
 
-    private void HandleCandidateClicked(string definitionId)
+    private void HandleCandidateClicked(string runtimeId)
     {
         MedicalManager manager = CacheMedicalManager();
         if (manager == null)
             return;
 
-        if (manager.TryAssignHelper(definitionId))
+        ShelterMemberRuntimeData selected = m_candidates.Find(
+            character => character != null && character.RuntimeId == runtimeId);
+        if (manager.TryAssignHelper(runtimeId))
         {
-            if (m_pendingSlot != null)
-                m_pendingSlot.SetHelper(definitionId);
+            if (m_pendingSlot != null && selected != null)
+                m_pendingSlot.SetHelper(selected.RuntimeId, selected.DefinitionId);
             m_pendingSlot = null;
 
             HideCandidateList();
@@ -164,21 +166,21 @@ public class MedicalStaffSlotController : MonoBehaviour
     }
 
     // 매니저 쪽에서 해제된 경우(외부 경로)에도 슬롯 표시를 맞춘다.
-    private void HandleHelperReleased(NPCRuntimeData helper)
+    private void HandleHelperReleased(ShelterMemberRuntimeData helper)
     {
         if (helper != null)
-            ClearSlotByHelperId(helper.DefinitionId);
+            ClearSlotByHelperId(helper.RuntimeId);
     }
 
-    private void ClearSlotByHelperId(string definitionId)
+    private void ClearSlotByHelperId(string runtimeId)
     {
-        if (m_slots == null || string.IsNullOrWhiteSpace(definitionId))
+        if (m_slots == null || string.IsNullOrWhiteSpace(runtimeId))
             return;
 
         for (int i = 0; i < m_slots.Length; i++)
         {
             MedicalStaffSlotView slot = m_slots[i];
-            if (slot != null && slot.HasHelper && slot.HelperId == definitionId)
+            if (slot != null && slot.HasHelper && slot.HelperRuntimeId == runtimeId)
             {
                 slot.ClearHelper();
                 return;
@@ -206,10 +208,10 @@ public class MedicalStaffSlotController : MonoBehaviour
         m_candidates.Clear();
     }
 
-    private NpcCandidateListPanel CacheCandidateListPanel()
+    private CharacterCandidateListPanel CacheCandidateListPanel()
     {
         if (m_candidateListPanel == null)
-            m_candidateListPanel = FindFirstObjectByType<NpcCandidateListPanel>(FindObjectsInactive.Include);
+            m_candidateListPanel = FindFirstObjectByType<CharacterCandidateListPanel>(FindObjectsInactive.Include);
 
         // 패널 참조가 바뀌면 ClosedBy 구독을 옮긴다.
         if (m_candidateListPanel != m_boundPanel)

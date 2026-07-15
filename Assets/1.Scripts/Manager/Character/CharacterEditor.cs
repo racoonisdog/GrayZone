@@ -15,17 +15,17 @@ public sealed class CharacterEditor
         this.query = query;
     }
 
-    public bool TryAssignToFacility(string definitionId, string facilityId, string roomId, FacilityAssignmentKind kind, out CharacterActionFailure failure)
+    public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, FacilityAssignmentKind kind, out CharacterActionFailure failure)
     {
-        return TryAssignToFacility(definitionId, facilityId, roomId, CharacterAssignmentFilter.AvailableAlive, kind, out failure);
+        return TryAssignToFacility(runtimeId, facilityId, roomId, CharacterAssignmentFilter.AvailableAlive, kind, out failure);
     }
 
-    public bool TryAssignToFacility(string definitionId, string facilityId, string roomId, CharacterAssignmentFilter filter, FacilityAssignmentKind kind, out CharacterActionFailure failure)
+    public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, CharacterAssignmentFilter filter, FacilityAssignmentKind kind, out CharacterActionFailure failure)
     {
-        return TryAssignToFacility(definitionId, facilityId, roomId, filter, kind, out _, out failure);
+        return TryAssignToFacility(runtimeId, facilityId, roomId, filter, kind, out _, out failure);
     }
 
-    public bool TryAssignToFacility(string definitionId, string facilityId, string roomId, CharacterAssignmentFilter filter, FacilityAssignmentKind kind, out NPCRuntimeData character, out CharacterActionFailure failure)
+    public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, CharacterAssignmentFilter filter, FacilityAssignmentKind kind, out ShelterMemberRuntimeData character, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
         character = null;
@@ -39,7 +39,7 @@ public sealed class CharacterEditor
             return false;
         }
 
-        if (!query.TryGetCharacter(definitionId, out character))
+        if (!query.TryGetCharacter(runtimeId, out character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -47,7 +47,7 @@ public sealed class CharacterEditor
 
         if (!query.MatchesFilter(character, filter))
         {
-            failure = character.GetIsAssignedToShelter()
+            failure = character.IsAssignedToFacility
                 ? CharacterActionFailure.AlreadyAssigned
                 : CharacterActionFailure.CharacterNotEligible;
             return false;
@@ -55,7 +55,7 @@ public sealed class CharacterEditor
 
         string normalizedFacilityId = facilityId.Trim();
         string normalizedRoomId = string.IsNullOrWhiteSpace(roomId) ? normalizedFacilityId : roomId.Trim();
-        if (!character.AssignToShelter(normalizedFacilityId, normalizedRoomId, kind))
+        if (!character.AssignToFacility(normalizedFacilityId, normalizedRoomId, kind))
         {
             failure = CharacterActionFailure.InvalidFacilityId;
             return false;
@@ -65,38 +65,38 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TryReleaseFromFacility(string definitionId, out CharacterActionFailure failure)
+    public bool TryReleaseFromFacility(string runtimeId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.FacilityAssignment, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
         }
 
-        if (!character.GetIsAssignedToShelter())
+        if (!character.IsAssignedToFacility)
         {
             failure = CharacterActionFailure.NotAssignedToFacility;
             return false;
         }
 
-        character.ReleaseFromShelter();
+        character.ReleaseFromFacility();
         context.NotifyCharacterChanged(character);
         return true;
     }
 
-    public bool TrySetCurrentHp(string definitionId, int currentHp, out CharacterActionFailure failure)
+    public bool TrySetCurrentHp(string runtimeId, int currentHp, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -107,14 +107,14 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TrySetInjuryState(string definitionId, NPCInjuryState injuryState, out CharacterActionFailure failure)
+    public bool TrySetInjuryState(string runtimeId, PlayerInjuryState injuryState, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -125,14 +125,14 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TrySetInjuryGauge(string definitionId, float injuryGauge, out CharacterActionFailure failure)
+    public bool TrySetInjuryGauge(string runtimeId, float injuryGauge, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -144,14 +144,14 @@ public sealed class CharacterEditor
     }
 
     // 부상상태를 현재 게이지 기준으로 재계산한다(완치/수동해제 시점 사용).
-    public bool TryRefreshInjuryState(string definitionId, out CharacterActionFailure failure)
+    public bool TryRefreshInjuryState(string runtimeId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -162,14 +162,14 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TryApplyDamage(string definitionId, int damage, out CharacterActionFailure failure)
+    public bool TryApplyDamage(string runtimeId, int damage, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -186,14 +186,14 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TryRecoverHp(string definitionId, int amount, out CharacterActionFailure failure)
+    public bool TryRecoverHp(string runtimeId, int amount, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -210,14 +210,14 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TryReviveToPercent(string definitionId, int percent, out CharacterActionFailure failure)
+    public bool TryReviveToPercent(string runtimeId, int percent, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -234,23 +234,23 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TryCompleteRecovery(string definitionId, out CharacterActionFailure failure)
+    public bool TryCompleteRecovery(string runtimeId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.HealthChange | CharacterEditCapability.FacilityAssignment, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out NPCRuntimeData character))
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
         }
 
         bool changed = character.CompleteRecovery();
-        if (character.GetIsAssignedToShelter())
+        if (character.IsAssignedToFacility)
         {
-            character.ReleaseFromShelter();
+            character.ReleaseFromFacility();
             changed = true;
         }
 
@@ -258,14 +258,14 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TryChangeWeapon(string definitionId, Weapon weapon, out CharacterActionFailure failure)
+    public bool TryChangeWeapon(string runtimeId, Weapon weapon, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.EquipmentChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out _))
+        if (!query.TryGetCharacter(runtimeId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -281,14 +281,14 @@ public sealed class CharacterEditor
         return false;
     }
 
-    public bool TryChangeWeaponPart(string definitionId, WeaponPart part, out CharacterActionFailure failure)
+    public bool TryChangeWeaponPart(string runtimeId, WeaponPart part, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.EquipmentChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out _))
+        if (!query.TryGetCharacter(runtimeId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -304,14 +304,14 @@ public sealed class CharacterEditor
         return false;
     }
 
-    public bool TryUpgradeEquipment(string definitionId, string equipmentId, out CharacterActionFailure failure)
+    public bool TryUpgradeEquipment(string runtimeId, string equipmentId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.EquipmentUpgrade, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out _))
+        if (!query.TryGetCharacter(runtimeId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -327,14 +327,14 @@ public sealed class CharacterEditor
         return false;
     }
 
-    public bool TryChangeSkill(string definitionId, string skillId, out CharacterActionFailure failure)
+    public bool TryChangeSkill(string runtimeId, string skillId, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
 
         if (!policy.CanUse(CharacterEditCapability.SkillChange, out failure))
             return false;
 
-        if (!query.TryGetCharacter(definitionId, out _))
+        if (!query.TryGetCharacter(runtimeId, out _))
         {
             failure = CharacterActionFailure.CharacterNotFound;
             return false;
@@ -350,7 +350,7 @@ public sealed class CharacterEditor
         return false;
     }
 
-    private void NotifyChangedIfNeeded(NPCRuntimeData character, bool changed)
+    private void NotifyChangedIfNeeded(ShelterMemberRuntimeData character, bool changed)
     {
         if (changed)
             context.NotifyCharacterChanged(character);

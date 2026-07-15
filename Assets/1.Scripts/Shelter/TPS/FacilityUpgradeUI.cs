@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
@@ -7,7 +7,7 @@ using TMPro;
 /// </summary>
 /// <remarks>
 /// 특정 시설을 알지 않고 <see cref="Open"/>에 받은 facilityId로 <see cref="FacilityManager"/>에서 데이터를 pull합니다.
-/// (시설 이름·제공 기능·비용/보유·업그레이드 실행 모두 FacilityManager/ShelterDataManager 경유)
+/// (시설 이름·제공 기능·비용/보유·업그레이드 실행 모두 FacilityManager/ShelterSceneDataManager 경유)
 /// </remarks>
 public class FacilityUpgradeUI : MonoBehaviour
 {
@@ -90,7 +90,7 @@ public class FacilityUpgradeUI : MonoBehaviour
 
         // 비용 (줄마다 보유 vs 요구 비교, 부족=lack 색)
         ClearChildren(m_costRoot);
-        ShelterDataManager sdm = ShelterDataManager.Instance;
+        ShelterSceneDataManager sdm = ShelterSceneDataManager.Instance;
         if (m_costRoot != null && m_costRowPrefab != null)
         {
             foreach (CurrencyCost c in fm.GetUpgradeCost(m_facilityId).Costs)

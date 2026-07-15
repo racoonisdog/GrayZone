@@ -17,13 +17,13 @@ public class MedicalUI : MonoBehaviour
 
     [Header("Treatment Candidates")]
     [SerializeField] private CharacterManager m_characterManager;
-    [SerializeField] private NpcCandidateListPanel m_candidateListPanel;
+    [SerializeField] private CharacterCandidateListPanel m_candidateListPanel;
 
-    private readonly List<NPCRuntimeData> m_treatmentCandidates = new List<NPCRuntimeData>();
+    private readonly List<ShelterMemberRuntimeData> m_treatmentCandidates = new List<ShelterMemberRuntimeData>();
 
     private MedicalManager m_currentManager;
     private CharacterManager m_boundCharacterManager;
-    private NpcCandidateListPanel m_boundCandidateListPanel;
+    private CharacterCandidateListPanel m_boundCandidateListPanel;
     private MedicalPatientSlotView m_pendingSlot;   // 배치 대상으로 클릭해 둔 빈 슬롯
     private bool m_isOpening;
     private bool m_isOpen;
@@ -186,7 +186,7 @@ public class MedicalUI : MonoBehaviour
             for (int j = 0; j < statuses.Count; j++)
             {
                 PatientStatus status = statuses[j];
-                if (status.Patient != null && status.Patient.DefinitionId == slot.PatientId)
+                if (status.Patient != null && status.Patient.RuntimeId == slot.PatientRuntimeId)
                 {
                     slot.ApplyStatus(status, showGauge);
                     break;
@@ -227,27 +227,27 @@ public class MedicalUI : MonoBehaviour
         IReadOnlyList<PatientStatus> statuses = m_currentManager.PatientStatuses;
         for (int i = 0; i < statuses.Count && i < m_patientSlots.Length; i++)
         {
-            NPCRuntimeData patient = statuses[i].Patient;
+            ShelterMemberRuntimeData patient = statuses[i].Patient;
             if (patient != null && m_patientSlots[i] != null)
-                m_patientSlots[i].SetPatient(patient.DefinitionId);
+                m_patientSlots[i].SetPatient(patient.RuntimeId, patient.DefinitionId);
         }
     }
 
-    private void HandlePatientHealed(NPCRuntimeData patient)
+    private void HandlePatientHealed(ShelterMemberRuntimeData patient)
     {
         if (patient != null)
-            ClearSlotByPatientId(patient.DefinitionId);
+            ClearSlotByPatientId(patient.RuntimeId);
     }
 
-    private void ClearSlotByPatientId(string definitionId)
+    private void ClearSlotByPatientId(string runtimeId)
     {
-        if (m_patientSlots == null || string.IsNullOrWhiteSpace(definitionId))
+        if (m_patientSlots == null || string.IsNullOrWhiteSpace(runtimeId))
             return;
 
         for (int i = 0; i < m_patientSlots.Length; i++)
         {
             MedicalPatientSlotView slot = m_patientSlots[i];
-            if (slot != null && slot.HasPatient && slot.PatientId == definitionId)
+            if (slot != null && slot.HasPatient && slot.PatientRuntimeId == runtimeId)
             {
                 slot.ClearPatient();
                 return;
@@ -259,7 +259,7 @@ public class MedicalUI : MonoBehaviour
     {
         ClearTreatmentCandidateList();
 
-        NpcCandidateListPanel panel = CacheCandidateListPanel();
+        CharacterCandidateListPanel panel = CacheCandidateListPanel();
         if (m_currentManager == null || panel == null)
             return;
 
@@ -292,7 +292,7 @@ public class MedicalUI : MonoBehaviour
         if (slot.HasPatient)
         {
             // 점유 슬롯 → 배치 취소
-            if (m_currentManager.TryReleasePatient(slot.PatientId))
+            if (m_currentManager.TryReleasePatient(slot.PatientRuntimeId))
             {
                 slot.ClearPatient();
                 HideTreatmentCandidateList();
@@ -307,7 +307,7 @@ public class MedicalUI : MonoBehaviour
         RefreshTreatmentCandidates();
     }
 
-    private void HandleTreatmentCandidateClicked(string definitionId)
+    private void HandleTreatmentCandidateClicked(string runtimeId)
     {
         if (m_currentManager == null)
             return;
@@ -315,15 +315,17 @@ public class MedicalUI : MonoBehaviour
         bool wasCandidateListOpen = m_isTreatmentCandidateListOpen;
         m_isTreatmentCandidateListOpen = false;
 
+        ShelterMemberRuntimeData selected = m_treatmentCandidates.Find(
+            character => character != null && character.RuntimeId == runtimeId);
         bool assigned = m_helperMode
-            ? m_currentManager.TryAssignHelper(definitionId)
-            : m_currentManager.TryAssignPatient(definitionId);
+            ? m_currentManager.TryAssignHelper(runtimeId)
+            : m_currentManager.TryAssignPatient(runtimeId);
 
         if (assigned)
         {
             // 환자 모드에서만 클릭해 둔 빈 슬롯에 고정 배치. 헬퍼 전용 슬롯 UI는 에디터 배선 필요.
-            if (!m_helperMode && m_pendingSlot != null)
-                m_pendingSlot.SetPatient(definitionId);
+            if (!m_helperMode && m_pendingSlot != null && selected != null)
+                m_pendingSlot.SetPatient(selected.RuntimeId, selected.DefinitionId);
             m_pendingSlot = null;
 
             HideTreatmentCandidateList();
@@ -369,10 +371,10 @@ public class MedicalUI : MonoBehaviour
         m_treatmentCandidates.Clear();
     }
 
-    private NpcCandidateListPanel CacheCandidateListPanel()
+    private CharacterCandidateListPanel CacheCandidateListPanel()
     {
         if (m_candidateListPanel == null)
-            m_candidateListPanel = FindFirstObjectByType<NpcCandidateListPanel>(FindObjectsInactive.Include);
+            m_candidateListPanel = FindFirstObjectByType<CharacterCandidateListPanel>(FindObjectsInactive.Include);
 
         // 패널 참조가 바뀌면 ClosedBy 구독을 옮긴다.
         if (m_candidateListPanel != m_boundCandidateListPanel)
@@ -412,7 +414,7 @@ public class MedicalUI : MonoBehaviour
             return;
 
         m_boundCharacterManager.CharacterChanged += HandleCharacterChanged;
-        m_boundCharacterManager.RosterChanged += HandleRosterChanged;
+        m_boundCharacterManager.CharactersChanged += HandleCharactersChanged;
     }
 
     private void UnbindCharacterManager()
@@ -420,19 +422,19 @@ public class MedicalUI : MonoBehaviour
         if (m_boundCharacterManager != null)
         {
             m_boundCharacterManager.CharacterChanged -= HandleCharacterChanged;
-            m_boundCharacterManager.RosterChanged -= HandleRosterChanged;
+            m_boundCharacterManager.CharactersChanged -= HandleCharactersChanged;
         }
 
         m_boundCharacterManager = null;
     }
 
-    private void HandleCharacterChanged(NPCRuntimeData character)
+    private void HandleCharacterChanged(ShelterMemberRuntimeData character)
     {
         if (m_isOpen)
             Refresh();
     }
 
-    private void HandleRosterChanged()
+    private void HandleCharactersChanged()
     {
         if (m_isOpen)
             Refresh();

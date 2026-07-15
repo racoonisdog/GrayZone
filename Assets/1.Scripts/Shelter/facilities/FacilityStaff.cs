@@ -5,7 +5,7 @@ using System.Collections.Generic;
 /// </summary>
 public class FacilityStaff
 {
-    private readonly List<NPCRuntimeData> assigned = new List<NPCRuntimeData>();
+    private readonly List<ShelterMemberRuntimeData> assigned = new List<ShelterMemberRuntimeData>();
     private readonly StaffAssignment slots;
 
     /// <summary>
@@ -18,7 +18,7 @@ public class FacilityStaff
     }
 
     /// <summary>현재 배치된 NPC 목록 외부에서는 읽기 전용으로만 사용</summary>
-    public IReadOnlyList<NPCRuntimeData> Assigned => assigned;
+    public IReadOnlyList<ShelterMemberRuntimeData> Assigned => assigned;
 
     /// <summary>현재 배치된 스태프 수</summary>
     public int CurrentCount => assigned.Count;
@@ -34,7 +34,7 @@ public class FacilityStaff
     /// </summary>
     /// <param name="staff">검사할 NPC 런타임 데이터</param>
     /// <returns>이미 배치되어 있으면 <c>true</c></returns>
-    public bool Contains(NPCRuntimeData staff)
+    public bool Contains(ShelterMemberRuntimeData staff)
     {
         return staff != null && assigned.Contains(staff);
     }
@@ -44,7 +44,7 @@ public class FacilityStaff
     /// </summary>
     /// <param name="staff">배치할 NPC 런타임 데이터</param>
     /// <returns>명단이 실제로 변경되어 새로 추가됐으면 <c>true</c></returns>
-    public bool TryAssign(NPCRuntimeData staff)
+    public bool TryAssign(ShelterMemberRuntimeData staff)
     {
         if (staff == null) return false;
         if (assigned.Contains(staff)) return false;
@@ -59,7 +59,7 @@ public class FacilityStaff
     /// </summary>
     /// <param name="staff">해제할 NPC 런타임 데이터</param>
     /// <returns>실제로 명단에서 제거됐으면 <c>true</c></returns>
-    public bool TryRelease(NPCRuntimeData staff)
+    public bool TryRelease(ShelterMemberRuntimeData staff)
     {
         return staff != null && assigned.Remove(staff);
     }

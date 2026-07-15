@@ -15,7 +15,7 @@ using Object = UnityEngine.Object;
 /// properties (e.g. RosterCount / ShelterStability / ResourceAmounts / Npcs) and,
 /// optionally, [SerializeField] private fields. Nothing is hard-coded per manager:
 /// whatever a component exposes is shown automatically. Dictionaries and lists are
-/// expanded, complex objects (e.g. NPCRuntimeData) recurse a couple of levels, and
+/// expanded, complex objects (e.g. ShelterMemberRuntimeData) recurse a couple of levels, and
 /// values that change are briefly highlighted.
 ///
 /// Editor-only and never mutates anything. Live in Play mode, current values in Edit mode.

@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 여러 시설 UI가 공용으로 쓰는 NPC 후보 목록 패널.
+/// 여러 시설 UI가 공용으로 쓰는 캐릭터 후보 목록 패널.
 /// 시설 UI(요청자)가 후보 목록과 클릭 콜백을 넘겨 열고, 연 요청자만 닫을 수 있다.
 /// 다른 요청자가 새로 열면 이전 요청자는 <see cref="ClosedBy"/>로 통지받고 밀려난다.
 /// </summary>
-public class NpcCandidateListPanel : MonoBehaviour
+public class CharacterCandidateListPanel : MonoBehaviour
 {
     [SerializeField] private GameObject m_root;          // 표시/숨김 대상. 없으면 자기 자신
-    [SerializeField] private NPCListScript m_listScript;
+    [SerializeField] private CharacterListView m_listScript;
     [SerializeField] private bool m_hideOnAwake = true;
 
     private object m_currentRequester;   // null = 닫힘
@@ -46,9 +46,9 @@ public class NpcCandidateListPanel : MonoBehaviour
     /// 후보 목록을 표시. 이미 다른 요청자가 열어 두었다면 새 요청자가 이기고 이전 요청자에게 교체를 통지
     /// </summary>
     /// <param name="requester">목록을 여는 시설 UI(소유권 식별용)</param>
-    /// <param name="candidates">표시할 NPC 후보 목록</param>
-    /// <param name="onSelected">행 클릭 시 NPC 정의 ID를 전달할 콜백</param>
-    public void Open(object requester, IReadOnlyList<NPCRuntimeData> candidates, Action<string> onSelected)
+    /// <param name="candidates">표시할 캐릭터 후보 목록</param>
+    /// <param name="onSelected">행 클릭 시 캐릭터 런타임 ID를 전달할 콜백</param>
+    public void Open(object requester, IReadOnlyList<ShelterMemberRuntimeData> candidates, Action<string> onSelected)
     {
         if (requester == null)
             return;
@@ -99,6 +99,6 @@ public class NpcCandidateListPanel : MonoBehaviour
             m_root = gameObject;
 
         if (m_listScript == null)
-            m_listScript = GetComponentInChildren<NPCListScript>(true);
+            m_listScript = GetComponentInChildren<CharacterListView>(true);
     }
 }
