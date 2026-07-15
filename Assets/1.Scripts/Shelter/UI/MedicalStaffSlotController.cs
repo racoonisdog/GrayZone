@@ -4,7 +4,7 @@ using UnityEngine;
 /// <summary>
 /// StaffSlot 아래의 헬퍼 슬롯(<see cref="MedicalStaffSlotView"/>)들을 관리하는 컨트롤러.
 /// 슬롯 클릭 → 후보를 공용 패널(<see cref="CharacterCandidateListPanel"/>)에 넘겨 표시 → 후보 클릭 → 헬퍼 배치.
-/// 후보 필터: 부상상태가 Light 이상 Healthy 미만(= 경상만).
+/// 후보 필터는 <see cref="MedicalManager.FillHelperCandidates"/>의 의료 시설 정책을 그대로 사용한다.
 /// 슬롯 해금은 계층 순서(=배열 순서)와 <see cref="MedicalManager.HelperCapacity"/>로 판정한다.
 /// </summary>
 public class MedicalStaffSlotController : MonoBehaviour
@@ -14,7 +14,6 @@ public class MedicalStaffSlotController : MonoBehaviour
 
     [Header("Candidates")]
     [SerializeField] private MedicalManager m_medicalManager;
-    [SerializeField] private CharacterManager m_characterManager;
     [SerializeField] private CharacterCandidateListPanel m_candidateListPanel;
 
     private readonly List<ShelterMemberRuntimeData> m_candidates = new List<ShelterMemberRuntimeData>();
@@ -117,29 +116,10 @@ public class MedicalStaffSlotController : MonoBehaviour
         if (manager == null || panel == null)
             return;
 
-        if (manager.CurrentHelperCount < manager.HelperCapacity &&
-            TryGetCharacterManager(out CharacterManager characterManager))
-        {
-            foreach (ShelterMemberRuntimeData character in characterManager.Characters)
-            {
-                if (IsStaffCandidate(character))
-                    m_candidates.Add(character);
-            }
-        }
+        if (manager.CurrentHelperCount < manager.HelperCapacity)
+            manager.FillHelperCandidates(m_candidates);
 
         panel.Open(this, m_candidates, HandleCandidateClicked);
-    }
-
-    // 후보 조건: Light 이상 Healthy 미만 → enum 순서(Healthy<Light<Heavy<...)상 경상(LightInjury)만 해당.
-    private bool IsStaffCandidate(ShelterMemberRuntimeData character)
-    {
-        if (character == null)
-            return false;
-
-        if (character.InjuryState != PlayerInjuryState.Minor)
-            return false;
-
-        return !character.IsAssignedToFacility;
     }
 
     private void HandleCandidateClicked(string runtimeId)
@@ -234,22 +214,6 @@ public class MedicalStaffSlotController : MonoBehaviour
             m_medicalManager = FindFirstObjectByType<MedicalManager>();
 
         return m_medicalManager;
-    }
-
-    private bool TryGetCharacterManager(out CharacterManager manager)
-    {
-        if (m_characterManager == null)
-            m_characterManager = CharacterManager.Instance;
-
-        if (m_characterManager == null)
-            m_characterManager = FindFirstObjectByType<CharacterManager>();
-
-        manager = m_characterManager;
-        if (manager != null)
-            return true;
-
-        Debug.LogWarning("[MedicalStaffSlotController] CharacterManager is not available.", this);
-        return false;
     }
 
     private void CacheChildViews()
