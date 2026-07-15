@@ -1,9 +1,11 @@
-﻿using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
-/// 씬 사이에서 유지되는 공용·셸터 런타임 데이터와 배틀 결과 반영 경계를 소유하는 전역 데이터 매니저입니다.
+/// 씬 사이에서 유지되어야 하는 게임 런타임 정본을 평탄 필드로 소유하는 전역 데이터 매니저입니다.
+/// 각 씬과 저장 시스템에는 소비 목적에 맞는 독립 패킷을 생성해 전달합니다.
 /// </summary>
 [DefaultExecutionOrder(-300)]
 public class GameDataManager : MonoBehaviour
@@ -11,62 +13,83 @@ public class GameDataManager : MonoBehaviour
     /// <summary>현재 GameManager 자식에서 활성화된 전역 데이터 매니저 인스턴스입니다.</summary>
     public static GameDataManager Instance { get; private set; }
 
-    [Header("Shared Runtime Baseline Data")]
-    [SerializeField] private SharedRuntimeData sharedData = new SharedRuntimeData();
+    [Header("공용 진행 정본")]
+    [Tooltip("마지막으로 진행한 스테이지의 영속 ID입니다.")]
+    [SerializeField] private string lastStageId = string.Empty;
+    [Tooltip("현재 셸터 안정도입니다. 0~100 범위로 유지됩니다.")]
+    [Range(0, 100)][SerializeField] private int shelterStability = 100;
+    [Tooltip("현재 셸터 진행 일차입니다. 1 이상으로 유지됩니다.")]
+    [Min(1)][SerializeField] private int currentDay = 1;
+    [Tooltip("현재 보유한 플레이어블 캐릭터 수입니다.")]
+    [Min(0)][SerializeField] private int playableCharacterCount;
+    [Tooltip("현재 보유한 비플레이어 NPC 수입니다.")]
+    [Min(0)][SerializeField] private int nonPlayableNpcCount;
 
-    [Header("Scene Runtime Backup Data")]
-    [SerializeField] private ShelterRuntimeData shelterData = new ShelterRuntimeData();
+    [Header("자원 정본")]
+    [Tooltip("자원 종류별 현재 보유량입니다. 같은 종류는 런타임에 하나로 정규화됩니다.")]
+    [SerializeField] private List<ResourceAmountState> resourceAmounts = new();
 
-    [Header("Battle Runtime Backup Data")]
-    [SerializeField] private BattleResultData lastBattleResult;
+    [Header("보유 캐릭터 및 장비 정본")]
+    [Tooltip("보유 캐릭터의 영속 상태와 캐릭터별 장착 총기 상태입니다.")]
+    [SerializeField] private List<NPCRuntimeData> ownedCharacters = new();
 
-    [SerializeField] private List<string> appliedBattleIds = new();
+    [Header("셸터 정본")]
+    [Tooltip("현재 출전 대상으로 선택된 캐릭터 정의 ID 목록입니다. 최대 3명입니다.")]
+    [FormerlySerializedAs("battleSquadNpcDefinitionIds")]
+    [SerializeField] private List<string> playableSquadDefinitionIds = new();
+    [Tooltip("시설별 해금 여부와 업그레이드 단계입니다.")]
+    [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
+
+    [Header("최근 배틀 정산 정본")]
+    [Tooltip("마지막으로 정산 반영이 완료된 배틀 ID이며 중복 반영 방지 키로 사용합니다.")]
+    [SerializeField] private string lastSettledBattleId = string.Empty;
+    [Tooltip("최근 배틀이 진행된 스테이지 ID입니다.")]
+    [SerializeField] private string lastBattleStageId = string.Empty;
+    [Tooltip("최근 배틀의 최종 성공, 실패 또는 철수 결과입니다.")]
+    [SerializeField] private BattleOutcome lastBattleOutcome;
+    [Tooltip("최근 배틀이 종료된 직접적인 사유입니다.")]
+    [SerializeField] private BattleEndReason lastBattleEndReason;
+    [Tooltip("최근 배틀 종료 전에 임무 목표를 달성했는지 여부입니다.")]
+    [SerializeField] private bool lastBattleMissionCompleted;
+    [Tooltip("최근 배틀의 총 경과 시간입니다. 단위는 초입니다.")]
+    [Min(0.0f)][SerializeField] private float lastBattleElapsedSeconds;
+    [Tooltip("최근 배틀에서 스쿼드 전체가 확정한 적 처치 수입니다.")]
+    [Min(0)][SerializeField] private int lastBattleTotalKillCount;
+    [Tooltip("최근 배틀의 캐릭터별 최종 상태와 처치 결과입니다.")]
+    [SerializeField] private List<BattleMemberResultData> lastBattleMemberResults = new();
+    [Tooltip("최근 배틀에서 획득한 자원별 수량입니다.")]
+    [SerializeField] private List<BattleResourceAmountData> lastBattleAcquiredResources = new();
 
     private ShelterDataManager activeShelterDataManager;
 
-    private SharedRuntimeData SharedData
-    {
-        get
-        {
-            EnsureSharedData();
-            return sharedData;
-        }
-    }
+    /// <summary>현재 보유한 전체 캐릭터 수입니다.</summary>
+    public int OwnedCharacterCount => ownedCharacters?.Count ?? 0;
 
-    private ShelterRuntimeData ShelterData
-    {
-        get
-        {
-            EnsureShelterData();
-            return shelterData;
-        }
-    }
-
-    /// <summary>현재 공용 로스터에 등록된 NPC 수입니다.</summary>
-    public int RosterCount => SharedData.RosterCount;
-
-    /// <summary>플레이어블 캐릭터와 비플레이어 NPC를 합한 전체 보유 캐릭터 수입니다.</summary>
-    public int TotalOwnedCharacterCount => SharedData.TotalOwnedCharacterCount;
+    /// <summary>플레이어블 캐릭터와 비플레이어 NPC를 합한 전체 보유 수입니다.</summary>
+    public int TotalOwnedCharacterCount => PlayableCharacterCount + NonPlayableNpcCount;
 
     /// <summary>현재 보유한 플레이어블 캐릭터 수입니다.</summary>
-    public int PlayableCharacterCount => SharedData.PlayableCharacterCount;
+    public int PlayableCharacterCount => Mathf.Max(0, playableCharacterCount);
 
     /// <summary>현재 보유한 비플레이어 NPC 수입니다.</summary>
-    public int NonPlayableNpcCount => SharedData.NonPlayableNpcCount;
+    public int NonPlayableNpcCount => Mathf.Max(0, nonPlayableNpcCount);
 
     /// <summary>0~100 범위로 보정된 현재 셸터 안정도입니다.</summary>
-    public int ShelterStability => Mathf.Clamp(SharedData.ShelterStability, 0, 100);
+    public int ShelterStability => Mathf.Clamp(shelterStability, 0, 100);
 
     /// <summary>현재 셸터 진행 일차입니다.</summary>
-    public int CurrentDay => ShelterData.CurrentDay;
+    public int CurrentDay => Mathf.Max(1, currentDay);
 
     /// <summary>현재 씬의 ShelterDataManager가 등록되어 있는지 여부입니다.</summary>
     public bool HasActiveShelterDataManager => activeShelterDataManager != null;
 
-    /// <summary>현재 세션에서 반영한 마지막 배틀 결과가 있는지 여부입니다.</summary>
-    public bool HasLastBattleResult => lastBattleResult != null;
+    /// <summary>현재 세션 또는 저장 데이터에 반영된 최근 배틀 결과가 있는지 여부입니다.</summary>
+    public bool HasLastBattleResult => !string.IsNullOrWhiteSpace(lastSettledBattleId);
 
-    /// <summary>중복 인스턴스를 거부하고 런타임 데이터 컨테이너를 준비합니다.</summary>
+    /// <summary>마지막으로 정산 반영이 완료된 배틀 ID입니다.</summary>
+    public string LastSettledBattleId => lastSettledBattleId ?? string.Empty;
+
+    /// <summary>중복 인스턴스를 거부하고 모든 평탄 정본 필드를 정규화합니다.</summary>
     private void Awake()
     {
         if (TryRejectDuplicateOrInvalidRoot())
@@ -74,9 +97,7 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
-        EnsureSharedData();
-        EnsureShelterData();
-        appliedBattleIds ??= new List<string>();
+        EnsureRuntimeState();
         Instance = this;
     }
 
@@ -92,10 +113,10 @@ public class GameDataManager : MonoBehaviour
     /// <summary>현재 셸터 씬의 작업 데이터 매니저를 동기화 대상으로 등록합니다.</summary>
     public void RegisterShelterDataManager(ShelterDataManager shelterDataManager)
     {
-        if (shelterDataManager == null)
-            return;
-
-        activeShelterDataManager = shelterDataManager;
+        if (shelterDataManager != null)
+        {
+            activeShelterDataManager = shelterDataManager;
+        }
     }
 
     /// <summary>지정한 셸터 씬 데이터 매니저가 현재 등록 대상이면 연결을 해제합니다.</summary>
@@ -107,7 +128,7 @@ public class GameDataManager : MonoBehaviour
         }
     }
 
-    /// <summary>현재 등록된 ShelterDataManager의 공용·셸터 작업 데이터를 전역 데이터로 복사합니다.</summary>
+    /// <summary>현재 등록된 셸터 씬의 기존 공용·셸터 작업 패킷을 전역 평탄 정본에 반영합니다.</summary>
     public bool SyncFromShelter()
     {
         if (activeShelterDataManager == null)
@@ -119,7 +140,7 @@ public class GameDataManager : MonoBehaviour
         return SyncFromShelter(activeShelterDataManager);
     }
 
-    /// <summary>지정한 ShelterDataManager의 공용·셸터 작업 데이터를 전역 데이터로 복사합니다.</summary>
+    /// <summary>지정한 셸터 씬 데이터 매니저의 기존 공용·셸터 작업 패킷을 전역 평탄 정본에 반영합니다.</summary>
     public bool SyncFromShelter(ShelterDataManager shelterDataManager)
     {
         if (shelterDataManager == null)
@@ -133,36 +154,138 @@ public class GameDataManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>현재 공용 런타임 데이터의 깊은 복사본을 반환합니다.</summary>
+    /// <summary>현재 평탄 정본에서 셸터의 기존 공용 작업 패킷을 생성합니다.</summary>
     public SharedRuntimeData CreateSharedSnapshot()
     {
-        return SharedData.Clone();
+        EnsureRuntimeState();
+        SharedRuntimeData packet = new SharedRuntimeData();
+        packet.SetLastStageId(lastStageId);
+        packet.SetShelterStability(shelterStability);
+        packet.SetOwnedCharacterCounts(playableCharacterCount, nonPlayableNpcCount);
+
+        for (int i = 0; i < resourceAmounts.Count; i++)
+        {
+            ResourceAmountState resource = resourceAmounts[i];
+            if (resource != null)
+            {
+                packet.Resources.SetAmount(resource.Type, resource.Amount);
+            }
+        }
+
+        for (int i = 0; i < ownedCharacters.Count; i++)
+        {
+            if (ownedCharacters[i] != null)
+            {
+                packet.NpcRoster.Add(ownedCharacters[i].Clone());
+            }
+        }
+
+        return packet;
     }
 
-    /// <summary>현재 셸터 전용 런타임 데이터의 깊은 복사본을 반환합니다.</summary>
+    /// <summary>현재 평탄 정본에서 셸터의 기존 전용 작업 패킷을 생성합니다.</summary>
     public ShelterRuntimeData CreateShelterSnapshot()
     {
-        return ShelterData.Clone();
+        EnsureRuntimeState();
+        ShelterRuntimeData packet = new ShelterRuntimeData();
+        packet.ApplySavedState(currentDay, playableSquadDefinitionIds, facilityStates);
+        return packet;
     }
 
-    /// <summary>
-    /// 현재 영속 런타임 데이터에서 배틀 씬으로 넘길 출전 스냅샷을 생성합니다.
-    /// 셸터 NPC의 회복형 부상 게이지는 배틀의 누적 부상 게이지 방향으로 변환합니다.
-    /// </summary>
+    /// <summary>셸터의 기존 공용 작업 패킷을 깊은 복사해 전역 평탄 정본에 반영합니다.</summary>
+    public void ApplySharedSnapshot(SharedRuntimeData packet)
+    {
+        if (packet == null)
+        {
+            Debug.LogWarning("[GameDataManager] SharedRuntimeData is null.");
+            return;
+        }
+
+        packet.EnsureRuntimeContainers();
+        lastStageId = packet.LastStageId;
+        shelterStability = packet.ShelterStability;
+        playableCharacterCount = packet.PlayableCharacterCount;
+        nonPlayableNpcCount = packet.NonPlayableNpcCount;
+
+        resourceAmounts = new List<ResourceAmountState>();
+        foreach (KeyValuePair<CurrencyType, int> resource in packet.Resources.Amounts)
+        {
+            resourceAmounts.Add(new ResourceAmountState(resource.Key, resource.Value));
+        }
+
+        ownedCharacters = new List<NPCRuntimeData>();
+        for (int i = 0; i < packet.NpcRoster.All.Count; i++)
+        {
+            NPCRuntimeData character = packet.NpcRoster.All[i];
+            if (character != null)
+            {
+                ownedCharacters.Add(character.Clone());
+            }
+        }
+
+        EnsureRuntimeState();
+    }
+
+    /// <summary>셸터의 기존 전용 작업 패킷을 깊은 복사해 전역 평탄 정본에 반영합니다.</summary>
+    public void ApplyShelterSnapshot(ShelterRuntimeData packet)
+    {
+        if (packet == null)
+        {
+            Debug.LogWarning("[GameDataManager] ShelterRuntimeData is null.");
+            return;
+        }
+
+        packet.EnsureRuntimeContainers();
+        currentDay = packet.CurrentDay;
+        playableSquadDefinitionIds = new List<string>(packet.BattleSquadNpcDefinitionIds);
+        facilityStates = CloneFacilityStates(packet.FacilityStates);
+        EnsureRuntimeState();
+    }
+
+    /// <summary>지정한 영속 캐릭터 ID의 캐릭터·총기 스냅샷을 깊은 복사하여 반환합니다.</summary>
+    public bool TryGetCharacterSnapshot(string definitionId, out CharacterSnapshotData snapshot)
+    {
+        snapshot = null;
+        if (!TryGetOwnedCharacter(definitionId, out NPCRuntimeData npc))
+        {
+            return false;
+        }
+
+        snapshot = npc.Snapshot;
+        return true;
+    }
+
+    /// <summary>셸터 또는 배틀 씬에서 받은 캐릭터·총기 스냅샷을 전역 캐릭터 정본에 반영합니다.</summary>
+    public bool TryApplyCharacterSnapshot(CharacterSnapshotData snapshot)
+    {
+        if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.DefinitionId))
+        {
+            return false;
+        }
+
+        if (!TryGetOwnedCharacter(snapshot.DefinitionId, out NPCRuntimeData npc))
+        {
+            Debug.LogWarning($"[GameDataManager] 캐릭터 스냅샷을 반영할 캐릭터를 찾지 못했습니다. definitionId={snapshot.DefinitionId}");
+            return false;
+        }
+
+        return npc.ApplySnapshot(snapshot);
+    }
+
+    /// <summary>현재 평탄 정본에서 배틀 씬이 필요로 하는 출전 패킷을 생성합니다.</summary>
     public BattleEntryData CreateBattleEntryData(string battleId, string stageId, int randomSeed)
     {
-        SharedRuntimeData sharedSnapshot = activeShelterDataManager != null
-            ? activeShelterDataManager.CreateSharedSnapshot()
-            : SharedData.Clone();
-        ShelterRuntimeData shelterSnapshot = activeShelterDataManager != null
-            ? activeShelterDataManager.CreateShelterSnapshot()
-            : ShelterData.Clone();
+        if (activeShelterDataManager != null)
+        {
+            SyncFromShelter(activeShelterDataManager);
+        }
 
+        EnsureRuntimeState();
         string resolvedBattleId = string.IsNullOrWhiteSpace(battleId)
             ? Guid.NewGuid().ToString("N")
             : battleId.Trim();
         string resolvedStageId = string.IsNullOrWhiteSpace(stageId)
-            ? sharedSnapshot.LastStageId
+            ? lastStageId
             : stageId.Trim();
 
         BattleEntryData entryData = new BattleEntryData(
@@ -171,67 +294,46 @@ public class GameDataManager : MonoBehaviour
             randomSeed,
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
-        foreach (KeyValuePair<CurrencyType, int> resource in sharedSnapshot.Resources.Amounts)
+        for (int i = 0; i < resourceAmounts.Count; i++)
         {
-            entryData.AddStartingResource(resource.Key, resource.Value);
+            ResourceAmountState resource = resourceAmounts[i];
+            if (resource != null)
+            {
+                entryData.AddStartingResource(resource.Type, resource.Amount);
+            }
         }
 
-        IReadOnlyList<string> squadDefinitionIds = shelterSnapshot.BattleSquadNpcDefinitionIds;
-        for (int i = 0; i < squadDefinitionIds.Count; i++)
+        for (int i = 0; i < playableSquadDefinitionIds.Count; i++)
         {
-            string definitionId = squadDefinitionIds[i];
-            if (!sharedSnapshot.NpcRoster.TryGet(definitionId, out NPCRuntimeData npc))
+            string definitionId = playableSquadDefinitionIds[i];
+            if (!TryGetOwnedCharacter(definitionId, out NPCRuntimeData character))
             {
-                Debug.LogWarning($"[GameDataManager] 출전 스쿼드 NPC를 로스터에서 찾지 못했습니다. definitionId={definitionId}");
+                Debug.LogWarning($"[GameDataManager] 출전 스쿼드 캐릭터를 찾지 못했습니다. definitionId={definitionId}");
                 continue;
             }
 
-            float maxInjuryGauge = npc.MaxInjuryGauge;
-            float battleInjuryGauge = Mathf.Clamp(maxInjuryGauge - npc.InjuryGauge, 0.0f, maxInjuryGauge);
-            string displayName = npc.NPCData != null && !string.IsNullOrWhiteSpace(npc.NPCData.name)
-                ? npc.NPCData.name
-                : npc.DefinitionId;
-
-            entryData.AddMember(new BattleMemberEntryData(
-                npc.DefinitionId,
-                string.Empty,
-                PlayableCharacterId.Unknown,
-                displayName,
-                npc.GetCurrentHp(),
-                npc.MaxHp,
-                battleInjuryGauge,
-                maxInjuryGauge,
-                ConvertToPlayerInjuryState(npc.CurrentInjuryState),
-                string.Empty,
-                0,
-                0,
-                i == 0));
+            CharacterSnapshotData characterSnapshot = character.Snapshot;
+            characterSnapshot.SetPlayerSquadMember(i == 0);
+            entryData.AddMember(new BattleMemberEntryData(characterSnapshot));
         }
 
         return entryData;
     }
 
     /// <summary>
-    /// 확정된 배틀 결과를 공용 영속 런타임 데이터에 한 번만 반영합니다.
-    /// 성공 또는 탈출일 때만 획득 자원을 보존하며, 멤버 HP·부상 결과는 모든 종료 결과에 반영합니다.
+    /// 확정된 배틀 결과를 전역 평탄 정본에 한 번만 반영합니다.
+    /// 성공 또는 탈출일 때만 획득 자원을 보존하며, 캐릭터 최종 상태는 모든 결과에 반영합니다.
     /// </summary>
     public bool ApplyBattleResult(BattleResultData resultData)
     {
-        if (resultData == null)
+        if (resultData == null || string.IsNullOrWhiteSpace(resultData.BattleId))
         {
-            Debug.LogWarning("[GameDataManager] BattleResultData is null.");
+            Debug.LogWarning("[GameDataManager] 유효한 BattleResultData가 필요합니다.");
             return false;
         }
 
-        appliedBattleIds ??= new List<string>();
-        string battleId = resultData.BattleId;
-        if (string.IsNullOrWhiteSpace(battleId))
-        {
-            Debug.LogWarning("[GameDataManager] BattleResultData.BattleId is empty.");
-            return false;
-        }
-
-        if (appliedBattleIds.Contains(battleId))
+        string battleId = resultData.BattleId.Trim();
+        if (battleId == LastSettledBattleId)
         {
             return true;
         }
@@ -243,7 +345,7 @@ public class GameDataManager : MonoBehaviour
                 BattleResourceAmountData resource = resultData.AcquiredResources[i];
                 if (resource != null)
                 {
-                    SharedData.Resources.Add(resource.Type, resource.Amount);
+                    AddResource(resource.Type, resource.Amount);
                 }
             }
         }
@@ -255,43 +357,57 @@ public class GameDataManager : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(resultData.StageId))
         {
-            SharedData.SetLastStageId(resultData.StageId);
+            lastStageId = resultData.StageId.Trim();
         }
 
-        lastBattleResult = resultData.Clone();
-        appliedBattleIds.Add(battleId);
+        ApplyLastBattleResult(resultData);
 
         if (activeShelterDataManager != null)
         {
-            activeShelterDataManager.ApplySharedSnapshot(SharedData.Clone());
+            activeShelterDataManager.ApplySharedSnapshot(CreateSharedSnapshot());
         }
 
         return true;
     }
 
-    /// <summary>마지막으로 반영한 배틀 결과의 깊은 복사본을 반환합니다.</summary>
+    /// <summary>최근 배틀 결과의 평탄 필드를 독립된 결과 패킷으로 조립해 반환합니다.</summary>
     public BattleResultData CreateLastBattleResultSnapshot()
     {
-        return lastBattleResult?.Clone();
+        if (!HasLastBattleResult)
+        {
+            return null;
+        }
+
+        return new BattleResultData(
+            lastSettledBattleId,
+            lastBattleStageId,
+            lastBattleOutcome,
+            lastBattleEndReason,
+            lastBattleMissionCompleted,
+            lastBattleElapsedSeconds,
+            lastBattleTotalKillCount,
+            lastBattleMemberResults,
+            lastBattleAcquiredResources);
     }
 
-    /// <summary>현재 전역 런타임 데이터를 지정한 프로필의 저장 데이터 구조로 변환합니다.</summary>
+    /// <summary>현재 전역 평탄 정본을 지정한 프로필의 독립된 저장 패킷으로 변환합니다.</summary>
+    /// <remarks>활성 셸터 작업본은 호출 전에 <see cref="SyncFromShelter()"/>로 정본에 먼저 반영해야 합니다.</remarks>
     public SaveData CreateSaveData(string profileId)
     {
+        EnsureRuntimeState();
         SaveData saveData = new SaveData
         {
-            profileId = string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId
+            profileId = string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId.Trim(),
+            shared = CreateSharedSaveData(),
+            shelter = CreateShelterSaveData(),
+            lastBattleResult = CreateLastBattleResultSnapshot()
         };
 
-        SharedRuntimeData sharedSnapshot = activeShelterDataManager != null ? activeShelterDataManager.CreateSharedSnapshot() : SharedData.Clone();
-        ShelterRuntimeData shelterSnapshot = activeShelterDataManager != null ? activeShelterDataManager.CreateShelterSnapshot() : ShelterData.Clone();
-        saveData.shared = CreateSharedSaveData(sharedSnapshot);
-        saveData.shelter = CreateShelterSaveData(shelterSnapshot);
         saveData.MarkSavedNow();
         return saveData;
     }
 
-    /// <summary>불러온 저장 데이터를 현재 공용·셸터 런타임 데이터에 적용합니다.</summary>
+    /// <summary>불러온 저장 패킷의 영속값을 전역 평탄 정본에 적용합니다.</summary>
     public void ApplySaveData(SaveData saveData)
     {
         if (saveData == null)
@@ -302,216 +418,388 @@ public class GameDataManager : MonoBehaviour
 
         ApplySharedSaveData(saveData.shared ?? new SaveData.SharedSaveData());
         ApplyShelterSaveData(saveData.shelter ?? new SaveData.ShelterSaveData());
-    }
 
-    /// <summary>지정한 공용 런타임 스냅샷을 현재 전역 공용 데이터에 복사합니다.</summary>
-    public void ApplySharedSnapshot(SharedRuntimeData snapshot)
-    {
-        if (snapshot == null)
+        if (saveData.lastBattleResult != null
+            && !string.IsNullOrWhiteSpace(saveData.lastBattleResult.BattleId))
         {
-            Debug.LogWarning("[GameDataManager] Snapshot is null.");
-            return;
+            ApplyLastBattleResult(saveData.lastBattleResult);
+        }
+        else
+        {
+            ClearLastBattleResult();
         }
 
-        SharedData.CopyFrom(snapshot);
+        EnsureRuntimeState();
     }
 
-    /// <summary>지정한 셸터 런타임 스냅샷을 현재 전역 셸터 데이터에 복사합니다.</summary>
-    public void ApplyShelterSnapshot(ShelterRuntimeData snapshot)
+    private void ApplyLastBattleResult(BattleResultData resultData)
     {
-        if (snapshot == null)
+        lastSettledBattleId = resultData.BattleId.Trim();
+        lastBattleStageId = resultData.StageId;
+        lastBattleOutcome = resultData.Outcome;
+        lastBattleEndReason = resultData.EndReason;
+        lastBattleMissionCompleted = resultData.MissionCompleted;
+        lastBattleElapsedSeconds = resultData.ElapsedSeconds;
+        lastBattleTotalKillCount = resultData.TotalKillCount;
+        lastBattleMemberResults = new List<BattleMemberResultData>();
+        lastBattleAcquiredResources = new List<BattleResourceAmountData>();
+
+        for (int i = 0; i < resultData.Members.Count; i++)
         {
-            Debug.LogWarning("[GameDataManager] Shelter snapshot is null.");
-            return;
+            if (resultData.Members[i] != null)
+            {
+                lastBattleMemberResults.Add(resultData.Members[i].Clone());
+            }
         }
 
-        ShelterData.CopyFrom(snapshot);
-    }
-
-    /// <summary>공용 런타임 데이터와 내부 컬렉션이 항상 사용 가능한 상태인지 보장합니다.</summary>
-    private void EnsureSharedData()
-    {
-        sharedData ??= new SharedRuntimeData();
-        sharedData.EnsureRuntimeContainers();
-    }
-
-    /// <summary>셸터 런타임 데이터와 내부 컬렉션이 항상 사용 가능한 상태인지 보장합니다.</summary>
-    private void EnsureShelterData()
-    {
-        shelterData ??= new ShelterRuntimeData();
-        shelterData.EnsureRuntimeContainers();
-    }
-
-    /// <summary>셸터 NPC 부상 단계를 배틀 플레이어 부상 단계로 대응시킵니다.</summary>
-    private static PlayerInjuryState ConvertToPlayerInjuryState(NPCInjuryState state)
-    {
-        return state switch
+        for (int i = 0; i < resultData.AcquiredResources.Count; i++)
         {
-            NPCInjuryState.Healthy => PlayerInjuryState.Normal,
-            NPCInjuryState.LightInjury => PlayerInjuryState.Minor,
-            NPCInjuryState.HeavyInjury => PlayerInjuryState.Serious,
-            NPCInjuryState.NearDeath => PlayerInjuryState.Critical,
-            NPCInjuryState.Dead => PlayerInjuryState.Critical,
-            _ => PlayerInjuryState.Normal
+            if (resultData.AcquiredResources[i] != null)
+            {
+                lastBattleAcquiredResources.Add(resultData.AcquiredResources[i].Clone());
+            }
+        }
+    }
+
+    private void ClearLastBattleResult()
+    {
+        lastSettledBattleId = string.Empty;
+        lastBattleStageId = string.Empty;
+        lastBattleOutcome = default;
+        lastBattleEndReason = BattleEndReason.None;
+        lastBattleMissionCompleted = false;
+        lastBattleElapsedSeconds = 0.0f;
+        lastBattleTotalKillCount = 0;
+        lastBattleMemberResults = new List<BattleMemberResultData>();
+        lastBattleAcquiredResources = new List<BattleResourceAmountData>();
+    }
+
+    private SaveData.SharedSaveData CreateSharedSaveData()
+    {
+        SaveData.SharedSaveData saveData = new SaveData.SharedSaveData
+        {
+            lastStageId = lastStageId,
+            shelterStability = ShelterStability,
+            playableCharacterCount = PlayableCharacterCount,
+            nonPlayableNpcCount = NonPlayableNpcCount
         };
+
+        for (int i = 0; i < resourceAmounts.Count; i++)
+        {
+            ResourceAmountState resource = resourceAmounts[i];
+            if (resource != null)
+            {
+                saveData.resources.Add(new SaveData.ResourceAmountData
+                {
+                    type = resource.Type,
+                    amount = resource.Amount
+                });
+            }
+        }
+
+        for (int i = 0; i < ownedCharacters.Count; i++)
+        {
+            SaveData.NpcSaveData npcSaveData = NpcSaveDataMapper.FromRuntime(ownedCharacters[i]);
+            if (npcSaveData != null)
+            {
+                saveData.npcs.Add(npcSaveData);
+            }
+        }
+
+        return saveData;
     }
 
-    /// <summary>종료 결과에 따라 이번 배틀에서 획득한 자원을 셸터에 보존할지 결정합니다.</summary>
+    private SaveData.ShelterSaveData CreateShelterSaveData()
+    {
+        SaveData.ShelterSaveData saveData = new SaveData.ShelterSaveData
+        {
+            currentDay = CurrentDay,
+            battleSquadNpcDefinitionIds = new List<string>(playableSquadDefinitionIds)
+        };
+
+        for (int i = 0; i < facilityStates.Count; i++)
+        {
+            SaveData.FacilitySaveData facilitySaveData = FacilitySaveDataMapper.FromRuntime(facilityStates[i]);
+            if (facilitySaveData != null)
+            {
+                saveData.facilities.Add(facilitySaveData);
+            }
+        }
+
+        return saveData;
+    }
+
+    private void ApplySharedSaveData(SaveData.SharedSaveData saveData)
+    {
+        lastStageId = saveData.lastStageId?.Trim() ?? string.Empty;
+        shelterStability = Mathf.Clamp(saveData.shelterStability, 0, 100);
+        playableCharacterCount = Mathf.Max(0, saveData.playableCharacterCount);
+        nonPlayableNpcCount = Mathf.Max(0, saveData.nonPlayableNpcCount);
+        resourceAmounts = new List<ResourceAmountState>();
+        ownedCharacters = new List<NPCRuntimeData>();
+
+        if (saveData.resources != null)
+        {
+            for (int i = 0; i < saveData.resources.Count; i++)
+            {
+                SaveData.ResourceAmountData resource = saveData.resources[i];
+                if (resource != null)
+                {
+                    SetResourceAmount(resource.type, resource.amount);
+                }
+            }
+        }
+
+        if (saveData.npcs != null)
+        {
+            for (int i = 0; i < saveData.npcs.Count; i++)
+            {
+                NPCRuntimeData runtimeCharacter = NpcSaveDataMapper.ToRuntime(saveData.npcs[i]);
+                if (runtimeCharacter != null && !ContainsOwnedCharacter(runtimeCharacter.DefinitionId))
+                {
+                    ownedCharacters.Add(runtimeCharacter);
+                }
+            }
+        }
+    }
+
+    private void ApplyShelterSaveData(SaveData.ShelterSaveData saveData)
+    {
+        currentDay = Mathf.Max(1, saveData.currentDay);
+        playableSquadDefinitionIds = NormalizeDefinitionIds(
+            saveData.battleSquadNpcDefinitionIds,
+            ShelterRuntimeData.MaxBattleSquadSize);
+        facilityStates = new List<FacilityRuntimeState>();
+
+        if (saveData.facilities == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < saveData.facilities.Count; i++)
+        {
+            FacilityRuntimeState state = FacilitySaveDataMapper.ToRuntime(saveData.facilities[i]);
+            if (state != null)
+            {
+                facilityStates.Add(state);
+            }
+        }
+    }
+
+    private void ApplyBattleMemberResult(BattleMemberResultData memberResult)
+    {
+        CharacterSnapshotData snapshot = memberResult?.Snapshot;
+        if (snapshot != null && !string.IsNullOrWhiteSpace(snapshot.DefinitionId))
+        {
+            TryApplyCharacterSnapshot(snapshot);
+        }
+    }
+
+    private bool TryGetOwnedCharacter(string definitionId, out NPCRuntimeData runtimeData)
+    {
+        runtimeData = null;
+        if (string.IsNullOrWhiteSpace(definitionId))
+        {
+            return false;
+        }
+
+        string normalizedId = definitionId.Trim();
+        for (int i = 0; i < ownedCharacters.Count; i++)
+        {
+            if (ownedCharacters[i] != null && ownedCharacters[i].DefinitionId == normalizedId)
+            {
+                runtimeData = ownedCharacters[i];
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool ContainsOwnedCharacter(string definitionId)
+    {
+        return TryGetOwnedCharacter(definitionId, out _);
+    }
+
+    private int GetResourceAmount(CurrencyType type)
+    {
+        ResourceAmountState state = FindResource(type);
+        return state?.Amount ?? 0;
+    }
+
+    private void SetResourceAmount(CurrencyType type, int amount)
+    {
+        ResourceAmountState state = FindResource(type);
+        if (state == null)
+        {
+            resourceAmounts.Add(new ResourceAmountState(type, amount));
+            return;
+        }
+
+        state.SetAmount(amount);
+    }
+
+    private void AddResource(CurrencyType type, int amount)
+    {
+        if (amount > 0)
+        {
+            SetResourceAmount(type, GetResourceAmount(type) + amount);
+        }
+    }
+
+    private ResourceAmountState FindResource(CurrencyType type)
+    {
+        for (int i = 0; i < resourceAmounts.Count; i++)
+        {
+            if (resourceAmounts[i] != null && resourceAmounts[i].Type == type)
+            {
+                return resourceAmounts[i];
+            }
+        }
+
+        return null;
+    }
+
+    private void EnsureRuntimeState()
+    {
+        lastStageId ??= string.Empty;
+        shelterStability = Mathf.Clamp(shelterStability, 0, 100);
+        currentDay = Mathf.Max(1, currentDay);
+        playableCharacterCount = Mathf.Max(0, playableCharacterCount);
+        nonPlayableNpcCount = Mathf.Max(0, nonPlayableNpcCount);
+        resourceAmounts ??= new List<ResourceAmountState>();
+        ownedCharacters ??= new List<NPCRuntimeData>();
+        playableSquadDefinitionIds ??= new List<string>();
+        facilityStates ??= new List<FacilityRuntimeState>();
+        lastBattleMemberResults ??= new List<BattleMemberResultData>();
+        lastBattleAcquiredResources ??= new List<BattleResourceAmountData>();
+
+        NormalizeResources();
+        NormalizeOwnedCharacters();
+        playableSquadDefinitionIds = NormalizeDefinitionIds(
+            playableSquadDefinitionIds,
+            ShelterRuntimeData.MaxBattleSquadSize);
+        facilityStates = CloneFacilityStates(facilityStates);
+
+        if (!HasLastBattleResult)
+        {
+            ClearLastBattleResult();
+        }
+    }
+
+    private void NormalizeResources()
+    {
+        List<ResourceAmountState> normalized = new();
+        for (int i = 0; i < resourceAmounts.Count; i++)
+        {
+            ResourceAmountState source = resourceAmounts[i];
+            if (source == null)
+            {
+                continue;
+            }
+
+            ResourceAmountState existing = null;
+            for (int j = 0; j < normalized.Count; j++)
+            {
+                if (normalized[j].Type == source.Type)
+                {
+                    existing = normalized[j];
+                    break;
+                }
+            }
+
+            if (existing == null)
+            {
+                normalized.Add(source.Clone());
+            }
+            else
+            {
+                existing.SetAmount(existing.Amount + source.Amount);
+            }
+        }
+
+        resourceAmounts = normalized;
+    }
+
+    private void NormalizeOwnedCharacters()
+    {
+        HashSet<string> definitionIds = new();
+        List<NPCRuntimeData> normalized = new();
+        for (int i = 0; i < ownedCharacters.Count; i++)
+        {
+            NPCRuntimeData character = ownedCharacters[i];
+            if (character != null
+                && !string.IsNullOrWhiteSpace(character.DefinitionId)
+                && definitionIds.Add(character.DefinitionId))
+            {
+                normalized.Add(character);
+            }
+        }
+
+        ownedCharacters = normalized;
+    }
+
     private static bool ShouldApplyAcquiredResources(BattleOutcome outcome)
     {
         return outcome == BattleOutcome.Success || outcome == BattleOutcome.Evacuated;
     }
 
-    /// <summary>스쿼드원 최종 HP와 부상 게이지를 대응하는 셸터 NPC 런타임 데이터에 반영합니다.</summary>
-    private void ApplyBattleMemberResult(BattleMemberResultData memberResult)
+    private static List<string> NormalizeDefinitionIds(IEnumerable<string> source, int maximumCount)
     {
-        BattleMemberRuntimeData member = memberResult?.RuntimeData;
-        BattleMemberEntryData entry = member?.EntryData;
-        string definitionId = entry?.DefinitionId ?? string.Empty;
-        if (member == null || string.IsNullOrWhiteSpace(definitionId))
+        List<string> normalized = new();
+        if (source == null)
         {
-            return;
+            return normalized;
         }
 
-        if (!SharedData.NpcRoster.TryGet(definitionId, out NPCRuntimeData npc))
+        foreach (string definitionId in source)
         {
-            Debug.LogWarning($"[GameDataManager] 배틀 결과를 반영할 NPC를 로스터에서 찾지 못했습니다. definitionId={definitionId}");
-            return;
-        }
-
-        float hpRatio = member.MaxHp > 0
-            ? Mathf.Clamp01((float)member.CurrentHp / member.MaxHp)
-            : 0.0f;
-        int shelterHp = member.IsCombatOut
-            ? 0
-            : Mathf.RoundToInt(npc.MaxHp * hpRatio);
-
-        float battleInjuryRatio = member.MaxInjuryGauge > 0.0f
-            ? Mathf.Clamp01(member.InjuryGauge / member.MaxInjuryGauge)
-            : 0.0f;
-        float shelterRecoveryGauge = npc.MaxInjuryGauge * (1.0f - battleInjuryRatio);
-
-        npc.SetCurrentHp(shelterHp);
-        npc.SetInjuryGauge(shelterRecoveryGauge);
-        npc.RefreshInjuryStateFromGauge();
-    }
-
-    /// <summary>공용 런타임 데이터를 파일 저장용 공용 데이터 구조로 변환합니다.</summary>
-    private SaveData.SharedSaveData CreateSharedSaveData(SharedRuntimeData source)
-    {
-        source.EnsureRuntimeContainers();
-
-        SaveData.SharedSaveData saveData = new SaveData.SharedSaveData
-        {
-            lastStageId = source.LastStageId,
-            shelterStability = source.ShelterStability,
-            playableCharacterCount = source.PlayableCharacterCount,
-            nonPlayableNpcCount = source.NonPlayableNpcCount
-        };
-
-        foreach (KeyValuePair<CurrencyType, int> resource in source.Resources.Amounts)
-        {
-            saveData.resources.Add(new SaveData.ResourceAmountData
+            if (string.IsNullOrWhiteSpace(definitionId))
             {
-                type = resource.Key,
-                amount = Mathf.Max(0, resource.Value)
-            });
-        }
-
-        foreach (NPCRuntimeData npc in source.NpcRoster.All)
-        {
-            SaveData.NpcSaveData npcSaveData = NpcSaveDataMapper.FromRuntime(npc);
-            if (npcSaveData == null)
                 continue;
+            }
 
-            saveData.npcs.Add(npcSaveData);
+            string normalizedId = definitionId.Trim();
+            if (!normalized.Contains(normalizedId))
+            {
+                normalized.Add(normalizedId);
+            }
+
+            if (normalized.Count >= maximumCount)
+            {
+                break;
+            }
         }
 
-        return saveData;
+        return normalized;
     }
 
-    /// <summary>셸터 런타임 데이터를 파일 저장용 셸터 데이터 구조로 변환합니다.</summary>
-    private SaveData.ShelterSaveData CreateShelterSaveData(ShelterRuntimeData source)
+    private static List<FacilityRuntimeState> CloneFacilityStates(IEnumerable<FacilityRuntimeState> source)
     {
-        source.EnsureRuntimeContainers();
-
-        SaveData.ShelterSaveData saveData = new SaveData.ShelterSaveData
+        List<FacilityRuntimeState> clone = new();
+        if (source == null)
         {
-            currentDay = source.CurrentDay,
-            battleSquadNpcDefinitionIds = new List<string>(source.BattleSquadNpcDefinitionIds)
-        };
+            return clone;
+        }
 
-        foreach (FacilityRuntimeState state in source.FacilityStates)
+        HashSet<string> facilityIds = new();
+        foreach (FacilityRuntimeState state in source)
         {
-            SaveData.FacilitySaveData facilitySaveData = FacilitySaveDataMapper.FromRuntime(state);
-            if (facilitySaveData == null)
+            if (state == null)
+            {
                 continue;
+            }
 
-            saveData.facilities.Add(facilitySaveData);
-        }
-
-        return saveData;
-    }
-
-    /// <summary>파일에서 읽은 공용 저장 데이터를 현재 공용 런타임 데이터에 적용합니다.</summary>
-    private void ApplySharedSaveData(SaveData.SharedSaveData saveData)
-    {
-        SharedData.SetLastStageId(saveData.lastStageId);
-        SharedData.SetShelterStability(saveData.shelterStability);
-        SharedData.SetOwnedCharacterCounts(saveData.playableCharacterCount, saveData.nonPlayableNpcCount);
-
-        SharedData.Resources.Clear();
-        if (saveData.resources != null)
-        {
-            foreach (SaveData.ResourceAmountData resource in saveData.resources)
+            state.EnsureValid();
+            if (!string.IsNullOrWhiteSpace(state.facilityId) && facilityIds.Add(state.facilityId))
             {
-                if (resource == null)
-                    continue;
-
-                SharedData.Resources.SetAmount(resource.type, resource.amount);
+                clone.Add(new FacilityRuntimeState(state.facilityId, state.isUnlocked, state.upgradeLevel));
             }
         }
 
-        SharedData.NpcRoster.Clear();
-        if (saveData.npcs != null)
-        {
-            foreach (SaveData.NpcSaveData npc in saveData.npcs)
-            {
-                if (npc == null)
-                    continue;
-
-                NPCRuntimeData runtimeNpc = NpcSaveDataMapper.ToRuntime(npc);
-                if (runtimeNpc != null)
-                {
-                    SharedData.NpcRoster.Add(runtimeNpc);
-                }
-            }
-        }
+        return clone;
     }
 
-    /// <summary>파일에서 읽은 셸터 저장 데이터를 현재 셸터 런타임 데이터에 적용합니다.</summary>
-    private void ApplyShelterSaveData(SaveData.ShelterSaveData saveData)
-    {
-        List<FacilityRuntimeState> facilityStates = new List<FacilityRuntimeState>();
-        if (saveData.facilities != null)
-        {
-            foreach (SaveData.FacilitySaveData facility in saveData.facilities)
-            {
-                if (facility == null)
-                    continue;
-
-                FacilityRuntimeState runtimeState = FacilitySaveDataMapper.ToRuntime(facility);
-                if (runtimeState != null)
-                {
-                    facilityStates.Add(runtimeState);
-                }
-            }
-        }
-
-        ShelterData.ApplySavedState(saveData.currentDay, saveData.battleSquadNpcDefinitionIds, facilityStates);
-    }
-
-    /// <summary>GameManager 소속이 아닌 중복 또는 고아 인스턴스를 제거할지 판정합니다.</summary>
     private bool TryRejectDuplicateOrInvalidRoot()
     {
         GameManager rootManager = GetComponentInParent<GameManager>();
