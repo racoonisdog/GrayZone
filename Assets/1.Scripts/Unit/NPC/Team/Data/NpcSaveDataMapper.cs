@@ -1,7 +1,7 @@
-using UnityEngine;
-
+/// <summary>NPC 런타임 데이터와 파일 저장 구조 사이의 변환을 담당합니다.</summary>
 public static class NpcSaveDataMapper
 {
+    /// <summary>NPC 정의 데이터의 초기 상태를 파일 저장 구조로 변환합니다.</summary>
     public static SaveData.NpcSaveData FromNpcChar(NPCChar npcChar)
     {
         if (npcChar == null)
@@ -9,22 +9,10 @@ public static class NpcSaveDataMapper
             return null;
         }
 
-        string definitionId = ResolveDefinitionId(npcChar);
-        int maxHp = Mathf.Max(1, npcChar.MaxHP);
-
-        return new SaveData.NpcSaveData
-        {
-            definitionId = definitionId,
-            type = npcChar.Type,
-            maxHp = maxHp,
-            currentHp = maxHp,
-            injuryGauge = npcChar.InjuryGauge,
-            maxInjuryGauge = npcChar.MaxInjuryGauge,
-            isAssignedToShelter = false,
-            assignedRoomId = string.Empty
-        };
+        return FromRuntime(new NPCRuntimeData(npcChar));
     }
 
+    /// <summary>공용 NPC 런타임 상태를 공용 캐릭터·총기 스냅샷이 포함된 파일 저장 구조로 변환합니다.</summary>
     public static SaveData.NpcSaveData FromRuntime(NPCRuntimeData runtimeData)
     {
         if (runtimeData == null)
@@ -34,6 +22,7 @@ public static class NpcSaveDataMapper
 
         return new SaveData.NpcSaveData
         {
+            characterSnapshot = runtimeData.Snapshot,
             definitionId = runtimeData.DefinitionId,
             type = runtimeData.Type,
             maxHp = runtimeData.MaxHp,
@@ -45,6 +34,8 @@ public static class NpcSaveDataMapper
         };
     }
 
+    /// <summary>파일 저장 구조에서 공용 NPC 런타임 상태를 복원합니다.</summary>
+    /// <remarks>schemaVersion 4 이하 데이터는 기존 평면 필드로 복원하고, 새 스냅샷이 있으면 그 값을 우선 적용합니다.</remarks>
     public static NPCRuntimeData ToRuntime(SaveData.NpcSaveData saveData)
     {
         if (saveData == null)
@@ -52,7 +43,7 @@ public static class NpcSaveDataMapper
             return null;
         }
 
-        return new NPCRuntimeData(
+        NPCRuntimeData runtimeData = new NPCRuntimeData(
             saveData.definitionId,
             saveData.type,
             saveData.maxHp,
@@ -62,15 +53,13 @@ public static class NpcSaveDataMapper
             saveData.injuryGauge,
             saveData.maxInjuryGauge
             );
-    }
 
-    private static string ResolveDefinitionId(NPCChar npcChar)
-    {
-        if (!string.IsNullOrWhiteSpace(npcChar.DefinitionId))
+        CharacterSnapshotData snapshot = saveData.characterSnapshot;
+        if (snapshot != null && !string.IsNullOrWhiteSpace(snapshot.DefinitionId))
         {
-            return npcChar.DefinitionId.Trim();
+            runtimeData.ApplySnapshot(snapshot);
         }
 
-        return npcChar.name ?? string.Empty;
+        return runtimeData;
     }
 }

@@ -119,11 +119,16 @@ public class BattleSceneDataManager : MonoBehaviour
     [SerializeField] private List<ResourceResult> m_mockResources = new();
 
     private readonly HashSet<EnemyHealth> m_subscribedEnemies = new();
+    private readonly HashSet<EnemyHealth> m_countedEnemyActivations = new();
     private readonly Dictionary<WeaponController, Action<CombatDamage.HitFeedback>> m_weaponKillHandlers = new();
     private readonly Dictionary<PlayerbleUnitData, Action> m_playerDataHandlers = new();
     private readonly Dictionary<PlayerbleUnitData, int> m_characterKillCounts = new();
     private readonly List<PlayerbleResult> m_characterResults = new();
     private readonly List<ResourceResult> m_resourceResults = new();
+    private SquadManager m_subscribedSquadManager;
+
+    /// <summary>스쿼드 전멸로 정산 없는 게임오버 화면 전환이 필요할 때 발생합니다.</summary>
+    public event Action OnGameOverRequested;
 
     /// <summary>현재 배틀의 임무 목표 달성 여부입니다.</summary>
     public bool MissionCompleted => m_missionCompleted;
@@ -170,17 +175,21 @@ public class BattleSceneDataManager : MonoBehaviour
     /// <summary>활성화 시 적·무기·스쿼드 공개 데이터 이벤트를 구독합니다.</summary>
     private void OnEnable()
     {
+        EnemyHealth.OnEnemyEnabled += HandleEnemyEnabled;
         RefreshEnemySubscriptions();
         RefreshWeaponSubscriptions();
         RefreshPlayerDataSubscriptions();
+        RefreshSquadEliminationSubscription();
     }
 
     /// <summary>비활성화 시 이 컴포넌트가 등록한 모든 런타임 이벤트를 해제합니다.</summary>
     private void OnDisable()
     {
+        EnemyHealth.OnEnemyEnabled -= HandleEnemyEnabled;
         UnsubscribeEnemies();
         UnsubscribeWeapons();
         UnsubscribePlayerData();
+        UnsubscribeSquadElimination();
     }
 
     /// <summary>임무 달성 판정 결과를 기록합니다.</summary>
@@ -258,6 +267,7 @@ public class BattleSceneDataManager : MonoBehaviour
         {
             m_runtimeData ??= new BattleRuntimeData();
             m_runtimeData.Initialize(m_entryData, CountActiveEnemies());
+            ResetCountedEnemyActivations();
             m_runtimeData.StartBattle();
         }
 
@@ -283,6 +293,7 @@ public class BattleSceneDataManager : MonoBehaviour
 
         m_runtimeData ??= new BattleRuntimeData();
         m_runtimeData.Initialize(m_entryData, CountActiveEnemies());
+        ResetCountedEnemyActivations();
         for (int i = 0; i < m_mockResources.Count; i++)
         {
             ResourceResult resource = m_mockResources[i];
@@ -336,6 +347,11 @@ public class BattleSceneDataManager : MonoBehaviour
 
         RefreshPlayerDataSubscriptions();
         SyncAllRuntimeMemberStates();
+        if (endReason == BattleEndReason.Escaped || endReason == BattleEndReason.MissionCompleted)
+        {
+            m_runtimeData.ConfirmDownMembersAsCombatOut();
+        }
+
         m_runtimeData.SetMissionCompleted(m_missionCompleted);
 
         if (!m_runtimeData.BeginFinalization())
@@ -379,6 +395,11 @@ public class BattleSceneDataManager : MonoBehaviour
     /// <summary>현재 전투 결과를 귀환 정산 UI가 소비할 수 있는 불변 스냅샷으로 만듭니다.</summary>
     public ResultSnapshot CaptureResult()
     {
+        if (m_finalResult != null)
+        {
+            return CreateResultSnapshot(m_finalResult);
+        }
+
         RefreshEnemySubscriptions();
         RefreshWeaponSubscriptions();
         RefreshPlayerDataSubscriptions();
@@ -394,6 +415,64 @@ public class BattleSceneDataManager : MonoBehaviour
             m_killCount,
             m_characterResults.ToArray(),
             m_resourceResults.ToArray());
+    }
+
+    /// <summary>확정된 배틀 결과만 사용해 귀환 정산 UI용 불변 스냅샷을 생성합니다.</summary>
+    private ResultSnapshot CreateResultSnapshot(BattleResultData resultData)
+    {
+        m_characterResults.Clear();
+        m_resourceResults.Clear();
+
+        for (int i = 0; i < resultData.Members.Count; i++)
+        {
+            CharacterSnapshotData snapshot = resultData.Members[i]?.Snapshot;
+            if (snapshot == null)
+            {
+                continue;
+            }
+
+            m_characterResults.Add(new PlayerbleResult(
+                snapshot.DisplayName,
+                snapshot.CharacterId,
+                Mathf.RoundToInt(snapshot.InjurySeverityGauge),
+                snapshot.InjuryState,
+                snapshot.IsCombatOut,
+                snapshot.KillCount));
+        }
+
+        for (int i = 0; i < resultData.AcquiredResources.Count; i++)
+        {
+            BattleResourceAmountData resource = resultData.AcquiredResources[i];
+            if (resource == null || resource.Amount <= 0)
+            {
+                continue;
+            }
+
+            ResourceResult presentation = FindResourcePresentation(resource.Type);
+            presentation.Type = resource.Type;
+            presentation.Count = resource.Amount;
+            m_resourceResults.Add(presentation);
+        }
+
+        return new ResultSnapshot(
+            resultData.MissionCompleted,
+            resultData.TotalKillCount,
+            m_characterResults.ToArray(),
+            m_resourceResults.ToArray());
+    }
+
+    /// <summary>지정한 자원 종류에 대응하는 목업 ID와 아이콘 표시 정보를 찾습니다.</summary>
+    private ResourceResult FindResourcePresentation(CurrencyType type)
+    {
+        for (int i = 0; i < m_mockResources.Count; i++)
+        {
+            if (m_mockResources[i].Type == type)
+            {
+                return m_mockResources[i];
+            }
+        }
+
+        return new ResourceResult { Type = type };
     }
 
     /// <summary>씬에서 필요한 스쿼드 매니저 참조를 자동으로 탐색합니다.</summary>
@@ -430,7 +509,7 @@ public class BattleSceneDataManager : MonoBehaviour
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
     }
 
-    /// <summary>씬 스쿼드 순서에 맞춰 입장 스냅샷의 캐릭터·전투 장비 값을 확정합니다.</summary>
+    /// <summary>영속 정의 ID를 우선 사용해 입장 스냅샷과 씬 스쿼드원의 캐릭터·전투 장비 값을 연결합니다.</summary>
     private void ApplySceneSquadData(BattleEntryData entryData)
     {
         AutoFindReferences();
@@ -440,6 +519,20 @@ public class BattleSceneDataManager : MonoBehaviour
         }
 
         IReadOnlyList<PlayerbleUnitData> players = m_squadManager.PlayerDataSources;
+        List<BattleMemberEntryData> persistedMembers = new();
+        for (int i = 0; i < entryData.Members.Count; i++)
+        {
+            if (entryData.Members[i] != null)
+            {
+                persistedMembers.Add(entryData.Members[i].Clone());
+            }
+        }
+
+        entryData.ClearMembers();
+        HashSet<int> usedPersistedIndices = new();
+        bool canUseIndexFallback = persistedMembers.Count == players.Count;
+        bool indexFallbackLogged = false;
+
         for (int i = 0; i < players.Count; i++)
         {
             PlayerbleUnitData player = players[i];
@@ -448,33 +541,114 @@ public class BattleSceneDataManager : MonoBehaviour
                 continue;
             }
 
-            BattleMemberEntryData persistedMember = i < entryData.Members.Count ? entryData.Members[i] : null;
-            PlayerHealth health = player.GetComponent<PlayerHealth>();
-            float maxInjuryGauge = health != null ? health.MaxInjuryGauge : 100.0f;
-            float injuryGauge = health != null ? health.CurrentInjuryGauge : 0.0f;
-            PlayerInjuryState injuryState = health != null ? health.CurrentInjuryState : PlayerInjuryState.Normal;
+            int persistedIndex = FindPersistedMemberIndex(player.DefinitionId, persistedMembers, usedPersistedIndices);
+            if (persistedIndex < 0
+                && string.IsNullOrWhiteSpace(player.DefinitionId)
+                && canUseIndexFallback
+                && i < persistedMembers.Count
+                && !usedPersistedIndices.Contains(i))
+            {
+                persistedIndex = i;
+                if (!indexFallbackLogged && persistedMembers.Count > 0)
+                {
+                    Debug.LogWarning(
+                        "[BattleSceneDataManager] PlayerbleUnitData.DefinitionId가 없어 씬 순서로 출전 데이터를 연결합니다. "
+                        + "외부 스폰 연결 시 DefinitionId를 반드시 주입해야 합니다.",
+                        this);
+                    indexFallbackLogged = true;
+                }
+            }
 
-            entryData.SetMemberAt(i, new BattleMemberEntryData(
-                persistedMember?.DefinitionId ?? string.Empty,
-                player.RuntimeId,
-                player.CharacterId,
-                player.DisplayName,
-                player.CurrentHp,
-                player.MaxHp,
-                injuryGauge,
-                maxInjuryGauge,
-                injuryState,
-                player.CurrentWeaponId,
-                player.CurrentMagazineAmmo,
-                player.ReserveAmmo,
-                i == m_squadManager.PlayerSquadMemberIndex));
+            BattleMemberEntryData persistedMember = persistedIndex >= 0 ? persistedMembers[persistedIndex] : null;
+            if (persistedIndex >= 0)
+            {
+                usedPersistedIndices.Add(persistedIndex);
+            }
+
+            CharacterSnapshotData persistedSnapshot = persistedMember?.Snapshot;
+            if (persistedSnapshot != null)
+            {
+                player.ApplyCharacterSnapshot(persistedSnapshot);
+            }
+
+            NPCType npcType = persistedSnapshot?.NpcType ?? default;
+            CharacterSnapshotData sceneSnapshot = player.CreateCharacterSnapshot(npcType);
+            CharacterSnapshotData resolvedSnapshot = persistedSnapshot?.Clone() ?? sceneSnapshot.Clone();
+
+            string definitionId = !string.IsNullOrWhiteSpace(player.DefinitionId)
+                ? player.DefinitionId
+                : persistedMember?.DefinitionId ?? string.Empty;
+
+            resolvedSnapshot.SetPersistentIdentity(definitionId, npcType);
+            resolvedSnapshot.SetSceneIdentity(player.RuntimeId, player.CharacterId, player.DisplayName);
+            resolvedSnapshot.SetReliability(sceneSnapshot.Reliability);
+            resolvedSnapshot.SetCombatState(
+                sceneSnapshot.CurrentHp,
+                sceneSnapshot.MaxHp,
+                sceneSnapshot.InjurySeverityGauge,
+                sceneSnapshot.MaxInjuryGauge,
+                sceneSnapshot.InjuryState,
+                sceneSnapshot.IsDown,
+                sceneSnapshot.IsCombatOut,
+                i == m_squadManager.PlayerSquadMemberIndex);
+
+            WeaponSnapshotData resolvedWeapon = resolvedSnapshot.Weapon;
+            resolvedWeapon.MergeSceneAmmo(sceneSnapshot.Weapon);
+            resolvedSnapshot.SetWeapon(resolvedWeapon);
+            entryData.AddMember(new BattleMemberEntryData(resolvedSnapshot));
         }
+
+
+        if (!canUseIndexFallback && persistedMembers.Count > 0 && usedPersistedIndices.Count < persistedMembers.Count)
+        {
+            Debug.LogWarning(
+                $"[BattleSceneDataManager] 출전 데이터와 씬 스쿼드 구성이 일치하지 않아 연결되지 않은 영속 멤버를 제외했습니다. "
+                + $"entry={persistedMembers.Count}, scene={players.Count}, matched={usedPersistedIndices.Count}",
+                this);
+        }
+    }
+
+    /// <summary>아직 사용하지 않은 입장 멤버 중 영속 정의 ID가 일치하는 목록 인덱스를 찾습니다.</summary>
+    private static int FindPersistedMemberIndex(
+        string definitionId,
+        IReadOnlyList<BattleMemberEntryData> persistedMembers,
+        ISet<int> usedIndices)
+    {
+        if (string.IsNullOrWhiteSpace(definitionId))
+        {
+            return -1;
+        }
+
+        string normalizedDefinitionId = definitionId.Trim();
+        for (int i = 0; i < persistedMembers.Count; i++)
+        {
+            if (!usedIndices.Contains(i) && persistedMembers[i].DefinitionId == normalizedDefinitionId)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>현재 활성 상태인 적 수를 배틀 시작 시점의 전체 적 수로 집계합니다.</summary>
     private static int CountActiveEnemies()
     {
         return FindObjectsByType<EnemyHealth>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).Length;
+    }
+
+    /// <summary>배틀 시작 시점에 활성 상태인 적을 이미 집계된 인스턴스로 등록합니다.</summary>
+    private void ResetCountedEnemyActivations()
+    {
+        m_countedEnemyActivations.Clear();
+        EnemyHealth[] enemies = FindObjectsByType<EnemyHealth>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        for (int i = 0; i < enemies.Length; i++)
+        {
+            if (enemies[i] != null)
+            {
+                m_countedEnemyActivations.Add(enemies[i]);
+            }
+        }
     }
 
     /// <summary>임무 달성 여부와 직접 종료 사유를 귀환 정산 결과로 변환합니다.</summary>
@@ -497,12 +671,36 @@ public class BattleSceneDataManager : MonoBehaviour
         for (int i = 0; i < enemies.Length; i++)
         {
             EnemyHealth enemy = enemies[i];
-            if (enemy == null || !m_subscribedEnemies.Add(enemy))
-            {
-                continue;
-            }
+            SubscribeEnemy(enemy);
+            RecordEnemyActivationIfNew(enemy);
+        }
+    }
 
-            enemy.OnDeath += HandleEnemyDeath;
+    /// <summary>적 사망 이벤트를 중복 없이 구독하고 새 구독 여부를 반환합니다.</summary>
+    private bool SubscribeEnemy(EnemyHealth enemy)
+    {
+        if (enemy == null || !m_subscribedEnemies.Add(enemy))
+        {
+            return false;
+        }
+
+        enemy.OnDeath += HandleEnemyDeath;
+        return true;
+    }
+
+    /// <summary>배틀 도중 활성화된 적을 구독하고 전체 및 생존 적 수에 추가합니다.</summary>
+    private void HandleEnemyEnabled(EnemyHealth enemy)
+    {
+        SubscribeEnemy(enemy);
+        RecordEnemyActivationIfNew(enemy);
+    }
+
+    /// <summary>아직 집계하지 않은 적 활성화만 새 적 생성으로 런타임 데이터에 반영합니다.</summary>
+    private void RecordEnemyActivationIfNew(EnemyHealth enemy)
+    {
+        if (enemy != null && m_countedEnemyActivations.Add(enemy))
+        {
+            m_runtimeData?.RecordEnemySpawned();
         }
     }
 
@@ -610,6 +808,48 @@ public class BattleSceneDataManager : MonoBehaviour
         m_playerDataHandlers.Clear();
     }
 
+    /// <summary>현재 스쿼드 매니저의 전멸 이벤트 구독을 최신 참조로 갱신합니다.</summary>
+    private void RefreshSquadEliminationSubscription()
+    {
+        AutoFindReferences();
+        if (m_subscribedSquadManager == m_squadManager)
+        {
+            return;
+        }
+
+        UnsubscribeSquadElimination();
+        m_subscribedSquadManager = m_squadManager;
+        if (m_subscribedSquadManager != null)
+        {
+            m_subscribedSquadManager.OnSquadEliminated += HandleSquadEliminated;
+        }
+    }
+
+    /// <summary>현재 스쿼드 매니저에 등록한 전멸 이벤트 구독을 해제합니다.</summary>
+    private void UnsubscribeSquadElimination()
+    {
+        if (m_subscribedSquadManager != null)
+        {
+            m_subscribedSquadManager.OnSquadEliminated -= HandleSquadEliminated;
+            m_subscribedSquadManager = null;
+        }
+    }
+
+    /// <summary>스쿼드 전멸 상태를 고정하고 정산 없이 게임오버 화면 전환을 요청합니다.</summary>
+    private void HandleSquadEliminated()
+    {
+        if (IsFinalized || m_runtimeData == null)
+        {
+            return;
+        }
+
+        SyncAllRuntimeMemberStates();
+        if (m_runtimeData.EnterGameOver())
+        {
+            OnGameOverRequested?.Invoke();
+        }
+    }
+
     /// <summary>현재 스쿼드원 전체의 공개 상태를 배틀 런타임 데이터에 다시 반영합니다.</summary>
     private void SyncAllRuntimeMemberStates()
     {
@@ -644,23 +884,7 @@ public class BattleSceneDataManager : MonoBehaviour
             return;
         }
 
-        PlayerHealth health = player.GetComponent<PlayerHealth>();
-        m_runtimeData.UpdateMemberState(
-            player.RuntimeId,
-            player.CharacterId,
-            player.CurrentHp,
-            player.MaxHp,
-            health != null ? health.CurrentInjuryGauge : 0.0f,
-            health != null ? health.MaxInjuryGauge : 100.0f,
-            health != null ? health.CurrentInjuryState : PlayerInjuryState.Normal,
-            health != null ? health.IsDowned : player.IsDown,
-            health != null ? health.IsDead : player.IsDead,
-            player.CurrentWeaponId,
-            player.CurrentMagazineAmmo,
-            player.MagazineCapacity,
-            player.ReserveAmmo,
-            player.MaxReserveAmmo,
-            player.IsPlayerSquadMember);
+        m_runtimeData.UpdateMemberSnapshot(player.CreateCharacterSnapshot());
     }
 
     /// <summary>적 사망을 전체 처치 수와 배틀 런타임 데이터에 반영합니다.</summary>
@@ -673,6 +897,7 @@ public class BattleSceneDataManager : MonoBehaviour
 
         m_killCount++;
         m_runtimeData?.RecordEnemyKill();
+        m_countedEnemyActivations.RemoveWhere(enemy => enemy == null || enemy.IsDead);
     }
 
     /// <summary>무기가 적 처치를 확정했을 때 해당 무기 소유 스쿼드원의 처치 수를 증가시킵니다.</summary>

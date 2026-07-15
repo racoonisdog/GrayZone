@@ -27,6 +27,9 @@ public enum PlayableCharacterId
 public class PlayerbleUnitData : MonoBehaviour
 {
     [Header("Public Identity")]
+    [Tooltip("보유 캐릭터 목록과 배틀 결과를 연결하는 영속 정의 ID입니다.")]
+    [SerializeField] private string m_definitionId;
+
     [SerializeField] private string m_runtimeId;
     [SerializeField] private PlayableCharacterId m_characterId = PlayableCharacterId.Unknown;
     [SerializeField] private string m_displayName = "Player";
@@ -43,7 +46,10 @@ public class PlayerbleUnitData : MonoBehaviour
     [SerializeField] private Transform m_publicTarget;
 
     [Header("Weapon Public Data")]
+    [Tooltip("이 캐릭터에 기본으로 지정된 총기 정의입니다. 배틀 입장 시 새로 스폰하지 않고 이 참조를 기준으로 총기 상태를 구성합니다.")]
     [SerializeField] private Weapon m_currentWeapon;
+
+    [Tooltip("총기 정의가 없을 때 UI와 로그에 표시할 대체 이름입니다.")]
     [SerializeField] private string m_currentWeaponFallbackName;
 
     [Header("Ammo Inventory")]
@@ -99,6 +105,11 @@ public class PlayerbleUnitData : MonoBehaviour
     /// 공개 상태 중 외부에 노출되는 값이 바뀌었을 때 발생합니다.
     /// </summary>
     public event Action OnPublicDataChanged;
+
+    /// <summary>
+    /// 보유 캐릭터 목록과 배틀 결과를 연결하는 영속 정의 ID입니다.
+    /// </summary>
+    public string DefinitionId => m_definitionId?.Trim() ?? string.Empty;
 
     /// <summary>
     /// 이 유닛을 외부 시스템에서 식별하기 위한 런타임 ID입니다.
@@ -268,6 +279,99 @@ public class PlayerbleUnitData : MonoBehaviour
     /// </summary>
     public Transform PublicTarget => m_publicTarget != null ? m_publicTarget : transform;
 
+    /// <summary>현재 씬 캐릭터와 장착 총기 상태를 공용 스냅샷 구조로 깊은 복사하여 반환합니다.</summary>
+    public CharacterSnapshotData CreateCharacterSnapshot(NPCType npcType = default)
+    {
+        PlayerHealth health = m_health;
+        WeaponSnapshotData weaponSnapshot = WeaponSnapshotData.Create(
+            m_currentWeapon,
+            m_weaponController,
+            m_reserveAmmo,
+            m_maxReserveAmmo);
+
+        return new CharacterSnapshotData(
+            DefinitionId,
+            RuntimeId,
+            CharacterId,
+            npcType,
+            DisplayName,
+            Reliability,
+            CurrentHp,
+            Mathf.Max(1, MaxHp),
+            health != null ? health.CurrentInjuryGauge : 0.0f,
+            health != null ? health.MaxInjuryGauge : 100.0f,
+            health != null ? health.CurrentInjuryState : PlayerInjuryState.Normal,
+            health != null ? health.IsDowned : IsDown,
+            IsDead,
+            IsPlayerSquadMember,
+            0,
+            weaponSnapshot);
+    }
+
+    /// <summary>GameDataManager에서 받은 공용 캐릭터·총기 스냅샷을 씬 유닛의 입장 상태에 적용합니다.</summary>
+    /// <remarks>
+    /// 총기 정의는 캐릭터에 지정된 <c>m_currentWeapon</c> 참조를 유지하고, 스냅샷에서는 성장·파츠·탄약 상태를 전달합니다.
+    /// 현재 구현은 식별 정보, HP, 부상과 탄약까지 씬 컴포넌트에 적용합니다. 파츠에 따른 외형 변경은 정책이 확정되지 않아
+    /// 처리하지 않으며, 계산 스탯과 파츠 ID는 이후 적용 지점을 위해 스냅샷에 그대로 보존합니다.
+    /// </remarks>
+    public bool ApplyCharacterSnapshot(CharacterSnapshotData snapshot)
+    {
+        if (snapshot == null)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.DefinitionId))
+        {
+            m_definitionId = snapshot.DefinitionId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.RuntimeId))
+        {
+            m_runtimeId = snapshot.RuntimeId;
+        }
+
+        if (snapshot.CharacterId != PlayableCharacterId.Unknown)
+        {
+            m_characterId = snapshot.CharacterId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.DisplayName))
+        {
+            m_displayName = snapshot.DisplayName;
+        }
+
+        m_reliability = snapshot.Reliability;
+        m_health?.ApplySnapshotState(
+            snapshot.CurrentHp,
+            snapshot.MaxHp,
+            snapshot.InjurySeverityGauge,
+            snapshot.MaxInjuryGauge);
+
+        WeaponSnapshotData weaponSnapshot = snapshot.Weapon;
+        bool hasWeaponState = !string.IsNullOrWhiteSpace(weaponSnapshot.WeaponId)
+            || weaponSnapshot.MagazineCapacity > 0
+            || weaponSnapshot.MaxReserveAmmo > 0;
+        if (hasWeaponState)
+        {
+            m_maxReserveAmmo = weaponSnapshot.MaxReserveAmmo;
+            m_reserveAmmo = weaponSnapshot.ReserveAmmo;
+            if (m_currentWeapon == null && !string.IsNullOrWhiteSpace(weaponSnapshot.DisplayName))
+            {
+                m_currentWeaponFallbackName = weaponSnapshot.DisplayName;
+            }
+
+            if (m_weaponController != null)
+            {
+                m_weaponController.SetMaxBullet(weaponSnapshot.MagazineCapacity);
+                m_weaponController.SetCurrentBullet(weaponSnapshot.CurrentMagazineAmmo);
+            }
+        }
+
+        NotifyPublicDataChanged();
+        return true;
+    }
+
     private void Reset()
     {
         CacheReferences();
@@ -315,6 +419,22 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_runtimeId = nextValue;
+        NotifyPublicDataChanged();
+    }
+
+    /// <summary>
+    /// 보유 캐릭터 목록과 연결할 영속 정의 ID를 설정합니다.
+    /// </summary>
+    /// <param name="value">셸터 NPC 정의 ID입니다.</param>
+    public void SetDefinitionId(string value)
+    {
+        string nextValue = value?.Trim() ?? string.Empty;
+        if (m_definitionId == nextValue)
+        {
+            return;
+        }
+
+        m_definitionId = nextValue;
         NotifyPublicDataChanged();
     }
 

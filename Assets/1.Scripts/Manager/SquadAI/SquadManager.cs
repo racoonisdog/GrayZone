@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System;
 using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
@@ -65,7 +66,11 @@ public class SquadManager : MonoBehaviour
     [SerializeField] private Key m_member3Key = Key.Digit3;
 
     private bool m_hasInitialized;
+    private bool m_squadEliminationNotified;
     private readonly List<SquadMemberController> m_subscribedMemberDeathEvents = new List<SquadMemberController>();
+
+    /// <summary>조작 가능한 스쿼드원이 한 명도 남지 않아 게임오버 조건이 성립했을 때 발생합니다.</summary>
+    public event Action OnSquadEliminated;
 
     /// <summary>현재 PlayerSquadMember의 스쿼드 목록 인덱스입니다.</summary>
     public int PlayerSquadMemberIndex => m_playerSquadMemberIndex;
@@ -489,6 +494,8 @@ public class SquadManager : MonoBehaviour
         {
             Debug.Log("[SquadManager] No available squad member remains after current member death.", this);
         }
+
+        NotifySquadEliminatedIfNeeded();
     }
 
     /// <summary>
@@ -511,6 +518,28 @@ public class SquadManager : MonoBehaviour
         {
             Debug.Log("[SquadManager] No available squad member remains after current member down.", this);
         }
+
+        NotifySquadEliminatedIfNeeded();
+    }
+
+    /// <summary>조작 가능한 멤버가 한 명도 남지 않았으면 전멸 이벤트를 한 번만 발생시킵니다.</summary>
+    private void NotifySquadEliminatedIfNeeded()
+    {
+        if (m_squadEliminationNotified || m_squadMembers == null || m_squadMembers.Count == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < m_squadMembers.Count; i++)
+        {
+            if (CanSwitchTo(i))
+            {
+                return;
+            }
+        }
+
+        m_squadEliminationNotified = true;
+        OnSquadEliminated?.Invoke();
     }
 
     /// <summary>

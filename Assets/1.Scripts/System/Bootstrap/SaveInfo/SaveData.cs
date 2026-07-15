@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
+/// <summary>저장 파일이 오토세이브인지 수동 저장인지 구분합니다.</summary>
 public enum SaveSlotType
 {
     Auto,
@@ -10,7 +11,7 @@ public enum SaveSlotType
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 6;
 
     public int schemaVersion = CurrentSchemaVersion;
     public string profileId = "default";
@@ -20,7 +21,9 @@ public class SaveData
 
     public SharedSaveData shared = new SharedSaveData();
     public ShelterSaveData shelter = new ShelterSaveData();
+    public BattleResultData lastBattleResult;
 
+    /// <summary>현재 UTC 시각을 저장 파일 생성 시각으로 기록합니다.</summary>
     public void MarkSavedNow()
     {
         savedAtUnixTimeUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -55,6 +58,10 @@ public class SaveData
     [Serializable]
     public class NpcSaveData
     {
+        /// <summary>캐릭터 기본 수치와 장착 총기 상태를 함께 보존하는 schemaVersion 5 이상 공용 스냅샷입니다.</summary>
+        public CharacterSnapshotData characterSnapshot = new CharacterSnapshotData();
+
+        // schemaVersion 4 이하 저장 파일을 불러오기 위한 호환 필드입니다.
         public string definitionId = string.Empty;
         public NPCType type;
         public int maxHp = 1;

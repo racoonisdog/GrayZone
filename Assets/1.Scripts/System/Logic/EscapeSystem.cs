@@ -18,13 +18,13 @@ public class EscapeSystem : MonoBehaviour
     [SerializeField] private BattleSceneDataManager m_battleSceneDataManager;
 
     [Header("Result UI")]
-    [Tooltip("Result UI root to enable on escape. Auto-finds the object named 'Result UI' when empty.")]
+    [Tooltip("탈출 시 활성화할 Result UI 루트입니다. 비어 있으면 'Result UI' 이름의 오브젝트를 자동 탐색합니다.")]
     [SerializeField] private GameObject m_resultUI;
 
-    [Tooltip("Optional result UI controller. The root GameObject is enabled directly when this is empty.")]
+    [Tooltip("선택 사항인 결과 UI 컨트롤러입니다. 비어 있으면 루트 GameObject만 직접 활성화합니다.")]
     [SerializeField] private ResultUIController m_resultUIController;
 
-    [Tooltip("Hide Result UI on Awake so it is not visible before escape.")]
+    [Tooltip("탈출 전에 결과 UI가 보이지 않도록 Awake에서 숨길지 여부입니다.")]
     [SerializeField] private bool m_hideResultUIOnAwake = true;
 
     /// <summary>Inspector에서 컴포넌트를 추가하거나 Reset할 때 필요한 씬 참조를 자동 탐색합니다.</summary>
@@ -113,6 +113,12 @@ public class EscapeSystem : MonoBehaviour
         if (member == null && playerData != null)
         {
             member = playerData.GetComponent<SquadMemberController>();
+        }
+
+        if ((member != null && (!member.IsAlive || member.IsDown))
+            || (playerData != null && (!playerData.IsAlive || playerData.IsDown)))
+        {
+            return false;
         }
 
         if (m_squadManager == null)
