@@ -1469,6 +1469,7 @@ GameObject:
   - component: {fileID: 467619343}
   - component: {fileID: 467619342}
   - component: {fileID: 467619345}
+  - component: {fileID: 467619346}
   m_Layer: 5
   m_Name: Scroll View
   m_TagString: Untagged
@@ -1485,16 +1486,16 @@ RectTransform:
   m_GameObject: {fileID: 467619340}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.8, y: 0.82, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1724718529}
   - {fileID: 454979787}
-  m_Father: {fileID: 1793438748}
+  m_Father: {fileID: 1655556015}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 229.3125, y: -459.46948}
+  m_AnchoredPosition: {x: 273.59998, y: -455.02}
   m_SizeDelta: {x: 400, y: 600}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &467619342
@@ -1579,6 +1580,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NPCListScript
   contentRoot: {fileID: 1615427548}
   rowPrefab: {fileID: 7179024387286601439, guid: edc35e87afbb89a42984e4e8ccdd888a, type: 3}
+--- !u!114 &467619346
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467619340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a26e089e43608b54daa9ad2086c37bcf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NpcCandidateListPanel
+  m_root: {fileID: 467619340}
+  m_listScript: {fileID: 467619345}
+  m_hideOnAwake: 1
 --- !u!1 &513518102
 GameObject:
   m_ObjectHideFlags: 0
@@ -1742,6 +1758,7 @@ GameObject:
   - component: {fileID: 557497714}
   - component: {fileID: 557497716}
   - component: {fileID: 557497715}
+  - component: {fileID: 557497717}
   m_Layer: 5
   m_Name: StaffSlot
   m_TagString: Untagged
@@ -1872,6 +1889,24 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 557497713}
   m_CullTransparentMesh: 1
+--- !u!114 &557497717
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 557497713}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57340d832ca27a3408990ca402c3a21b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MedicalStaffSlotController
+  m_slots:
+  - {fileID: 1233018102}
+  - {fileID: 877173210}
+  m_medicalManager: {fileID: 1536208057}
+  m_characterManager: {fileID: 766322780}
+  m_candidateListPanel: {fileID: 467619346}
 --- !u!1 &631162740
 GameObject:
   m_ObjectHideFlags: 0
@@ -2459,7 +2494,7 @@ MonoBehaviour:
   m_unlockedSprite: {fileID: 21300000, guid: 915621f3e43871d458ed52c1395efc60, type: 3}
   m_lockedSprite: {fileID: 21300000, guid: 88af9f0c989d25545bf6f2e75b3725b7, type: 3}
   m_cancelButton: {fileID: 1905612790}
-  m_npccatalog: {fileID: 11400000, guid: d928eeb89574a3d4d88b76629a9e3099, type: 2}
+  m_npccatalog: {fileID: 11400000, guid: 5488d0f5a63ec9946b37d4ea0b216c0a, type: 2}
   m_gaugeRoot: {fileID: 834538783}
   m_gaugeFill: {fileID: 891347178}
   m_gaugeSlider: {fileID: 834538785}
@@ -3095,6 +3130,7 @@ GameObject:
   - component: {fileID: 877173207}
   - component: {fileID: 877173206}
   - component: {fileID: 877173209}
+  - component: {fileID: 877173210}
   m_Layer: 5
   m_Name: slot02
   m_TagString: Untagged
@@ -3203,6 +3239,24 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &877173210
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 877173204}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e70dabb1771237439a743d332f2bff7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MedicalStaffSlotView
+  m_button: {fileID: 877173209}
+  m_slotImage: {fileID: 877173206}
+  m_unlockedSprite: {fileID: 21300000, guid: 915621f3e43871d458ed52c1395efc60, type: 3}
+  m_lockedSprite: {fileID: 21300000, guid: 88af9f0c989d25545bf6f2e75b3725b7, type: 3}
+  m_npccatalog: {fileID: 11400000, guid: 5488d0f5a63ec9946b37d4ea0b216c0a, type: 2}
+  m_slotId: 
 --- !u!1 &891347176
 GameObject:
   m_ObjectHideFlags: 0
@@ -4900,6 +4954,7 @@ GameObject:
   - component: {fileID: 1233018099}
   - component: {fileID: 1233018098}
   - component: {fileID: 1233018101}
+  - component: {fileID: 1233018102}
   m_Layer: 5
   m_Name: slot01
   m_TagString: Untagged
@@ -5008,6 +5063,24 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &1233018102
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1233018096}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e70dabb1771237439a743d332f2bff7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MedicalStaffSlotView
+  m_button: {fileID: 1233018101}
+  m_slotImage: {fileID: 1233018098}
+  m_unlockedSprite: {fileID: 21300000, guid: 915621f3e43871d458ed52c1395efc60, type: 3}
+  m_lockedSprite: {fileID: 21300000, guid: 88af9f0c989d25545bf6f2e75b3725b7, type: 3}
+  m_npccatalog: {fileID: 11400000, guid: 5488d0f5a63ec9946b37d4ea0b216c0a, type: 2}
+  m_slotId: 
 --- !u!1 &1259197202
 GameObject:
   m_ObjectHideFlags: 0
@@ -9185,6 +9258,7 @@ RectTransform:
   - {fileID: 2134014017}
   - {fileID: 1793438748}
   - {fileID: 1019437878}
+  - {fileID: 467619341}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -9382,6 +9456,17 @@ MonoBehaviour:
     currentDay: 1
     battleSquadNpcDefinitionIds: []
     facilityStates: []
+  lastBattleResult:
+    battleId: 
+    stageId: 
+    outcome: 0
+    endReason: 0
+    missionCompleted: 0
+    elapsedSeconds: 0
+    totalKillCount: 0
+    members: []
+    acquiredResources: []
+  appliedBattleIds: []
 --- !u!1 &1670703294
 GameObject:
   m_ObjectHideFlags: 0
@@ -9767,7 +9852,6 @@ RectTransform:
   - {fileID: 840249420}
   - {fileID: 460759012}
   - {fileID: 557497714}
-  - {fileID: 467619341}
   - {fileID: 1156833905}
   m_Father: {fileID: 1655556015}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -9830,7 +9914,7 @@ MonoBehaviour:
   m_hideOnAwake: 1
   m_patientSlots: []
   m_characterManager: {fileID: 766322780}
-  m_npcListScript: {fileID: 467619345}
+  m_candidateListPanel: {fileID: 467619346}
 --- !u!1 &1819593656
 GameObject:
   m_ObjectHideFlags: 0

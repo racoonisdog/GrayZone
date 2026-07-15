@@ -17,12 +17,13 @@ public class MedicalUI : MonoBehaviour
 
     [Header("Treatment Candidates")]
     [SerializeField] private CharacterManager m_characterManager;
-    [SerializeField] private NPCListScript m_npcListScript;
+    [SerializeField] private NpcCandidateListPanel m_candidateListPanel;
 
     private readonly List<NPCRuntimeData> m_treatmentCandidates = new List<NPCRuntimeData>();
 
     private MedicalManager m_currentManager;
     private CharacterManager m_boundCharacterManager;
+    private NpcCandidateListPanel m_boundCandidateListPanel;
     private MedicalPatientSlotView m_pendingSlot;   // 배치 대상으로 클릭해 둔 빈 슬롯
     private bool m_isOpening;
     private bool m_isOpen;
@@ -62,13 +63,25 @@ public class MedicalUI : MonoBehaviour
             SetOpenState(false);
     }
 
+    private void OnDestroy()
+    {
+        if (m_boundCandidateListPanel != null)
+        {
+            m_boundCandidateListPanel.ClosedBy -= HandleCandidateListClosedBy;
+            m_boundCandidateListPanel = null;
+        }
+    }
 
     private void Update()
     {
         if (Keyboard.current != null &&
                 Keyboard.current.escapeKey.wasPressedThisFrame)
         {
-            Close();
+            // 후보 목록이 열려 있으면 목록만 먼저 닫는다.
+            if (m_isTreatmentCandidateListOpen)
+                HideTreatmentCandidateList();
+            else
+                Close();
         }
     }
 
@@ -132,9 +145,6 @@ public class MedicalUI : MonoBehaviour
     {
         if (m_patientSlots == null || m_patientSlots.Length == 0)
             m_patientSlots = GetComponentsInChildren<MedicalPatientSlotView>(true);
-
-        if (m_npcListScript == null)
-            m_npcListScript = GetComponentInChildren<NPCListScript>(true);
     }
 
     private void RefreshPatientSlots()
@@ -249,32 +259,28 @@ public class MedicalUI : MonoBehaviour
     {
         ClearTreatmentCandidateList();
 
-        if (m_currentManager == null || m_npcListScript == null)
+        NpcCandidateListPanel panel = CacheCandidateListPanel();
+        if (m_currentManager == null || panel == null)
             return;
 
         if (m_helperMode)
         {
-            if (m_currentManager.CurrentHelperCount >= m_currentManager.HelperCapacity)
-                return;
-
-            m_currentManager.FillHelperCandidates(m_treatmentCandidates);
+            if (m_currentManager.CurrentHelperCount < m_currentManager.HelperCapacity)
+                m_currentManager.FillHelperCandidates(m_treatmentCandidates);
         }
         else
         {
-            if (m_currentManager.CurrentPatientCount >= m_currentManager.PatientCapacity)
-                return;
-
-            m_currentManager.FillPatientCandidates(m_treatmentCandidates);
+            if (m_currentManager.CurrentPatientCount < m_currentManager.PatientCapacity)
+                m_currentManager.FillPatientCandidates(m_treatmentCandidates);
         }
 
-        m_npcListScript.Bind(m_treatmentCandidates, HandleTreatmentCandidateClicked);
+        // 정원이 가득 차면 빈 목록을 넘겨 빈 패널을 표시(기존 동작과 동일).
+        panel.Open(this, m_treatmentCandidates, HandleTreatmentCandidateClicked);
     }
 
+    // 로컬 후보 버퍼만 비운다. 패널의 행 제거는 패널 소유권 규칙(Open/Close)에 맡긴다.
     private void ClearTreatmentCandidateList()
     {
-        if (m_npcListScript != null)
-            m_npcListScript.Clear();
-
         m_treatmentCandidates.Clear();
     }
 
@@ -335,10 +341,8 @@ public class MedicalUI : MonoBehaviour
 
     private void ShowTreatmentCandidateList()
     {
+        // 실제 패널 표시는 RefreshTreatmentCandidates의 Open에서 일어난다.
         m_isTreatmentCandidateListOpen = true;
-
-        if (m_npcListScript != null)
-            m_npcListScript.gameObject.SetActive(true);
     }
 
     private void HideTreatmentCandidateList()
@@ -348,8 +352,41 @@ public class MedicalUI : MonoBehaviour
         m_pendingSlot = null;
         ClearTreatmentCandidateList();
 
-        if (m_npcListScript != null)
-            m_npcListScript.gameObject.SetActive(false);
+        // OnDisable/Close 경로에서도 호출되므로 씬 검색 없이 캐시된 패널만 닫는다.
+        if (m_candidateListPanel != null)
+            m_candidateListPanel.Close(this);
+    }
+
+    // 패널이 닫히거나 다른 시설 UI가 패널을 가져갔을 때 로컬 상태를 정리한다.
+    private void HandleCandidateListClosedBy(object requester)
+    {
+        if (!ReferenceEquals(requester, this))
+            return;
+
+        m_isTreatmentCandidateListOpen = false;
+        m_helperMode = false;
+        m_pendingSlot = null;
+        m_treatmentCandidates.Clear();
+    }
+
+    private NpcCandidateListPanel CacheCandidateListPanel()
+    {
+        if (m_candidateListPanel == null)
+            m_candidateListPanel = FindFirstObjectByType<NpcCandidateListPanel>(FindObjectsInactive.Include);
+
+        // 패널 참조가 바뀌면 ClosedBy 구독을 옮긴다.
+        if (m_candidateListPanel != m_boundCandidateListPanel)
+        {
+            if (m_boundCandidateListPanel != null)
+                m_boundCandidateListPanel.ClosedBy -= HandleCandidateListClosedBy;
+
+            m_boundCandidateListPanel = m_candidateListPanel;
+
+            if (m_boundCandidateListPanel != null)
+                m_boundCandidateListPanel.ClosedBy += HandleCandidateListClosedBy;
+        }
+
+        return m_candidateListPanel;
     }
 
     private CharacterManager CacheCharacterManager()
