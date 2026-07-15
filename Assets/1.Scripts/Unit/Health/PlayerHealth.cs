@@ -364,11 +364,30 @@ public class PlayerHealth : HealthSystemBase
         return PlayerInjuryState.Normal;
     }
 
+    /// <summary>공용 캐릭터 스냅샷의 최대 HP, 현재 HP와 누적 부상 게이지를 전투 체력 상태에 적용합니다.</summary>
+    /// <remarks>씬 입장 초기화 경로에서 사용하며 구조 횟수와 다운 타이머는 새 출격의 기본값으로 초기화합니다.</remarks>
+    public void ApplySnapshotState(int currentHp, int maxHp, float injurySeverityGauge, float maxInjuryGauge)
+    {
+        m_isDowned = false;
+        m_downTimerPaused = false;
+        m_downTimeRemaining = 0.0f;
+        m_reviveCount = 0;
+        m_maxInjuryGauge = Mathf.Max(1.0f, maxInjuryGauge);
+        SetMaxHP(maxHp);
+        SetCurrentHP(currentHp);
+        m_currentInjuryGauge = Mathf.Clamp(injurySeverityGauge, 0.0f, MaxInjuryGauge);
+        UpdateInjuryStateAndNotify();
+        NotifyDownTimerChanged();
+        OnReviveCountChanged?.Invoke(m_reviveCount, MaxReviveCount);
+    }
+
+    /// <summary>현재 출격에서 누적된 부상 게이지를 0으로 초기화합니다.</summary>
     public void ResetInjuryDamage()
     {
         SetCurrentInjuryGauge(0.0f);
     }
 
+    /// <summary>현재 출격에서 누적된 부상 게이지를 0으로 초기화합니다.</summary>
     public void ResetInjuryGauge()
     {
         SetCurrentInjuryGauge(0.0f);
