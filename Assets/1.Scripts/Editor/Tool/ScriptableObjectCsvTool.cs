@@ -18,6 +18,10 @@ using UnityEngine;
 ///
 /// Editor-only. All writes go through SerializedObject (Undo / dirty / save safe).
 /// No runtime code is touched.
+///
+/// 이 도구의 CSV 폴더를 감시하는 자동 임포터는
+/// <c>Assets/1.Scripts/Editor/SoCsvAutoImporter.cs</c>에 분리되어 있습니다.
+/// 자동 임포터는 에셋 변경 시 자동으로 실행되며, 이 파일의 창은 Tools 메뉴에서 직접 열 때만 표시됩니다.
 /// </summary>
 public class ScriptableObjectCsvWindow : EditorWindow
 {
@@ -42,7 +46,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
         public string label;
     }
 
-    [MenuItem("GrayZone/SO CSV Tool")]
+    [MenuItem("Tools/GrayZone/SO CSV Tool")]
     private static void Open()
     {
         ScriptableObjectCsvWindow window = GetWindow<ScriptableObjectCsvWindow>("SO CSV Tool");
@@ -445,70 +449,6 @@ public class ScriptableObjectCsvWindow : EditorWindow
         for (int i = 0; i < cells.Count; i++)
             cells[i] = SoCsvText.Escape(cells[i]);
         return string.Join(",", cells);
-    }
-}
-
-// ===================================================================== auto-import
-
-/// <summary>
-/// Watches the CsvData folder. Whenever a .csv there is added or changed, the
-/// matching ScriptableObject assets are re-baked automatically. The actual bake
-/// is deferred via delayCall so it runs after the asset import that triggered it
-/// (modifying assets directly inside OnPostprocessAllAssets is unsafe).
-/// </summary>
-internal sealed class SoCsvAutoImporter : AssetPostprocessor
-{
-    private static readonly HashSet<string> s_pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    private static bool s_scheduled;
-
-    private static void OnPostprocessAllAssets(
-        string[] importedAssets,
-        string[] deletedAssets,
-        string[] movedAssets,
-        string[] movedFromAssetPaths)
-    {
-        Collect(importedAssets);
-        Collect(movedAssets);
-
-        if (s_pending.Count > 0 && !s_scheduled)
-        {
-            s_scheduled = true;
-            EditorApplication.delayCall += ProcessPending;
-        }
-    }
-
-    private static void Collect(string[] paths)
-    {
-        string prefix = ScriptableObjectCsvWindow.CsvFolder + "/";
-        foreach (string raw in paths)
-        {
-            string path = raw.Replace('\\', '/');
-            if (path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)
-                && path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                s_pending.Add(path);
-            }
-        }
-    }
-
-    private static void ProcessPending()
-    {
-        EditorApplication.delayCall -= ProcessPending;
-        s_scheduled = false;
-
-        if (s_pending.Count == 0)
-            return;
-
-        List<string> batch = new List<string>(s_pending);
-        s_pending.Clear();
-
-        foreach (string path in batch)
-        {
-            if (File.Exists(path))
-                ScriptableObjectCsvWindow.ImportFile(path);
-        }
-
-        AssetDatabase.SaveAssets();
     }
 }
 

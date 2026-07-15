@@ -18,7 +18,7 @@ namespace GrayZone.EditorTools
 
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
 
-        [MenuItem("GrayZone/UI/Crosshair/Export Primitive SVG Assets")]
+        [MenuItem("Tools/GrayZone/UI/Crosshair/Export Primitive SVG Assets")]
         public static void ExportPrimitiveSvgAssetsMenu()
         {
             if (!EditorUtility.DisplayDialog(
@@ -35,7 +35,7 @@ namespace GrayZone.EditorTools
             Debug.Log($"[CrosshairSvgExporter] Exported {writtenCount} primitive SVG asset(s) to {DefaultExportFolder}.");
         }
 
-        [MenuItem("GrayZone/UI/Crosshair/Export Selected Crosshair SVG")]
+        [MenuItem("Tools/GrayZone/UI/Crosshair/Export Selected Crosshair SVG")]
         public static void ExportSelectedCrosshairSvgMenu()
         {
             CrosshairController controller = FindSelectedCrosshairController();
@@ -48,7 +48,7 @@ namespace GrayZone.EditorTools
             ExportCrosshairSvgWithDialog(controller);
         }
 
-        [MenuItem("GrayZone/UI/Crosshair/Export Selected Crosshair SVG", true)]
+        [MenuItem("Tools/GrayZone/UI/Crosshair/Export Selected Crosshair SVG", true)]
         public static bool CanExportSelectedCrosshairSvgMenu()
         {
             return FindSelectedCrosshairController() != null;
