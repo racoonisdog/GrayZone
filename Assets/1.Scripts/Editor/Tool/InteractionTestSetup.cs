@@ -9,12 +9,12 @@ namespace GrayZone.EditorTools
     /// 열린 씬에 상호작용 테스트 환경을 붙이는 에디터 유틸리티입니다.
     /// </summary>
     /// <remarks>
-    /// unity-cli로 실행: <c>unity-cli --project . menu --menu_path "GrayZone/Interaction/Setup Test In Open Scene"</c>
+    /// unity-cli로 실행: <c>unity-cli --project . menu --menu_path "Tools/GrayZone/Interaction/Setup Test In Open Scene"</c>
     /// 이미 컴파일된 메뉴라 exec와 달리 즉시 실행됩니다. 씬은 dirty로만 표시하고 자동 저장하지 않습니다(플레이 테스트는 인메모리로 동작).
     /// </remarks>
     public static class InteractionTestSetup
     {
-        [MenuItem("GrayZone/Interaction/Setup Test In Open Scene")]
+        [MenuItem("Tools/GrayZone/Interaction/Setup Test In Open Scene")]
         public static void Setup()
         {
             var inputs = Object.FindObjectsByType<PlayerInputs>(FindObjectsInactive.Include, FindObjectsSortMode.None);
