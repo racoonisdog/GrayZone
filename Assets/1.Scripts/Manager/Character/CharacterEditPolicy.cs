@@ -4,11 +4,15 @@
 /// </summary>
 public sealed class CharacterEditPolicy
 {
-    private const CharacterEditCapability LegacyAllCapabilities =
+    private const CharacterEditCapability LegacyAllCapabilitiesWithoutHealth =
         CharacterEditCapability.FacilityAssignment |
         CharacterEditCapability.EquipmentChange |
         CharacterEditCapability.SkillChange |
         CharacterEditCapability.EquipmentUpgrade;
+
+    private const CharacterEditCapability LegacyAllCapabilitiesWithoutRoster =
+        LegacyAllCapabilitiesWithoutHealth |
+        CharacterEditCapability.HealthChange;
 
     private readonly ICharacterDataContext context;
 
@@ -51,6 +55,9 @@ public sealed class CharacterEditPolicy
     /// </summary>
     public static CharacterEditCapability NormalizeCapabilities(CharacterEditCapability value)
     {
-        return value == LegacyAllCapabilities ? CharacterEditCapability.All : value;
+        return value == LegacyAllCapabilitiesWithoutHealth
+            || value == LegacyAllCapabilitiesWithoutRoster
+            ? CharacterEditCapability.All
+            : value;
     }
 }

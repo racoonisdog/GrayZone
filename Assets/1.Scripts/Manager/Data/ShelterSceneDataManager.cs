@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -16,6 +16,8 @@ public class ShelterSceneDataManager : MonoBehaviour
     [FormerlySerializedAs("shelterData")]
     [SerializeField] private ShelterRuntimeData m_runtimeData = new ShelterRuntimeData();
 
+    private StorageFacility storageFacility;
+
     /// <summary>셸터 작업 데이터가 변경됐을 때 발생</summary>
     public event Action ShelterDataChanged;
 
@@ -29,9 +31,16 @@ public class ShelterSceneDataManager : MonoBehaviour
     }
 
     private ResourceStorage Resources => RuntimeData.Resources;
+    private List<ItemStorageEntry> ItemStorageEntries => RuntimeData.MutableItemStorageEntries;
 
-    /// <summary>현재 보유 재화 수량 맵</summary>
-    public IReadOnlyDictionary<CurrencyType, int> ResourceAmounts => Resources.Amounts;
+    /// <summary>현재 셸터 자원 작업본을 사용하는 비가시 창고 시설 기능입니다.</summary>
+    public StorageFacility Storage => storageFacility ??= new StorageFacility(
+        Resources,
+        ItemStorageEntries,
+        NotifyShelterDataChanged);
+
+    /// <summary>현재 셸터 씬에서 사용하는 제조 시설 작업 데이터입니다.</summary>
+    public ManufacturingRuntimeData Manufacturing => RuntimeData.Manufacturing;
 
     /// <summary>현재 셸터 씬의 캐릭터 작업 목록</summary>
     public IReadOnlyList<ShelterMemberRuntimeData> Characters => RuntimeData.Characters;
@@ -153,6 +162,7 @@ public class ShelterSceneDataManager : MonoBehaviour
         }
 
         RuntimeData.CopyFrom(snapshot);
+        storageFacility?.NotifySnapshotApplied();
         NotifyShelterDataChanged();
     }
 
@@ -169,26 +179,10 @@ public class ShelterSceneDataManager : MonoBehaviour
         return state;
     }
 
-    /// <summary>
-    /// 기존 캐릭터 정의 에셋을 Battle 공용 스냅샷 기반 셸터 캐릭터로 영입
-    /// </summary>
-    /// <param name="characterDefinition">영입할 캐릭터 정의 데이터</param>
-    /// <param name="character">생성된 셸터 캐릭터 런타임 데이터</param>
-    /// <returns>영입에 성공하면 <c>true</c></returns>
-    public bool TryRecruitCharacter(PlayableCharacterDefinition characterDefinition, out ShelterMemberRuntimeData character)
+    /// <summary>CharacterManager가 검증한 캐릭터를 작업 목록에 추가합니다.</summary>
+    internal bool TryAddCharacter(ShelterMemberRuntimeData character)
     {
-        character = null;
-        if (characterDefinition == null)
-            return false;
-
-        ShelterMemberRuntimeData created = new ShelterMemberRuntimeData(characterDefinition);
-        bool result = RuntimeData.AddCharacter(created);
-        if (!result)
-            return false;
-
-        character = created;
-        NotifyShelterDataChanged();
-        return true;
+        return RuntimeData.AddCharacter(character);
     }
 
     /// <summary>
@@ -202,119 +196,10 @@ public class ShelterSceneDataManager : MonoBehaviour
         return RuntimeData.TryGetCharacter(runtimeId, out character);
     }
 
-    /// <summary>
-    /// 캐릭터를 목록에서 제거하고 관련 참조를 정리
-    /// </summary>
-    /// <param name="runtimeId">제거할 캐릭터 런타임 ID</param>
-    /// <returns>제거에 성공하면 <c>true</c></returns>
-    public bool TryRemoveCharacter(string runtimeId)
+    /// <summary>CharacterManager가 검증한 캐릭터를 제거하고 관련 참조를 정리합니다.</summary>
+    internal bool TryRemoveCharacter(string runtimeId)
     {
-        if (!RuntimeData.RemoveCharacter(runtimeId))
-            return false;
-
-        NotifyShelterDataChanged();
-        return true;
-    }
-
-    /// <summary>
-    /// 지정한 재화의 현재 보유량을 반환
-    /// </summary>
-    /// <param name="type">조회할 재화 타입</param>
-    /// <returns>현재 보유량</returns>
-    public int GetResourceAmount(CurrencyType type)
-    {
-        return Resources.GetAmount(type);
-    }
-
-    /// <summary>
-    /// 단일 재화 비용을 지불할 수 있는지 검사
-    /// </summary>
-    /// <param name="cost">검사할 재화 비용</param>
-    /// <returns>지불 가능하면 <c>true</c></returns>
-    public bool CanSpendResource(CurrencyCost cost)
-    {
-        return Resources.CanSpend(cost);
-    }
-
-    /// <summary>
-    /// 비용 묶음 전체를 지불할 수 있는지 검사
-    /// </summary>
-    /// <param name="costBundle">검사할 비용 묶음</param>
-    /// <returns>모든 비용을 지불 가능하면 <c>true</c></returns>
-    public bool CanSpendResources(CostBundle costBundle)
-    {
-        if (costBundle == null || costBundle.IsFree)
-            return true;
-
-        foreach (CurrencyCost cost in costBundle.Costs)
-        {
-            if (!CanSpendResource(cost))
-                return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// 단일 재화 비용을 차감
-    /// </summary>
-    /// <param name="cost">차감할 재화 비용</param>
-    /// <returns>차감에 성공하면 <c>true</c></returns>
-    public bool TrySpendResource(CurrencyCost cost)
-    {
-        bool result = Resources.TrySpend(cost);
-        if (result)
-            NotifyShelterDataChanged();
-
-        return result;
-    }
-
-    /// <summary>
-    /// 비용 묶음 전체를 차감
-    /// </summary>
-    /// <param name="costBundle">차감할 비용 묶음</param>
-    /// <returns>모든 비용 차감에 성공하면 <c>true</c></returns>
-    public bool TrySpendResources(CostBundle costBundle)
-    {
-        if (!CanSpendResources(costBundle))
-            return false;
-
-        if (costBundle == null || costBundle.IsFree)
-            return true;
-
-        foreach (CurrencyCost cost in costBundle.Costs)
-        {
-            Resources.TrySpend(cost);
-        }
-
-        NotifyShelterDataChanged();
-        return true;
-    }
-
-    /// <summary>
-    /// 지정한 재화를 추가
-    /// </summary>
-    /// <param name="type">추가할 재화 타입</param>
-    /// <param name="amount">추가할 수량</param>
-    /// <returns>추가에 성공하면 <c>true</c></returns>
-    public bool TryAddResource(CurrencyType type, int amount)
-    {
-        bool result = Resources.Add(type, amount);
-        if (result)
-            NotifyShelterDataChanged();
-
-        return result;
-    }
-
-    /// <summary>
-    /// 지정한 재화 보유량을 직접 설정
-    /// </summary>
-    /// <param name="type">설정할 재화 타입</param>
-    /// <param name="amount">새 보유량</param>
-    public void SetResourceAmount(CurrencyType type, int amount)
-    {
-        Resources.SetAmount(type, amount);
-        NotifyShelterDataChanged();
+        return RuntimeData.RemoveCharacter(runtimeId);
     }
 
     /// <summary>

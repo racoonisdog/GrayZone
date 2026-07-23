@@ -46,7 +46,12 @@ public class CharacterManager : MonoBehaviour, ICharacterDataContext
     ShelterSceneDataManager ICharacterDataContext.DataSource => DataSource;
     bool ICharacterDataContext.IsReadOnly => readOnlyMode;
     CharacterEditCapability ICharacterDataContext.EnabledCapabilities => enabledCapabilities;
+    bool ICharacterDataContext.TryAddCharacter(ShelterMemberRuntimeData character)
+        => DataSource != null && DataSource.TryAddCharacter(character);
+    bool ICharacterDataContext.TryRemoveCharacter(string runtimeId)
+        => DataSource != null && DataSource.TryRemoveCharacter(runtimeId);
     void ICharacterDataContext.NotifyCharacterChanged(ShelterMemberRuntimeData character) => NotifyCharacterChanged(character);
+    void ICharacterDataContext.NotifyCharactersChanged() => NotifyCharactersChanged();
 
     private void Awake()
     {
@@ -107,6 +112,12 @@ public class CharacterManager : MonoBehaviour, ICharacterDataContext
         => Query.CanAssignToFacility(character, filter);
 
     // ── 변경 (CharacterEditor 위임) ──────────────────────────────────────────
+    public bool TryRecruitCharacter(PlayableCharacterDefinition characterDefinition, out ShelterMemberRuntimeData character, out CharacterActionFailure failure)
+        => Editor.TryRecruitCharacter(characterDefinition, out character, out failure);
+
+    public bool TryRemoveCharacter(string runtimeId, out CharacterActionFailure failure)
+        => Editor.TryRemoveCharacter(runtimeId, out failure);
+
     public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, FacilityAssignmentKind kind, out CharacterActionFailure failure)
         => Editor.TryAssignToFacility(runtimeId, facilityId, roomId, kind, out failure);
 
@@ -122,14 +133,8 @@ public class CharacterManager : MonoBehaviour, ICharacterDataContext
     public bool TrySetCurrentHp(string runtimeId, int currentHp, out CharacterActionFailure failure)
         => Editor.TrySetCurrentHp(runtimeId, currentHp, out failure);
 
-    public bool TrySetInjuryState(string runtimeId, PlayerInjuryState injuryState, out CharacterActionFailure failure)
-        => Editor.TrySetInjuryState(runtimeId, injuryState, out failure);
-
     public bool TrySetInjuryGauge(string runtimeId, float injuryGauge, out CharacterActionFailure failure)
         => Editor.TrySetInjuryGauge(runtimeId, injuryGauge, out failure);
-
-    public bool TryRefreshInjuryState(string runtimeId, out CharacterActionFailure failure)
-        => Editor.TryRefreshInjuryState(runtimeId, out failure);
 
     public bool TryApplyDamage(string runtimeId, int damage, out CharacterActionFailure failure)
         => Editor.TryApplyDamage(runtimeId, damage, out failure);
@@ -159,6 +164,12 @@ public class CharacterManager : MonoBehaviour, ICharacterDataContext
     {
         DataSource?.MarkDirty();
         CharacterChanged?.Invoke(character);
+        CharactersChanged?.Invoke();
+    }
+
+    private void NotifyCharactersChanged()
+    {
+        DataSource?.MarkDirty();
         CharactersChanged?.Invoke();
     }
 }

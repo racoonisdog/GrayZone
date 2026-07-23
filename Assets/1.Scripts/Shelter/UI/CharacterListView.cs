@@ -64,6 +64,38 @@ public class CharacterListView : MonoBehaviour
     }
 
     /// <summary>
+    /// 같은 Scroll View와 행 프리팹을 사용해 제조 레시피 후보를 표시합니다.
+    /// </summary>
+    public void BindRecipes(
+        IReadOnlyList<ManufacturingRecipeDefinition> recipes,
+        Func<ManufacturingRecipeDefinition, bool> isSelectable,
+        Action<string> onClicked)
+    {
+        Clear();
+
+        if (recipes == null || rowPrefab == null)
+            return;
+
+        Transform parent = ResolveContentRoot();
+        for (int i = 0; i < recipes.Count; i++)
+        {
+            ManufacturingRecipeDefinition recipe = recipes[i];
+            if (recipe == null || string.IsNullOrWhiteSpace(recipe.RecipeId))
+                continue;
+
+            GameObject rowObject = Instantiate(rowPrefab, parent);
+            ManufacturingRecipeListItemView rowView =
+                rowObject.GetComponent<ManufacturingRecipeListItemView>();
+            if (rowView == null)
+                rowView = rowObject.AddComponent<ManufacturingRecipeListItemView>();
+
+            rowObject.SetActive(true);
+            rowView.Bind(recipe, isSelectable?.Invoke(recipe) ?? true, onClicked);
+            spawnedRows.Add(rowObject);
+        }
+    }
+
+    /// <summary>
     /// 현재 생성된 모든 캐릭터 행을 제거
     /// </summary>
     public void Clear()

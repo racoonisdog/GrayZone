@@ -81,7 +81,7 @@ public class MedicalStaffSlotController : MonoBehaviour
                 continue;
 
             bool isUnlocked = i < unlockedSlotCount;
-            slotView.Bind(isUnlocked, HandleSlotClicked);
+            slotView.Bind(isUnlocked, HandleSlotClicked, HandleCancelClicked);
         }
     }
 
@@ -92,19 +92,24 @@ public class MedicalStaffSlotController : MonoBehaviour
             return;
 
         if (slot.HasHelper)
-        {
-            // 점유 슬롯 → 배치 취소 (별도 취소 버튼 없음)
-            if (manager.TryReleaseHelper(slot.HelperRuntimeId))
-            {
-                slot.ClearHelper();
-                HideCandidateList();
-            }
             return;
-        }
 
         // 빈 슬롯 → 후보 목록 열기 (이 슬롯을 배치 대상으로 기억)
         m_pendingSlot = slot;
         RefreshCandidates();
+    }
+
+    private void HandleCancelClicked(MedicalStaffSlotView slot)
+    {
+        MedicalManager manager = CacheMedicalManager();
+        if (slot == null || manager == null || !slot.HasHelper)
+            return;
+
+        if (manager.TryReleaseHelper(slot.HelperRuntimeId))
+        {
+            slot.ClearHelper();
+            HideCandidateList();
+        }
     }
 
     private void RefreshCandidates()

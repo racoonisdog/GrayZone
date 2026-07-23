@@ -12,6 +12,9 @@ public enum ShelterUIType
     /// <summary>의료 시설 UI가 열려 있음</summary>
     Medical,
 
+    /// <summary>제조 시설 UI가 열려 있음</summary>
+    Manufacturing,
+
     /// <summary>시설 업그레이드 UI가 열려 있음</summary>
     FacilityUpgrade
 }
@@ -27,6 +30,9 @@ public class UIManager : MonoBehaviour
 
     [Header("Medical UI")]
     [SerializeField] private MedicalUI m_medicalUI;
+
+    [Header("Manufacturing UI")]
+    [SerializeField] private ManufacturingUI m_manufacturingUI;
 
     [Header("Facility Upgrade UI")]
     [SerializeField] private FacilityUpgradeUI m_facilityUpgradeUI;
@@ -52,6 +58,8 @@ public class UIManager : MonoBehaviour
 
     private void Awake()
     {
+        CacheManufacturingUI();
+
         // The manager object should stay active; only the assigned UI object is hidden.
         if (m_hideInteractionUIOnAwake)
             HideInteraction();
@@ -62,6 +70,10 @@ public class UIManager : MonoBehaviour
         if (m_medicalUI != null)
             m_medicalUI.Closed += HandleMedicalUIClosed;
 
+        ManufacturingUI manufacturingUI = CacheManufacturingUI();
+        if (manufacturingUI != null)
+            manufacturingUI.Closed += HandleManufacturingUIClosed;
+
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed += HandleFacilityUpgradeUIClosed;
     }
@@ -70,6 +82,9 @@ public class UIManager : MonoBehaviour
     {
         if (m_medicalUI != null)
             m_medicalUI.Closed -= HandleMedicalUIClosed;
+
+        if (m_manufacturingUI != null)
+            m_manufacturingUI.Closed -= HandleManufacturingUIClosed;
 
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed -= HandleFacilityUpgradeUIClosed;
@@ -85,7 +100,7 @@ public class UIManager : MonoBehaviour
     public void SetInteractionTarget(GameObject target)
     {
         if (target != m_currentInteractionTarget)
-            CloseMedicalUI();
+            CloseCurrentFacilityUI();
 
         // PlayerInteractor calls this whenever its CurrentTarget changes.
         if (target != null)
@@ -150,6 +165,9 @@ public class UIManager : MonoBehaviour
             case FacilityInteractionType.Medical:
                 OpenMedicalUI(interactionPoint);
                 return true;
+            case FacilityInteractionType.Manufactur:
+                OpenManufacturingUI(interactionPoint);
+                return true;
             default:
                 return false;
         }
@@ -195,6 +213,42 @@ public class UIManager : MonoBehaviour
         SetActiveUI(ShelterUIType.None);
     }
 
+    /// <summary>제조 시설 상호작용 지점에서 제조 UI를 엽니다.</summary>
+    public void OpenManufacturingUI(FacilityInteractionPoint interactionPoint)
+    {
+        ManufacturingUI manufacturingUI = CacheManufacturingUI();
+        if (manufacturingUI == null)
+        {
+            Debug.LogWarning("[UI] Manufacturing UI is not assigned.", this);
+            return;
+        }
+
+        if (interactionPoint == null)
+            return;
+
+        if (!interactionPoint.TryGetFacility(out ManufacturingManager manufacturingManager))
+        {
+            Debug.LogWarning("[UI] Manufacturing Manager is not found.", interactionPoint);
+            return;
+        }
+
+        SetInteractionUIActive(false);
+        manufacturingUI.Open(manufacturingManager);
+        SetActiveUI(ShelterUIType.Manufacturing);
+
+        if (m_logMessages)
+            Debug.Log($"[UI] Open Manufacturing UI : {interactionPoint.name}", interactionPoint);
+    }
+
+    /// <summary>제조 UI를 닫고 활성 UI 상태를 비웁니다.</summary>
+    public void CloseManufacturingUI()
+    {
+        if (m_manufacturingUI != null)
+            m_manufacturingUI.Close();
+
+        SetActiveUI(ShelterUIType.None);
+    }
+
     /// <summary>
     /// 시설 ID에 해당하는 공용 업그레이드 UI를 연다.
     /// </summary>
@@ -216,6 +270,7 @@ public class UIManager : MonoBehaviour
         if (m_activeUI != ShelterUIType.FacilityUpgrade)
             m_returnUIAfterFacilityUpgrade = m_activeUI;
 
+        FindFirstObjectByType<CharacterCandidateListPanel>(FindObjectsInactive.Include)?.Dismiss();
         SetInteractionUIActive(false);
         m_facilityUpgradeUI.Open(facilityId);
         SetActiveUI(ShelterUIType.FacilityUpgrade);
@@ -244,6 +299,12 @@ public class UIManager : MonoBehaviour
             SetActiveUI(ShelterUIType.None);
     }
 
+    private void HandleManufacturingUIClosed()
+    {
+        if (m_activeUI == ShelterUIType.Manufacturing)
+            SetActiveUI(ShelterUIType.None);
+    }
+
     private void HandleFacilityUpgradeUIClosed()
     {
         if (m_activeUI == ShelterUIType.FacilityUpgrade)
@@ -261,7 +322,32 @@ public class UIManager : MonoBehaviour
             returnUI = ShelterUIType.None;
         }
 
+        if (returnUI == ShelterUIType.Manufacturing
+            && (m_manufacturingUI == null || !m_manufacturingUI.IsOpen))
+        {
+            returnUI = ShelterUIType.None;
+        }
+
         SetActiveUI(returnUI);
+    }
+
+    private void CloseCurrentFacilityUI()
+    {
+        if (m_activeUI == ShelterUIType.Medical)
+            CloseMedicalUI();
+        else if (m_activeUI == ShelterUIType.Manufacturing)
+            CloseManufacturingUI();
+    }
+
+    private ManufacturingUI CacheManufacturingUI()
+    {
+        if (m_manufacturingUI == null)
+        {
+            m_manufacturingUI =
+                FindFirstObjectByType<ManufacturingUI>(FindObjectsInactive.Include);
+        }
+
+        return m_manufacturingUI;
     }
 
     private void SetInteractionUIActive(bool active)

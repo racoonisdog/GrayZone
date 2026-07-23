@@ -16,7 +16,8 @@ public enum CharacterEditCapability
     SkillChange = 1 << 2,
     EquipmentUpgrade = 1 << 3,
     HealthChange = 1 << 4,
-    All = FacilityAssignment | EquipmentChange | SkillChange | EquipmentUpgrade | HealthChange
+    RosterChange = 1 << 5,
+    All = FacilityAssignment | EquipmentChange | SkillChange | EquipmentUpgrade | HealthChange | RosterChange
 }
 
 /// <summary>캐릭터 조회 시 적용할 필터.</summary>
@@ -35,7 +36,9 @@ public enum CharacterActionFailure
     DataSourceUnavailable,
     ReadOnlyMode,
     CapabilityDisabled,
+    InvalidCharacterDefinition,
     CharacterNotFound,
+    CharacterAddFailed,
     CharacterNotEligible,
     AlreadyAssigned,
     NotAssignedToFacility,

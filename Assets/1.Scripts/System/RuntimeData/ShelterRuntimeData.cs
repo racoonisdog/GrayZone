@@ -73,6 +73,8 @@ public sealed class ShelterRuntimeData
     [SerializeField] private List<string> battleSquadRuntimeIds = new();
     [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
     [SerializeField] private List<ShelterMemberRuntimeData> characters = new();
+    [SerializeField] private ManufacturingRuntimeData manufacturing = new();
+    [SerializeField] private List<ItemStorageEntry> itemStorageEntries = new();
 
     private ResourceStorage resources;
 
@@ -85,6 +87,26 @@ public sealed class ShelterRuntimeData
     public IReadOnlyList<string> BattleSquadRuntimeIds => battleSquadRuntimeIds;
     public IReadOnlyList<FacilityRuntimeState> FacilityStates => facilityStates;
     public IReadOnlyList<ShelterMemberRuntimeData> Characters => characters;
+    public IReadOnlyList<ItemStorageEntry> ItemStorageEntries => itemStorageEntries;
+
+    internal List<ItemStorageEntry> MutableItemStorageEntries
+    {
+        get
+        {
+            itemStorageEntries ??= new List<ItemStorageEntry>();
+            return itemStorageEntries;
+        }
+    }
+
+    public ManufacturingRuntimeData Manufacturing
+    {
+        get
+        {
+            manufacturing ??= new ManufacturingRuntimeData();
+            manufacturing.EnsureValid();
+            return manufacturing;
+        }
+    }
 
     public ResourceStorage Resources
     {
@@ -102,10 +124,13 @@ public sealed class ShelterRuntimeData
         battleSquadRuntimeIds ??= new List<string>();
         facilityStates ??= new List<FacilityRuntimeState>();
         characters ??= new List<ShelterMemberRuntimeData>();
+        itemStorageEntries ??= new List<ItemStorageEntry>();
         _ = Resources;
+        _ = Manufacturing;
 
         NormalizeCharacters();
         NormalizeBattleSquad();
+        NormalizeItemStorageEntries();
         for (int i = facilityStates.Count - 1; i >= 0; i--)
         {
             if (facilityStates[i] == null)
@@ -124,7 +149,9 @@ public sealed class ShelterRuntimeData
             currentDay = CurrentDay,
             battleSquadRuntimeIds = new List<string>(battleSquadRuntimeIds),
             facilityStates = CloneFacilityStates(facilityStates),
-            characters = CloneCharacters(characters)
+            characters = CloneCharacters(characters),
+            manufacturing = Manufacturing.Clone(),
+            itemStorageEntries = CloneItemStorageEntries(itemStorageEntries)
         };
         clone.Resources.CopyFrom(Resources);
         return clone;
@@ -132,15 +159,18 @@ public sealed class ShelterRuntimeData
 
     public void CopyFrom(ShelterRuntimeData source)
     {
-        if (source == null)
+        if (source == null || ReferenceEquals(source, this))
             return;
 
         source.EnsureRuntimeContainers();
+        itemStorageEntries ??= new List<ItemStorageEntry>();
         shelterStability = source.ShelterStability;
         currentDay = source.CurrentDay;
         battleSquadRuntimeIds = new List<string>(source.battleSquadRuntimeIds);
         facilityStates = CloneFacilityStates(source.facilityStates);
         characters = CloneCharacters(source.characters);
+        Manufacturing.CopyFrom(source.Manufacturing);
+        CopyItemStorageEntries(source.itemStorageEntries, itemStorageEntries);
         Resources.CopyFrom(source.Resources);
         EnsureRuntimeContainers();
     }
@@ -148,6 +178,14 @@ public sealed class ShelterRuntimeData
     public void SetShelterStability(int stability) => shelterStability = Mathf.Clamp(stability, 0, 100);
 
     public void SetCurrentDay(int day) => currentDay = Mathf.Max(1, day);
+
+    /// <summary>현재 보유 아이템 목록을 깊은 복사해 셸터 작업 데이터에 적용합니다.</summary>
+    public void SetItemStorageEntries(IEnumerable<ItemStorageEntry> entries)
+    {
+        itemStorageEntries ??= new List<ItemStorageEntry>();
+        CopyItemStorageEntries(entries, itemStorageEntries);
+        NormalizeItemStorageEntries();
+    }
 
     public void ApplySavedState(
         int day,
@@ -365,6 +403,61 @@ public sealed class ShelterRuntimeData
                 clone.Add(character.Clone());
         }
         return clone;
+    }
+
+    private void NormalizeItemStorageEntries()
+    {
+        List<ItemStorageEntry> normalized = new List<ItemStorageEntry>();
+        Dictionary<string, int> entryIndexes = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (ItemStorageEntry entry in itemStorageEntries)
+        {
+            if (entry == null)
+                continue;
+
+            entry.EnsureValid();
+            if (!entry.IsValid)
+                continue;
+
+            if (!entryIndexes.TryGetValue(entry.ItemDefinitionId, out int existingIndex))
+            {
+                entryIndexes.Add(entry.ItemDefinitionId, normalized.Count);
+                normalized.Add(entry.Clone());
+                continue;
+            }
+
+            long combinedQuantity = (long)normalized[existingIndex].Quantity + entry.Quantity;
+            normalized[existingIndex] = new ItemStorageEntry(
+                entry.ItemDefinitionId,
+                combinedQuantity > int.MaxValue ? int.MaxValue : (int)combinedQuantity);
+        }
+
+        itemStorageEntries.Clear();
+        itemStorageEntries.AddRange(normalized);
+    }
+
+    private static List<ItemStorageEntry> CloneItemStorageEntries(IEnumerable<ItemStorageEntry> source)
+    {
+        List<ItemStorageEntry> clone = new List<ItemStorageEntry>();
+        if (source == null)
+            return clone;
+
+        foreach (ItemStorageEntry entry in source)
+        {
+            if (entry != null && entry.IsValid)
+                clone.Add(entry.Clone());
+        }
+
+        return clone;
+    }
+
+    private static void CopyItemStorageEntries(
+        IEnumerable<ItemStorageEntry> source,
+        List<ItemStorageEntry> destination)
+    {
+        List<ItemStorageEntry> clone = CloneItemStorageEntries(source);
+        destination.Clear();
+        destination.AddRange(clone);
     }
 
     private static List<FacilityRuntimeState> CloneFacilityStates(IEnumerable<FacilityRuntimeState> source)

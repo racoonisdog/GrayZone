@@ -15,8 +15,17 @@ public interface ICharacterDataContext
     /// <summary>현재 활성화된 편집 능력 플래그.</summary>
     CharacterEditCapability EnabledCapabilities { get; }
 
+    /// <summary>캐릭터 작업 목록에 새 캐릭터를 추가한다.</summary>
+    bool TryAddCharacter(ShelterMemberRuntimeData character);
+
+    /// <summary>캐릭터 작업 목록에서 런타임 ID에 해당하는 캐릭터를 제거한다.</summary>
+    bool TryRemoveCharacter(string runtimeId);
+
     /// <summary>
     /// 캐릭터가 변경되었음을 알린다. 파사드가 DataSource.MarkDirty + CharacterChanged/CharactersChanged 이벤트를 발행한다.
     /// </summary>
     void NotifyCharacterChanged(ShelterMemberRuntimeData character);
+
+    /// <summary>캐릭터 목록 구성이 변경됐음을 알린다.</summary>
+    void NotifyCharactersChanged();
 }

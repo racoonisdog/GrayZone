@@ -68,12 +68,54 @@ public class CharacterCandidateListPanel : MonoBehaviour
     }
 
     /// <summary>
+    /// 캐릭터 후보와 같은 Scroll View를 제조 레시피 선택 목록으로 사용합니다.
+    /// 잠긴 레시피도 표시하되 선택할 수 없게 바인딩합니다.
+    /// </summary>
+    public void OpenRecipes(
+        object requester,
+        IReadOnlyList<ManufacturingRecipeDefinition> recipes,
+        Func<ManufacturingRecipeDefinition, bool> isSelectable,
+        Action<string> onSelected)
+    {
+        if (requester == null)
+            return;
+
+        CacheReferences();
+
+        object previous = m_currentRequester;
+        m_currentRequester = requester;
+        SetVisible(true);
+
+        if (m_listScript != null)
+            m_listScript.BindRecipes(recipes, isSelectable, onSelected);
+
+        if (previous != null && !ReferenceEquals(previous, requester))
+            ClosedBy?.Invoke(previous);
+    }
+
+    /// <summary>
     /// 요청자가 자기가 연 목록을 닫음. 소유자가 아니면 무시
     /// </summary>
     /// <param name="requester">닫기를 요청한 시설 UI</param>
     public void Close(object requester)
     {
         if (!IsOpenFor(requester))
+            return;
+
+        object previous = m_currentRequester;
+        m_currentRequester = null;
+
+        if (m_listScript != null)
+            m_listScript.Clear();
+
+        SetVisible(false);
+        ClosedBy?.Invoke(previous);
+    }
+
+    /// <summary>현재 요청자가 누구인지와 관계없이 공용 후보 패널을 닫습니다.</summary>
+    public void Dismiss()
+    {
+        if (m_currentRequester == null)
             return;
 
         object previous = m_currentRequester;
