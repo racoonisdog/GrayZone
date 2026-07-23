@@ -82,6 +82,16 @@ public class MainSceneSaveManager : MonoBehaviour
             }
         };
 
+        // Temporary test resources. Remove when new-game resource defaults are designed.
+        foreach (CurrencyType type in System.Enum.GetValues(typeof(CurrencyType)))
+        {
+            saveData.shared.resources.Add(new SaveData.ResourceAmountData
+            {
+                type = type,
+                amount = 9999
+            });
+        }
+
         AddStartingCharacters(saveData.shared);
         AddStartingFacilities(saveData.shelter);
         return saveData;
