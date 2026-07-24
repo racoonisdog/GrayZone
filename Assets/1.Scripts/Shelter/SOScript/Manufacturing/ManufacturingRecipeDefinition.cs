@@ -72,6 +72,9 @@ public sealed class ManufacturingRecipeDefinition : ScriptableObject
     public string DisplayName => m_resultItem != null
         ? m_resultItem.DisplayName
         : name;
+    public string Info => m_resultItem != null
+        ? m_resultItem.Info
+        : string.Empty;
     public Sprite Icon => m_resultItem != null ? m_resultItem.Icon : null;
     public ItemCategory Category => m_resultItem != null
         ? m_resultItem.Category

@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
 /// 제조 레시피 목록 필터링에 사용하는 임시 아이템 분류입니다.
@@ -27,11 +27,14 @@ public sealed class ItemDefinition : ScriptableObject
 
     [Header("Presentation")]
     [SerializeField] private string m_displayName = string.Empty;
+    [TextArea(2, 6)]
+    [SerializeField] private string m_info = string.Empty;
     [SerializeField] private Sprite m_icon;
     [SerializeField] private ItemCategory m_category = ItemCategory.Miscellaneous;
 
     public string ItemDefinitionId => m_itemDefinitionId;
     public string DisplayName => string.IsNullOrWhiteSpace(m_displayName) ? name : m_displayName;
+    public string Info => m_info;
     public Sprite Icon => m_icon;
     public ItemCategory Category => m_category;
 
@@ -39,5 +42,6 @@ public sealed class ItemDefinition : ScriptableObject
     {
         m_itemDefinitionId = m_itemDefinitionId?.Trim() ?? string.Empty;
         m_displayName = m_displayName?.Trim() ?? string.Empty;
+        m_info = m_info?.Trim() ?? string.Empty;
     }
 }
