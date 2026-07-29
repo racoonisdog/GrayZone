@@ -1,41 +1,26 @@
-﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Serialization;
 
 /// <summary>
-/// Enemy의 탐색, 경계, 추적, 공격, 피격, 사망 상태 전환을 제어하는 메인 컨트롤러입니다.
+/// Enemy 행동을 엄브렐라 HFSM으로 오케스트레이션하는 호스트입니다.
 /// </summary>
 /// <remarks>
-/// 대상 탐지는 <see cref="EnemyTargetSensor"/>, 공격 판정은 <see cref="EnemyAttack"/>, 체력 처리는 <see cref="EnemyHealth"/>에 위임합니다.
+/// 상태 전이는 <see cref="TransitionTo"/>로 처리하고, 이산 자극(피격/사망)은 이벤트로 전이를 요청합니다(하이브리드 트리거).
+/// 감지·공격·체력은 각각 <see cref="EnemyTargetSensor"/>, <see cref="EnemyAttack"/>, <see cref="EnemyHealth"/>에 위임합니다.
+/// 밸런스 수치는 <see cref="EnemyBalanceSO"/>가 있으면 <see cref="ApplyBalance"/>로 각 모듈에 주입하고, 없으면 직렬화 기본값을 유지합니다.
+/// 슬라이스 1(뼈대): 상태 패턴 배선·전이·엄브렐라 구조만. 각 상태의 실제 행동(Tick 본문)·타이머·전이 조건·<see cref="MoveTo"/> 구현은 후속 슬라이스.
+/// 설계 근거: privateDoc ENEMY_SYSTEM_DESIGN.md §5~6(행동), §1(밸런스).
 /// </remarks>
 [RequireComponent(typeof(EnemyHealth))]
 [RequireComponent(typeof(EnemyTargetSensor))]
 [RequireComponent(typeof(EnemyAttack))]
 public class EnemyController : MonoBehaviour
 {
-    /// <summary>
-    /// Enemy가 현재 수행 중인 행동 상태입니다.
-    /// </summary>
-    public enum EnemyState
-    {
-        /// <summary>스폰 지점 주변을 배회하는 상태입니다.</summary>
-        Wander,
-
-        /// <summary>대상을 발견한 직후 잠시 바라보며 반응하는 상태입니다.</summary>
-        Alert,
-
-        /// <summary>현재 대상을 추적하는 상태입니다.</summary>
-        Chase,
-
-        /// <summary>공격 애니메이션과 피해 판정을 처리하는 상태입니다.</summary>
-        Attack,
-
-        /// <summary>피격 경직을 처리하는 상태입니다.</summary>
-        Hit,
-
-        /// <summary>사망 후 정리 루틴을 처리하는 상태입니다.</summary>
-        Dead
-    }
+    [Header("Balance Data")]
+    [Tooltip("선택 사항인 적 밸런스 데이터입니다. 지정하면 아래 레거시 기본값보다 우선 적용됩니다.")]
+    [FormerlySerializedAs("m_balance")]
+    [SerializeField] private EnemyBalanceSO m_balanceSO;
 
     [Header("Move")]
     /// <summary>스폰 지점을 기준으로 배회 목적지를 고를 반경입니다.</summary>
@@ -57,8 +42,15 @@ public class EnemyController : MonoBehaviour
     /// <summary>대상을 처음 발견했을 때 경계 상태에 머무는 시간입니다.</summary>
     [SerializeField] private float alertDuration = 0.5f;
 
-    /// <summary>대상을 마지막으로 본 뒤 추적을 포기하기까지의 지연 시간입니다.</summary>
+    /// <summary>시야에서 벗어난 뒤에도 대상의 실시간 위치를 계속 아는 시간입니다.</summary>
     [SerializeField] private float loseSightDelay = 2f;
+
+    [Header("Target")]
+    /// <summary>현재 대상을 다시 고를지 판단하는 주기입니다. 이 주기가 곧 대상의 최소 유지 시간입니다.</summary>
+    [SerializeField] private float targetReevaluateInterval = 1f;
+
+    /// <summary>새 후보가 현재 대상보다 이만큼 더 가까워야 대상을 바꿉니다.</summary>
+    [SerializeField] private float targetSwitchPathDistanceDelta = 2f;
 
     [Header("Hit")]
     /// <summary>피격 상태에서 이동과 상태 전환을 잠그는 시간입니다.</summary>
@@ -67,10 +59,23 @@ public class EnemyController : MonoBehaviour
     /// <summary>연속 피격 시 Hit 상태를 다시 시작할 수 있는 최소 간격입니다.</summary>
     [SerializeField] private float hitStunCooldown = 0.2f;
 
+    [Header("Attack Timing")]
+    /// <summary>공격 시작 후 방향을 확정하는 시점입니다. 이후에는 대상을 따라 회전하지 않습니다.</summary>
+    [SerializeField] private float attackDirectionLockTime = 0.25f;
+
+    /// <summary>공격 시작 후 공간 판정을 수행하는 시점입니다.</summary>
+    [SerializeField] private float attackImpactTime = 0.45f;
+
+    /// <summary>판정 후 다음 행동까지의 후딜레이입니다. 이 값이 곧 공격 간격입니다.</summary>
+    [SerializeField] private float attackRecoveryDuration = 0.75f;
+
     [Header("Dead")]
     /// <summary>사망 애니메이션 이후 Enemy 오브젝트를 제거하기까지 기다리는 시간입니다.</summary>
     [SerializeField] private float destroyDelay = 3f;
 
+    // =========================
+    // 컴포넌트 참조
+    // =========================
     /// <summary>Enemy의 NavMesh 이동을 담당하는 컴포넌트입니다.</summary>
     private NavMeshAgent agent;
 
@@ -86,59 +91,144 @@ public class EnemyController : MonoBehaviour
     /// <summary>공격 가능 여부, 쿨다운, 실제 피해 적용을 담당하는 공격 모듈입니다.</summary>
     private EnemyAttack enemyAttack;
 
-    /// <summary>배회 기준점으로 사용하는 최초 활성 위치입니다.</summary>
-    private Vector3 spawnPosition;
+    // =========================
+    // 최상위 상태 인스턴스 (상태 간 전이에 사용)
+    // =========================
+    /// <summary>비전투 배회 상태입니다.</summary>
+    public WanderState Wander { get; private set; }
 
-    /// <summary>현재 NavMeshAgent에 지정된 배회 목적지입니다.</summary>
-    private Vector3 currentWanderPoint;
+    /// <summary>교전 엄브렐라 상태입니다.</summary>
+    public CombatState Combat { get; private set; }
 
-    /// <summary>다음 배회 목적지 갱신 가능 시각입니다.</summary>
-    private float nextWanderTime;
+    /// <summary>처치 상태입니다.</summary>
+    public DeadState Dead { get; private set; }
+    // 각성 준비(AwakenState)·경직(HitState)은 각각 슬라이스 2·4에서 추가.
 
-    /// <summary>다음 피격 경직 진입 가능 시각입니다.</summary>
-    private float nextHitTime;
+    /// <summary>현재 활성 상태입니다.</summary>
+    private EnemyStateBase m_current;
 
-    /// <summary>대상을 마지막으로 시야 안에서 확인한 시각입니다.</summary>
-    private float lastSeenTime;
+    /// <summary>현재 활성 상태입니다.</summary>
+    public EnemyStateBase Current => m_current;
 
-    /// <summary>공격, 경계, 피격처럼 짧은 루틴 동안 상태 전환을 막는 플래그입니다.</summary>
-    private bool isStateLocked;
+    // =========================
+    // 상태가 읽어 쓰는 접근자 (튜닝 수치는 컨트롤러가 소유, 상태는 읽기만)
+    // =========================
+    /// <summary>NavMesh 이동 컴포넌트입니다.</summary>
+    public NavMeshAgent Agent => agent;
 
-    /// <summary>사망 루틴이 시작되었는지 여부입니다.</summary>
-    private bool isDead;
+    /// <summary>애니메이터입니다.</summary>
+    public Animator Animator => animator;
 
-    /// <summary>시야 밖에서 피해를 받아도 추적 상태로 전환해야 하는지 여부입니다.</summary>
-    private bool isProvokedByDamage;
+    /// <summary>체력 컴포넌트입니다.</summary>
+    public EnemyHealth Health => enemyHealth;
 
-    /// <summary>공격 코루틴이 이미 진행 중인지 여부입니다.</summary>
-    private bool isAttacking;
+    /// <summary>대상 감지 센서입니다.</summary>
+    public EnemyTargetSensor Sensor => targetSensor;
 
-    /// <summary>현재 Enemy 상태입니다.</summary>
-    private EnemyState currentState = EnemyState.Wander;
+    /// <summary>공격 모듈입니다.</summary>
+    public EnemyAttack Attack => enemyAttack;
 
-    /// <summary>외부에서 읽을 수 있는 현재 Enemy 상태입니다.</summary>
-    public EnemyState CurrentState => currentState;
+    /// <summary>배회 목적지 반경입니다.</summary>
+    public float WanderRadius => wanderRadius;
 
-    /// <summary>현재 체력입니다. 체력 컴포넌트가 없으면 0을 반환합니다.</summary>
+    /// <summary>배회 목적지 갱신 주기입니다.</summary>
+    public float WanderInterval => wanderInterval;
+
+    /// <summary>배회 이동 속도입니다.</summary>
+    public float WanderSpeed => wanderSpeed;
+
+    /// <summary>추적 이동 속도입니다.</summary>
+    public float ChaseSpeed => chaseSpeed;
+
+    /// <summary>대상 방향 회전 보간 속도입니다.</summary>
+    public float RotationSpeed => rotationSpeed;
+
+    /// <summary>각성 준비(경계) 시간입니다.</summary>
+    public float AlertDuration => alertDuration;
+
+    /// <summary>시야에서 벗어난 뒤 실시간 위치를 계속 아는 시간입니다.</summary>
+    public float LoseSightDelay => loseSightDelay;
+
+    /// <summary>현재 대상 재평가 주기입니다.</summary>
+    public float TargetReevaluateInterval => targetReevaluateInterval;
+
+    /// <summary>대상 교체에 필요한 경로 거리 차이입니다.</summary>
+    public float TargetSwitchPathDistanceDelta => targetSwitchPathDistanceDelta;
+
+    /// <summary>피격 경직 지속 시간입니다.</summary>
+    public float HitStunDuration => hitStunDuration;
+
+    /// <summary>연속 피격 경직 재진입 최소 간격입니다.</summary>
+    public float HitStunCooldown => hitStunCooldown;
+
+    /// <summary>공격 시작 기준 방향 고정 시점입니다.</summary>
+    public float AttackDirectionLockTime => attackDirectionLockTime;
+
+    /// <summary>공격 시작 기준 판정 시점입니다.</summary>
+    public float AttackImpactTime => Mathf.Max(attackDirectionLockTime, attackImpactTime);
+
+    /// <summary>판정 후 후딜레이이며 곧 공격 간격입니다.</summary>
+    public float AttackRecoveryDuration => attackRecoveryDuration;
+
+    /// <summary>사망 후 제거까지 대기 시간입니다.</summary>
+    public float DestroyDelay => destroyDelay;
+
+    /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
+    public EnemyBalanceSO Balance => m_balanceSO;
+
+    /// <summary>현재 HP입니다. 체력 컴포넌트가 없으면 0을 반환합니다.</summary>
     public int CurrentHP => enemyHealth != null ? enemyHealth.CurrentHP : 0;
 
     /// <summary>현재 유효한 추적 대상 스쿼드 멤버입니다.</summary>
-    private SquadMemberController CurrentTarget => targetSensor != null ? targetSensor.CurrentTarget : null;
+    public SquadMemberController CurrentTarget => targetSensor != null ? targetSensor.CurrentTarget : null;
 
-    /// <summary>현재 유효한 추적 대상의 Transform입니다.</summary>
-    private Transform CurrentTargetTransform => targetSensor != null ? targetSensor.CurrentTargetTransform : null;
-
-    /// <summary>
-    /// 필수 컴포넌트 참조를 캐싱합니다.
-    /// </summary>
+    /// <summary>필수 컴포넌트를 캐싱하고 상태 인스턴스를 생성한 뒤 밸런스를 적용합니다.</summary>
     private void Awake()
     {
         CacheReferences();
+        CreateStates();
+        ApplyBalance(m_balanceSO);
     }
 
     /// <summary>
-    /// 활성화될 때 체력 이벤트를 구독합니다.
+    /// 지정한 적 밸런스 데이터를 컨트롤러와 하위 감지·공격·체력 모듈에 적용합니다.
     /// </summary>
+    /// <remarks>
+    /// null이면 기존 컴포넌트 직렬화 기본값을 유지합니다. 최초 Awake에서는 체력 Start 초기화 전에
+    /// 최대 HP만 교체하며, 런타임 재적용 시 현재 HP를 강제로 회복하지 않습니다.
+    /// </remarks>
+    /// <param name="balance">적용할 순수 수치 밸런스 데이터입니다.</param>
+    public void ApplyBalance(EnemyBalanceSO balance)
+    {
+        if (balance == null)
+        {
+            return;
+        }
+
+        m_balanceSO = balance;
+
+        wanderRadius = balance.WanderRadius;
+        wanderInterval = balance.WanderInterval;
+        wanderSpeed = balance.WanderSpeed;
+        chaseSpeed = balance.ChaseSpeed;
+        rotationSpeed = balance.RotationSpeed;
+        alertDuration = balance.AlertDuration;
+        loseSightDelay = balance.LoseSightDelay;
+        targetReevaluateInterval = balance.TargetReevaluateInterval;
+        targetSwitchPathDistanceDelta = balance.TargetSwitchPathDistanceDelta;
+        attackDirectionLockTime = balance.AttackDirectionLockTime;
+        attackImpactTime = balance.AttackImpactTime;
+        attackRecoveryDuration = balance.AttackRecoveryDuration;
+        hitStunDuration = balance.HitStunDuration;
+        hitStunCooldown = balance.HitStunCooldown;
+        destroyDelay = balance.DestroyDelay;
+
+        targetSensor?.ApplyBalance(balance);
+        enemyAttack?.ApplyBalance(balance);
+        enemyHealth?.SetMaxHP(balance.MaxHp);
+    }
+
+    /// <summary>활성화될 때 체력 이벤트를 구독합니다.</summary>
     private void OnEnable()
     {
         CacheReferences();
@@ -152,9 +242,7 @@ public class EnemyController : MonoBehaviour
         enemyHealth.OnDeath += HandleDied;
     }
 
-    /// <summary>
-    /// 비활성화될 때 체력 이벤트 구독을 해제합니다.
-    /// </summary>
+    /// <summary>비활성화될 때 체력 이벤트 구독을 해제합니다.</summary>
     private void OnDisable()
     {
         if (enemyHealth == null)
@@ -166,72 +254,120 @@ public class EnemyController : MonoBehaviour
         enemyHealth.OnDeath -= HandleDied;
     }
 
-    /// <summary>
-    /// 스폰 위치를 기록하고 초기 대상을 찾은 뒤 배회 상태로 진입합니다.
-    /// </summary>
+    /// <summary>초기 상태로 진입합니다.</summary>
     private void Start()
     {
-        CacheReferences();
-
-        spawnPosition = transform.position;
-
-        RefreshTarget(force: true);
-        EnterWanderState();
+        // TODO(슬라이스 2): 휴면/배회 배치 구분, 스폰 기준점 기록.
+        TransitionTo(Wander);
     }
 
-    /// <summary>
-    /// 현재 상태에 맞는 Enemy 행동 루프를 갱신합니다.
-    /// </summary>
+    /// <summary>이동 애니메이션을 갱신하고 현재 상태를 Tick합니다.</summary>
     private void Update()
     {
-        if (isDead)
-            return;
-
-        RefreshTarget();
-
-        UpdateAnimatorMoveSpeed();
-
-        switch (currentState)
-        {
-            case EnemyState.Wander:
-                UpdateWanderState();
-                break;
-
-            case EnemyState.Alert:
-                UpdateAlertState();
-                break;
-
-            case EnemyState.Chase:
-                UpdateChaseState();
-                break;
-
-            case EnemyState.Attack:
-                UpdateAttackState();
-                break;
-
-            case EnemyState.Hit:
-                UpdateHitState();
-                break;
-        }
+        UpdateLocomotionAnimator();
+        m_current?.Tick();
     }
 
-    /// <summary>
-    /// 대상 센서가 추적 대상을 다시 평가하도록 요청합니다.
-    /// </summary>
-    /// <param name="force">true이면 센서의 갱신 주기를 무시하고 즉시 갱신합니다.</param>
-    private void RefreshTarget(bool force = false)
+    /// <summary>NavMeshAgent 속도를 애니메이터 MoveSpeed 파라미터로 전달합니다.</summary>
+    private void UpdateLocomotionAnimator()
     {
-        if (targetSensor == null)
+        if (animator != null && agent != null)
+        {
+            animator.SetFloat(AnimMoveSpeed, agent.velocity.magnitude);
+        }
+    }
+
+    // =========================
+    // 애니메이터 연동
+    // 파라미터 이름을 여기 모아 두어 상태 클래스들이 같은 문자열을 각자 들고 있지 않게 합니다.
+    // =========================
+    private const string AnimMoveSpeed = "MoveSpeed";
+    private const string AnimInAttackRange = "InAttackRange";
+    private const string AnimAttack = "Attack";
+    private const string AnimDead = "Dead";
+
+    /// <summary>공격 애니메이션을 재생합니다.</summary>
+    public void PlayAttackAnimation()
+    {
+        animator?.SetTrigger(AnimAttack);
+    }
+
+    /// <summary>사망 애니메이션을 재생합니다.</summary>
+    public void PlayDeathAnimation()
+    {
+        if (animator == null)
         {
             return;
         }
 
-        targetSensor.RefreshTarget(force);
+        animator.SetBool(AnimInAttackRange, false);
+        animator.SetTrigger(AnimDead);
     }
 
-    /// <summary>
-    /// Enemy 동작에 필요한 컴포넌트를 찾고 없으면 보조 모듈을 추가합니다.
-    /// </summary>
+    /// <summary>공격 사거리 안에 있는지를 애니메이터에 전달합니다.</summary>
+    /// <param name="inRange">사거리 안이면 true입니다.</param>
+    public void SetInAttackRangeAnimation(bool inRange)
+    {
+        animator?.SetBool(AnimInAttackRange, inRange);
+    }
+
+    /// <summary>현재 상태를 빠져나가고 지정한 상태로 진입합니다.</summary>
+    /// <param name="next">전이할 상태입니다.</param>
+    public void TransitionTo(EnemyStateBase next)
+    {
+        if (next == null || next == m_current)
+        {
+            return;
+        }
+
+        m_current?.Exit();
+        m_current = next;
+        m_current.Enter();
+    }
+
+    /// <summary>공격 애니메이션 이벤트에서 호출되어 판정 시점을 알립니다.</summary>
+    /// <remarks>
+    /// 이제 여기서 피해를 넣지 않습니다. 실제 적중은 손에 달린 판정 콜라이더가 결정합니다.
+    /// 이름이 하는 일과 어긋나 보이지만, 기존 클립의 애니메이션 이벤트가 이 이름으로 묶여 있어 그대로 둡니다.
+    /// 클립을 새로 만들 때 이벤트 이름을 정리하면 그때 함께 바꿉니다.
+    /// 상태는 이 통보와 자체 타이머 중 먼저 오는 것을 판정 시점으로 삼고 한 번의 공격에서 한 번만 처리합니다.
+    /// </remarks>
+    public void ApplyAttackDamage()
+    {
+        if (m_current == Dead)
+        {
+            return;
+        }
+
+        Combat?.Attack?.NotifyAnimationImpact();
+    }
+
+    /// <summary>지정한 월드 좌표로 NavMesh 이동을 지시합니다.</summary>
+    /// <param name="worldPosition">이동 목적지 월드 좌표입니다.</param>
+    /// <remarks>이동 속도는 호출 상태가 <c>Agent.speed</c>로 미리 설정합니다(배회/추격 등).</remarks>
+    public void MoveTo(Vector3 worldPosition)
+    {
+        if (agent == null || !agent.isOnNavMesh)
+        {
+            return;
+        }
+
+        agent.isStopped = false;
+        agent.SetDestination(worldPosition);
+    }
+
+    /// <summary>이동을 멈춥니다.</summary>
+    public void StopMoving()
+    {
+        if (agent == null || !agent.isOnNavMesh)
+        {
+            return;
+        }
+
+        agent.isStopped = true;
+    }
+
+    /// <summary>Enemy 동작에 필요한 컴포넌트를 찾고 없으면 보조 모듈을 추가합니다.</summary>
     private void CacheReferences()
     {
         if (agent == null)
@@ -260,534 +396,30 @@ public class EnemyController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// NavMeshAgent 속도를 Animator MoveSpeed 파라미터로 전달합니다.
-    /// </summary>
-    private void UpdateAnimatorMoveSpeed()
+    /// <summary>상태 인스턴스를 생성합니다.</summary>
+    private void CreateStates()
     {
-        if (animator != null && agent != null)
-        {
-            animator.SetFloat("MoveSpeed", agent.velocity.magnitude);
-        }
+        Wander = new WanderState(this);
+        Combat = new CombatState(this);
+        Dead = new DeadState(this);
     }
 
-    // =========================
-    // Wander
-    // =========================
-    /// <summary>
-    /// 배회 상태로 진입하고 새로운 배회 목적지를 설정합니다.
-    /// </summary>
-    private void EnterWanderState()
-    {
-        if (isDead) return;
-
-        currentState = EnemyState.Wander;
-        isStateLocked = false;
-        isProvokedByDamage = false;
-        isAttacking = false;
-
-        if (animator != null)
-        {
-            animator.SetBool("InAttackRange", false);
-        }
-
-        agent.isStopped = false;
-        agent.speed = wanderSpeed;
-
-        SetNewWanderDestination();
-        nextWanderTime = Time.time + wanderInterval;
-    }
-
-    /// <summary>
-    /// 배회 중 대상 발견 여부와 목적지 갱신 시점을 확인합니다.
-    /// </summary>
-    private void UpdateWanderState()
-    {
-        if (CanSeeTarget())
-        {
-            EnterAlertState();
-            return;
-        }
-
-        if (!agent.pathPending)
-        {
-            if (agent.remainingDistance <= agent.stoppingDistance + 0.2f || Time.time >= nextWanderTime)
-            {
-                SetNewWanderDestination();
-                nextWanderTime = Time.time + wanderInterval;
-            }
-        }
-    }
-
-    /// <summary>
-    /// 스폰 위치 주변의 NavMesh 위에서 새 배회 목적지를 선택합니다.
-    /// </summary>
-    private void SetNewWanderDestination()
-    {
-        Vector3 randomDirection = Random.insideUnitSphere * wanderRadius;
-        randomDirection += spawnPosition;
-        randomDirection.y = transform.position.y;
-
-        if (NavMesh.SamplePosition(randomDirection, out NavMeshHit hit, wanderRadius, NavMesh.AllAreas))
-        {
-            currentWanderPoint = hit.position;
-            agent.SetDestination(currentWanderPoint);
-        }
-        else
-        {
-            currentWanderPoint = transform.position;
-            agent.SetDestination(currentWanderPoint);
-        }
-    }
-
-    // =========================
-    // Alert
-    // =========================
-    /// <summary>
-    /// 경계 상태로 진입해 이동을 멈추고 대상을 바라보는 루틴을 시작합니다.
-    /// </summary>
-    private void EnterAlertState()
-    {
-        if (isDead) return;
-
-        currentState = EnemyState.Alert;
-        isStateLocked = true;
-        isAttacking = false;
-
-        agent.isStopped = true;
-        StartCoroutine(AlertRoutine());
-    }
-
-    /// <summary>
-    /// 경계 시간 동안 대상을 바라본 뒤 시야 여부에 따라 추적 또는 배회로 전환합니다.
-    /// </summary>
-    private IEnumerator AlertRoutine()
-    {
-        float timer = 0f;
-
-        while (timer < alertDuration)
-        {
-            RefreshTarget(force: true);
-
-            Transform targetTransform = CurrentTargetTransform;
-            if (targetTransform != null)
-            {
-                RotateTowards(targetTransform.position);
-            }
-
-            timer += Time.deltaTime;
-            yield return null;
-        }
-
-        isStateLocked = false;
-
-        if (CanSeeTarget())
-        {
-            EnterChaseState();
-        }
-        else
-        {
-            EnterWanderState();
-        }
-    }
-
-    /// <summary>
-    /// 경계 상태가 유지되는 동안 현재 대상을 바라봅니다.
-    /// </summary>
-    private void UpdateAlertState()
-    {
-        Transform targetTransform = CurrentTargetTransform;
-        if (targetTransform != null)
-        {
-            RotateTowards(targetTransform.position);
-        }
-    }
-
-    // =========================
-    // Chase
-    // =========================
-    /// <summary>
-    /// 추적 상태로 진입하고 현재 대상 위치를 NavMeshAgent 목적지로 설정합니다.
-    /// </summary>
-    private void EnterChaseState()
-    {
-        if (isDead) return;
-
-        currentState = EnemyState.Chase;
-        isAttacking = false;
-
-        SquadMemberController target = CurrentTarget;
-        Transform targetTransform = CurrentTargetTransform;
-        bool inAttackRange = enemyAttack != null && enemyAttack.IsTargetInRange(transform.position, target);
-
-        if (animator != null)
-        {
-            animator.SetBool("InAttackRange", inAttackRange);
-        }
-
-        agent.isStopped = false;
-        agent.speed = chaseSpeed;
-
-        if (targetTransform != null)
-        {
-            agent.SetDestination(targetTransform.position);
-            lastSeenTime = Time.time;
-        }
-    }
-
-    /// <summary>
-    /// 대상 위치, 시야 유지, 공격 거리 진입 여부를 갱신합니다.
-    /// </summary>
-    private void UpdateChaseState()
-    {
-        SquadMemberController target = CurrentTarget;
-        Transform targetTransform = CurrentTargetTransform;
-
-        if (target == null || targetTransform == null)
-        {
-            if (animator != null)
-            {
-                animator.SetBool("InAttackRange", false);
-            }
-
-            RefreshTarget(force: true);
-            target = CurrentTarget;
-            targetTransform = CurrentTargetTransform;
-
-            if (target == null || targetTransform == null)
-            {
-                EnterWanderState();
-                return;
-            }
-        }
-
-        if (CanSeeTarget())
-        {
-            lastSeenTime = Time.time;
-            agent.SetDestination(targetTransform.position);
-        }
-
-        bool inAttackRange = enemyAttack != null && enemyAttack.IsTargetInRange(transform.position, target);
-
-        if (animator != null)
-        {
-            animator.SetBool("InAttackRange", inAttackRange);
-        }
-
-        if (inAttackRange)
-        {
-            if (CanAttack())
-            {
-                StartCoroutine(AttackRoutine());
-            }
-            return;
-        }
-
-        if (Time.time - lastSeenTime > loseSightDelay)
-        {
-            EnterWanderState();
-        }
-    }
-
-    // =========================
-    // Attack
-    // =========================
-    /// <summary>
-    /// 현재 상태와 공격 모듈 기준으로 공격을 시작할 수 있는지 확인합니다.
-    /// </summary>
-    private bool CanAttack()
-    {
-        if (isDead) return false;
-        if (isStateLocked) return false;
-
-        return enemyAttack != null && enemyAttack.CanAttack(transform.position, CurrentTarget);
-    }
-
-    /// <summary>
-    /// 공격 상태를 잠그고 공격 애니메이션 트리거와 쿨다운을 처리합니다.
-    /// </summary>
-    private IEnumerator AttackRoutine()
-    {
-        if (isAttacking || isDead)
-            yield break;
-
-        isAttacking = true;
-        currentState = EnemyState.Attack;
-        isStateLocked = true;
-
-        agent.isStopped = true;
-        enemyAttack?.StartCooldown();
-
-        Transform targetTransform = CurrentTargetTransform;
-        if (targetTransform != null)
-        {
-            RotateTowards(targetTransform.position);
-        }
-
-        if (animator != null)
-        {
-            animator.SetTrigger("Attack");
-        }
-
-        float lockDuration = enemyAttack != null ? enemyAttack.AttackLockDuration : 0.0f;
-        yield return new WaitForSeconds(lockDuration);
-
-        isStateLocked = false;
-        isAttacking = false;
-
-        if (isDead)
-            yield break;
-
-        RefreshTarget(force: true);
-        targetTransform = CurrentTargetTransform;
-
-        if (targetTransform == null)
-        {
-            EnterWanderState();
-            yield break;
-        }
-
-        if (enemyAttack == null || !enemyAttack.IsTargetInRange(transform.position, CurrentTarget))
-        {
-            EnterChaseState();
-        }
-    }
-
-    /// <summary>
-    /// 공격 상태에서 대상 이탈, 재공격 가능 여부, 추적 전환 여부를 갱신합니다.
-    /// </summary>
-    private void UpdateAttackState()
-    {
-        SquadMemberController target = CurrentTarget;
-        Transform targetTransform = CurrentTargetTransform;
-
-        if (target == null || targetTransform == null)
-        {
-            if (animator != null)
-            {
-                animator.SetBool("InAttackRange", false);
-            }
-
-            RefreshTarget(force: true);
-            target = CurrentTarget;
-            targetTransform = CurrentTargetTransform;
-
-            if (target == null || targetTransform == null)
-            {
-                EnterWanderState();
-                return;
-            }
-        }
-
-        RotateTowards(targetTransform.position);
-
-        bool inAttackRange = enemyAttack != null && enemyAttack.IsTargetInRange(transform.position, target);
-
-        if (animator != null)
-        {
-            animator.SetBool("InAttackRange", inAttackRange);
-        }
-
-        if (!inAttackRange)
-        {
-            EnterChaseState();
-            return;
-        }
-
-        if (!isAttacking && !isStateLocked && enemyAttack != null && enemyAttack.IsCooldownComplete)
-        {
-            StartCoroutine(AttackRoutine());
-        }
-    }
-
-    /// <summary>
-    /// 공격 애니메이션 이벤트에서 호출되어 실제 피해 판정을 수행합니다.
-    /// </summary>
-    public void ApplyAttackDamage()
-    {
-        if (isDead) return;
-
-        enemyAttack?.ApplyAttackDamage(CurrentTarget);
-    }
-
-    // =========================
-    // Hit
-    // =========================
-    /// <summary>
-    /// 피격 상태로 진입하고 경직 애니메이션과 복귀 루틴을 시작합니다.
-    /// </summary>
-    private void EnterHitState()
-    {
-        if (isDead) return;
-
-        currentState = EnemyState.Hit;
-        isStateLocked = true;
-        isAttacking = false;
-        agent.isStopped = true;
-
-        if (animator != null)
-        {
-            animator.SetTrigger("Hit");
-        }
-
-        StartCoroutine(HitRoutine());
-    }
-
-    /// <summary>
-    /// 피격 경직이 끝난 뒤 도발 여부와 시야 상태에 따라 다음 상태를 결정합니다.
-    /// </summary>
-    private IEnumerator HitRoutine()
-    {
-        yield return new WaitForSeconds(hitStunDuration);
-
-        isStateLocked = false;
-
-        if (isDead)
-            yield break;
-
-        RefreshTarget(force: true);
-
-        Transform targetTransform = CurrentTargetTransform;
-        if (isProvokedByDamage && targetTransform != null)
-        {
-            EnterChaseState();
-            yield break;
-        }
-
-        if (targetTransform != null && CanSeeTarget())
-        {
-            EnterChaseState();
-        }
-        else
-        {
-            EnterWanderState();
-        }
-    }
-
-    /// <summary>
-    /// 피격 상태가 유지되는 동안 현재 대상을 바라봅니다.
-    /// </summary>
-    private void UpdateHitState()
-    {
-        Transform targetTransform = CurrentTargetTransform;
-        if (targetTransform != null)
-        {
-            RotateTowards(targetTransform.position);
-        }
-    }
-
-    // =========================
-    // Dead
-    // =========================
-    /// <summary>
-    /// 사망 상태로 진입하고 이동, 충돌, 공격 판정을 정리합니다.
-    /// </summary>
-    private void EnterDeadState()
-    {
-        if (isDead) return;
-
-        isDead = true;
-        currentState = EnemyState.Dead;
-        isStateLocked = true;
-        isAttacking = false;
-
-        if (animator != null)
-        {
-            animator.SetBool("InAttackRange", false);
-            animator.SetTrigger("Dead");
-        }
-
-        if (agent != null)
-        {
-            agent.isStopped = true;
-            agent.enabled = false;
-        }
-
-        Collider[] colliders = GetComponentsInChildren<Collider>();
-        for (int i = 0; i < colliders.Length; i++)
-        {
-            colliders[i].enabled = false;
-        }
-
-        StartCoroutine(DeadRoutine());
-    }
-
-    /// <summary>
-    /// 사망 연출 시간을 기다린 뒤 Enemy 오브젝트를 제거합니다.
-    /// </summary>
-    private IEnumerator DeadRoutine()
-    {
-        yield return new WaitForSeconds(destroyDelay);
-        Destroy(gameObject);
-    }
-
-    /// <summary>
-    /// 피격 이벤트를 받아 도발 상태를 기록하고 Hit 또는 Chase 상태로 전환합니다.
-    /// </summary>
+    /// <summary>피해를 받으면 교전으로 전이합니다.</summary>
     /// <param name="damage">이번에 적용된 피해량입니다.</param>
+    /// <remarks>슬라이스 1: 뼈대. TODO(후속): 도발·대상=공격자 지정·경직 처리.</remarks>
     private void HandleDamaged(int damage)
     {
-        if (isDead || enemyHealth == null || enemyHealth.CurrentHP <= 0)
+        if (m_current == Dead)
         {
             return;
         }
 
-        RefreshTarget(force: true);
-
-        isProvokedByDamage = true;
-        lastSeenTime = Time.time;
-
-        if (Time.time >= nextHitTime)
-        {
-            nextHitTime = Time.time + hitStunCooldown;
-            EnterHitState();
-        }
-        else
-        {
-            if (CurrentTargetTransform != null)
-            {
-                EnterChaseState();
-            }
-        }
+        TransitionTo(Combat);
     }
 
-    /// <summary>
-    /// 사망 이벤트를 받아 Dead 상태로 전환합니다.
-    /// </summary>
+    /// <summary>사망 이벤트를 받아 처치 상태로 전이합니다.</summary>
     private void HandleDied()
     {
-        EnterDeadState();
+        TransitionTo(Dead);
     }
-
-    // =========================
-    // Sight
-    // =========================
-    /// <summary>
-    /// 현재 대상이 EnemyTargetSensor 기준으로 보이는지 확인합니다.
-    /// </summary>
-    private bool CanSeeTarget()
-    {
-        return targetSensor != null && targetSensor.CanSeeCurrentTarget();
-    }
-
-    /// <summary>
-    /// 수평 방향만 사용해 지정 위치를 향하도록 Enemy를 회전시킵니다.
-    /// </summary>
-    /// <param name="targetPosition">바라볼 월드 좌표입니다.</param>
-    private void RotateTowards(Vector3 targetPosition)
-    {
-        Vector3 lookDirection = targetPosition - transform.position;
-        lookDirection.y = 0f;
-
-        if (lookDirection.sqrMagnitude < 0.001f)
-            return;
-
-        Quaternion targetRotation = Quaternion.LookRotation(lookDirection.normalized);
-        transform.rotation = Quaternion.Slerp(
-            transform.rotation,
-            targetRotation,
-            Time.deltaTime * rotationSpeed
-        );
-    }
-
 }

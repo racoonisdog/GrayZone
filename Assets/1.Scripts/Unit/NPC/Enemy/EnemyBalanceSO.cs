@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// CSV/XLSX로 조정할 기본 적 1종의 순수 밸런스 수치를 보관합니다.
@@ -6,6 +7,8 @@ using UnityEngine;
 /// <remarks>
 /// Unity 오브젝트 및 미디어 참조를 포함하지 않습니다. 이 타입의 직렬화 필드는 모두
 /// 기획 테이블 입출력 대상이며, 런타임 상태는 각 Enemy 컴포넌트가 별도로 소유합니다.
+/// 수치의 정본은 공용 `적 시스템` 문서이며, 여기 기본값은 문서의 수치가 확정되기 전 임시값입니다.
+/// 아직 BindManager 파이프라인으로 이관하지 않아 범위 보정을 getter가 담당합니다.
 /// </remarks>
 [CreateAssetMenu(fileName = "EnemyBalance", menuName = "GrayZone/Enemy/Enemy Balance")]
 public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
@@ -35,8 +38,9 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [SerializeField] private float m_rotationSpeed = 8f;
 
     [Header("Detection")]
-    [Tooltip("추적 대상을 다시 평가하는 최소 주기(초)입니다. 최소값은 0.01초입니다.")]
-    [SerializeField] private float m_targetRefreshInterval = 0.25f;
+    [Tooltip("시야 판정을 다시 수행하는 주기(초)입니다. 최소값은 0.01초입니다.")]
+    [FormerlySerializedAs("m_targetRefreshInterval")]
+    [SerializeField] private float m_perceptionInterval = 0.25f;
 
     [Tooltip("시야로 대상을 감지할 수 있는 최대 거리(m)입니다.")]
     [SerializeField] private float m_sightRange = 12f;
@@ -47,8 +51,15 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("대상을 처음 발견한 뒤 추격을 시작하기 전 경계 시간(초)입니다.")]
     [SerializeField] private float m_alertDuration = 0.5f;
 
-    [Tooltip("대상을 마지막으로 본 뒤 추적을 포기할 때까지의 지연 시간(초)입니다.")]
+    [Tooltip("시야에서 벗어난 뒤에도 대상의 실시간 위치를 계속 아는 시간(초)입니다. 끝나면 마지막 확인 위치만 남습니다.")]
     [SerializeField] private float m_loseSightDelay = 2f;
+
+    [Header("Target Selection")]
+    [Tooltip("현재 대상을 다시 고를지 판단하는 주기(초)입니다. 이 주기 자체가 대상의 최소 유지 시간이 됩니다.")]
+    [SerializeField] private float m_targetReevaluateInterval = 1f;
+
+    [Tooltip("새 후보가 현재 대상보다 이만큼(m) 더 가까워야 대상을 바꿉니다. 경계에서 대상이 떨리는 것을 막습니다.")]
+    [SerializeField] private float m_targetSwitchPathDistanceDelta = 2f;
 
     [Header("Hit Reaction")]
     [Tooltip("피격 상태에서 이동과 상태 전환을 잠그는 시간(초)입니다.")]
@@ -58,20 +69,26 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [SerializeField] private float m_hitStunCooldown = 0.2f;
 
     [Header("Attack")]
-    [Tooltip("공격을 시작할 수 있는 대상과의 최대 거리(m)입니다.")]
+    [Tooltip("공격을 시작할 수 있는 대상과의 최대 거리(m)입니다. 실제 판정 범위와는 별개의 시작 조건입니다.")]
     [SerializeField] private float m_attackRange = 1.8f;
 
-    [Tooltip("한 번 공격한 뒤 다음 공격까지 기다리는 시간(초)입니다.")]
-    [SerializeField] private float m_attackCooldown = 1.2f;
+    [Tooltip("공격을 시작할 수 있는 정면 기준 허용 방향각(도)입니다. 이 밖의 대상에게는 공격을 시작하지 않습니다.")]
+    [SerializeField] private float m_attackStartAngle = 70f;
 
-    [Tooltip("공격 애니메이션 동안 상태 전환을 잠그는 시간(초)입니다.")]
-    [SerializeField] private float m_attackLockDuration = 0.9f;
+    [Tooltip("공격 시작 후 이 시점(초)에 방향을 확정합니다. 이후에는 대상을 따라 회전하지 않습니다.")]
+    [SerializeField] private float m_attackDirectionLockTime = 0.25f;
+
+    [Tooltip("공격 시작 후 이 시점(초)에 공간 판정을 수행합니다. 방향 고정 시점보다 뒤여야 합니다.")]
+    [SerializeField] private float m_attackImpactTime = 0.45f;
+
+    [Tooltip("판정 후 다음 행동까지의 후딜레이(초)입니다. 이 값이 곧 공격 간격이며 별도 쿨다운은 두지 않습니다.")]
+    [SerializeField] private float m_attackRecoveryDuration = 0.75f;
 
     [Tooltip("근접 공격이 적중했을 때 적용하는 기본 피해량입니다.")]
     [SerializeField] private int m_attackDamage = 1;
 
-    [Tooltip("근접 공격 판정 구체의 반지름(m)입니다.")]
-    [SerializeField] private float m_attackRadius = 1f;
+    [Tooltip("한 번의 공격으로 피해를 줄 수 있는 최대 캐릭터 수입니다.")]
+    [SerializeField] private int m_attackMaxTargets = 1;
 
     [Header("Death")]
     [Tooltip("사망 상태 진입 후 적 오브젝트를 제거하기까지 기다리는 시간(초)입니다.")]
@@ -98,8 +115,14 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     /// <summary>대상 방향 회전 보간 속도입니다.</summary>
     public float RotationSpeed => Mathf.Max(0f, m_rotationSpeed);
 
-    /// <summary>추적 대상 재평가 주기(초)입니다.</summary>
-    public float TargetRefreshInterval => Mathf.Max(0.01f, m_targetRefreshInterval);
+    /// <summary>시야 판정 갱신 주기(초)입니다.</summary>
+    public float PerceptionInterval => Mathf.Max(0.01f, m_perceptionInterval);
+
+    /// <summary>현재 대상 재평가 주기(초)입니다.</summary>
+    public float TargetReevaluateInterval => Mathf.Max(0.01f, m_targetReevaluateInterval);
+
+    /// <summary>대상을 교체하는 데 필요한 경로 거리 차이(m)입니다.</summary>
+    public float TargetSwitchPathDistanceDelta => Mathf.Max(0f, m_targetSwitchPathDistanceDelta);
 
     /// <summary>시야 감지 거리(m)입니다.</summary>
     public float SightRange => Mathf.Max(0f, m_sightRange);
@@ -110,7 +133,7 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     /// <summary>최초 감지 후 경계 시간(초)입니다.</summary>
     public float AlertDuration => Mathf.Max(0f, m_alertDuration);
 
-    /// <summary>시야 상실 후 추적 포기 지연 시간(초)입니다.</summary>
+    /// <summary>시야에서 벗어난 뒤 실시간 위치를 계속 아는 시간(초)입니다.</summary>
     public float LoseSightDelay => Mathf.Max(0f, m_loseSightDelay);
 
     /// <summary>피격 상태 유지 시간(초)입니다.</summary>
@@ -122,17 +145,23 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     /// <summary>공격 시작 거리(m)입니다.</summary>
     public float AttackRange => Mathf.Max(0f, m_attackRange);
 
-    /// <summary>공격 간 쿨다운(초)입니다.</summary>
-    public float AttackCooldown => Mathf.Max(0f, m_attackCooldown);
+    /// <summary>공격 시작 허용 방향각(도)입니다.</summary>
+    public float AttackStartAngle => Mathf.Clamp(m_attackStartAngle, 0f, 360f);
 
-    /// <summary>공격 중 상태 잠금 시간(초)입니다.</summary>
-    public float AttackLockDuration => Mathf.Max(0f, m_attackLockDuration);
+    /// <summary>공격 시작 기준 방향 고정 시점(초)입니다.</summary>
+    public float AttackDirectionLockTime => Mathf.Max(0f, m_attackDirectionLockTime);
+
+    /// <summary>공격 시작 기준 판정 시점(초)입니다. 방향 고정 시점보다 앞설 수 없습니다.</summary>
+    public float AttackImpactTime => Mathf.Max(AttackDirectionLockTime, m_attackImpactTime);
+
+    /// <summary>판정 후 후딜레이(초)이며 곧 공격 간격입니다.</summary>
+    public float AttackRecoveryDuration => Mathf.Max(0f, m_attackRecoveryDuration);
 
     /// <summary>근접 공격 기본 피해량입니다.</summary>
     public int AttackDamage => Mathf.Max(0, m_attackDamage);
 
-    /// <summary>근접 공격 판정 반지름(m)입니다.</summary>
-    public float AttackRadius => Mathf.Max(0f, m_attackRadius);
+    /// <summary>한 번의 공격이 피해를 줄 수 있는 최대 캐릭터 수입니다.</summary>
+    public int AttackMaxTargets => Mathf.Max(1, m_attackMaxTargets);
 
     /// <summary>사망 후 오브젝트 제거 지연 시간(초)입니다.</summary>
     public float DestroyDelay => Mathf.Max(0f, m_destroyDelay);
