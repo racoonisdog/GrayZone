@@ -71,11 +71,17 @@ crashlytics-build.properties
 # Packed Addressables
 /[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 
-# Temporary auto-generated Android Assets
+# SVN이 따로 관리하는 에셋 폴더 (각각 별도 작업본 = 자체 .svn 보유).
+# git에는 넣지 않는다. 용량이 크고 두 VCS가 같은 파일을 다투면 충돌이 난다.
 /Assets/3.Resources
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
+# RealToon은 규칙상 4.ThirdParty에 있어야 하지만 예외로 Assets 바로 아래에 둔다.
+# 셰이더 인스펙터(RealToonShaderGUI_URP_SRP.cs)가 "Assets/RealToon/..." 절대경로로
+# .shader 소스를 직접 고쳐 쓰기 때문에(하드코딩 310건/48파일) 폴더를 옮기면 기능이 깨진다.
+/Assets/RealToon
+/Assets/RealToon.meta
 Packages/com.youngwoocho02.unity-cli-connector/
 Packages/unity-cli/
 /Tools
