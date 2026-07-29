@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37fd71bc7e5745fdad8bc746adc670b4, type: 3}
+  m_Name: EnemyBalance
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyBalanceSO
+  m_enemyId: enemy.basic
+  m_maxHp: 10
+  m_wanderRadius: 8
+  m_wanderInterval: 3
+  m_wanderSpeed: 1.2
+  m_chaseSpeed: 3.2
+  m_rotationSpeed: 8
+  m_targetRefreshInterval: 0.25
+  m_sightRange: 12
+  m_sightAngle: 120
+  m_alertDuration: 0.5
+  m_loseSightDelay: 2
+  m_hitStunDuration: 0.35
+  m_hitStunCooldown: 0.2
+  m_attackRange: 1.8
+  m_attackCooldown: 1.2
+  m_attackLockDuration: 0.9
+  m_attackDamage: 1
+  m_attackRadius: 1
+  m_destroyDelay: 3

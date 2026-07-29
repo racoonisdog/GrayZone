@@ -18,6 +18,9 @@ using VInspector;
 [RequireComponent(typeof(AudioSource))]
 public class AimController : MonoBehaviour
 {
+    [Tooltip("이 플레이어에 적용할 공용 밸런스 SO입니다. 비어 있으면 Inspector 값을 그대로 씁니다.")]
+    [SerializeField] private PlayerCommonBalanceSO m_balanceSO;
+
     private const int WeaponLayerIndex = 1;
     private const float AimRotationLerpSpeed = 50.0f;
 
@@ -41,7 +44,7 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>시각 킥(롤·FOV 펀치)의 회복 방식입니다. 실제 탄착에는 영향이 없습니다.</summary>
-    private enum VisualKickRecoveryMode
+    public enum VisualKickRecoveryMode
     {
         /// <summary>반동과 같은 회복 속도를 공유합니다. 연사 중에는 0으로 안 꺼지고 밴드로 누적됩니다.</summary>
         MatchRecoil,
@@ -74,6 +77,7 @@ public class AimController : MonoBehaviour
     [Tooltip("지향점(LookPoint)을 카메라 전방 이 거리에 항상 둡니다. 레이캐스트와 무관하게 늘 먼 지점을 바라보며, 무기 히트스캔 사거리보다 작으면 사거리만큼으로 보정됩니다.")]
     [FormerlySerializedAs("m_aimTargetDistance")]
     [FormerlySerializedAs("aimObjDis")]
+    [BalanceField(Min = 0)]
     [SerializeField] private float m_lookDistance = 100.0f;
 
     [Tooltip("조준점(카메라 트레이스) 및 탄착점(총구 히트스캔) 판정에 사용할 레이어입니다. 비어 있으면 무기 히트스캔 레이어 또는 전체를 사용합니다.")]
@@ -85,35 +89,49 @@ public class AimController : MonoBehaviour
     [SerializeField] private GameObject m_hitscanBlockMarker;
 
     [FormerlySerializedAs("m_hitscanObstructionMarkerOffset")]
+    [BalanceField]
     [SerializeField] private float m_hitscanBlockMarkerOffset = 0.01f;
 
     [Foldout("Hipfire Options")]
     [Tooltip("힙파이어(비조준 사격) 후 백뷰를 유지하다 자유 시점으로 복귀하기까지의 유지 시간(초)입니다.")]
+    [BalanceField(Min = 0)]
     [SerializeField] private float m_hipfireHoldDuration = 2.0f;
 
     [Foldout("Combat Zoom Options")]
     [Tooltip("ADS(조준) 시 백뷰 카메라 FOV입니다. 값이 작을수록 더 확대됩니다.")]
+    [BalanceField(Min = 1)]
     [SerializeField] private float m_adsFov = 20.0f;
 
     [Tooltip("힙파이어(비조준) 시 백뷰 카메라 FOV입니다. 줌 없는 기본 시야 값(기본 30)입니다.")]
+    [BalanceField(Min = 1)]
     [SerializeField] private float m_hipfireFov = 30.0f;
 
     [Tooltip("ADS↔힙파이어 전환 시 FOV 보간 속도입니다. 매우 크게 두면 즉시 전환에 가까워집니다.")]
+    [BalanceField(Min = 0)]
     [SerializeField] private float m_zoomLerpSpeed = 10.0f;
 
     [Foldout("Recoil Visual Kick Options")]
+    [Tooltip("켜면 발사마다 실제 조준과 탄착에 영향을 주는 피치/요 반동을 적용합니다. 플레이테스트 트레이너에서 즉시 켜고 끌 수 있습니다.")]
+    [SerializeField] private bool m_enableAimRecoil = true;
+
+    [Tooltip("켜면 발사마다 카메라 롤과 FOV 펀치 시각 킥을 적용합니다. 실제 조준과 탄착에는 영향을 주지 않습니다.")]
+    [SerializeField] private bool m_enableVisualKick = true;
+
     [Tooltip("시각 킥 회복 방식입니다. MatchRecoil=반동과 같은 속도(연사 중 밴드로 누적), PerShotReset=발사 간격 기준 N발 안에 회복(발당 리셋). Play Mode에서 바꿔가며 체감을 비교할 수 있습니다.")]
     [SerializeField] private VisualKickRecoveryMode m_visualKickRecoveryMode = VisualKickRecoveryMode.MatchRecoil;
 
     [Tooltip("PerShotReset일 때, 시각 킥이 거의(~95%) 회복되는 데 걸리는 발수(무기 ShootDelay 기준)입니다. 1이면 다음 발 전에 거의 리셋됩니다.")]
     [ShowIf(nameof(m_visualKickRecoveryMode), VisualKickRecoveryMode.PerShotReset)]
+    [BalanceField(Min = 0.01)]
     [SerializeField] private float m_visualKickRecoverShots = 1.0f;
 
     [EndIf]
     [Tooltip("누적될 수 있는 카메라 롤(Dutch) 상한(도)입니다. 유지 없이 발당 순간 펀치 후 회복합니다.")]
+    [BalanceField(Min = 0)]
     [SerializeField] private float m_visualKickMaxRoll = 3.0f;
 
     [Tooltip("누적될 수 있는 FOV 펀치 상한(도)입니다.")]
+    [BalanceField(Min = 0)]
     [SerializeField] private float m_visualKickMaxFovPunch = 5.0f;
 
 
@@ -163,6 +181,14 @@ public class AimController : MonoBehaviour
     [Tooltip("사격 시 탄착점에 생성할 디버그 오브젝트(스피어 등)입니다. 비어 있으면 생성을 생략합니다.")]
     [SerializeField] private GameObject m_impactMarkerPrefab;
 
+    [Tooltip("임팩트 마커를 유지할 시간(초)입니다. 프리팹이 비어 있으면 런타임 디버그 스피어에도 적용됩니다.")]
+    [Min(0.05f)]
+    [SerializeField] private float m_impactMarkerLifetime = 1.5f;
+
+    [Tooltip("프리팹이 비어 있을 때 생성하는 런타임 디버그 스피어의 지름(월드 단위)입니다.")]
+    [Min(0.01f)]
+    [SerializeField] private float m_impactMarkerSize = 0.16f;
+
     private PlayerInputs m_input;
     private ThirdPersonController m_controller;
     private Animator m_animator;
@@ -206,6 +232,27 @@ public class AimController : MonoBehaviour
     /// <summary>조준점/탄착점 판정 레이어입니다.</summary>
     public LayerMask TargetLayer => m_targetLayer;
 
+    /// <summary>탄퍼짐·피격 피드백 표시를 담당하는 선택형 조준선 컨트롤러입니다.</summary>
+    public CrosshairController CrosshairController => m_crosshairController;
+
+    /// <summary>조준/힙파이어 상태가 아니어도 조준선을 항상 표시할지 여부입니다.</summary>
+    public bool ShowAimImageAlways => m_showAimImageAlways;
+
+    /// <summary>총구 히트스캔이 장애물에 막힐 때 마커를 표면에서 띄울 거리입니다.</summary>
+    public float HitscanBlockMarkerOffset => Mathf.Max(0.0f, m_hitscanBlockMarkerOffset);
+
+    /// <summary>힙파이어 사격 후 전투 자세를 유지하는 시간입니다.</summary>
+    public float HipfireHoldDuration => Mathf.Max(0.0f, m_hipfireHoldDuration);
+
+    /// <summary>ADS 카메라 기본 FOV입니다.</summary>
+    public float AdsFov => Mathf.Max(1.0f, m_adsFov);
+
+    /// <summary>힙파이어 카메라 기본 FOV입니다.</summary>
+    public float HipfireFov => Mathf.Max(1.0f, m_hipfireFov);
+
+    /// <summary>ADS와 힙파이어 FOV 전환 보간 속도입니다.</summary>
+    public float ZoomLerpSpeed => Mathf.Max(0.0f, m_zoomLerpSpeed);
+
     /// <summary>현재 히트스캔이 조준 중인 적입니다.</summary>
     public EnemyController CurrentAimEnemy => m_currentAimEnemy;
 
@@ -217,6 +264,54 @@ public class AimController : MonoBehaviour
 
     /// <summary>재장전 사운드 클립 배열입니다.</summary>
     public AudioClip[] ReloadSounds => m_reloadSounds;
+
+    /// <summary>실제 조준과 탄착에 영향을 주는 반동 적용 여부입니다.</summary>
+    public bool AimRecoilEnabled => m_enableAimRecoil;
+
+    /// <summary>카메라 롤과 FOV 펀치로 구성된 시각 킥 적용 여부입니다.</summary>
+    public bool VisualKickEnabled => m_enableVisualKick;
+
+    /// <summary>시각 킥 회복 방식입니다.</summary>
+    public VisualKickRecoveryMode CurrentVisualKickRecoveryMode => m_visualKickRecoveryMode;
+
+    /// <summary>PerShotReset 회복에 사용할 발수입니다.</summary>
+    public float VisualKickRecoverShots => m_visualKickRecoverShots;
+
+    /// <summary>누적 가능한 카메라 롤 상한(도)입니다.</summary>
+    public float VisualKickMaxRoll => m_visualKickMaxRoll;
+
+    /// <summary>누적 가능한 FOV 펀치 상한(도)입니다.</summary>
+    public float VisualKickMaxFovPunch => m_visualKickMaxFovPunch;
+
+    /// <summary>발사 시 탄착점에 임팩트 마커를 생성할지 여부입니다.</summary>
+    public bool ImpactMarkerEnabled => m_spawnImpactMarkerOnShot;
+
+    /// <summary>임팩트 마커 유지 시간(초)입니다.</summary>
+    public float ImpactMarkerLifetime => m_impactMarkerLifetime;
+
+    /// <summary>프리팹이 없을 때 생성하는 임팩트 마커 지름입니다.</summary>
+    public float ImpactMarkerSize => m_impactMarkerSize;
+
+    /// <summary>총구 기준 히트스캔 디버그 레이 표시 여부입니다.</summary>
+    public bool HitscanDebugRayEnabled => m_drawHitscanDebugRay;
+
+    /// <summary>카메라 조준점 트레이스 디버그 선 표시 여부입니다.</summary>
+    public bool DrawAimTraceLine => m_drawAimTraceLine;
+
+    /// <summary>논리 조준과 렌더 카메라 전방 비교 레이 표시 여부입니다.</summary>
+    public bool DrawCameraForwardRay => m_drawCameraForwardRay;
+
+    /// <summary>지향점 디버그 스피어 표시 여부입니다.</summary>
+    public bool DrawLookPointSphere => m_drawLookPointSphere;
+
+    /// <summary>카메라 조준점 디버그 스피어 표시 여부입니다.</summary>
+    public bool DrawAimPointSphere => m_drawAimPointSphere;
+
+    /// <summary>총구 기준 탄착점 디버그 스피어 표시 여부입니다.</summary>
+    public bool DrawImpactPointSphere => m_drawImpactPointSphere;
+
+    /// <summary>조준 디버그 스피어 반지름입니다.</summary>
+    public float DebugSphereRadius => Mathf.Max(0.0f, m_debugSphereRadius);
 
     /// <summary>
     /// 조준 카메라 참조를 설정합니다.
@@ -248,6 +343,33 @@ public class AimController : MonoBehaviour
     /// <param name="value">새 대상 레이어 마스크입니다.</param>
     public void SetTargetLayer(LayerMask value) => m_targetLayer = value;
 
+    /// <summary>조준/힙파이어 상태가 아니어도 조준선을 항상 표시할지 여부를 설정합니다.</summary>
+    /// <param name="value">항상 표시하려면 <c>true</c>입니다.</param>
+    public void SetShowAimImageAlways(bool value)
+    {
+        m_showAimImageAlways = value;
+        if (m_aimImage != null)
+        {
+            m_aimImage.SetActive(m_isAds || m_showAimImageAlways);
+        }
+    }
+
+    /// <summary>힙파이어 사격 후 전투 자세를 유지하는 시간을 설정합니다.</summary>
+    /// <param name="value">음수는 0으로 보정됩니다.</param>
+    public void SetHipfireHoldDuration(float value) => m_hipfireHoldDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>ADS 카메라 기본 FOV를 설정합니다.</summary>
+    /// <param name="value">1보다 작은 값은 1로 보정됩니다.</param>
+    public void SetAdsFov(float value) => m_adsFov = Mathf.Max(1.0f, value);
+
+    /// <summary>힙파이어 카메라 기본 FOV를 설정합니다.</summary>
+    /// <param name="value">1보다 작은 값은 1로 보정됩니다.</param>
+    public void SetHipfireFov(float value) => m_hipfireFov = Mathf.Max(1.0f, value);
+
+    /// <summary>ADS와 힙파이어 FOV 전환 보간 속도를 설정합니다.</summary>
+    /// <param name="value">음수는 0으로 보정됩니다.</param>
+    public void SetZoomLerpSpeed(float value) => m_zoomLerpSpeed = Mathf.Max(0.0f, value);
+
     /// <summary>
     /// 총구 기준 히트스캔 장애물 마커 오브젝트를 설정합니다.
     /// </summary>
@@ -278,6 +400,30 @@ public class AimController : MonoBehaviour
     /// <param name="value">표시하려면 <c>true</c>, 숨기려면 <c>false</c>입니다.</param>
     public void SetDrawHitscanDebugRay(bool value) => m_drawHitscanDebugRay = value;
 
+    /// <summary>카메라 조준점 트레이스 디버그 선 표시 여부를 설정합니다.</summary>
+    /// <param name="value">표시하려면 <c>true</c>입니다.</param>
+    public void SetDrawAimTraceLine(bool value) => m_drawAimTraceLine = value;
+
+    /// <summary>논리 조준과 렌더 카메라 전방 비교 레이 표시 여부를 설정합니다.</summary>
+    /// <param name="value">표시하려면 <c>true</c>입니다.</param>
+    public void SetDrawCameraForwardRay(bool value) => m_drawCameraForwardRay = value;
+
+    /// <summary>지향점 디버그 스피어 표시 여부를 설정합니다.</summary>
+    /// <param name="value">표시하려면 <c>true</c>입니다.</param>
+    public void SetDrawLookPointSphere(bool value) => m_drawLookPointSphere = value;
+
+    /// <summary>카메라 조준점 디버그 스피어 표시 여부를 설정합니다.</summary>
+    /// <param name="value">표시하려면 <c>true</c>입니다.</param>
+    public void SetDrawAimPointSphere(bool value) => m_drawAimPointSphere = value;
+
+    /// <summary>총구 기준 탄착점 디버그 스피어 표시 여부를 설정합니다.</summary>
+    /// <param name="value">표시하려면 <c>true</c>입니다.</param>
+    public void SetDrawImpactPointSphere(bool value) => m_drawImpactPointSphere = value;
+
+    /// <summary>조준 디버그 스피어 반지름을 설정합니다.</summary>
+    /// <param name="value">음수는 0으로 보정됩니다.</param>
+    public void SetDebugSphereRadius(float value) => m_debugSphereRadius = Mathf.Max(0.0f, value);
+
     /// <summary>
     /// 사격 사운드 클립을 설정합니다.
     /// </summary>
@@ -290,10 +436,73 @@ public class AimController : MonoBehaviour
     /// <param name="value">새 재장전 사운드 배열입니다.</param>
     public void SetReloadSounds(AudioClip[] value) => m_reloadSounds = value;
 
+    /// <summary>실제 조준과 탄착에 영향을 주는 반동 적용 여부를 설정합니다.</summary>
+    /// <param name="value">반동을 적용하려면 <c>true</c>입니다.</param>
+    public void SetAimRecoilEnabled(bool value) => m_enableAimRecoil = value;
+
+    /// <summary>카메라 롤과 FOV 펀치 시각 킥 적용 여부를 설정합니다.</summary>
+    /// <param name="value">시각 킥을 적용하려면 <c>true</c>입니다.</param>
+    public void SetVisualKickEnabled(bool value)
+    {
+        m_enableVisualKick = value;
+
+        if (!m_enableVisualKick)
+        {
+            m_visualKickRoll = 0.0f;
+            m_visualKickFovPunch = 0.0f;
+        }
+    }
+
+    /// <summary>시각 킥 회복 방식을 설정합니다.</summary>
+    /// <param name="value">새 회복 방식입니다.</param>
+    public void SetVisualKickRecoveryMode(VisualKickRecoveryMode value) => m_visualKickRecoveryMode = value;
+
+    /// <summary>PerShotReset 회복에 사용할 발수를 설정합니다.</summary>
+    /// <param name="value">0보다 작은 값은 0.01로 보정됩니다.</param>
+    public void SetVisualKickRecoverShots(float value) => m_visualKickRecoverShots = Mathf.Max(0.01f, value);
+
+    /// <summary>누적 가능한 카메라 롤 상한을 설정합니다.</summary>
+    /// <param name="value">음수는 0으로 보정됩니다.</param>
+    public void SetVisualKickMaxRoll(float value) => m_visualKickMaxRoll = Mathf.Max(0.0f, value);
+
+    /// <summary>누적 가능한 FOV 펀치 상한을 설정합니다.</summary>
+    /// <param name="value">음수는 0으로 보정됩니다.</param>
+    public void SetVisualKickMaxFovPunch(float value) => m_visualKickMaxFovPunch = Mathf.Max(0.0f, value);
+
+    /// <summary>발사 시 탄착점 임팩트 마커 생성 여부를 설정합니다.</summary>
+    /// <param name="value">생성하려면 <c>true</c>입니다.</param>
+    public void SetImpactMarkerEnabled(bool value) => m_spawnImpactMarkerOnShot = value;
+
+    /// <summary>임팩트 마커 유지 시간을 설정합니다.</summary>
+    /// <param name="value">0.05초보다 작은 값은 0.05초로 보정됩니다.</param>
+    public void SetImpactMarkerLifetime(float value) => m_impactMarkerLifetime = Mathf.Max(0.05f, value);
+
+    /// <summary>프리팹이 없을 때 생성하는 임팩트 마커 지름을 설정합니다.</summary>
+    /// <param name="value">0.01보다 작은 값은 0.01로 보정됩니다.</param>
+    public void SetImpactMarkerSize(float value) => m_impactMarkerSize = Mathf.Max(0.01f, value);
+
     /// <summary>
     /// Unity 생명주기 초기화 함수입니다.
     /// 필수 참조를 캐싱하고 누락 여부를 검증합니다.
     /// </summary>
+    /// <summary>
+    /// 지정된 SO가 있을 때 공용 BindManager로 같은 이름의 필드 값을 적용합니다.
+    /// </summary>
+    /// <returns>이번 바인딩의 집계 결과입니다. SO가 없으면 기본값입니다.</returns>
+    /// <remarks>
+    /// 같은 SO를 이 오브젝트의 다른 컴포넌트도 각자 바인드합니다. 대상이 요구한 필드만 가져가므로
+    /// 서로 간섭하지 않고, 컴포넌트 간 Awake 실행 순서에도 의존하지 않습니다.
+    /// </remarks>
+    private BalanceBindResult BindConfiguredBalance()
+    {
+        if (m_balanceSO == null)
+        {
+            return default;
+        }
+
+        return BindManager.Instance.Bind(m_balanceSO, this, this);
+    }
+
     private void Awake()
     {
         CacheRequiredReferences();
@@ -306,6 +515,7 @@ public class AimController : MonoBehaviour
 
         CacheOptionalCrosshairController();
         m_hasRequiredReferences = true;
+        BindConfiguredBalance();
         ApplyCombatStanceState(false, false, 0.0f);
 
         if (m_weaponController != null)
@@ -720,9 +930,9 @@ public class AimController : MonoBehaviour
         }
 
         float spreadDegrees = m_weaponController != null ? m_weaponController.GetCurrentSpread(m_isAds) : 0.0f;
-        WeaponController.SpreadDistribution distribution = m_weaponController != null
+        SpreadDistribution distribution = m_weaponController != null
             ? m_weaponController.Distribution
-            : WeaponController.SpreadDistribution.Gaussian;
+            : SpreadDistribution.Gaussian;
         float concentration = m_weaponController != null ? m_weaponController.SpreadConcentration : 3.0f;
         // 시각 FOV 펀치가 아니라 기준 FOV를 써서, 크로스헤어가 발사 juice에 따라 숨쉬지 않게 합니다.
         float fovDegrees = m_baseFov;
@@ -1151,12 +1361,15 @@ public class AimController : MonoBehaviour
     /// 사격이 발사된 프레임에 탄착점에 디버그 마커 오브젝트를 생성합니다.
     /// </summary>
     /// <param name="shotInfo">발사된 사격의 히트스캔 정보입니다.</param>
-    /// <remarks>토글이 켜져 있고 마커 프리팹이 할당된 경우에만 생성합니다. 충돌 표면이 있으면 법선 방향으로 정렬합니다.</remarks>
+    /// <remarks>
+    /// 토글이 켜진 개발 모드에서만 생성합니다. 마커 프리팹이 비어 있으면 플레이테스트에서도 바로 확인할 수 있도록
+    /// 작은 마젠타 스피어를 임시로 만들고, 충돌 표면이 있으면 법선 방향으로 정렬합니다.
+    /// </remarks>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
     [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
     private void SpawnImpactMarker(WeaponController.HitscanShotInfo shotInfo)
     {
-        if (!m_spawnImpactMarkerOnShot || m_impactMarkerPrefab == null)
+        if (!GameDevMode.DebugFeaturesEnabled || !m_spawnImpactMarkerOnShot)
         {
             return;
         }
@@ -1165,7 +1378,32 @@ public class AimController : MonoBehaviour
             ? Quaternion.LookRotation(shotInfo.Hit.normal)
             : Quaternion.identity;
 
-        Instantiate(m_impactMarkerPrefab, shotInfo.EndPoint, rotation);
+        GameObject marker;
+        if (m_impactMarkerPrefab != null)
+        {
+            marker = Instantiate(m_impactMarkerPrefab, shotInfo.EndPoint, rotation);
+        }
+        else
+        {
+            marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            marker.name = "ImpactMarker(Trainer)";
+            marker.transform.SetPositionAndRotation(shotInfo.EndPoint, rotation);
+            marker.transform.localScale = Vector3.one * m_impactMarkerSize;
+
+            Collider markerCollider = marker.GetComponent<Collider>();
+            if (markerCollider != null)
+            {
+                Destroy(markerCollider);
+            }
+
+            Renderer markerRenderer = marker.GetComponent<Renderer>();
+            if (markerRenderer != null)
+            {
+                markerRenderer.material.color = Color.magenta;
+            }
+        }
+
+        Destroy(marker, m_impactMarkerLifetime);
     }
 
 
@@ -1245,11 +1483,17 @@ public class AimController : MonoBehaviour
         m_kickShotIndex++;
 
         // (1) 반동 — 실제 조준을 밀어 탄착에도 영향(세로 pitch + 좌우 yaw).
-        m_controller.AddRecoil(m_weaponController.RecoilPitchKick, yawSigned);
+        if (m_enableAimRecoil)
+        {
+            m_controller.AddRecoil(m_weaponController.RecoilPitchKick, yawSigned);
+        }
 
         // (2) 시각 킥 — 롤·FOV 펀치 누적(조준/탄 무영향, 상한 클램프).
-        m_visualKickRoll = Mathf.Clamp(m_visualKickRoll + rollSigned, -m_visualKickMaxRoll, m_visualKickMaxRoll);
-        m_visualKickFovPunch = Mathf.Clamp(m_visualKickFovPunch + m_weaponController.RecoilFovPunch, 0.0f, m_visualKickMaxFovPunch);
+        if (m_enableVisualKick)
+        {
+            m_visualKickRoll = Mathf.Clamp(m_visualKickRoll + rollSigned, -m_visualKickMaxRoll, m_visualKickMaxRoll);
+            m_visualKickFovPunch = Mathf.Clamp(m_visualKickFovPunch + m_weaponController.RecoilFovPunch, 0.0f, m_visualKickMaxFovPunch);
+        }
     }
 
     /// <summary>
@@ -1260,21 +1504,21 @@ public class AimController : MonoBehaviour
     /// <param name="shotIndex">현재 발 인덱스입니다. 번갈이 패턴의 짝/홀 판정에 씁니다.</param>
     /// <returns>Random이면 ±범위 무작위, Alternate이면 발 인덱스로 좌우 교대한 부호 있는 크기입니다.</returns>
     /// <remarks>Yaw 반동과 시각 롤이 같은 발 인덱스를 공유하되 각자 자기 패턴으로 독립 계산됩니다.</remarks>
-    private static float ResolveKickValue(WeaponController.KickSidePattern pattern, float magnitude, int shotIndex)
+    private static float ResolveKickValue(KickSidePattern pattern, float magnitude, int shotIndex)
     {
         if (magnitude <= 0.0f)
         {
             return 0.0f;
         }
 
-        if (pattern == WeaponController.KickSidePattern.Random)
+        if (pattern == KickSidePattern.Random)
         {
             return Random.Range(-magnitude, magnitude);
         }
 
         // 번갈이: 발 인덱스 짝/홀로 좌우 교대. 왼쪽 = 음수.
         bool even = (shotIndex % 2) == 0;
-        bool leftFirst = pattern == WeaponController.KickSidePattern.AlternateLeftFirst;
+        bool leftFirst = pattern == KickSidePattern.AlternateLeftFirst;
         float sign = even == leftFirst ? -1.0f : 1.0f;
         return magnitude * sign;
     }
