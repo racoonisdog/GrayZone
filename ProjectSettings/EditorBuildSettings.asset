@@ -6,8 +6,8 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/0.Scenes/JangHu/PlayerTest.unity
-    guid: a89b475f83864d94b9fe4c971a8099a2
+    path: Assets/0.Scenes/JangHu/CombatPlayTest.unity
+    guid: b2c785a503e94de6b20bb1d43137c87b
   - enabled: 1
     path: Assets/0.Scenes/JungHyeon/Scenes/TEst.unity
     guid: df0923c90418f524b87aff75196465a8
