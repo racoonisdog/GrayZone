@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 4a8abf7c6fd8c4a4898ef197a9cfb4e1
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 357252
+  packageName: Top Down Post Apocalyptic Pack
+  packageVersion: 1.0
+  assetPath: Assets/Top_Down_Post-Apocalyptic_Pack/Script/TD_SimpleCameraController.cs
+  uploadId: 851398
