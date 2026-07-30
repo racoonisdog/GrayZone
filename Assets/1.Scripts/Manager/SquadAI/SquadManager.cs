@@ -16,6 +16,18 @@ using VInspector;
 /// </remarks>
 public class SquadManager : MonoBehaviour
 {
+    private static SquadManager s_instance;
+
+    /// <summary>현재 씬의 인스턴스입니다. 스쿼드가 없는 씬이면 <c>null</c>입니다.</summary>
+    /// <remarks>씬에 속하므로 씬 전환과 함께 사라집니다. 셸터처럼 스쿼드가 없는 씬에서는 없는 것이 정상입니다.</remarks>
+    public static SquadManager Instance => s_instance;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticState()
+    {
+        s_instance = null;
+    }
+
     [Foldout("Squad Options")]
     [Tooltip("관리할 스쿼드 멤버 목록입니다.")]
     [FormerlySerializedAs("squadMembers")]
@@ -35,6 +47,9 @@ public class SquadManager : MonoBehaviour
 
     [Tooltip("PlayerSquadMember가 사망해 자동 전환될 때도 Transform 스왑 방식을 사용할지 여부입니다.")]
     [SerializeField] private bool m_swapMemberTransformsOnDeath;
+
+    [Tooltip("전환 입력을 다시 받기까지 기다리는 시간(초)입니다. 연타로 전환이 겹쳐 쌓이는 것을 막습니다. 사망 자동 전환에는 적용하지 않습니다.")]
+    [SerializeField] private float m_switchInputCooldown = 0.1f;
 
     [Tooltip("멤버 전환 직후 각 멤버의 제어 주체, 위치, NavMeshAgent, Animator 상태를 콘솔에 출력합니다.")]
     [SerializeField] private bool m_logSwitchDebug = true;
@@ -64,6 +79,9 @@ public class SquadManager : MonoBehaviour
     [Tooltip("세 번째 스쿼드 멤버로 전환하는 키입니다.")]
     [FormerlySerializedAs("member3Key")]
     [SerializeField] private Key m_member3Key = Key.Digit3;
+
+    /// <summary>전환 입력을 다시 받을 수 있는 시각입니다.</summary>
+    private float m_nextSwitchInputTime;
 
     private bool m_hasInitialized;
     private bool m_squadEliminationNotified;
@@ -150,8 +168,27 @@ public class SquadManager : MonoBehaviour
     /// </summary>
     private void Awake()
     {
+        // 스쿼드 구성은 씬에 하나만 있어야 합니다. 중복이 있으면 조작 캐릭터가 둘로 갈립니다.
+        if (s_instance != null && s_instance != this)
+        {
+            Debug.LogWarning("[SquadManager] 씬에 이미 인스턴스가 있어 중복된 쪽을 제거합니다.", this);
+            Destroy(gameObject);
+            return;
+        }
+
+        s_instance = this;
+
         AutoFindReferences();
         NormalizeMemberIndex();
+        ApplyInitialMemberRolePresets();
+    }
+
+    private void OnDestroy()
+    {
+        if (s_instance == this)
+        {
+            s_instance = null;
+        }
     }
 
     private void OnEnable()
@@ -171,17 +208,12 @@ public class SquadManager : MonoBehaviour
     /// <returns>Unity 코루틴 실행을 위한 IEnumerator입니다.</returns>
     private IEnumerator Start()
     {
-        SetAllMembersAsAiSquadMembers();
         UpdateCameraTarget();
 
-        // PlayerInput, Controller, NavMeshAgent의 초기 활성 상태가 안정화될 때까지 대기합니다.
+        // Awake에서 역할 프리셋을 이미 적용했습니다. PlayerInput, Controller, NavMeshAgent의 초기 활성 상태가
+        // 안정화될 때까지 대기한 뒤 현재 상태를 한 번 더 확인합니다.
         yield return null;
         yield return null;
-
-        if (PlayerSquadMember != null)
-        {
-            PlayerSquadMember.SetPlayerSquadMember(true);
-        }
 
         UpdateCameraTarget();
         RefreshPlayerSquadMemberWeaponUI();
@@ -299,25 +331,74 @@ public class SquadManager : MonoBehaviour
             return;
         }
 
+        if (Time.time < m_nextSwitchInputTime)
+        {
+            return;
+        }
+
         if (Keyboard.current[m_nextMemberKey].wasPressedThisFrame)
         {
-            SwitchToNextMember();
+            RequestSwitchByInput(-1);
         }
 
         if (Keyboard.current[m_member1Key].wasPressedThisFrame)
         {
-            SwitchToMember(0);
+            RequestSwitchByInput(0);
         }
 
         if (Keyboard.current[m_member2Key].wasPressedThisFrame)
         {
-            SwitchToMember(1);
+            RequestSwitchByInput(1);
         }
 
         if (Keyboard.current[m_member3Key].wasPressedThisFrame)
         {
-            SwitchToMember(2);
+            RequestSwitchByInput(2);
         }
+    }
+
+    /// <summary>
+    /// 입력으로 요청한 전환을 처리하고 다음 입력까지의 간격을 둡니다.
+    /// </summary>
+    /// <param name="index">전환할 멤버 인덱스이며, -1이면 다음 멤버로 넘깁니다.</param>
+    /// <remarks>
+    /// 간격을 두는 것은 연타로 전환이 짧은 시간에 쌓이는 것을 막기 위해서입니다.
+    /// 전환마다 위치가 맞바뀌므로 반복되면 무슨 일이 일어났는지 보이지 않고,
+    /// 전환 직후 밀림이 남아 있는 동안 다시 전환되면 그 영향이 누적됩니다.
+    ///
+    /// 사망으로 인한 자동 전환에는 걸지 않습니다. 그쪽까지 막으면 조작할 캐릭터가 없는 시간이 생깁니다.
+    /// 실제로 전환이 일어났을 때만 간격을 두는 것은, 같은 멤버를 다시 누르거나 전환할 수 없는 대상을 눌렀을 때
+    /// 아무 일도 없었는데 입력이 씹히는 것처럼 느껴지지 않게 하기 위해서입니다.
+    /// </remarks>
+    private void RequestSwitchByInput(int index)
+    {
+        bool switched = index < 0
+            ? TrySwitchToNextMember(m_swapMemberTransforms)
+            : TrySwitchToMember(index);
+
+        if (switched)
+        {
+            m_nextSwitchInputTime = Time.time + Mathf.Max(0f, m_switchInputCooldown);
+        }
+    }
+
+    /// <summary>지정한 인덱스로 전환을 시도하고 실제로 바뀌었는지 알려 줍니다.</summary>
+    /// <param name="index">전환할 스쿼드 멤버 인덱스입니다.</param>
+    /// <returns>전환이 일어났으면 true입니다.</returns>
+    private bool TrySwitchToMember(int index)
+    {
+        if (m_squadMembers == null || index < 0 || index >= m_squadMembers.Count)
+        {
+            return false;
+        }
+
+        if (index == m_playerSquadMemberIndex || !CanSwitchTo(index))
+        {
+            return false;
+        }
+
+        SwitchToMember(index, m_swapMemberTransforms);
+        return true;
     }
 
     /// <summary>
@@ -575,10 +656,9 @@ public class SquadManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 모든 스쿼드 멤버의 직접 조작 상태를 일괄 설정합니다.
+    /// 시작 시 스쿼드 인덱스 기준으로 각 멤버의 역할별 초기 프리셋을 적용합니다.
     /// </summary>
-    /// <param name="value">직접 조작 상태로 설정하려면 true입니다.</param>
-    private void SetAllMembersAsAiSquadMembers()
+    private void ApplyInitialMemberRolePresets()
     {
         if (m_squadMembers == null)
         {
@@ -592,7 +672,33 @@ public class SquadManager : MonoBehaviour
                 continue;
             }
 
-            m_squadMembers[i].SetPlayerSquadMember(false);
+            ApplyInitialRolePreset(m_squadMembers[i], i == m_playerSquadMemberIndex);
+        }
+    }
+
+    /// <summary>
+    /// 필드 씬에서 새 플레이어블 캐릭터를 만든 직후 호출할 역할별 초기 프리셋 진입점입니다.
+    /// </summary>
+    /// <remarks>
+    /// 이 메서드는 스쿼드 목록 등록을 대신하지 않습니다. 생성 시스템은 멤버를 목록에 등록한 뒤,
+    /// 해당 멤버의 첫 역할에 맞춰 이 메서드를 호출합니다.
+    /// </remarks>
+    /// <param name="member">초기화할 플레이어블 스쿼드 멤버입니다.</param>
+    /// <param name="isPlayerSquadMember">첫 프레임부터 직접 조작할 멤버이면 true입니다.</param>
+    public void ApplyInitialRolePreset(SquadMemberController member, bool isPlayerSquadMember)
+    {
+        if (member == null)
+        {
+            return;
+        }
+
+        if (isPlayerSquadMember)
+        {
+            member.ApplyPlayerInitialSetup();
+        }
+        else
+        {
+            member.ApplyAiInitialSetup();
         }
     }
 
@@ -651,22 +757,45 @@ public class SquadManager : MonoBehaviour
         Vector3 nextPosition = nextTransform.position;
         Quaternion nextRotation = nextTransform.rotation;
 
-        MoveMemberTo(previousMember, nextPosition, nextRotation);
-        MoveMemberTo(nextMember, previousPosition, previousRotation);
+        // 두 멤버를 한 명씩 끝까지 옮기면 안 됩니다.
+        // 먼저 옮긴 멤버가 아직 자리를 비우지 않은 상대 위에 겹쳐 놓이고,
+        // 그 상태로 CharacterController를 다시 켜면 유니티가 겹침을 풀려고 캐릭터를 밀어냅니다.
+        // 그래서 둘 다 끈 뒤에 위치를 정하고, 자리를 다 잡은 다음에 함께 켭니다.
+        CharacterController previousController = previousMember.GetComponent<CharacterController>();
+        CharacterController nextController = nextMember.GetComponent<CharacterController>();
+
+        bool previousControllerWasEnabled = previousController != null && previousController.enabled;
+        bool nextControllerWasEnabled = nextController != null && nextController.enabled;
+
+        if (previousControllerWasEnabled)
+        {
+            previousController.enabled = false;
+        }
+
+        if (nextControllerWasEnabled)
+        {
+            nextController.enabled = false;
+        }
+
+        PlaceMember(previousMember, nextPosition, nextRotation);
+        PlaceMember(nextMember, previousPosition, previousRotation);
+
+        if (previousControllerWasEnabled)
+        {
+            previousController.enabled = true;
+        }
+
+        if (nextControllerWasEnabled)
+        {
+            nextController.enabled = true;
+        }
+
         nextMember.SyncCameraTargetRotation(previousCameraTargetRotation);
 
-        static void MoveMemberTo(SquadMemberController member, Vector3 position, Quaternion rotation)
+        static void PlaceMember(SquadMemberController member, Vector3 position, Quaternion rotation)
         {
             Transform memberTransform = member.transform;
-            CharacterController characterController = member.GetComponent<CharacterController>();
             UnityEngine.AI.NavMeshAgent navMeshAgent = member.GetComponent<UnityEngine.AI.NavMeshAgent>();
-
-            bool wasCharacterControllerEnabled = characterController != null && characterController.enabled;
-
-            if (wasCharacterControllerEnabled)
-            {
-                characterController.enabled = false;
-            }
 
             if (navMeshAgent != null && navMeshAgent.enabled && navMeshAgent.isOnNavMesh)
             {
@@ -677,11 +806,6 @@ public class SquadManager : MonoBehaviour
             else
             {
                 memberTransform.SetPositionAndRotation(position, rotation);
-            }
-
-            if (wasCharacterControllerEnabled)
-            {
-                characterController.enabled = true;
             }
         }
     }
@@ -763,7 +887,7 @@ public class SquadManager : MonoBehaviour
             bool grounded = animator != null && animator.GetBool("IsGrounded");
             bool jump = animator != null && animator.GetBool("IsJump");
             bool freeFall = animator != null && animator.GetBool("IsFreeFall");
-            float speed = animator != null ? animator.GetFloat("Speed") : 0.0f;
+            float speed = animator != null ? animator.GetFloat("MoveSpeed") : 0.0f;
             float motionSpeed = animator != null ? animator.GetFloat("MotionSpeed") : 0.0f;
             Vector3 agentVelocity = agentEnabled ? navMeshAgent.velocity : Vector3.zero;
 

@@ -1,10 +1,11 @@
 ﻿using System;
 using UnityEngine;
+using VInspector;
 
 /// <summary>
 /// 플레이어블 캐릭터의 고정 식별자입니다.
 /// </summary>
-public enum PlayableCharacterId
+public enum PlayerbleCharacterId
 {
     /// <summary>아직 캐릭터가 지정되지 않은 상태입니다.</summary>
     Unknown = 0,
@@ -27,12 +28,14 @@ public enum PlayableCharacterId
 public class PlayerbleUnitData : MonoBehaviour
 {
     [Header("Public Identity")]
-    [Tooltip("보유 캐릭터 목록과 배틀 결과를 연결하는 영속 정의 ID입니다.")]
+    [Tooltip("보유 캐릭터 목록과 필드 결과를 연결하는 영속 정의 ID입니다.")]
     [SerializeField] private string m_definitionId;
 
     [SerializeField] private string m_runtimeId;
-    [SerializeField] private PlayableCharacterId m_characterId = PlayableCharacterId.Unknown;
+    [SerializeField] private PlayerbleCharacterId m_characterId = PlayerbleCharacterId.Unknown;
     [SerializeField] private string m_displayName = "Player";
+    [Tooltip("필드 결과 UI에서 이 캐릭터를 표시할 때 사용하는 풀바디 초상화입니다. 없으면 결과 UI는 이미지를 숨깁니다.")]
+    [SerializeField] private Sprite m_resultPortrait;
 
     [Header("Public Runtime Data")]
     [Range(0, 100)]
@@ -42,11 +45,11 @@ public class PlayerbleUnitData : MonoBehaviour
     [SerializeField] private PlayerHealth m_health;
     [SerializeField] private SquadMemberController m_squadMember;
     [SerializeField] private InteractionController m_interactionController;
-    [SerializeField] private WeaponController m_weaponController;
+    [SerializeField] private Gun m_weaponController;
     [SerializeField] private Transform m_publicTarget;
 
     [Header("Weapon Public Data")]
-    [Tooltip("이 캐릭터에 기본으로 지정된 총기 정의입니다. 배틀 입장 시 새로 스폰하지 않고 이 참조를 기준으로 총기 상태를 구성합니다.")]
+    [Tooltip("이 캐릭터에 기본으로 지정된 총기 정의입니다. 필드 입장 시 새로 스폰하지 않고 이 참조를 기준으로 총기 상태를 구성합니다.")]
     [SerializeField] private Weapon m_currentWeapon;
 
     [Tooltip("총기 정의가 없을 때 UI와 로그에 표시할 대체 이름입니다.")]
@@ -56,12 +59,13 @@ public class PlayerbleUnitData : MonoBehaviour
     [SerializeField] private int m_reserveAmmo;
     [SerializeField] private int m_maxReserveAmmo = 120;
 
-#if UNITY_EDITOR
+    // 아래 디버그 패스스루들은 플레이테스트 트레이너에서도 쓰기 위해 빌드에도 컴파일합니다.
+    // 각 플래그의 실제 효과는 소유 컴포넌트에서 GameDevMode.DebugFeaturesEnabled일 때만 동작합니다.
     [Header("Debug")]
-    [Tooltip("켜면 예비 탄약(탄창)이 줄어들지 않습니다(무한 탄창). Player 빌드에서는 항상 꺼진 것으로 취급됩니다.")]
+    [Tooltip("켜면 예비 탄약(탄창)이 줄어들지 않습니다(무한 탄창). 개발 모드에서만 효과가 있습니다.")]
     [SerializeField] private bool m_debugInfiniteReserveAmmo = false;
 
-    /// <summary>무한 탄창(예비 탄약) 디버그 플래그입니다. 디버그 트레이너 창에서 사용합니다.</summary>
+    /// <summary>무한 탄창(예비 탄약) 디버그 플래그입니다. 디버그 트레이너에서 사용하며 개발 모드에서만 효과가 있습니다.</summary>
     public bool DebugInfiniteReserveAmmo
     {
         get => m_debugInfiniteReserveAmmo;
@@ -70,7 +74,7 @@ public class PlayerbleUnitData : MonoBehaviour
 
     /// <summary>
     /// 무한 체력 디버그 플래그입니다. 실제 저장·판정은 <see cref="PlayerHealth"/>가 소유하며,
-    /// 이 프로퍼티는 디버그 트레이너 창이 단일 진입점(<c>PlayerbleUnitData</c>)으로만 접근하도록 하는 패스스루입니다.
+    /// 이 프로퍼티는 디버그 트레이너가 단일 진입점(<c>PlayerbleUnitData</c>)으로만 접근하도록 하는 패스스루입니다.
     /// </summary>
     public bool DebugInfiniteHealth
     {
@@ -85,8 +89,8 @@ public class PlayerbleUnitData : MonoBehaviour
     }
 
     /// <summary>
-    /// 무한 장탄수(현재 탄창) 디버그 플래그입니다. 실제 저장·판정은 <see cref="WeaponController"/>가 소유하며,
-    /// 이 프로퍼티는 디버그 트레이너 창이 단일 진입점(<c>PlayerbleUnitData</c>)으로만 접근하도록 하는 패스스루입니다.
+    /// 무한 장탄수(현재 탄창) 디버그 플래그입니다. 실제 저장·판정은 <see cref="Gun"/>가 소유하며,
+    /// 이 프로퍼티는 디버그 트레이너가 단일 진입점(<c>PlayerbleUnitData</c>)으로만 접근하도록 하는 패스스루입니다.
     /// </summary>
     public bool DebugInfiniteMagazine
     {
@@ -99,7 +103,28 @@ public class PlayerbleUnitData : MonoBehaviour
             }
         }
     }
-#endif
+
+    /// <summary>
+    /// 이 플레이어블 유닛을 새 프리팹의 PlayerSquadMember 기본값으로 맞춥니다.
+    /// </summary>
+    [Foldout("Initial Role Setup")]
+    [Button("Player 초기화 세팅 적용")]
+    [ContextMenu("Role Setup/Apply Player Initial Setup")]
+    public void ApplyPlayerInitialSetup()
+    {
+        ApplyInitialRoleSetup(true);
+    }
+
+    /// <summary>
+    /// 이 플레이어블 유닛을 새 프리팹의 AiSquadMember 기본값으로 맞춥니다.
+    /// </summary>
+    [Foldout("Initial Role Setup")]
+    [Button("AI 초기화 세팅 적용")]
+    [ContextMenu("Role Setup/Apply AI Initial Setup")]
+    public void ApplyAiInitialSetup()
+    {
+        ApplyInitialRoleSetup(false);
+    }
 
     /// <summary>
     /// 공개 상태 중 외부에 노출되는 값이 바뀌었을 때 발생합니다.
@@ -107,7 +132,7 @@ public class PlayerbleUnitData : MonoBehaviour
     public event Action OnPublicDataChanged;
 
     /// <summary>
-    /// 보유 캐릭터 목록과 배틀 결과를 연결하는 영속 정의 ID입니다.
+    /// 보유 캐릭터 목록과 필드 결과를 연결하는 영속 정의 ID입니다.
     /// </summary>
     public string DefinitionId => m_definitionId?.Trim() ?? string.Empty;
 
@@ -122,7 +147,10 @@ public class PlayerbleUnitData : MonoBehaviour
     /// <summary>
     /// 플레이어블 캐릭터의 고정 식별자입니다.
     /// </summary>
-    public PlayableCharacterId CharacterId => m_characterId;
+    public PlayerbleCharacterId CharacterId => m_characterId;
+
+    /// <summary>필드 결과 UI가 캐릭터 식별자 조회 없이 직접 표시하는 초상화입니다.</summary>
+    public Sprite ResultPortrait => m_resultPortrait;
 
     /// <summary>
     /// UI나 로그에서 표시할 이름입니다.
@@ -198,9 +226,9 @@ public class PlayerbleUnitData : MonoBehaviour
     /// <summary>
     /// 현재 부상 상태입니다.
     /// </summary>
-    public PlayerInjuryState InjuryState => m_health != null
+    public CharacterInjuryState InjuryState => m_health != null
         ? m_health.CurrentInjuryState
-        : PlayerInjuryState.Normal;
+        : CharacterInjuryState.Normal;
 
     /// <summary>
     /// 부상 게이지를 0~1 범위로 정규화한 값입니다.
@@ -212,7 +240,7 @@ public class PlayerbleUnitData : MonoBehaviour
     /// <summary>
     /// 현재 장착 무기의 컨트롤러입니다.
     /// </summary>
-    public WeaponController WeaponController => m_weaponController;
+    public Gun Gun => m_weaponController;
 
     /// <summary>
     /// 현재 장착 무기의 정의 데이터입니다.
@@ -300,7 +328,7 @@ public class PlayerbleUnitData : MonoBehaviour
             Mathf.Max(1, MaxHp),
             health != null ? health.CurrentInjuryGauge : 0.0f,
             health != null ? health.MaxInjuryGauge : 100.0f,
-            health != null ? health.CurrentInjuryState : PlayerInjuryState.Normal,
+            health != null ? health.CurrentInjuryState : CharacterInjuryState.Normal,
             health != null ? health.IsDowned : IsDown,
             IsDead,
             IsPlayerSquadMember,
@@ -331,7 +359,7 @@ public class PlayerbleUnitData : MonoBehaviour
             m_runtimeId = snapshot.RuntimeId;
         }
 
-        if (snapshot.CharacterId != PlayableCharacterId.Unknown)
+        if (snapshot.CharacterId != PlayerbleCharacterId.Unknown)
         {
             m_characterId = snapshot.CharacterId;
         }
@@ -442,7 +470,7 @@ public class PlayerbleUnitData : MonoBehaviour
     /// 플레이어블 캐릭터 식별자를 설정합니다.
     /// </summary>
     /// <param name="value">새 캐릭터 식별자입니다.</param>
-    public void SetCharacterId(PlayableCharacterId value)
+    public void SetCharacterId(PlayerbleCharacterId value)
     {
         if (m_characterId == value)
         {
@@ -526,12 +554,12 @@ public class PlayerbleUnitData : MonoBehaviour
     }
 
     /// <summary>
-    /// 관찰할 무기 컨트롤러를 설정합니다.
+    /// 관찰할 총기를 설정합니다.
     /// </summary>
-    /// <param name="weaponController">새 무기 컨트롤러입니다.</param>
-    public void SetWeaponController(WeaponController weaponController)
+    /// <param name="gun">새로 관찰할 총기입니다.</param>
+    public void SetGun(Gun gun)
     {
-        if (m_weaponController == weaponController)
+        if (m_weaponController == gun)
         {
             return;
         }
@@ -542,7 +570,7 @@ public class PlayerbleUnitData : MonoBehaviour
             UnsubscribeWeapon();
         }
 
-        m_weaponController = weaponController;
+        m_weaponController = gun;
 
         if (wasActive)
         {
@@ -560,13 +588,11 @@ public class PlayerbleUnitData : MonoBehaviour
     {
         int clampedValue = Mathf.Clamp(value, 0, m_maxReserveAmmo);
 
-#if UNITY_EDITOR
-        if (m_debugInfiniteReserveAmmo && clampedValue < m_reserveAmmo)
+        if (m_debugInfiniteReserveAmmo && GameDevMode.DebugFeaturesEnabled && clampedValue < m_reserveAmmo)
         {
             // 무한 탄창 디버그가 켜져 있으면 소모(감소) 호출은 무시합니다. 증가(예: 보급)는 그대로 반영됩니다.
             return;
         }
-#endif
 
         if (m_reserveAmmo == clampedValue)
         {
@@ -623,12 +649,37 @@ public class PlayerbleUnitData : MonoBehaviour
 
         if (m_weaponController == null)
         {
-            m_weaponController = GetComponentInChildren<WeaponController>(true);
+            m_weaponController = GetComponentInChildren<Gun>(true);
         }
 
         if (m_publicTarget == null && m_squadMember != null)
         {
             m_publicTarget = m_squadMember.CameraTarget;
+        }
+    }
+
+    /// <summary>
+    /// PlayerbleUnitData는 Inspector 진입점만 제공하고, 실제 역할별 컴포넌트 상태는 SquadMemberController가 소유합니다.
+    /// </summary>
+    private void ApplyInitialRoleSetup(bool isPlayerSquadMember)
+    {
+        SquadMemberController squadMember = m_squadMember != null
+            ? m_squadMember
+            : GetComponent<SquadMemberController>();
+
+        if (squadMember == null)
+        {
+            Debug.LogWarning("[PlayerbleUnitData] 초기 역할 세팅을 적용할 SquadMemberController를 찾지 못했습니다.", this);
+            return;
+        }
+
+        if (isPlayerSquadMember)
+        {
+            squadMember.ApplyPlayerInitialSetup();
+        }
+        else
+        {
+            squadMember.ApplyAiInitialSetup();
         }
     }
 
@@ -710,7 +761,7 @@ public class PlayerbleUnitData : MonoBehaviour
         NotifyPublicDataChanged();
     }
 
-    private void HandleInjuryStateChanged(PlayerInjuryState injuryState)
+    private void HandleInjuryStateChanged(CharacterInjuryState injuryState)
     {
         NotifyPublicDataChanged();
     }

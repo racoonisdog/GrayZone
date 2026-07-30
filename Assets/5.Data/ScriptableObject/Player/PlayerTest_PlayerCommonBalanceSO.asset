@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e47b121352c46249ad25d6a8dc240c9, type: 3}
+  m_Name: PlayerTest_PlayerCommonBalanceSO
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCommonBalanceSO
+  m_moveSpeed: 5
+  m_sprintSpeed: 5.335
+  m_rotationSmoothTime: 0.12
+  m_speedChangeRate: 10
+  m_jumpHeight: 1.2
+  m_gravity: -15
+  m_jumpTimeout: 0.5
+  m_fallTimeout: 0.15
+  m_groundedOffset: -0.14
+  m_groundedRadius: 0.28
+  m_topClamp: 70
+  m_bottomClamp: -30
+  m_cameraAngleOverride: 0
+  m_recoilRecoverySpeed: 8
+  m_recoilRecoveryDelay: 0.15
+  m_recoilOnsetSpeed: 35
+  m_recoilMaxPitch: 4
+  m_recoilMaxYaw: 3
+  m_pitchRecoveryRatio: 1
+  m_yawRecoveryRatio: 1
+  m_footstepAudioVolume: 0.5
+  m_lookDistance: 20
+  m_hitscanBlockMarkerOffset: 0.01
+  m_hipfireHoldDuration: 2
+  m_adsFov: 20
+  m_hipfireFov: 30
+  m_zoomLerpSpeed: 10
+  m_visualKickRecoverShots: 1
+  m_visualKickMaxRoll: 3
+  m_visualKickMaxFovPunch: 0
+  m_injuryConversionRatio: 0.35
+  m_normalInjuryMaxGauge: 10
+  m_minorInjuryMaxGauge: 40
+  m_criticalInjuryMinGauge: 71
+  m_baseInjuryMultiplier: 1
+  m_revivedOnceInjuryMultiplier: 1.2
+  m_revivedTwiceInjuryMultiplier: 1.5
+  m_revivedThreeTimesInjuryMultiplier: 1.8
+  m_downDuration: 30
+  m_maxReviveCount: 3
+  m_firstReviveHpPercent: 50
+  m_secondReviveHpPercent: 25
+  m_thirdReviveHpPercent: 10

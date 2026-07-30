@@ -3,14 +3,14 @@ using UnityEngine;
 
 /// <summary>
 /// <see cref="CharacterSnapshotData"/>를 복사해 셸터 씬에서 편집하는 캐릭터 런타임 데이터입니다.
-/// BattleMemberRuntimeData와 동일하게 스냅샷은 입출력 경계로만 사용하고, 씬 내부 변경값은 이 객체가 소유합니다.
+/// FieldMemberRuntimeData와 동일하게 스냅샷은 입출력 경계로만 사용하고, 씬 내부 변경값은 이 객체가 소유합니다.
 /// </summary>
 [Serializable]
 public sealed class ShelterMemberRuntimeData
 {
     [SerializeField] private string definitionId = string.Empty;
     [SerializeField] private string runtimeId = string.Empty;
-    [SerializeField] private PlayableCharacterId characterId;
+    [SerializeField] private PlayerbleCharacterId characterId;
     [SerializeField] private NPCType npcType;
     [SerializeField] private string displayName = string.Empty;
     [SerializeField] private int reliability;
@@ -18,7 +18,7 @@ public sealed class ShelterMemberRuntimeData
     [SerializeField] private int maxHp = 1;
     [SerializeField] private float injuryGauge;
     [SerializeField] private float maxInjuryGauge = 100.0f;
-    [SerializeField] private PlayerInjuryState injuryState;
+    [SerializeField] private CharacterInjuryState injuryState;
     [SerializeField] private bool isDown;
     [SerializeField] private bool isCombatOut;
     [SerializeField] private bool isPlayerSquadMember;
@@ -32,7 +32,7 @@ public sealed class ShelterMemberRuntimeData
 
     public string DefinitionId => definitionId ?? string.Empty;
     public string RuntimeId => string.IsNullOrWhiteSpace(runtimeId) ? DefinitionId : runtimeId;
-    public PlayableCharacterId CharacterId => characterId;
+    public PlayerbleCharacterId CharacterId => characterId;
     public NPCType Type => npcType;
     public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? DefinitionId : displayName;
     public int Reliability => Mathf.Clamp(reliability, 0, 100);
@@ -41,7 +41,7 @@ public sealed class ShelterMemberRuntimeData
     public bool IsDead => CurrentHp <= 0 || isCombatOut;
     public float InjuryGauge => Mathf.Clamp(injuryGauge, 0.0f, MaxInjuryGauge);
     public float MaxInjuryGauge => Mathf.Max(1.0f, maxInjuryGauge);
-    public PlayerInjuryState InjuryState => injuryState;
+    public CharacterInjuryState InjuryState => injuryState;
     public bool IsDown => isDown;
     public bool IsCombatOut => isCombatOut;
     public bool IsPlayerSquadMember => isPlayerSquadMember;
@@ -58,7 +58,7 @@ public sealed class ShelterMemberRuntimeData
     {
     }
 
-    /// <summary>Battle과 GameDataManager가 사용하는 공용 캐릭터 스냅샷을 셸터 작업 데이터로 복사합니다.</summary>
+    /// <summary>Field와 GameDataManager가 사용하는 공용 캐릭터 스냅샷을 셸터 작업 데이터로 복사합니다.</summary>
     public ShelterMemberRuntimeData(CharacterSnapshotData snapshot)
     {
         if (!ApplySnapshot(snapshot))
@@ -66,7 +66,7 @@ public sealed class ShelterMemberRuntimeData
     }
 
     /// <summary>기존 NPC 정의 에셋을 신규 캐릭터 스냅샷 구조로 가져오기 위한 부트스트랩 생성자입니다.</summary>
-    public ShelterMemberRuntimeData(PlayableCharacterDefinition characterDefinition)
+    public ShelterMemberRuntimeData(PlayerbleCharacterDefinition characterDefinition)
         : this(characterDefinition != null
             ? characterDefinition.CreateSnapshot()
             : throw new ArgumentNullException(nameof(characterDefinition)))
@@ -86,7 +86,7 @@ public sealed class ShelterMemberRuntimeData
         : this(new CharacterSnapshotData(
             definitionId,
             definitionId,
-            PlayableCharacterId.Unknown,
+            PlayerbleCharacterId.Unknown,
             type,
             definitionId,
             0,
@@ -94,7 +94,7 @@ public sealed class ShelterMemberRuntimeData
             maxHp,
             injuryGauge,
             maxInjuryGauge,
-            PlayerInjuryStateRule.FromGauge(injuryGauge, maxInjuryGauge),
+            CharacterInjuryStateRule.FromGauge(injuryGauge, maxInjuryGauge),
             false,
             currentHp <= 0,
             false,
@@ -164,7 +164,7 @@ public sealed class ShelterMemberRuntimeData
         return true;
     }
 
-    private bool SetInjuryState(PlayerInjuryState state)
+    private bool SetInjuryState(CharacterInjuryState state)
     {
         if (injuryState == state)
             return false;
@@ -178,7 +178,7 @@ public sealed class ShelterMemberRuntimeData
         float clamped = Mathf.Clamp(value, 0.0f, MaxInjuryGauge);
         bool gaugeChanged = !Mathf.Approximately(injuryGauge, clamped);
         injuryGauge = clamped;
-        bool stateChanged = SetInjuryState(PlayerInjuryStateRule.FromGauge(injuryGauge, MaxInjuryGauge));
+        bool stateChanged = SetInjuryState(CharacterInjuryStateRule.FromGauge(injuryGauge, MaxInjuryGauge));
         return gaugeChanged || stateChanged;
     }
 
@@ -247,7 +247,7 @@ public sealed class ShelterMemberRuntimeData
         currentHp = snapshot.IsCombatOut ? 0 : snapshot.CurrentHp;
         maxInjuryGauge = snapshot.MaxInjuryGauge;
         injuryGauge = snapshot.InjurySeverityGauge;
-        injuryState = PlayerInjuryStateRule.FromGauge(injuryGauge, maxInjuryGauge);
+        injuryState = CharacterInjuryStateRule.FromGauge(injuryGauge, maxInjuryGauge);
         isDown = snapshot.IsDown;
         isCombatOut = snapshot.IsCombatOut;
         isPlayerSquadMember = snapshot.IsPlayerSquadMember;

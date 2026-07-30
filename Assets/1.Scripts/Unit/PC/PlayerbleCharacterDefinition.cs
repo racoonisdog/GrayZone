@@ -1,14 +1,14 @@
 using UnityEngine;
 using UnityEngine.Serialization;
 
-[CreateAssetMenu(fileName = "PlayableCharacterDefinition", menuName = "Scriptable Objects/PlayableCharacterDefinition")]
-public class PlayableCharacterDefinition : ScriptableObject
+[CreateAssetMenu(fileName = "PlayerbleCharacterDefinition", menuName = "Scriptable Objects/PlayerbleCharacterDefinition")]
+public class PlayerbleCharacterDefinition : ScriptableObject
 {
     [Header("Character Identity")]
     [FormerlySerializedAs("<DefinitionId>k__BackingField")]
     [SerializeField] private string definitionId = string.Empty;
     [SerializeField] private string runtimeId = string.Empty;
-    [SerializeField] private PlayableCharacterId characterId = PlayableCharacterId.Unknown;
+    [SerializeField] private PlayerbleCharacterId characterId = PlayerbleCharacterId.Unknown;
     [SerializeField] private string displayName = string.Empty;
     [FormerlySerializedAs("Type")]
     [SerializeField] private NPCType npcType;
@@ -29,7 +29,7 @@ public class PlayableCharacterDefinition : ScriptableObject
 
     public string DefinitionId => string.IsNullOrWhiteSpace(definitionId) ? name : definitionId.Trim();
     public string RuntimeId => string.IsNullOrWhiteSpace(runtimeId) ? DefinitionId : runtimeId.Trim();
-    public PlayableCharacterId CharacterId => characterId;
+    public PlayerbleCharacterId CharacterId => characterId;
     public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? name : displayName.Trim();
     public NPCType NpcType => npcType;
     public int Reliability => Mathf.Clamp(reliability, 0, 100);
@@ -50,7 +50,7 @@ public class PlayableCharacterDefinition : ScriptableObject
             MaxHp,
             InjuryGauge,
             MaxInjuryGauge,
-            PlayerInjuryStateRule.FromGauge(InjuryGauge, MaxInjuryGauge),
+            CharacterInjuryStateRule.FromGauge(InjuryGauge, MaxInjuryGauge),
             false,
             false,
             false,

@@ -15,7 +15,8 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     [SerializeField] protected Faction m_faction = Faction.None;
 
     [Foldout("HP Options")]
-    [Tooltip("최대 HP입니다. 1보다 작은 값은 1로 보정됩니다.")]
+    [Tooltip("최대 HP입니다.")]
+    [Clamp(Min = 1)]
     [FormerlySerializedAs("m_maxHP")]
     [SerializeField] protected int m_maxHp = 10;
 
@@ -57,18 +58,28 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     public bool IsDead => m_isDead;
 
     /// <summary>
-    /// 이 유닛의 진영입니다. 직렬화 값이 <see cref="Faction.None"/>이면
-    /// gameObject의 레이어 번호에서 진영을 추론합니다(레이어 번호 == 진영 enum 값).
+    /// 이 유닛의 진영입니다. 직렬화 값이 <see cref="Faction.None"/>이면 <see cref="DefaultFaction"/>을 씁니다.
     /// </summary>
     public Faction Faction => m_faction != Faction.None
         ? m_faction
-        : LayerToFaction(gameObject.layer);
+        : DefaultFaction;
+
+    /// <summary>
+    /// 직렬화 값이 없을 때 사용할 진영입니다.
+    /// </summary>
+    /// <remarks>
+    /// 기본 구현은 레이어 번호에서 추론합니다(레이어 번호 == 진영 enum 값).
+    /// 다만 레이어는 히트박스 분리 같은 이유로 바뀔 수 있어서, 진영을 레이어에 묶어 두면
+    /// 레이어를 옮기는 순간 조용히 <see cref="Faction.None"/>이 되어 피해가 전혀 오가지 않게 됩니다.
+    /// 실제로 그 사고가 있었으므로, 진영이 정해진 파생 타입은 이 값을 고정해 결합을 끊습니다.
+    /// </remarks>
+    protected virtual Faction DefaultFaction => LayerToFaction(gameObject.layer);
 
     /// <summary>
     /// 레이어 번호를 진영으로 환산합니다. 진영 enum 값이 레이어 번호와 동일하게
     /// 맞춰져 있어, 알려진 레이어면 그대로 캐스팅합니다.
     /// </summary>
-    private static Faction LayerToFaction(int layer)
+    protected static Faction LayerToFaction(int layer)
     {
         Faction candidate = (Faction)layer;
         return candidate == Faction.Player
@@ -87,8 +98,13 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     /// <summary>부활 또는 전체 회복으로 컴포넌트가 사망 상태에서 벗어날 때 발생합니다.</summary>
     public event Action OnRevive;
 
-    /// <summary>피해로 현재 HP가 감소했을 때 발생합니다. 인자는 실제로 감소한 HP입니다.</summary>
-    public event Action<int> OnDamaged;
+    /// <summary>피해로 현재 HP가 감소했을 때 발생합니다.</summary>
+    /// <remarks>
+    /// 인자는 실제로 감소한 HP와 피해를 입힌 대상입니다. 공격자를 모르는 경로로 들어온 피해는 null입니다.
+    /// 공격자를 이벤트에 함께 싣는 이유는, 그 정보가 피해 발생 순간에만 존재하기 때문입니다.
+    /// 별도 필드에 보관해 두고 나중에 조회하는 방식은 같은 프레임에 두 발을 맞으면 덮어써집니다.
+    /// </remarks>
+    public event Action<int, GameObject> OnDamaged;
 
     private void Start()
     {
@@ -96,9 +112,12 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     }
 
 #if UNITY_EDITOR
+    /// <remarks>
+    /// 단일 필드 경계는 <see cref="ClampAttribute"/>가 담당하므로 여기 두지 않습니다.
+    /// 남은 것은 현재 HP가 최대 HP를 넘지 못한다는 런타임 상태 규칙이며, 다른 필드가 상한이라 선언으로 표현할 수 없습니다.
+    /// </remarks>
     protected void OnValidate()
     {
-        m_maxHp = Mathf.Max(1, m_maxHp);
         m_currentHp = Mathf.Clamp(m_currentHp, 0, m_maxHp);
     }
 #endif
@@ -146,7 +165,9 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     /// <summary>
     /// 피해를 적용합니다. HP가 실제로 변경된 경우에만 true를 반환합니다.
     /// </summary>
-    public virtual bool TakeDamage(int damage)
+    /// <param name="damage">적용할 피해량입니다.</param>
+    /// <param name="attacker">피해를 입힌 대상입니다. 디버그처럼 공격자가 없는 경로는 null입니다.</param>
+    public virtual bool TakeDamage(int damage, GameObject attacker = null)
     {
         if (m_isDead)
         {
@@ -173,7 +194,7 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
         LogHealthDebug($"[HealthSystem] Hit. Current HP : {m_currentHp}");
 
         NotifyHPChanged();
-        OnDamaged?.Invoke(actualDamage);
+        OnDamaged?.Invoke(actualDamage, attacker);
 
         if (m_currentHp <= 0)
         {

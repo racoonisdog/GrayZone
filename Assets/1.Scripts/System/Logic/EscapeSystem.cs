@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Serialization;
 
 /// <summary>
-/// 현재 PlayerSquadMember의 탈출 지점 진입을 판정하고 배틀 결과 확정 및 결과 UI 표시를 시작합니다.
+/// 현재 PlayerSquadMember의 탈출 지점 진입을 판정하고 필드 결과 확정 및 결과 UI 표시를 시작합니다.
 /// </summary>
 [DisallowMultipleComponent]
 public class EscapeSystem : MonoBehaviour
@@ -13,9 +13,13 @@ public class EscapeSystem : MonoBehaviour
     [Tooltip("현재 PlayerSquadMember를 식별하는 스쿼드 매니저입니다. 비어 있으면 자동 탐색합니다.")]
     [SerializeField] private SquadManager m_squadManager;
 
-    [Tooltip("배틀 씬 런타임 데이터와 귀환 정산 결과를 관리하는 씬 전용 데이터 매니저입니다. 비어 있으면 자동 탐색합니다.")]
+    [Tooltip("필드 씬 런타임 데이터와 귀환 정산 결과를 관리하는 씬 전용 데이터 매니저입니다. 비어 있으면 자동 탐색합니다.")]
     [FormerlySerializedAs("m_battleManager")]
-    [SerializeField] private BattleSceneDataManager m_battleSceneDataManager;
+    [FormerlySerializedAs("m_battleSceneDataManager")]
+    [SerializeField] private FieldSceneDataManager m_fieldSceneDataManager;
+
+    [Tooltip("결과 UI 진입 시 필드 게임플레이 입력을 UI 모드로 전환하는 필드 씬 루트 컨트롤러입니다.")]
+    [SerializeField] private FieldManager m_fieldManager;
 
     [Header("Result UI")]
     [Tooltip("탈출 시 활성화할 Result UI 루트입니다. 비어 있으면 'Result UI' 이름의 오브젝트를 자동 탐색합니다.")]
@@ -55,7 +59,7 @@ public class EscapeSystem : MonoBehaviour
         TryShowResultFor(other);
     }
 
-    /// <summary>스쿼드·배틀 데이터·결과 UI 참조 중 비어 있는 항목을 현재 씬에서 자동 탐색합니다.</summary>
+    /// <summary>스쿼드·필드 데이터·결과 UI 참조 중 비어 있는 항목을 현재 씬에서 자동 탐색합니다.</summary>
     private void AutoFindReferences()
     {
         if (m_squadManager == null)
@@ -63,9 +67,14 @@ public class EscapeSystem : MonoBehaviour
             m_squadManager = FindFirstObjectByType<SquadManager>();
         }
 
-        if (m_battleSceneDataManager == null)
+        if (m_fieldSceneDataManager == null)
         {
-            m_battleSceneDataManager = FindFirstObjectByType<BattleSceneDataManager>();
+            m_fieldSceneDataManager = FindFirstObjectByType<FieldSceneDataManager>();
+        }
+
+        if (m_fieldManager == null)
+        {
+            m_fieldManager = FindFirstObjectByType<FieldManager>();
         }
 
         if (m_resultUI == null)
@@ -88,7 +97,7 @@ public class EscapeSystem : MonoBehaviour
         }
     }
 
-    /// <summary>진입자가 현재 PlayerSquadMember이면 배틀 결과 확정과 결과 UI 표시를 시작합니다.</summary>
+    /// <summary>진입자가 현재 PlayerSquadMember이면 필드 결과 확정과 결과 UI 표시를 시작합니다.</summary>
     private void TryShowResultFor(Collider entrant)
     {
         if (!IsCurrentPlayerEntrant(entrant))
@@ -155,19 +164,37 @@ public class EscapeSystem : MonoBehaviour
         return playerData != null && playerData.IsPlayerSquadMember;
     }
 
-    /// <summary>배틀을 탈출 사유로 최종 확정한 뒤 기존 Result UI에 정산 값을 표시합니다.</summary>
+    /// <summary>
+    /// 탈출 지점 진입 없이 즉시 탈출 절차를 실행합니다.
+    /// </summary>
+    /// <remarks>
+    /// 디버그 트레이너처럼 판정을 건너뛰고 정산을 확인해야 하는 도구가 쓰는 진입점입니다.
+    /// 실제 탈출과 같은 경로를 타야 정산 결과가 달라지지 않으므로, 절차를 복제하지 않고 이 메서드를 공유합니다.
+    /// </remarks>
+    public void ForceEscape()
+    {
+        ShowResultUI();
+    }
+
+    /// <summary>필드를 탈출 사유로 최종 확정한 뒤 기존 Result UI에 정산 값을 표시합니다.</summary>
     private void ShowResultUI()
     {
         AutoFindReferences();
 
-        if (m_battleSceneDataManager != null)
+        if (m_fieldManager != null && m_fieldManager.SetInputMode(InputMode.UI) != 1)
         {
-            m_battleSceneDataManager.FinalizeBattle(BattleEndReason.Escaped);
+            Debug.LogWarning("[EscapeSystem] FieldManager가 UI 입력 모드로 전환되지 않아 결과 UI를 열지 않았습니다.", this);
+            return;
         }
 
-        if (m_resultUIController != null && m_battleSceneDataManager != null)
+        if (m_fieldSceneDataManager != null)
         {
-            m_resultUIController.ShowResult(m_battleSceneDataManager.CaptureResult());
+            m_fieldSceneDataManager.FinalizeField(FieldEndReason.Escaped);
+        }
+
+        if (m_resultUIController != null && m_fieldSceneDataManager != null)
+        {
+            m_resultUIController.ShowResult(m_fieldSceneDataManager.CaptureResult());
             return;
         }
 

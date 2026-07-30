@@ -62,10 +62,10 @@ public class CrosshairController : MonoBehaviour
     /// <remarks>
     /// 이건 순수하게 "어떻게 보여줄까"의 표현 선택이며, 실제 탄 궤적은 바꾸지 않습니다(실제 분포는 무기가 소유).
     /// 탄은 콘 경계(하드캡)까지 거의 안 가고 중심에 몰리므로, 팔 끝을 콘 경계에 두면 실제 탄착보다 몇 배 넓어 보입니다.
-    /// 무기의 분포·집중도(<see cref="WeaponController.Distribution"/>/<see cref="WeaponController.SpreadConcentration"/>)를
+    /// 무기의 분포·집중도(<see cref="Gun.Distribution"/>/<see cref="Gun.SpreadConcentration"/>)를
     /// 읽어, 선택한 기준의 반경을 표시 배율(factor)로 환산합니다.
     /// </remarks>
-    private enum SpreadDisplayBasis
+    public enum SpreadDisplayBasis
     {
         /// <summary>콘 경계(하드캡). 이론상 최대 편향이며 탄은 극히 일부만 도달합니다(가장 넓게 보임).</summary>
         ConeEdge,
@@ -381,7 +381,7 @@ public class CrosshairController : MonoBehaviour
 
     // (디버그) 값 복사가 아니라 전환 시점에 연결된 라이브 소스 포인터를 통해 현재값을 읽는 읽기전용 게터입니다.
     // 별도 매 프레임 업데이트 없이 인스펙터 리페인트 때마다 포인터로 현재값을 당겨옵니다.
-    [Tooltip("(디버그) WeaponController에서 읽어온 현재 spread degree입니다. 실제 탄의 랜덤 방향이 아니라 발사 cone의 현재 크기(콘 반각=하드캡)입니다.")]
+    [Tooltip("(디버그) Gun에서 읽어온 현재 spread degree입니다. 실제 탄의 랜덤 방향이 아니라 발사 cone의 현재 크기(콘 반각=하드캡)입니다.")]
     [ShowInInspector] private float DebugSpreadDegrees => m_debugSpreadSource != null ? m_debugSpreadSource() : 0.0f;
 
     [Tooltip("(디버그) 콘 반각 대비 표시 배율(tan 공간, 수정 불가)입니다. 현재 표시 기준(basis)과 마지막으로 받은 무기 분포/집중도로 계산되는 중간값이며, 팔 끝이 탄이 실제로 몰리는 반경을 가리키게 합니다.")]
@@ -425,13 +425,25 @@ public class CrosshairController : MonoBehaviour
     private float m_killTimer;
     private float m_currentGapPixels;
     private float m_lastSpreadDegrees;
-    private WeaponController.SpreadDistribution m_lastDistribution = WeaponController.SpreadDistribution.Gaussian;
+    private SpreadDistribution m_lastDistribution = SpreadDistribution.Gaussian;
     private float m_lastConcentration = 3.0f;
     private float m_lastSpreadDisplayFactor = 1.0f;
     private float m_lastCameraFovDegrees = 60.0f;
 
     /// <summary>탄퍼짐 정확도 표시 여부입니다.</summary>
     public bool UseSpreadAccuracy => m_useSpreadAccuracy;
+
+    /// <summary>탄퍼짐 콘을 조준선 간격으로 환산하는 표시 기준입니다.</summary>
+    public SpreadDisplayBasis CurrentSpreadDisplayBasis => m_spreadDisplayBasis;
+
+    /// <summary>조준선 최대 간격 상한 사용 여부입니다.</summary>
+    public bool ClampToMaxGap => m_clampToMaxGap;
+
+    /// <summary>조준선 최대 간격 상한(픽셀)입니다.</summary>
+    public float MaxGapPixels => Mathf.Max(0.0f, m_maxGapPixels);
+
+    /// <summary>조준선 간격이 목표를 따라가는 보간 속도입니다.</summary>
+    public float SpreadLerpSpeed => Mathf.Max(0.0f, m_lerpSpeed);
 
     private bool HasMainShape => m_mainShape != MainShape.None;
     private bool HasSubShape => m_subShape != SubShape.None;
@@ -593,12 +605,12 @@ public class CrosshairController : MonoBehaviour
     /// 표시 기준(<see cref="m_spreadDisplayBasis"/>)과 분포·집중도로 배율(factor)을 계산하고, 유효각(= spread를 tan 공간에서 factor배)을
     /// FOV로 실제 화면 투영하므로 팔 벌어짐이 화면상 탄착 분포와 1:1이 됩니다. 분포·집중도는 읽기만 하며 실제 탄 궤적은 무기가 결정합니다.
     /// </remarks>
-    public void SetSpread(float spreadDegrees, WeaponController.SpreadDistribution distribution, float concentration, float cameraFovDegrees, bool snap)
+    public void SetSpread(float spreadDegrees, SpreadDistribution distribution, float concentration, float cameraFovDegrees, bool snap)
     {
         SetSpreadInternal(spreadDegrees, distribution, concentration, cameraFovDegrees, snap);
     }
 
-    private void SetSpreadInternal(float spreadDegrees, WeaponController.SpreadDistribution distribution, float concentration, float cameraFovDegrees, bool snap)
+    private void SetSpreadInternal(float spreadDegrees, SpreadDistribution distribution, float concentration, float cameraFovDegrees, bool snap)
     {
         if (!CacheVisualElements())
         {
@@ -634,20 +646,20 @@ public class CrosshairController : MonoBehaviour
     /// <remarks>
     /// ApplySpread의 편향 = 단위오프셋(크기 |·|∈[0,1]) × tan(spread)이라, 이 배율을 tan(spread)에 곱하면 선택한 기준의 반경이 됩니다.
     /// 고정 계수의 출처:
-    /// - Gaussian: WeaponController.SampleGaussianUnitOffset이 σ = 1/concentration으로 샘플링(단위원 밖은 경계로 클램프).
+    /// - Gaussian: Gun.SampleGaussianUnitOffset이 σ = 1/concentration으로 샘플링(단위원 밖은 경계로 클램프).
     ///   Rayleigh(σ) 기준 RMS = √2·σ = √2/concentration, 2σ(≈86% 포함) = 2/concentration.
     ///   ※ 이 공식은 클램프를 무시한 해석적 근사입니다. concentration이 낮아 클램프가 자주 걸리면 실제 분포와 벌어집니다(기본 3에서는 클램프 ~1%로 정확).
-    ///     WeaponController.SampleGaussianUnitOffset의 σ 정의를 바꾸면 이 계수도 함께 갱신해야 합니다.
+    ///     Gun.SampleGaussianUnitOffset의 σ 정의를 바꾸면 이 계수도 함께 갱신해야 합니다.
     /// - Uniform: 반경 1 원판(pdf 2r) 기준 RMS = 1/√2 ≈ 0.707, 86% 포함 반경 = √0.86 ≈ 0.927. (클램프·concentration과 무관하게 정확)
     /// - Core: Gaussian 최빈 반경(mode) = σ = 1/concentration(가장 타이트). Uniform은 밀집 코어가 없어 0.5로 둡니다.
     /// - ConeEdge: 하드캡(단위오프셋 최대 = 1)이라 항상 1.
     /// 마지막에 [0,1]로 클램프해 콘 경계를 넘지 않게 합니다.
     /// </remarks>
-    private float CalculateDisplayFactor(WeaponController.SpreadDistribution distribution, float concentration)
+    private float CalculateDisplayFactor(SpreadDistribution distribution, float concentration)
     {
         float c = Mathf.Max(1.0f, concentration);
 
-        float factor = distribution == WeaponController.SpreadDistribution.Uniform
+        float factor = distribution == SpreadDistribution.Uniform
             ? m_spreadDisplayBasis switch
             {
                 SpreadDisplayBasis.Core => 0.5f,               // Uniform은 밀집 코어가 없어 임의의 타이트값
@@ -701,6 +713,34 @@ public class CrosshairController : MonoBehaviour
         m_useSpreadAccuracy = enabled;
         SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
     }
+
+    /// <summary>탄퍼짐 콘을 조준선 간격으로 환산하는 표시 기준을 설정합니다.</summary>
+    /// <param name="value">새 표시 기준입니다. 실제 탄 궤적은 변경하지 않습니다.</param>
+    public void SetSpreadDisplayBasis(SpreadDisplayBasis value)
+    {
+        m_spreadDisplayBasis = value;
+        SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
+    }
+
+    /// <summary>조준선 최대 간격 상한 사용 여부를 설정합니다.</summary>
+    /// <param name="value">상한을 적용하려면 <c>true</c>입니다.</param>
+    public void SetClampToMaxGap(bool value)
+    {
+        m_clampToMaxGap = value;
+        SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
+    }
+
+    /// <summary>조준선 최대 간격 상한(픽셀)을 설정합니다.</summary>
+    /// <param name="value">음수는 0으로 보정됩니다.</param>
+    public void SetMaxGapPixels(float value)
+    {
+        m_maxGapPixels = Mathf.Max(0.0f, value);
+        SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
+    }
+
+    /// <summary>조준선 간격 보간 속도를 설정합니다.</summary>
+    /// <param name="value">음수는 0으로 보정됩니다.</param>
+    public void SetSpreadLerpSpeed(float value) => m_lerpSpeed = Mathf.Max(0.0f, value);
 
     /// <summary>
     /// 재장전 상태를 설정합니다. 스왑 토글이 켜져 있으면 재장전 중 크로스헤어를 숨기고 중앙 탄약 아이콘을 표시합니다.

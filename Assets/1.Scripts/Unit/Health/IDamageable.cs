@@ -1,8 +1,10 @@
+using UnityEngine;
+
 /// <summary>
 /// 진영을 가지고 피해를 받을 수 있는 대상입니다.
 /// </summary>
 /// <remarks>
-/// 공격 측(<c>WeaponController</c>, <c>EnemyAttack</c> 등)이 구체 타입
+/// 공격 측(<c>Gun</c>, <c>EnemyAttack</c> 등)이 구체 타입
 /// (<c>PlayerHealth</c>/<c>EnemyHealth</c>)을 몰라도 진영 판정과 피해 적용을
 /// 한 경로로 처리할 수 있게 하는 공통 계약입니다. <see cref="HealthSystemBase"/>가 구현합니다.
 /// </remarks>
@@ -17,5 +19,11 @@ public interface IDamageable
     /// <summary>
     /// 피해를 적용합니다. HP가 실제로 변경된 경우에만 true를 반환합니다.
     /// </summary>
-    bool TakeDamage(int amount);
+    /// <param name="amount">적용할 피해량입니다.</param>
+    /// <param name="attacker">
+    /// 이 피해를 입힌 대상입니다. 모르면 null을 넘깁니다.
+    /// 피해를 받은 쪽이 "누가 때렸는지"를 알아야 반격할 수 있는데, 그 정보는 피해가 발생하는 순간에만 있습니다.
+    /// 결과 알림 이벤트까지 함께 실어 보내지 않으면 중간에 사라집니다.
+    /// </param>
+    bool TakeDamage(int amount, GameObject attacker = null);
 }

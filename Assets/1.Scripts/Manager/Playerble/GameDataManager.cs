@@ -26,7 +26,7 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private List<ItemStorageEntry> itemStorageEntries = new();
 
     [Header("보유 캐릭터 및 장비 정본")]
-    [Tooltip("Battle과 Shelter가 공통으로 복사해 사용하는 캐릭터 스냅샷 정본입니다.")]
+    [Tooltip("Field와 Shelter가 공통으로 복사해 사용하는 캐릭터 스냅샷 정본입니다.")]
     [FormerlySerializedAs("ownedCharacters")]
     [SerializeField] private List<CharacterSnapshotData> characters = new();
 
@@ -41,25 +41,38 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
     [SerializeField] private ManufacturingRuntimeData manufacturing = new();
 
-    [Header("최근 배틀 정산 정본")]
-    [Tooltip("마지막으로 정산 반영이 완료된 배틀 ID이며 중복 반영 방지 키로 사용합니다.")]
-    [SerializeField] private string lastSettledBattleId = string.Empty;
-    [Tooltip("최근 배틀이 진행된 스테이지 ID입니다.")]
-    [SerializeField] private string lastBattleStageId = string.Empty;
-    [Tooltip("최근 배틀의 최종 성공, 실패 또는 철수 결과입니다.")]
-    [SerializeField] private BattleOutcome lastBattleOutcome;
-    [Tooltip("최근 배틀이 종료된 직접적인 사유입니다.")]
-    [SerializeField] private BattleEndReason lastBattleEndReason;
-    [Tooltip("최근 배틀 종료 전에 임무 목표를 달성했는지 여부입니다.")]
-    [SerializeField] private bool lastBattleMissionCompleted;
-    [Tooltip("최근 배틀의 총 경과 시간입니다. 단위는 초입니다.")]
-    [Min(0.0f)][SerializeField] private float lastBattleElapsedSeconds;
-    [Tooltip("최근 배틀에서 스쿼드 전체가 확정한 적 처치 수입니다.")]
-    [Min(0)][SerializeField] private int lastBattleTotalKillCount;
-    [Tooltip("최근 배틀의 캐릭터별 최종 상태와 처치 결과입니다.")]
-    [SerializeField] private List<BattleMemberResultData> lastBattleMemberResults = new();
-    [Tooltip("최근 배틀에서 획득한 자원별 수량입니다.")]
-    [SerializeField] private List<BattleResourceAmountData> lastBattleAcquiredResources = new();
+    [Header("최근 필드 정산 정본")]
+    [Tooltip("마지막으로 정산 반영이 완료된 필드 ID이며 중복 반영 방지 키로 사용합니다.")]
+    [FormerlySerializedAs("lastSettledBattleId")]
+    [SerializeField] private string lastSettledFieldId = string.Empty;
+    [Tooltip("최근 필드가 진행된 스테이지 ID입니다.")]
+    [FormerlySerializedAs("lastBattleStageId")]
+    [SerializeField] private string lastFieldStageId = string.Empty;
+    [Tooltip("최근 필드의 최종 성공, 실패 또는 철수 결과입니다.")]
+    [FormerlySerializedAs("lastBattleOutcome")]
+    [SerializeField] private FieldOutcome lastFieldOutcome;
+    [Tooltip("최근 필드가 종료된 직접적인 사유입니다.")]
+    [FormerlySerializedAs("lastBattleEndReason")]
+    [SerializeField] private FieldEndReason lastFieldEndReason;
+    [Tooltip("최근 필드 종료 전에 임무 목표를 달성했는지 여부입니다.")]
+    [FormerlySerializedAs("lastBattleMissionCompleted")]
+    [SerializeField] private bool lastFieldMissionCompleted;
+    [Tooltip("최근 필드의 총 경과 시간입니다. 단위는 초입니다.")]
+    [FormerlySerializedAs("lastBattleElapsedSeconds")]
+    [Min(0.0f)][SerializeField] private float lastFieldElapsedSeconds;
+    [Tooltip("최근 필드에서 스쿼드 전체가 확정한 적 처치 수입니다.")]
+    [FormerlySerializedAs("lastBattleTotalKillCount")]
+    [Min(0)][SerializeField] private int lastFieldKillCount;
+    [Tooltip("최근 필드의 캐릭터별 최종 상태와 처치 결과입니다.")]
+    [FormerlySerializedAs("lastBattleMemberResults")]
+    [SerializeField] private List<FieldMemberResultData> lastFieldMemberResults = new();
+    [Tooltip("최근 필드에서 획득한 자원별 수량입니다.")]
+    [FormerlySerializedAs("lastBattleAcquiredResources")]
+    [SerializeField] private List<FieldResourceAmountData> lastFieldAcquiredResources = new();
+
+    private const int MaxFieldKillHistory = 20;
+    [SerializeField] private int totalFieldKillCount;
+    [SerializeField] private List<int> fieldKillHistory = new();
 
     private ShelterSceneDataManager activeShelterSceneDataManager;
 
@@ -72,10 +85,10 @@ public class GameDataManager : MonoBehaviour
     public int TotalOwnedCharacterCount => CharacterCount;
 
     /// <summary>현재 보유한 플레이어블 캐릭터 수입니다.</summary>
-    public int PlayableCharacterCount => CharacterCount;
+    public int PlayerbleCharacterCount => CharacterCount;
 
     /// <summary>현재 보유한 비플레이어 NPC 수입니다.</summary>
-    public int NonPlayableNpcCount => 0;
+    public int NonPlayerbleNpcCount => 0;
 
     /// <summary>0~100 범위로 보정된 현재 셸터 안정도입니다.</summary>
     public int ShelterStability => Mathf.Clamp(shelterStability, 0, 100);
@@ -86,11 +99,14 @@ public class GameDataManager : MonoBehaviour
     /// <summary>현재 씬의 ShelterSceneDataManager가 등록되어 있는지 여부입니다.</summary>
     public bool HasActiveShelterSceneDataManager => activeShelterSceneDataManager != null;
 
-    /// <summary>현재 세션 또는 저장 데이터에 반영된 최근 배틀 결과가 있는지 여부입니다.</summary>
-    public bool HasLastBattleResult => !string.IsNullOrWhiteSpace(lastSettledBattleId);
+    /// <summary>현재 세션 또는 저장 데이터에 반영된 최근 필드 결과가 있는지 여부입니다.</summary>
+    public bool HasLastFieldResult => !string.IsNullOrWhiteSpace(lastSettledFieldId);
 
-    /// <summary>마지막으로 정산 반영이 완료된 배틀 ID입니다.</summary>
-    public string LastSettledBattleId => lastSettledBattleId ?? string.Empty;
+    /// <summary>마지막으로 정산 반영이 완료된 필드 ID입니다.</summary>
+    public string LastSettledFieldId => lastSettledFieldId ?? string.Empty;
+
+    public int TotalFieldKillCount => Mathf.Max(0, totalFieldKillCount);
+    public IReadOnlyList<int> FieldKillHistory => fieldKillHistory;
 
     /// <summary>중복 인스턴스를 거부하고 모든 평탄 정본 필드를 정규화합니다.</summary>
     private void Awake()
@@ -156,7 +172,7 @@ public class GameDataManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>BattleEntryData와 동일한 역할의 셸터 씬 진입 패킷을 생성합니다.</summary>
+    /// <summary>FieldEntryData와 동일한 역할의 셸터 씬 진입 패킷을 생성합니다.</summary>
     public ShelterEntryData CreateShelterEntryData()
     {
         return new ShelterEntryData(CreateShelterRuntimeSnapshot());
@@ -207,7 +223,7 @@ public class GameDataManager : MonoBehaviour
         packet.EnsureRuntimeContainers();
         shelterStability = packet.ShelterStability;
         currentDay = packet.CurrentDay;
-        playableSquadRuntimeIds = new List<string>(packet.BattleSquadRuntimeIds);
+        playableSquadRuntimeIds = new List<string>(packet.FieldSquadRuntimeIds);
         facilityStates = CloneFacilityStates(packet.FacilityStates);
         manufacturing ??= new ManufacturingRuntimeData();
         manufacturing.CopyFrom(packet.Manufacturing);
@@ -248,7 +264,7 @@ public class GameDataManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>셸터 또는 배틀 씬에서 받은 캐릭터·총기 스냅샷을 전역 캐릭터 정본에 반영합니다.</summary>
+    /// <summary>셸터 또는 필드 씬에서 받은 캐릭터·총기 스냅샷을 전역 캐릭터 정본에 반영합니다.</summary>
     public bool TryApplyCharacterSnapshot(CharacterSnapshotData snapshot)
     {
         if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.DefinitionId))
@@ -276,8 +292,58 @@ public class GameDataManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>현재 평탄 정본에서 배틀 씬이 필요로 하는 출전 패킷을 생성합니다.</summary>
-    public BattleEntryData CreateBattleEntryData(string battleId, string stageId, int randomSeed)
+    /// <summary>
+    /// 필드 씬에서 구성된 캐릭터 스냅샷을 전역 정본에 바인딩합니다.
+    /// 이미 같은 런타임 ID 또는 정의 ID가 있으면 갱신하고, 아직 없으면 새 보유 캐릭터로 등록합니다.
+    /// </summary>
+    public bool TryBindFieldCharacterSnapshot(CharacterSnapshotData snapshot)
+    {
+        if (snapshot == null)
+        {
+            Debug.LogWarning("[GameDataManager] 필드 캐릭터 바인딩에는 유효한 스냅샷이 필요합니다.");
+            return false;
+        }
+
+        EnsureRuntimeState();
+        CharacterSnapshotData normalizedSnapshot = snapshot.Clone();
+        string runtimeId = string.IsNullOrWhiteSpace(normalizedSnapshot.RuntimeId)
+            ? normalizedSnapshot.DefinitionId
+            : normalizedSnapshot.RuntimeId;
+        if (string.IsNullOrWhiteSpace(runtimeId))
+        {
+            Debug.LogWarning("[GameDataManager] 필드 캐릭터 바인딩에는 RuntimeId 또는 DefinitionId가 필요합니다.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedSnapshot.DefinitionId))
+        {
+            // TODO(Field 테스트): 정식 씬/세이브 진입에서는 안정적인 DefinitionId를 주입하고 이 fallback 경고를 제거해야 합니다.
+            Debug.LogWarning(
+                $"[GameDataManager] DefinitionId가 없는 필드 캐릭터를 RuntimeId로 임시 바인딩합니다. runtimeId={runtimeId}");
+            normalizedSnapshot.SetPersistentIdentity(runtimeId, normalizedSnapshot.NpcType);
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedSnapshot.RuntimeId))
+        {
+            normalizedSnapshot.SetSceneIdentity(
+                runtimeId,
+                normalizedSnapshot.CharacterId,
+                normalizedSnapshot.DisplayName);
+        }
+
+        if (TryGetCharacterIndex(normalizedSnapshot.DefinitionId, out int index)
+            || TryGetCharacterIndex(runtimeId, out index))
+        {
+            characters[index] = normalizedSnapshot;
+            return true;
+        }
+
+        characters.Add(normalizedSnapshot);
+        return true;
+    }
+
+    /// <summary>현재 평탄 정본에서 필드 씬이 필요로 하는 출전 패킷을 생성합니다.</summary>
+    public FieldEntryData CreateFieldEntryData(string fieldId, string stageId, int randomSeed)
     {
         if (activeShelterSceneDataManager != null)
         {
@@ -285,15 +351,15 @@ public class GameDataManager : MonoBehaviour
         }
 
         EnsureRuntimeState();
-        string resolvedBattleId = string.IsNullOrWhiteSpace(battleId)
+        string resolvedFieldId = string.IsNullOrWhiteSpace(fieldId)
             ? Guid.NewGuid().ToString("N")
-            : battleId.Trim();
+            : fieldId.Trim();
         string resolvedStageId = string.IsNullOrWhiteSpace(stageId)
             ? lastStageId
             : stageId.Trim();
 
-        BattleEntryData entryData = new BattleEntryData(
-            resolvedBattleId,
+        FieldEntryData entryData = new FieldEntryData(
+            resolvedFieldId,
             resolvedStageId,
             randomSeed,
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
@@ -318,26 +384,26 @@ public class GameDataManager : MonoBehaviour
 
             CharacterSnapshotData characterSnapshot = characters[characterIndex].Clone();
             characterSnapshot.SetPlayerSquadMember(i == 0);
-            entryData.AddMember(new BattleMemberEntryData(characterSnapshot));
+            entryData.AddMember(new FieldMemberEntryData(characterSnapshot));
         }
 
         return entryData;
     }
 
     /// <summary>
-    /// 확정된 배틀 결과를 전역 평탄 정본에 한 번만 반영합니다.
+    /// 확정된 필드 결과를 전역 평탄 정본에 한 번만 반영합니다.
     /// 성공 또는 탈출일 때만 획득 자원을 보존하며, 캐릭터 최종 상태는 모든 결과에 반영합니다.
     /// </summary>
-    public bool ApplyBattleResult(BattleResultData resultData)
+    public bool ApplyFieldResult(FieldResultData resultData)
     {
-        if (resultData == null || string.IsNullOrWhiteSpace(resultData.BattleId))
+        if (resultData == null || string.IsNullOrWhiteSpace(resultData.FieldId))
         {
-            Debug.LogWarning("[GameDataManager] 유효한 BattleResultData가 필요합니다.");
+            Debug.LogWarning("[GameDataManager] 유효한 FieldResultData가 필요합니다.");
             return false;
         }
 
-        string battleId = resultData.BattleId.Trim();
-        if (battleId == LastSettledBattleId)
+        string fieldId = resultData.FieldId.Trim();
+        if (fieldId == LastSettledFieldId)
         {
             return true;
         }
@@ -346,7 +412,7 @@ public class GameDataManager : MonoBehaviour
         {
             for (int i = 0; i < resultData.AcquiredResources.Count; i++)
             {
-                BattleResourceAmountData resource = resultData.AcquiredResources[i];
+                FieldResourceAmountData resource = resultData.AcquiredResources[i];
                 if (resource != null)
                 {
                     AddResource(resource.ResourceId, resource.Amount);
@@ -356,7 +422,7 @@ public class GameDataManager : MonoBehaviour
 
         for (int i = 0; i < resultData.Members.Count; i++)
         {
-            ApplyBattleMemberResult(resultData.Members[i]);
+            ApplyFieldMemberResult(resultData.Members[i]);
         }
 
         if (!string.IsNullOrWhiteSpace(resultData.StageId))
@@ -364,7 +430,8 @@ public class GameDataManager : MonoBehaviour
             lastStageId = resultData.StageId.Trim();
         }
 
-        ApplyLastBattleResult(resultData);
+        ApplyLastFieldResult(resultData);
+        RecordFieldKillHistory(resultData.TotalKillCount);
 
         if (activeShelterSceneDataManager != null)
         {
@@ -374,24 +441,24 @@ public class GameDataManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>최근 배틀 결과의 평탄 필드를 독립된 결과 패킷으로 조립해 반환합니다.</summary>
-    public BattleResultData CreateLastBattleResultSnapshot()
+    /// <summary>최근 필드 결과의 평탄 필드를 독립된 결과 패킷으로 조립해 반환합니다.</summary>
+    public FieldResultData CreateLastFieldResultSnapshot()
     {
-        if (!HasLastBattleResult)
+        if (!HasLastFieldResult)
         {
             return null;
         }
 
-        return new BattleResultData(
-            lastSettledBattleId,
-            lastBattleStageId,
-            lastBattleOutcome,
-            lastBattleEndReason,
-            lastBattleMissionCompleted,
-            lastBattleElapsedSeconds,
-            lastBattleTotalKillCount,
-            lastBattleMemberResults,
-            lastBattleAcquiredResources);
+        return new FieldResultData(
+            lastSettledFieldId,
+            lastFieldStageId,
+            lastFieldOutcome,
+            lastFieldEndReason,
+            lastFieldMissionCompleted,
+            lastFieldElapsedSeconds,
+            lastFieldKillCount,
+            lastFieldMemberResults,
+            lastFieldAcquiredResources);
     }
 
     /// <summary>현재 전역 평탄 정본을 지정한 프로필의 독립된 저장 패킷으로 변환합니다.</summary>
@@ -404,7 +471,7 @@ public class GameDataManager : MonoBehaviour
             profileId = string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId.Trim(),
             shared = CreateSharedSaveData(),
             shelter = CreateShelterSaveData(),
-            lastBattleResult = CreateLastBattleResultSnapshot()
+            lastFieldResult = CreateLastFieldResultSnapshot()
         };
 
         saveData.MarkSavedNow();
@@ -423,36 +490,37 @@ public class GameDataManager : MonoBehaviour
         ApplySharedSaveData(saveData.shared ?? new SaveData.SharedSaveData());
         ApplyShelterSaveData(saveData.shelter ?? new SaveData.ShelterSaveData());
 
-        if (saveData.lastBattleResult != null
-            && !string.IsNullOrWhiteSpace(saveData.lastBattleResult.BattleId))
+        FieldResultData savedFieldResult = saveData.lastFieldResult ?? saveData.lastBattleResult;
+        if (savedFieldResult != null
+            && !string.IsNullOrWhiteSpace(savedFieldResult.FieldId))
         {
-            ApplyLastBattleResult(saveData.lastBattleResult);
+            ApplyLastFieldResult(savedFieldResult);
         }
         else
         {
-            ClearLastBattleResult();
+            ClearLastFieldResult();
         }
 
         EnsureRuntimeState();
     }
 
-    private void ApplyLastBattleResult(BattleResultData resultData)
+    private void ApplyLastFieldResult(FieldResultData resultData)
     {
-        lastSettledBattleId = resultData.BattleId.Trim();
-        lastBattleStageId = resultData.StageId;
-        lastBattleOutcome = resultData.Outcome;
-        lastBattleEndReason = resultData.EndReason;
-        lastBattleMissionCompleted = resultData.MissionCompleted;
-        lastBattleElapsedSeconds = resultData.ElapsedSeconds;
-        lastBattleTotalKillCount = resultData.TotalKillCount;
-        lastBattleMemberResults = new List<BattleMemberResultData>();
-        lastBattleAcquiredResources = new List<BattleResourceAmountData>();
+        lastSettledFieldId = resultData.FieldId.Trim();
+        lastFieldStageId = resultData.StageId;
+        lastFieldOutcome = resultData.Outcome;
+        lastFieldEndReason = resultData.EndReason;
+        lastFieldMissionCompleted = resultData.MissionCompleted;
+        lastFieldElapsedSeconds = resultData.ElapsedSeconds;
+        lastFieldKillCount = resultData.TotalKillCount;
+        lastFieldMemberResults = new List<FieldMemberResultData>();
+        lastFieldAcquiredResources = new List<FieldResourceAmountData>();
 
         for (int i = 0; i < resultData.Members.Count; i++)
         {
             if (resultData.Members[i] != null)
             {
-                lastBattleMemberResults.Add(resultData.Members[i].Clone());
+                lastFieldMemberResults.Add(resultData.Members[i].Clone());
             }
         }
 
@@ -460,22 +528,22 @@ public class GameDataManager : MonoBehaviour
         {
             if (resultData.AcquiredResources[i] != null)
             {
-                lastBattleAcquiredResources.Add(resultData.AcquiredResources[i].Clone());
+                lastFieldAcquiredResources.Add(resultData.AcquiredResources[i].Clone());
             }
         }
     }
 
-    private void ClearLastBattleResult()
+    private void ClearLastFieldResult()
     {
-        lastSettledBattleId = string.Empty;
-        lastBattleStageId = string.Empty;
-        lastBattleOutcome = default;
-        lastBattleEndReason = BattleEndReason.None;
-        lastBattleMissionCompleted = false;
-        lastBattleElapsedSeconds = 0.0f;
-        lastBattleTotalKillCount = 0;
-        lastBattleMemberResults = new List<BattleMemberResultData>();
-        lastBattleAcquiredResources = new List<BattleResourceAmountData>();
+        lastSettledFieldId = string.Empty;
+        lastFieldStageId = string.Empty;
+        lastFieldOutcome = default;
+        lastFieldEndReason = FieldEndReason.None;
+        lastFieldMissionCompleted = false;
+        lastFieldElapsedSeconds = 0.0f;
+        lastFieldKillCount = 0;
+        lastFieldMemberResults = new List<FieldMemberResultData>();
+        lastFieldAcquiredResources = new List<FieldResourceAmountData>();
     }
 
     private SaveData.SharedSaveData CreateSharedSaveData()
@@ -483,7 +551,9 @@ public class GameDataManager : MonoBehaviour
         SaveData.SharedSaveData saveData = new SaveData.SharedSaveData
         {
             lastStageId = lastStageId,
-            shelterStability = ShelterStability
+            shelterStability = ShelterStability,
+            totalFieldKillCount = TotalFieldKillCount,
+            fieldKillHistory = new List<int>(fieldKillHistory)
         };
 
         for (int i = 0; i < resourceAmounts.Count; i++)
@@ -548,6 +618,10 @@ public class GameDataManager : MonoBehaviour
     {
         lastStageId = saveData.lastStageId?.Trim() ?? string.Empty;
         shelterStability = Mathf.Clamp(saveData.shelterStability, 0, 100);
+        totalFieldKillCount = Mathf.Max(0, saveData.totalFieldKillCount);
+        fieldKillHistory = saveData.fieldKillHistory != null
+            ? new List<int>(saveData.fieldKillHistory)
+            : new List<int>();
         resourceAmounts = new List<ResourceAmountState>();
         characters = new List<CharacterSnapshotData>();
         shelterCharacterAssignments = new List<ShelterCharacterAssignmentData>();
@@ -601,7 +675,7 @@ public class GameDataManager : MonoBehaviour
             : saveData.battleSquadNpcDefinitionIds;
         playableSquadRuntimeIds = NormalizeCharacterIds(
             savedSquadIds,
-            ShelterRuntimeData.MaxBattleSquadSize);
+            ShelterRuntimeData.MaxFieldSquadSize);
         if (saveData.characterAssignments != null && saveData.characterAssignments.Count > 0)
         {
             shelterCharacterAssignments = new List<ShelterCharacterAssignmentData>();
@@ -636,12 +710,12 @@ public class GameDataManager : MonoBehaviour
         }
     }
 
-    private void ApplyBattleMemberResult(BattleMemberResultData memberResult)
+    private void ApplyFieldMemberResult(FieldMemberResultData memberResult)
     {
         CharacterSnapshotData snapshot = memberResult?.Snapshot;
-        if (snapshot != null && !string.IsNullOrWhiteSpace(snapshot.DefinitionId))
+        if (snapshot != null)
         {
-            TryApplyCharacterSnapshot(snapshot);
+            TryBindFieldCharacterSnapshot(snapshot);
         }
     }
 
@@ -748,23 +822,26 @@ public class GameDataManager : MonoBehaviour
         shelterCharacterAssignments ??= new List<ShelterCharacterAssignmentData>();
         facilityStates ??= new List<FacilityRuntimeState>();
         manufacturing ??= new ManufacturingRuntimeData();
-        lastBattleMemberResults ??= new List<BattleMemberResultData>();
-        lastBattleAcquiredResources ??= new List<BattleResourceAmountData>();
+        lastFieldMemberResults ??= new List<FieldMemberResultData>();
+        lastFieldAcquiredResources ??= new List<FieldResourceAmountData>();
+        totalFieldKillCount = Mathf.Max(0, totalFieldKillCount);
+        fieldKillHistory ??= new List<int>();
+        NormalizeFieldKillHistory();
 
         NormalizeResources();
         NormalizeItemStorageEntries();
         NormalizeOwnedCharacters();
         playableSquadRuntimeIds = NormalizeCharacterIds(
             playableSquadRuntimeIds,
-            ShelterRuntimeData.MaxBattleSquadSize);
-        NormalizePlayableSquadRuntimeIds();
+            ShelterRuntimeData.MaxFieldSquadSize);
+        NormalizePlayerbleSquadRuntimeIds();
         NormalizeShelterAssignments();
         facilityStates = CloneFacilityStates(facilityStates);
         manufacturing.EnsureValid();
 
-        if (!HasLastBattleResult)
+        if (!HasLastFieldResult)
         {
-            ClearLastBattleResult();
+            ClearLastFieldResult();
         }
     }
 
@@ -866,7 +943,7 @@ public class GameDataManager : MonoBehaviour
         characters = normalized;
     }
 
-    private void NormalizePlayableSquadRuntimeIds()
+    private void NormalizePlayerbleSquadRuntimeIds()
     {
         for (int i = 0; i < playableSquadRuntimeIds.Count; i++)
         {
@@ -881,7 +958,7 @@ public class GameDataManager : MonoBehaviour
 
         playableSquadRuntimeIds = NormalizeCharacterIds(
             playableSquadRuntimeIds,
-            ShelterRuntimeData.MaxBattleSquadSize);
+            ShelterRuntimeData.MaxFieldSquadSize);
     }
 
     private void NormalizeShelterAssignments()
@@ -915,9 +992,34 @@ public class GameDataManager : MonoBehaviour
         shelterCharacterAssignments = normalized;
     }
 
-    private static bool ShouldApplyAcquiredResources(BattleOutcome outcome)
+    private static bool ShouldApplyAcquiredResources(FieldOutcome outcome)
     {
-        return outcome == BattleOutcome.Success || outcome == BattleOutcome.Evacuated;
+        return outcome == FieldOutcome.Success || outcome == FieldOutcome.Evacuated;
+    }
+
+    private void RecordFieldKillHistory(int fieldKillCount)
+    {
+        int normalizedCount = Mathf.Max(0, fieldKillCount);
+        totalFieldKillCount += normalizedCount;
+        fieldKillHistory.Add(normalizedCount);
+        NormalizeFieldKillHistory();
+    }
+
+    private void NormalizeFieldKillHistory()
+    {
+        for (int i = fieldKillHistory.Count - 1; i >= 0; i--)
+        {
+            if (fieldKillHistory[i] < 0)
+            {
+                fieldKillHistory[i] = 0;
+            }
+        }
+
+        int overflow = fieldKillHistory.Count - MaxFieldKillHistory;
+        if (overflow > 0)
+        {
+            fieldKillHistory.RemoveRange(0, overflow);
+        }
     }
 
     private static List<string> NormalizeCharacterIds(IEnumerable<string> source, int maximumCount)

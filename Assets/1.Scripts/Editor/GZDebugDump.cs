@@ -56,7 +56,7 @@ namespace GrayZone.EditorTools
             {
                 var tpc = m.GetComponent<ThirdPersonController>();
                 var aim = m.GetComponent<AimController>();
-                var wc = m.GetComponentInChildren<WeaponController>();
+                var wc = m.GetComponentInChildren<Gun>();
                 var inp = m.GetComponent<PlayerInputs>();
 
                 members.Add(new

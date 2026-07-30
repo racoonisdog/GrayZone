@@ -14,7 +14,7 @@ public class CharacterInjuryIconCatalog : ScriptableObject
     /// </summary>
     /// <param name="state">조회할 캐릭터 부상 상태</param>
     /// <returns>연결된 아이콘이 있으면 해당 스프라이트, 없으면 <c>null</c></returns>
-    public Sprite GetIcon(PlayerInjuryState state)
+    public Sprite GetIcon(CharacterInjuryState state)
     {
         foreach (Entry entry in entries)
         {
@@ -28,7 +28,7 @@ public class CharacterInjuryIconCatalog : ScriptableObject
     [Serializable]
     private struct Entry
     {
-        public PlayerInjuryState state;
+        public CharacterInjuryState state;
         public Sprite icon;
     }
 }

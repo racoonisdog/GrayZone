@@ -11,7 +11,7 @@ public enum SaveSlotType
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     public int schemaVersion = CurrentSchemaVersion;
     public string profileId = "default";
@@ -21,7 +21,9 @@ public class SaveData
 
     public SharedSaveData shared = new SharedSaveData();
     public ShelterSaveData shelter = new ShelterSaveData();
-    public BattleResultData lastBattleResult;
+    public FieldResultData lastFieldResult;
+    /// <summary>schemaVersion 7 이하 저장 파일의 최근 결과 호환 필드입니다.</summary>
+    public FieldResultData lastBattleResult;
 
     /// <summary>현재 UTC 시각을 저장 파일 생성 시각으로 기록합니다.</summary>
     public void MarkSavedNow()
@@ -34,12 +36,14 @@ public class SaveData
     {
         public string lastStageId = string.Empty;
         public int shelterStability = 100;
+        public int totalFieldKillCount;
+        public List<int> fieldKillHistory = new List<int>();
         /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>
         public int playableCharacterCount;
         /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>
         public int nonPlayableNpcCount;
         public List<ResourceAmountData> resources = new List<ResourceAmountData>();
-        /// <summary>schemaVersion 7 이상에서 사용하는 Battle 공용 캐릭터 정본입니다.</summary>
+        /// <summary>schemaVersion 7 이상에서 사용하는 Field 공용 캐릭터 정본입니다.</summary>
         public List<CharacterSnapshotData> characters = new List<CharacterSnapshotData>();
         /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 NPC 목록입니다.</summary>
         public List<NpcSaveData> npcs = new List<NpcSaveData>();

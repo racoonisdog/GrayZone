@@ -69,7 +69,7 @@ public class BulletManager : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        // 히트스캔(WeaponController)과 동일한 진영 기반 공용 피해 경로를 사용합니다.
+        // 히트스캔(Gun)과 동일한 진영 기반 공용 피해 경로를 사용합니다.
         // 대상 구체 타입을 모른 채 CombatDamage가 IDamageable 조회 후 적대 판정하여 적용합니다.
         CombatDamage.TryApplyDamage(other, m_ownerFaction, damage);
 

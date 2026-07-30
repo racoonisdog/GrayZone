@@ -15,7 +15,7 @@ public sealed class CharacterEditor
         this.query = query;
     }
 
-    public bool TryRecruitCharacter(PlayableCharacterDefinition characterDefinition, out ShelterMemberRuntimeData character, out CharacterActionFailure failure)
+    public bool TryRecruitCharacter(PlayerbleCharacterDefinition characterDefinition, out ShelterMemberRuntimeData character, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
         character = null;

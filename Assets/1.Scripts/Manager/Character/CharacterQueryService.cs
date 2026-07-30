@@ -65,7 +65,7 @@ public sealed class CharacterQueryService
             return false;
 
         bool alive = !character.IsDead;
-        bool injured = character.InjuryState != PlayerInjuryState.Normal; // enum 기준: 건강 아니면 부상
+        bool injured = character.InjuryState != CharacterInjuryState.Normal; // enum 기준: 건강 아니면 부상
         bool available = !character.IsAssignedToFacility;
 
         switch (filter)
