@@ -13,6 +13,15 @@ public enum CharacterInjuryState
 
 public class PlayerHealth : HealthSystemBase
 {
+    /// <summary>
+    /// 이 컴포넌트를 쓰는 유닛은 진영이 정해져 있으므로 레이어 추론을 쓰지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 히트박스를 별도 레이어로 분리하면서 레이어와 진영의 결합을 끊기 위한 것입니다.
+    /// Inspector에서 진영을 명시하면 그 값이 우선합니다.
+    /// </remarks>
+    protected override Faction DefaultFaction => Faction.Player;
+
     [Tooltip("이 플레이어에 적용할 공용 밸런스 SO입니다. 비어 있으면 Inspector 값을 그대로 씁니다.")]
     [SerializeField] private PlayerCommonBalanceSO m_balanceSO;
 

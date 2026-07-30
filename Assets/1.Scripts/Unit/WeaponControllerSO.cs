@@ -40,7 +40,10 @@ public sealed class WeaponControllerSO : ScriptableObject, IBalanceTableData
     [Tooltip("일반 히트스캔 명중 피해량입니다.")]
     [SerializeField] private int m_hitscanDamage = 1;
 
-    [Tooltip("헤드샷 명중 시 기본 피해량에 곱하는 배율입니다.")]
+    [Tooltip("이 무기가 약점 판정을 사용하는지 여부입니다. 끄면 약점 부위를 맞혀도 일반 피해로 처리합니다.")]
+    [SerializeField] private bool m_allowHeadshot = true;
+
+    [Tooltip("헤드샷 명중 시 기본 피해량에 곱하는 배율입니다. 약점 판정이 꺼져 있으면 사용하지 않습니다.")]
     [SerializeField] private float m_headshotDamageMultiplier = 2f;
 
     [Tooltip("히트스캔 판정 최대 거리(m)입니다.")]

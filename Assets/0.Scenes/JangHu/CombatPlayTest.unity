@@ -770,7 +770,7 @@ GameObject:
   - component: {fileID: 10545687}
   - component: {fileID: 10545688}
   - component: {fileID: 10545689}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_UpperarmHitbox_R
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -807,7 +807,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -3997,7 +3997,7 @@ GameObject:
   - component: {fileID: 65188458}
   - component: {fileID: 65188460}
   - component: {fileID: 65188459}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_ThighHitbox_L
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4047,7 +4047,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -10153,7 +10153,7 @@ MonoBehaviour:
   m_hitscanRange: 100
   m_hitscanLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 4294966783
   m_hipfireMinSpread: 0
   m_hipfireMaxSpread: 10
   m_hipfireCurrentSpread: 0
@@ -13451,7 +13451,7 @@ GameObject:
   - component: {fileID: 217137149}
   - component: {fileID: 217137151}
   - component: {fileID: 217137150}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_SpineHitbox
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -13501,7 +13501,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -16775,7 +16775,7 @@ GameObject:
   - component: {fileID: 270200024}
   - component: {fileID: 270200025}
   - component: {fileID: 270200026}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_FootHitbox_L
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -16812,7 +16812,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -22104,7 +22104,7 @@ GameObject:
   - component: {fileID: 347922299}
   - component: {fileID: 347922301}
   - component: {fileID: 347922300}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_CalfHitbox_L
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -22154,7 +22154,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -40019,7 +40019,7 @@ GameObject:
   - component: {fileID: 580683906}
   - component: {fileID: 580683907}
   - component: {fileID: 580683908}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_HandHitbox_R
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -40056,7 +40056,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -45631,7 +45631,7 @@ GameObject:
   - component: {fileID: 673655777}
   - component: {fileID: 673655779}
   - component: {fileID: 673655778}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_CalfHitbox_R
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -45681,7 +45681,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -47295,7 +47295,7 @@ GameObject:
   - component: {fileID: 694336941}
   - component: {fileID: 694336943}
   - component: {fileID: 694336942}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_PelvisHitbox
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -47345,7 +47345,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -58506,7 +58506,7 @@ GameObject:
   - component: {fileID: 860948675}
   - component: {fileID: 860948676}
   - component: {fileID: 860948677}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_ForearmHitbox_L
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -58543,7 +58543,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -67901,7 +67901,7 @@ GameObject:
   - component: {fileID: 1007016850}
   - component: {fileID: 1007016846}
   - component: {fileID: 1007016853}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: Enemy(Before)
   m_TagString: Enemy
   m_Icon: {fileID: 0}
@@ -67989,7 +67989,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -70148,7 +70148,7 @@ GameObject:
   - component: {fileID: 1055066337}
   - component: {fileID: 1055066339}
   - component: {fileID: 1055066338}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_ThighHitbox_R
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -70198,7 +70198,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -86469,7 +86469,7 @@ GameObject:
   - component: {fileID: 1285899207}
   - component: {fileID: 1285899208}
   - component: {fileID: 1285899209}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_UpperarmHitbox_L
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -86506,7 +86506,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -100629,7 +100629,7 @@ GameObject:
   - component: {fileID: 1457600745}
   - component: {fileID: 1457600746}
   - component: {fileID: 1457600747}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_HandHitbox_L
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -100666,7 +100666,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -101722,7 +101722,7 @@ Camera:
     height: 1
   near clip plane: 0.2
   far clip plane: 500
-  field of view: 20
+  field of view: 30
   orthographic: 0
   orthographic size: 10
   m_Depth: -1
@@ -103081,6 +103081,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1500710486}
   - component: {fileID: 1500710497}
+  - component: {fileID: 1500710499}
   - component: {fileID: 1500710495}
   - component: {fileID: 1500710494}
   - component: {fileID: 1500710493}
@@ -103217,7 +103218,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyHealth
   m_faction: 0
   m_maxHp: 10
-  m_currentHp: 0
+  m_currentHp: 10
   m_hpSlider: {fileID: 0}
   m_hpText: {fileID: 0}
   m_debugLogHealth: 0
@@ -103270,6 +103271,29 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!136 &1500710499
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1500710485}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.23
+  m_Height: 1.5
+  m_Direction: 1
+  m_Center: {x: 0, y: 0.75, z: 0}
 --- !u!1 &1501866053
 GameObject:
   m_ObjectHideFlags: 0
@@ -103509,7 +103533,7 @@ MonoBehaviour:
   m_hitscanRange: 100
   m_hitscanLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 4294966783
   m_hipfireMinSpread: 4
   m_hipfireMaxSpread: 10
   m_hipfireCurrentSpread: 4
@@ -111962,8 +111986,12 @@ PrefabInstance:
       value: 65
       objectReference: {fileID: 0}
     - target: {fileID: 6265910216441840377, guid: a1a802ecaf6775746bb2a929fb554ad8, type: 3}
+      propertyPath: Lens.Dutch
+      value: -0.000000003104845
+      objectReference: {fileID: 0}
+    - target: {fileID: 6265910216441840377, guid: a1a802ecaf6775746bb2a929fb554ad8, type: 3}
       propertyPath: Lens.FieldOfView
-      value: 20
+      value: 30
       objectReference: {fileID: 0}
     - target: {fileID: 6265910216441840377, guid: a1a802ecaf6775746bb2a929fb554ad8, type: 3}
       propertyPath: Priority.Enabled
@@ -117806,7 +117834,7 @@ GameObject:
   - component: {fileID: 1723193035}
   - component: {fileID: 1723193036}
   - component: {fileID: 1723193037}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_ForearmHitbox_R
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -117843,7 +117871,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -133072,7 +133100,7 @@ GameObject:
   - component: {fileID: 1917884911}
   - component: {fileID: 1917884913}
   - component: {fileID: 1917884912}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_HeadHitbox
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -133122,7 +133150,7 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
@@ -138398,7 +138426,7 @@ GameObject:
   - component: {fileID: 1983557830}
   - component: {fileID: 1983557832}
   - component: {fileID: 1983557831}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_FootHitbox_R
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -138448,7 +138476,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -145686,7 +145714,7 @@ GameObject:
   - component: {fileID: 2105075050}
   - component: {fileID: 2105075052}
   - component: {fileID: 2105075051}
-  m_Layer: 9
+  m_Layer: 11
   m_Name: COL_HeadHitbox
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -145736,7 +145764,7 @@ SphereCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -151929,6 +151957,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1539452101745766751, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
+      propertyPath: m_IsTrigger
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 2093431808988188852, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
@@ -151936,6 +151968,10 @@ PrefabInstance:
     - target: {fileID: 2512216766550534553, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_Name
       value: X Bot
+      objectReference: {fileID: 0}
+    - target: {fileID: 2512216766550534553, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
+      propertyPath: m_Layer
+      value: 11
       objectReference: {fileID: 0}
     - target: {fileID: 2996863503051404067, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_LocalPosition.x
@@ -151979,7 +152015,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4200437060540829382, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_IsTrigger
-      value: 0
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5285853338284595116, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
+      propertyPath: m_Layer
+      value: 11
       objectReference: {fileID: 0}
     - target: {fileID: 7303579217154232679, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_hpSlider
@@ -152997,9 +153037,25 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 2000063308813134604, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
+      propertyPath: m_IsTrigger
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3251511350542525715, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
+      propertyPath: m_IsTrigger
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4216228649234502692, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
+      propertyPath: m_Layer
+      value: 11
+      objectReference: {fileID: 0}
     - target: {fileID: 5838140472483179025, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
       propertyPath: m_Name
       value: Y Bot
+      objectReference: {fileID: 0}
+    - target: {fileID: 5838140472483179025, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
+      propertyPath: m_Layer
+      value: 11
       objectReference: {fileID: 0}
     - target: {fileID: 6507399643083616427, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
       propertyPath: m_LocalPosition.x

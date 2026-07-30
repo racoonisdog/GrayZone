@@ -130,7 +130,11 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     [BalanceField(Min = 0)]
     [SerializeField] private int m_hitscanDamage = 1;
 
-    [Tooltip("Multiplier applied by this weapon when a hitscan shot hits a headshot hitbox.")]
+    [Tooltip("이 무기가 약점 판정을 사용하는지 여부입니다. 끄면 약점 부위를 맞혀도 일반 피해로 처리하고 약점 표시도 뜨지 않습니다.")]
+    [BalanceField]
+    [SerializeField] private bool m_allowHeadshot = true;
+
+    [Tooltip("약점 부위를 맞혔을 때 곱하는 피해 배율입니다. 약점 판정이 꺼져 있으면 사용하지 않습니다.")]
     [BalanceField(Min = 0)]
     [SerializeField] private float m_headshotDamageMultiplier = 2.0f;
 
@@ -345,6 +349,9 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
     /// <summary>히트스캔 사격이 적에게 적용할 피해량입니다.</summary>
     public int HitscanDamage => m_hitscanDamage;
+
+    /// <summary>이 무기가 약점 판정을 사용하는지 여부입니다.</summary>
+    public bool AllowHeadshot => m_allowHeadshot;
 
     /// <summary>헤드샷 히트박스에 명중했을 때 이 무기가 적용할 피해 배율입니다.</summary>
     public float HeadshotDamageMultiplier => m_headshotDamageMultiplier;
@@ -760,7 +767,9 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
             EndPoint = aimShot.Origin + direction * m_hitscanRange,
         };
 
-        if (Physics.Raycast(aimShot.Origin, direction, out RaycastHit hit, m_hitscanRange, m_hitscanLayerMask, QueryTriggerInteraction.UseGlobal))
+        // 피격 히트박스는 물리로 밀치지 않도록 trigger로 두므로, 전역 설정과 무관하게 trigger를 맞히도록 못 박습니다.
+        // UseGlobal로 두면 Physics.queriesHitTriggers를 끄는 순간 사격이 통째로 먹히지 않습니다.
+        if (Physics.Raycast(aimShot.Origin, direction, out RaycastHit hit, m_hitscanRange, m_hitscanLayerMask, QueryTriggerInteraction.Collide))
         {
             fired.HasHit = true;
             fired.Hit = hit;
@@ -1051,7 +1060,8 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
             shotInfo.Hit.collider,
             m_ownerFaction,
             m_hitscanDamage,
-            m_headshotDamageMultiplier);
+            m_headshotDamageMultiplier,
+            m_allowHeadshot);
         if (feedback.Applied)
         {
             OnHitFeedback?.Invoke(feedback);
@@ -1280,6 +1290,10 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     /// <summary>히트스캔 사격 피해량을 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 피해량입니다.</param>
     public void SetHitscanDamage(int value) => m_hitscanDamage = Mathf.Max(0, value);
+
+    /// <summary>이 무기의 약점 판정 사용 여부를 설정합니다.</summary>
+    /// <param name="value">약점 판정을 쓰면 true입니다.</param>
+    public void SetAllowHeadshot(bool value) => m_allowHeadshot = value;
 
     /// <summary>헤드샷 피해 배율을 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 배율입니다.</param>

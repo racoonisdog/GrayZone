@@ -57,18 +57,28 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     public bool IsDead => m_isDead;
 
     /// <summary>
-    /// 이 유닛의 진영입니다. 직렬화 값이 <see cref="Faction.None"/>이면
-    /// gameObject의 레이어 번호에서 진영을 추론합니다(레이어 번호 == 진영 enum 값).
+    /// 이 유닛의 진영입니다. 직렬화 값이 <see cref="Faction.None"/>이면 <see cref="DefaultFaction"/>을 씁니다.
     /// </summary>
     public Faction Faction => m_faction != Faction.None
         ? m_faction
-        : LayerToFaction(gameObject.layer);
+        : DefaultFaction;
+
+    /// <summary>
+    /// 직렬화 값이 없을 때 사용할 진영입니다.
+    /// </summary>
+    /// <remarks>
+    /// 기본 구현은 레이어 번호에서 추론합니다(레이어 번호 == 진영 enum 값).
+    /// 다만 레이어는 히트박스 분리 같은 이유로 바뀔 수 있어서, 진영을 레이어에 묶어 두면
+    /// 레이어를 옮기는 순간 조용히 <see cref="Faction.None"/>이 되어 피해가 전혀 오가지 않게 됩니다.
+    /// 실제로 그 사고가 있었으므로, 진영이 정해진 파생 타입은 이 값을 고정해 결합을 끊습니다.
+    /// </remarks>
+    protected virtual Faction DefaultFaction => LayerToFaction(gameObject.layer);
 
     /// <summary>
     /// 레이어 번호를 진영으로 환산합니다. 진영 enum 값이 레이어 번호와 동일하게
     /// 맞춰져 있어, 알려진 레이어면 그대로 캐스팅합니다.
     /// </summary>
-    private static Faction LayerToFaction(int layer)
+    protected static Faction LayerToFaction(int layer)
     {
         Faction candidate = (Faction)layer;
         return candidate == Faction.Player

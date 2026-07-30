@@ -2134,6 +2134,10 @@ PrefabInstance:
       propertyPath: m_hipfireCurrentSpread
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 4693724506572384012, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
+      propertyPath: m_hitscanLayerMask.m_Bits
+      value: 4294966783
+      objectReference: {fileID: 0}
     - target: {fileID: 5108517961052224996, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
       propertyPath: m_Name
       value: Rifle 1

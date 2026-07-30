@@ -5825,11 +5825,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3cf83ecd0e7fe5b4495e6c7e38d3f669, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WeaponController
-  m_balance: {fileID: 11400000, guid: 79421e9565ae4bfbae970dbcb5176c96, type: 2}
+  m_balanceSO: {fileID: 11400000, guid: 79421e9565ae4bfbae970dbcb5176c96, type: 2}
   m_currentBullet: 30
   m_maxBullet: 30
   m_shootDelay: 0.12
   m_reloadTime: 1.5
+  m_allowFullMagReload: 0
   m_firePos: {fileID: 1796962771349208849}
   m_shellPos: {fileID: 3569076800804841391}
   m_clipPos: {fileID: 7365221402661069985}
@@ -5842,12 +5843,38 @@ MonoBehaviour:
   m_audioSource: {fileID: 0}
   m_shootClip: {fileID: 0}
   m_reloadClip: {fileID: 0}
+  m_emptyReloadClip: {fileID: 0}
   m_muzzleFlashParticle: {fileID: 0}
   m_hitscanDamage: 1
+  m_headshotDamageMultiplier: 2
   m_hitscanRange: 100
   m_hitscanLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 4294966783
+  m_hipfireMinSpread: 4
+  m_hipfireMaxSpread: 10
+  m_hipfireCurrentSpread: 4
+  m_hipfireMinSpreadShotCount: 3
+  m_hipfireSpreadIncreasePerShot: 1
+  m_hipfireSpreadRecoveryPerSecond: 8
+  m_hipfireSpreadRecoveryDelay: 0.3
+  m_adsMinSpread: 0
+  m_adsMaxSpread: 6
+  m_adsCurrentSpread: 0
+  m_adsMinSpreadShotCount: 3
+  m_adsSpreadIncreasePerShot: 1
+  m_adsSpreadRecoveryPerSecond: 8
+  m_adsSpreadRecoveryDelay: 0.3
+  m_spreadDistribution: 1
+  m_spreadConcentration: 3
+  m_recoilPitchKick: 0.6
+  m_recoilYawKick: 0.2
+  m_yawKickPattern: 0
+  m_recoilRoll: 0.5
+  m_rollKickPattern: 0
+  m_recoilFovPunch: 1
+  m_debugLogSpread: 0
+  m_debugInfiniteMagazine: 0
 --- !u!1 &5113173453549473731
 GameObject:
   m_ObjectHideFlags: 0
