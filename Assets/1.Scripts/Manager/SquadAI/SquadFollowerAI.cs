@@ -59,7 +59,7 @@ public class SquadFollowerAI : MonoBehaviour
     private float m_nextUpdateTime;
     private bool m_hasRequiredReferences;
 
-    private static readonly int SpeedHash = Animator.StringToHash("Speed");
+    private static readonly int SpeedHash = Animator.StringToHash("MoveSpeed");
     private static readonly int MotionSpeedHash = Animator.StringToHash("MotionSpeed");
 
     /// <summary>리더 추종 시작 거리입니다.</summary>

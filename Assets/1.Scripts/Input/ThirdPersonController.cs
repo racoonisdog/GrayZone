@@ -271,6 +271,21 @@ public class ThirdPersonController : MonoBehaviour
     /// <summary>Animator FreeFall 파라미터 해시입니다.</summary>
     private int m_animIDFreeFall;
 
+    /// <summary>애니메이터를 기본 상태로 되돌리는 트리거의 해시입니다.</summary>
+    private int m_animIDReset;
+
+    /// <summary>
+    /// 전환 직후 밀려난 속도를 무시할 남은 프레임 수입니다.
+    /// </summary>
+    /// <remarks>
+    /// 겹침을 푸는 이동은 조작을 넘겨받은 다음 프레임에 한 번 일어나고, 그 뒤로는
+    /// 자기 velocity를 다시 읽으며 스스로 이어집니다. 그 고리를 끊을 만큼만 잡으면 됩니다.
+    /// </remarks>
+    private int m_switchSettleFrames;
+
+    /// <summary>전환 직후 밀려난 속도를 무시할 프레임 수입니다.</summary>
+    private const int SwitchSettleFrameCount = 3;
+
     /// <summary>Animator MotionSpeed 파라미터 해시입니다.</summary>
     private int m_animIDMotionSpeed;
 
@@ -768,6 +783,9 @@ public class ThirdPersonController : MonoBehaviour
     /// <param name="state">적용할 이동 블렌드 상태입니다.</param>
     public void ApplyLocomotionCarryoverState(LocomotionCarryoverState state)
     {
+        // 인계 상태가 없더라도 조작을 넘겨받은 것은 사실이므로 겹침 밀림 대비는 켭니다.
+        m_switchSettleFrames = SwitchSettleFrameCount;
+
         if (!state.HasState)
         {
             return;
@@ -992,11 +1010,25 @@ public class ThirdPersonController : MonoBehaviour
     /// </summary>
     private void AssignAnimationIDs()
     {
-        m_animIDSpeed = Animator.StringToHash("Speed");
+        m_animIDSpeed = Animator.StringToHash("MoveSpeed");
         m_animIDGrounded = Animator.StringToHash("IsGrounded");
         m_animIDJump = Animator.StringToHash("IsJump");
         m_animIDFreeFall = Animator.StringToHash("IsFreeFall");
         m_animIDMotionSpeed = Animator.StringToHash("MotionSpeed");
+        m_animIDReset = Animator.StringToHash("DoReset");
+    }
+
+    /// <summary>
+    /// 애니메이터를 기본 상태로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// 어떤 상태에 걸려 빠져나오지 못할 때 쓰는 탈출구입니다.
+    /// 변이체 쪽에서 같은 방식을 쓰고 있어 플레이어에도 같은 이름으로 둡니다.
+    /// 지금은 부르는 곳이 없습니다.
+    /// </remarks>
+    public void ResetAnimation()
+    {
+        m_animator?.SetTrigger(m_animIDReset);
     }
 
     /// <summary>
@@ -1125,6 +1157,23 @@ public class ThirdPersonController : MonoBehaviour
         }
 
         float currentHorizontalSpeed = new Vector3(m_controller.velocity.x, 0.0f, m_controller.velocity.z).magnitude;
+
+        // 전환 직후 몇 프레임은 밀려난 속도를 이동 입력으로 오해하지 않도록 잘라 냅니다.
+        // CharacterController를 다른 콜라이더와 겹친 자리에서 켜면 유니티가 겹침을 푸느라 크게 밀어내는데,
+        // 그 이동이 velocity에 잡히고 아래 보간이 현재 속력을 출발점으로 삼기 때문에
+        // 걷는 속도의 몇 배가 다음 프레임의 이동 속도가 되어 앞으로 튀어 나갑니다.
+        // 실측에서 한 프레임 0.58m(캡슐 반지름 두 개와 표면 두께의 합)를 밀린 뒤 2m 넘게 미끄러졌습니다.
+        //
+        // 상시로 자르지 않는 이유는 밀려나는 것 자체가 잘못이 아니기 때문입니다.
+        // 넉백처럼 외부에서 미는 이동을 넣으면 그때는 최대치를 넘는 것이 정상이고,
+        // 상시 클램프는 그것을 조용히 먹어 버립니다. 그래서 전환이 원인일 때만 적용합니다.
+        if (m_switchSettleFrames > 0)
+        {
+            m_switchSettleFrames--;
+
+            float maxSelfSpeed = Mathf.Max(m_moveSpeed, m_sprintSpeed);
+            currentHorizontalSpeed = Mathf.Min(currentHorizontalSpeed, maxSelfSpeed);
+        }
 
         float speedOffset = 0.1f;
         float inputMagnitude = m_input.analogMovement ? m_input.move.magnitude : 1f;
