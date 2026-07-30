@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
-/// <summary>배틀 씬 데이터가 거치는 생명주기 단계입니다.</summary>
-public enum BattlePhase
+/// <summary>필드 씬 데이터가 거치는 생명주기 단계입니다.</summary>
+public enum FieldPhase
 {
     /// <summary>입장 데이터가 아직 적용되지 않은 상태입니다.</summary>
     Uninitialized,
@@ -11,7 +12,7 @@ public enum BattlePhase
     /// <summary>입장 데이터와 씬 초기값이 준비된 상태입니다.</summary>
     Ready,
 
-    /// <summary>배틀 시간이 흐르고 결과를 수집하는 상태입니다.</summary>
+    /// <summary>필드 시간이 흐르고 결과를 수집하는 상태입니다.</summary>
     Running,
 
     /// <summary>귀환 정산 값을 확정하는 상태입니다.</summary>
@@ -24,24 +25,24 @@ public enum BattlePhase
     GameOver
 }
 
-/// <summary>귀환 정산에서 사용하는 배틀의 최종 결과입니다.</summary>
-public enum BattleOutcome
+/// <summary>귀환 정산에서 사용하는 필드의 최종 결과입니다.</summary>
+public enum FieldOutcome
 {
     /// <summary>아직 최종 결과가 판정되지 않았습니다.</summary>
     None,
 
-    /// <summary>배틀 목표를 달성했습니다.</summary>
+    /// <summary>필드 목표를 달성했습니다.</summary>
     Success,
 
-    /// <summary>배틀 목표 달성에 실패했습니다.</summary>
+    /// <summary>필드 목표 달성에 실패했습니다.</summary>
     Failure,
 
     /// <summary>임무 완료와 무관하게 스쿼드가 귀환했습니다.</summary>
     Evacuated
 }
 
-/// <summary>배틀이 종료된 직접적인 사유입니다.</summary>
-public enum BattleEndReason
+/// <summary>필드가 종료된 직접적인 사유입니다.</summary>
+public enum FieldEndReason
 {
     /// <summary>아직 종료 사유가 확정되지 않았습니다.</summary>
     None,
@@ -52,16 +53,16 @@ public enum BattleEndReason
     /// <summary>탈출 지점을 통한 귀환으로 종료되었습니다.</summary>
     Escaped,
 
-    /// <summary>모든 스쿼드원이 전투 이탈하여 종료되었습니다.</summary>
+    /// <summary>모든 스쿼드원이 필드에서 이탈하여 종료되었습니다.</summary>
     SquadEliminated,
 
     /// <summary>개발 또는 시스템 명령으로 중단되었습니다.</summary>
     Aborted
 }
 
-/// <summary>배틀 입장 또는 획득 자원 한 종류의 수량입니다.</summary>
+/// <summary>필드 입장 또는 획득 자원 한 종류의 수량입니다.</summary>
 [Serializable]
-public sealed class BattleResourceAmountData
+public sealed class FieldResourceAmountData
 {
     [SerializeField] private string resourceId = string.Empty;
     [Min(0)][SerializeField] private int amount;
@@ -73,16 +74,16 @@ public sealed class BattleResourceAmountData
     public int Amount => Mathf.Max(0, amount);
 
     /// <summary>지정한 자원 종류와 수량으로 데이터를 생성합니다.</summary>
-    public BattleResourceAmountData(string resourceId, int amount)
+    public FieldResourceAmountData(string resourceId, int amount)
     {
         this.resourceId = ResourceIds.Normalize(resourceId);
         this.amount = Mathf.Max(0, amount);
     }
 
     /// <summary>현재 값을 복제한 새 자원 데이터를 반환합니다.</summary>
-    public BattleResourceAmountData Clone()
+    public FieldResourceAmountData Clone()
     {
-        return new BattleResourceAmountData(ResourceId, Amount);
+        return new FieldResourceAmountData(ResourceId, Amount);
     }
 
     /// <summary>현재 수량에 지정한 값을 더하고 0 이상으로 보정합니다.</summary>
@@ -92,7 +93,7 @@ public sealed class BattleResourceAmountData
     }
 }
 
-/// <summary>셸터와 배틀 씬이 동일하게 저장하고 전달하는 총기 상태 스냅샷입니다.</summary>
+/// <summary>셸터와 필드 씬이 동일하게 저장하고 전달하는 총기 상태 스냅샷입니다.</summary>
 [Serializable]
 public sealed class WeaponSnapshotData
 {
@@ -421,13 +422,13 @@ public sealed class WeaponSnapshotData
     }
 }
 
-/// <summary>셸터와 배틀 씬이 동일하게 저장하고 전달하는 캐릭터 상태 스냅샷입니다.</summary>
+/// <summary>셸터와 필드 씬이 동일하게 저장하고 전달하는 캐릭터 상태 스냅샷입니다.</summary>
 [Serializable]
 public sealed class CharacterSnapshotData
 {
     [SerializeField] private string definitionId = string.Empty;
     [SerializeField] private string runtimeId = string.Empty;
-    [SerializeField] private PlayableCharacterId characterId;
+    [SerializeField] private PlayerbleCharacterId characterId;
     [SerializeField] private NPCType npcType;
     [SerializeField] private string displayName = string.Empty;
     [Range(0, 100)][SerializeField] private int reliability;
@@ -435,7 +436,7 @@ public sealed class CharacterSnapshotData
     [Min(1)][SerializeField] private int maxHp = 1;
     [Min(0.0f)][SerializeField] private float injurySeverityGauge;
     [Min(1.0f)][SerializeField] private float maxInjuryGauge = 100.0f;
-    [SerializeField] private PlayerInjuryState injuryState;
+    [SerializeField] private CharacterInjuryState injuryState;
     [SerializeField] private bool isDown;
     [SerializeField] private bool isCombatOut;
     [SerializeField] private bool isPlayerSquadMember;
@@ -449,7 +450,7 @@ public sealed class CharacterSnapshotData
     public string RuntimeId => runtimeId ?? string.Empty;
 
     /// <summary>플레이어블 캐릭터의 고정 식별자입니다.</summary>
-    public PlayableCharacterId CharacterId => characterId;
+    public PlayerbleCharacterId CharacterId => characterId;
 
     /// <summary>셸터에서 사용하는 NPC 역할 종류입니다.</summary>
     public NPCType NpcType => npcType;
@@ -473,12 +474,12 @@ public sealed class CharacterSnapshotData
     public float MaxInjuryGauge => Mathf.Max(1.0f, maxInjuryGauge);
 
     /// <summary>현재 부상 단계입니다.</summary>
-    public PlayerInjuryState InjuryState => injuryState;
+    public CharacterInjuryState InjuryState => injuryState;
 
     /// <summary>현재 구조 가능한 다운 상태인지 여부입니다.</summary>
     public bool IsDown => isDown;
 
-    /// <summary>현재 전투에서 이탈한 상태인지 여부입니다.</summary>
+    /// <summary>현재 필드에서 이탈한 상태인지 여부입니다.</summary>
     public bool IsCombatOut => isCombatOut;
 
     /// <summary>현재 직접 조작 중인 PlayerSquadMember인지 여부입니다.</summary>
@@ -497,9 +498,9 @@ public sealed class CharacterSnapshotData
 
     /// <summary>캐릭터와 장착 총기의 현재 상태 전체를 생성합니다.</summary>
     public CharacterSnapshotData(
-        string definitionId, string runtimeId, PlayableCharacterId characterId, NPCType npcType,
+        string definitionId, string runtimeId, PlayerbleCharacterId characterId, NPCType npcType,
         string displayName, int reliability, int currentHp, int maxHp,
-        float injurySeverityGauge, float maxInjuryGauge, PlayerInjuryState injuryState,
+        float injurySeverityGauge, float maxInjuryGauge, CharacterInjuryState injuryState,
         bool isDown, bool isCombatOut, bool isPlayerSquadMember, int killCount,
         WeaponSnapshotData weapon)
     {
@@ -538,7 +539,7 @@ public sealed class CharacterSnapshotData
     }
 
     /// <summary>현재 씬 인스턴스에서 사용하는 캐릭터 식별 정보를 설정합니다.</summary>
-    public void SetSceneIdentity(string value, PlayableCharacterId playableId, string name)
+    public void SetSceneIdentity(string value, PlayerbleCharacterId playableId, string name)
     {
         runtimeId = value?.Trim() ?? string.Empty;
         characterId = playableId;
@@ -548,10 +549,10 @@ public sealed class CharacterSnapshotData
     /// <summary>신뢰도를 0~100 범위로 설정합니다.</summary>
     public void SetReliability(int value) => reliability = Mathf.Clamp(value, 0, 100);
 
-    /// <summary>현재 HP, 부상, 다운, 전투 이탈 및 조작 역할 상태를 함께 설정합니다.</summary>
+    /// <summary>현재 HP, 부상, 다운, 이탈 및 조작 역할 상태를 함께 설정합니다.</summary>
     public void SetCombatState(
         int hp, int hpMaximum, float injurySeverity, float injuryMaximum,
-        PlayerInjuryState state, bool down, bool combatOut, bool playerSquadMember)
+        CharacterInjuryState state, bool down, bool combatOut, bool playerSquadMember)
     {
         maxHp = Mathf.Max(1, hpMaximum);
         currentHp = Mathf.Clamp(hp, 0, maxHp);
@@ -572,7 +573,7 @@ public sealed class CharacterSnapshotData
     /// <summary>현재 출격의 캐릭터별 적 처치 수를 1 증가시킵니다.</summary>
     public void RecordKill() => killCount++;
 
-    /// <summary>철수 시점에 다운 상태인 캐릭터를 전투 이탈 상태로 확정합니다.</summary>
+    /// <summary>철수 시점에 다운 상태인 캐릭터를 필드 이탈 상태로 확정합니다.</summary>
     public void ConfirmCombatOutIfDown()
     {
         if (!isDown) return;
@@ -582,13 +583,13 @@ public sealed class CharacterSnapshotData
     }
 }
 
-/// <summary>배틀 입장 시점에 확정하는 스쿼드원 한 명의 초기 데이터입니다.</summary>
+/// <summary>필드 입장 시점에 확정하는 스쿼드원 한 명의 초기 데이터입니다.</summary>
 [Serializable]
-public sealed class BattleMemberEntryData
+public sealed class FieldMemberEntryData
 {
     [SerializeField] private string definitionId = string.Empty;
     [SerializeField] private string runtimeId = string.Empty;
-    [SerializeField] private PlayableCharacterId characterId;
+    [SerializeField] private PlayerbleCharacterId characterId;
     [SerializeField] private NPCType npcType;
     [SerializeField] private string displayName = string.Empty;
     [Range(0, 100)][SerializeField] private int reliability;
@@ -596,7 +597,7 @@ public sealed class BattleMemberEntryData
     [Min(1)][SerializeField] private int maxHp = 1;
     [Min(0.0f)][SerializeField] private float injuryGauge;
     [Min(1.0f)][SerializeField] private float maxInjuryGauge = 100.0f;
-    [SerializeField] private PlayerInjuryState injuryState;
+    [SerializeField] private CharacterInjuryState injuryState;
     [SerializeField] private string weaponId = string.Empty;
     [Min(0)][SerializeField] private int magazineAmmo;
     [Min(0)][SerializeField] private int reserveAmmo;
@@ -609,11 +610,11 @@ public sealed class BattleMemberEntryData
     /// <summary>영속 보유 캐릭터 목록에서 사용하는 캐릭터 정의 ID입니다.</summary>
     public string DefinitionId => definitionId ?? string.Empty;
 
-    /// <summary>현재 배틀 씬 인스턴스를 식별하는 런타임 ID입니다.</summary>
+    /// <summary>현재 필드 씬 인스턴스를 식별하는 런타임 ID입니다.</summary>
     public string RuntimeId => runtimeId ?? string.Empty;
 
     /// <summary>플레이어블 캐릭터의 고정 ID입니다.</summary>
-    public PlayableCharacterId CharacterId => characterId;
+    public PlayerbleCharacterId CharacterId => characterId;
 
     /// <summary>셸터 NPC 역할 종류입니다.</summary>
     public NPCType NpcType => npcType;
@@ -621,46 +622,46 @@ public sealed class BattleMemberEntryData
     /// <summary>결과 UI와 로그에 표시할 이름입니다.</summary>
     public string DisplayName => displayName ?? string.Empty;
 
-    /// <summary>배틀 입장 시점의 신뢰도입니다.</summary>
+    /// <summary>필드 입장 시점의 신뢰도입니다.</summary>
     public int Reliability => Mathf.Clamp(reliability, 0, 100);
 
-    /// <summary>배틀 입장 시점의 현재 HP입니다.</summary>
+    /// <summary>필드 입장 시점의 현재 HP입니다.</summary>
     public int CurrentHp => Mathf.Clamp(currentHp, 0, MaxHp);
 
-    /// <summary>배틀 입장 시점의 최대 HP입니다.</summary>
+    /// <summary>필드 입장 시점의 최대 HP입니다.</summary>
     public int MaxHp => Mathf.Max(1, maxHp);
 
-    /// <summary>배틀 기준으로 환산된 누적 부상 게이지입니다.</summary>
+    /// <summary>필드 기준으로 환산된 누적 부상 게이지입니다.</summary>
     public float InjuryGauge => Mathf.Clamp(injuryGauge, 0.0f, MaxInjuryGauge);
 
     /// <summary>누적 부상 게이지의 최대값입니다.</summary>
     public float MaxInjuryGauge => Mathf.Max(1.0f, maxInjuryGauge);
 
-    /// <summary>배틀 입장 시점의 부상 단계입니다.</summary>
-    public PlayerInjuryState InjuryState => injuryState;
+    /// <summary>필드 입장 시점의 부상 단계입니다.</summary>
+    public CharacterInjuryState InjuryState => injuryState;
 
     /// <summary>장착 무기의 정의 ID입니다.</summary>
     public string WeaponId => weaponId ?? string.Empty;
 
-    /// <summary>배틀 입장 시점의 탄창 내 탄약 수입니다.</summary>
+    /// <summary>필드 입장 시점의 탄창 내 탄약 수입니다.</summary>
     public int MagazineAmmo => Mathf.Max(0, magazineAmmo);
 
-    /// <summary>배틀 입장 시점의 예비 탄약 수입니다.</summary>
+    /// <summary>필드 입장 시점의 예비 탄약 수입니다.</summary>
     public int ReserveAmmo => Mathf.Max(0, reserveAmmo);
 
-    /// <summary>배틀 시작 시 직접 조작 대상으로 지정된 멤버인지 여부입니다.</summary>
+    /// <summary>필드 시작 시 직접 조작 대상으로 지정된 멤버인지 여부입니다.</summary>
     public bool IsPlayerSquadMember => isPlayerSquadMember;
 
-    /// <summary>배틀 입장 시점에 이미 다운 상태인지 여부입니다.</summary>
+    /// <summary>필드 입장 시점에 이미 다운 상태인지 여부입니다.</summary>
     public bool IsDown => isDown;
 
-    /// <summary>배틀 입장 시점에 이미 전투 이탈 상태인지 여부입니다.</summary>
+    /// <summary>필드 입장 시점에 이미 필드 이탈 상태인지 여부입니다.</summary>
     public bool IsCombatOut => isCombatOut;
 
     /// <summary>입장 스냅샷에 포함된 현재 출격의 캐릭터별 처치 수입니다.</summary>
     public int KillCount => Mathf.Max(0, killCount);
 
-    /// <summary>셸터와 배틀이 공통으로 사용하는 캐릭터·총기 스냅샷입니다.</summary>
+    /// <summary>셸터와 필드가 공통으로 사용하는 캐릭터·총기 스냅샷입니다.</summary>
     public CharacterSnapshotData Snapshot => new CharacterSnapshotData(
         DefinitionId,
         RuntimeId,
@@ -679,17 +680,17 @@ public sealed class BattleMemberEntryData
         KillCount,
         weaponSnapshot);
 
-    /// <summary>스쿼드원 한 명의 배틀 입장 값을 생성합니다.</summary>
-    public BattleMemberEntryData(
+    /// <summary>스쿼드원 한 명의 필드 입장 값을 생성합니다.</summary>
+    public FieldMemberEntryData(
         string definitionId,
         string runtimeId,
-        PlayableCharacterId characterId,
+        PlayerbleCharacterId characterId,
         string displayName,
         int currentHp,
         int maxHp,
         float injuryGauge,
         float maxInjuryGauge,
-        PlayerInjuryState injuryState,
+        CharacterInjuryState injuryState,
         string weaponId,
         int magazineAmmo,
         int reserveAmmo,
@@ -732,8 +733,8 @@ public sealed class BattleMemberEntryData
         killCount = 0;
     }
 
-    /// <summary>공용 캐릭터 스냅샷을 배틀 입장 데이터로 복제합니다.</summary>
-    public BattleMemberEntryData(CharacterSnapshotData snapshot)
+    /// <summary>공용 캐릭터 스냅샷을 필드 입장 데이터로 복제합니다.</summary>
+    public FieldMemberEntryData(CharacterSnapshotData snapshot)
     {
         CharacterSnapshotData source = snapshot?.Clone() ?? new CharacterSnapshotData();
         definitionId = source.DefinitionId;
@@ -758,52 +759,52 @@ public sealed class BattleMemberEntryData
     }
 
     /// <summary>현재 값을 복제한 새 멤버 입장 데이터를 반환합니다.</summary>
-    public BattleMemberEntryData Clone()
+    public FieldMemberEntryData Clone()
     {
-        return new BattleMemberEntryData(Snapshot);
+        return new FieldMemberEntryData(Snapshot);
     }
 }
 
-/// <summary>셸터 또는 이전 씬에서 배틀 씬으로 전달하는 입장 스냅샷입니다.</summary>
+/// <summary>셸터 또는 이전 씬에서 필드 씬으로 전달하는 입장 스냅샷입니다.</summary>
 [Serializable]
-public sealed class BattleEntryData
+public sealed class FieldEntryData
 {
-    [SerializeField] private string battleId = string.Empty;
+    [SerializeField] private string fieldId = string.Empty;
     [SerializeField] private string stageId = string.Empty;
     [SerializeField] private int randomSeed;
     [SerializeField] private long startedAtUnixMilliseconds;
-    [SerializeField] private List<BattleMemberEntryData> members = new();
-    [SerializeField] private List<BattleResourceAmountData> startingResources = new();
+    [SerializeField] private List<FieldMemberEntryData> members = new();
+    [SerializeField] private List<FieldResourceAmountData> startingResources = new();
 
     /// <summary>출격 한 회를 구분하는 고유 ID입니다.</summary>
-    public string BattleId => battleId ?? string.Empty;
+    public string FieldId => fieldId ?? string.Empty;
 
-    /// <summary>배틀이 진행되는 스테이지 ID입니다.</summary>
+    /// <summary>필드가 진행되는 스테이지 ID입니다.</summary>
     public string StageId => stageId ?? string.Empty;
 
-    /// <summary>배틀의 결정적 랜덤 처리에 사용할 시드입니다.</summary>
+    /// <summary>필드의 결정적 랜덤 처리에 사용할 시드입니다.</summary>
     public int RandomSeed => randomSeed;
 
     /// <summary>출격 데이터를 만든 UTC 시각의 Unix 밀리초 값입니다.</summary>
     public long StartedAtUnixMilliseconds => Math.Max(0L, startedAtUnixMilliseconds);
 
     /// <summary>스쿼드 순서대로 확정된 멤버 입장 데이터입니다.</summary>
-    public IReadOnlyList<BattleMemberEntryData> Members => members;
+    public IReadOnlyList<FieldMemberEntryData> Members => members;
 
-    /// <summary>배틀 입장 시점에 보유한 공용 자원 스냅샷입니다.</summary>
-    public IReadOnlyList<BattleResourceAmountData> StartingResources => startingResources;
+    /// <summary>필드 입장 시점에 보유한 공용 자원 스냅샷입니다.</summary>
+    public IReadOnlyList<FieldResourceAmountData> StartingResources => startingResources;
 
-    /// <summary>배틀 식별 정보와 생성 시각으로 빈 입장 스냅샷을 만듭니다.</summary>
-    public BattleEntryData(string battleId, string stageId, int randomSeed, long startedAtUnixMilliseconds)
+    /// <summary>필드 식별 정보와 생성 시각으로 빈 입장 스냅샷을 만듭니다.</summary>
+    public FieldEntryData(string fieldId, string stageId, int randomSeed, long startedAtUnixMilliseconds)
     {
-        this.battleId = battleId?.Trim() ?? string.Empty;
+        this.fieldId = fieldId?.Trim() ?? string.Empty;
         this.stageId = stageId?.Trim() ?? string.Empty;
         this.randomSeed = randomSeed;
         this.startedAtUnixMilliseconds = Math.Max(0L, startedAtUnixMilliseconds);
     }
 
     /// <summary>입장 스냅샷의 마지막에 스쿼드원을 추가합니다.</summary>
-    public void AddMember(BattleMemberEntryData member)
+    public void AddMember(FieldMemberEntryData member)
     {
         if (member != null)
         {
@@ -812,7 +813,7 @@ public sealed class BattleEntryData
     }
 
     /// <summary>스쿼드 순서를 유지한 채 지정 위치의 멤버 초기값을 교체합니다.</summary>
-    public void SetMemberAt(int index, BattleMemberEntryData member)
+    public void SetMemberAt(int index, FieldMemberEntryData member)
     {
         if (index < 0 || member == null)
         {
@@ -846,7 +847,7 @@ public sealed class BattleEntryData
             return;
         }
 
-        BattleResourceAmountData existing = startingResources.Find(
+        FieldResourceAmountData existing = startingResources.Find(
             entry => string.Equals(
                 entry.ResourceId,
                 id,
@@ -857,13 +858,13 @@ public sealed class BattleEntryData
             return;
         }
 
-        startingResources.Add(new BattleResourceAmountData(id, amount));
+        startingResources.Add(new FieldResourceAmountData(id, amount));
     }
 
     /// <summary>입장 스냅샷 전체를 깊은 복사하여 반환합니다.</summary>
-    public BattleEntryData Clone()
+    public FieldEntryData Clone()
     {
-        BattleEntryData clone = new BattleEntryData(BattleId, StageId, RandomSeed, StartedAtUnixMilliseconds);
+        FieldEntryData clone = new FieldEntryData(FieldId, StageId, RandomSeed, StartedAtUnixMilliseconds);
         for (int i = 0; i < members.Count; i++)
         {
             clone.AddMember(members[i]);
@@ -871,7 +872,7 @@ public sealed class BattleEntryData
 
         for (int i = 0; i < startingResources.Count; i++)
         {
-            BattleResourceAmountData resource = startingResources[i];
+            FieldResourceAmountData resource = startingResources[i];
             if (resource != null)
             {
             clone.AddStartingResource(resource.ResourceId, resource.Amount);
@@ -882,16 +883,16 @@ public sealed class BattleEntryData
     }
 }
 
-/// <summary>배틀 진행 중 계속 갱신되는 스쿼드원 한 명의 상태입니다.</summary>
+/// <summary>필드 진행 중 계속 갱신되는 스쿼드원 한 명의 상태입니다.</summary>
 [Serializable]
-public sealed class BattleMemberRuntimeData
+public sealed class FieldMemberRuntimeData
 {
-    [SerializeField] private BattleMemberEntryData entryData;
+    [SerializeField] private FieldMemberEntryData entryData;
     [Min(0)][SerializeField] private int currentHp;
     [Min(1)][SerializeField] private int maxHp = 1;
     [Min(0.0f)][SerializeField] private float injuryGauge;
     [Min(1.0f)][SerializeField] private float maxInjuryGauge = 100.0f;
-    [SerializeField] private PlayerInjuryState injuryState;
+    [SerializeField] private CharacterInjuryState injuryState;
     [SerializeField] private bool isDown;
     [SerializeField] private bool isCombatOut;
     [SerializeField] private string weaponId = string.Empty;
@@ -904,13 +905,13 @@ public sealed class BattleMemberRuntimeData
     [Min(0)][SerializeField] private int killCount;
 
     /// <summary>이 런타임 상태의 기준이 된 입장 데이터입니다.</summary>
-    public BattleMemberEntryData EntryData => entryData;
+    public FieldMemberEntryData EntryData => entryData;
 
     /// <summary>현재 씬 인스턴스를 식별하는 런타임 ID입니다.</summary>
     public string RuntimeId => entryData?.RuntimeId ?? string.Empty;
 
     /// <summary>플레이어블 캐릭터의 고정 ID입니다.</summary>
-    public PlayableCharacterId CharacterId => entryData?.CharacterId ?? PlayableCharacterId.Unknown;
+    public PlayerbleCharacterId CharacterId => entryData?.CharacterId ?? PlayerbleCharacterId.Unknown;
 
     /// <summary>현재 HP입니다.</summary>
     public int CurrentHp => Mathf.Clamp(currentHp, 0, MaxHp);
@@ -925,12 +926,12 @@ public sealed class BattleMemberRuntimeData
     public float MaxInjuryGauge => Mathf.Max(1.0f, maxInjuryGauge);
 
     /// <summary>현재 부상 단계입니다.</summary>
-    public PlayerInjuryState InjuryState => injuryState;
+    public CharacterInjuryState InjuryState => injuryState;
 
     /// <summary>현재 다운 상태인지 여부입니다.</summary>
     public bool IsDown => isDown;
 
-    /// <summary>현재 전투 이탈 상태인지 여부입니다.</summary>
+    /// <summary>현재 필드 이탈 상태인지 여부입니다.</summary>
     public bool IsCombatOut => isCombatOut;
 
     /// <summary>현재 장착한 무기의 정의 ID입니다.</summary>
@@ -954,7 +955,7 @@ public sealed class BattleMemberRuntimeData
     /// <summary>이 멤버가 확정한 적 처치 수입니다.</summary>
     public int KillCount => Mathf.Max(0, killCount);
 
-    /// <summary>GameDataManager와 배틀 결과가 그대로 공유하는 현재 캐릭터 스냅샷입니다.</summary>
+    /// <summary>GameDataManager와 필드 결과가 그대로 공유하는 현재 캐릭터 스냅샷입니다.</summary>
     public CharacterSnapshotData Snapshot
     {
         get
@@ -980,13 +981,13 @@ public sealed class BattleMemberRuntimeData
     }
 
     /// <summary>입장 데이터를 기준으로 멤버 런타임 상태를 생성합니다.</summary>
-    public BattleMemberRuntimeData(BattleMemberEntryData source)
+    public FieldMemberRuntimeData(FieldMemberEntryData source)
     {
         entryData = source?.Clone();
         SetSceneSnapshot(source?.Snapshot);
     }
 
-    /// <summary>공용 캐릭터 스냅샷의 현재 전투 상태를 런타임 데이터에 반영합니다.</summary>
+    /// <summary>공용 캐릭터 스냅샷의 현재 필드 상태를 런타임 데이터에 반영합니다.</summary>
     public void SetSceneSnapshot(CharacterSnapshotData snapshot)
     {
         if (snapshot == null)
@@ -1026,7 +1027,7 @@ public sealed class BattleMemberRuntimeData
         int hpMaximum,
         float gauge,
         float gaugeMaximum,
-        PlayerInjuryState state,
+        CharacterInjuryState state,
         bool down,
         bool combatOut,
         string currentWeaponId,
@@ -1059,7 +1060,7 @@ public sealed class BattleMemberRuntimeData
         killCount++;
     }
 
-    /// <summary>철수 시점에 다운 상태인 멤버를 전투 이탈 상태로 확정합니다.</summary>
+    /// <summary>철수 시점에 다운 상태인 멤버를 필드 이탈 상태로 확정합니다.</summary>
     public void ConfirmCombatOutIfDown()
     {
         if (!isDown)
@@ -1073,9 +1074,9 @@ public sealed class BattleMemberRuntimeData
     }
 
     /// <summary>멤버 런타임 상태 전체를 깊은 복사하여 반환합니다.</summary>
-    public BattleMemberRuntimeData Clone()
+    public FieldMemberRuntimeData Clone()
     {
-        BattleMemberRuntimeData clone = new BattleMemberRuntimeData(entryData)
+        FieldMemberRuntimeData clone = new FieldMemberRuntimeData(entryData)
         {
             currentHp = CurrentHp,
             maxHp = MaxHp,
@@ -1097,37 +1098,37 @@ public sealed class BattleMemberRuntimeData
     }
 }
 
-/// <summary>배틀 씬이 소유하며 진행 중 계속 변경하는 전체 런타임 데이터입니다.</summary>
+/// <summary>필드 씬이 소유하며 진행 중 계속 변경하는 전체 런타임 데이터입니다.</summary>
 [Serializable]
-public sealed class BattleRuntimeData
+public sealed class FieldRuntimeData
 {
-    [SerializeField] private BattlePhase phase;
-    [SerializeField] private string battleId = string.Empty;
+    [SerializeField] private FieldPhase phase;
+    [SerializeField] private string fieldId = string.Empty;
     [SerializeField] private string stageId = string.Empty;
     [Min(0.0f)][SerializeField] private float elapsedSeconds;
     [SerializeField] private bool missionCompleted;
     [Min(0)][SerializeField] private int totalEnemyCount;
     [Min(0)][SerializeField] private int aliveEnemyCount;
     [Min(0)][SerializeField] private int totalKillCount;
-    [SerializeField] private List<BattleMemberRuntimeData> members = new();
-    [SerializeField] private List<BattleResourceAmountData> acquiredResources = new();
+    [SerializeField] private List<FieldMemberRuntimeData> members = new();
+    [SerializeField] private List<FieldResourceAmountData> acquiredResources = new();
 
-    /// <summary>현재 배틀 생명주기 단계입니다.</summary>
-    public BattlePhase Phase => phase;
+    /// <summary>현재 필드 생명주기 단계입니다.</summary>
+    public FieldPhase Phase => phase;
 
     /// <summary>출격 한 회를 구분하는 고유 ID입니다.</summary>
-    public string BattleId => battleId ?? string.Empty;
+    public string FieldId => fieldId ?? string.Empty;
 
-    /// <summary>현재 배틀의 스테이지 ID입니다.</summary>
+    /// <summary>현재 필드의 스테이지 ID입니다.</summary>
     public string StageId => stageId ?? string.Empty;
 
-    /// <summary>배틀 진행 상태로 누적한 경과 시간입니다.</summary>
+    /// <summary>필드 진행 상태로 누적한 경과 시간입니다.</summary>
     public float ElapsedSeconds => Mathf.Max(0.0f, elapsedSeconds);
 
     /// <summary>현재 임무 목표를 달성했는지 여부입니다.</summary>
     public bool MissionCompleted => missionCompleted;
 
-    /// <summary>배틀 시작 시점에 집계한 전체 적 수입니다.</summary>
+    /// <summary>필드 시작 시점에 집계한 전체 적 수입니다.</summary>
     public int TotalEnemyCount => Mathf.Max(0, totalEnemyCount);
 
     /// <summary>현재 살아 있는 것으로 집계된 적 수입니다.</summary>
@@ -1137,16 +1138,16 @@ public sealed class BattleRuntimeData
     public int TotalKillCount => Mathf.Max(0, totalKillCount);
 
     /// <summary>스쿼드원별 현재 런타임 상태입니다.</summary>
-    public IReadOnlyList<BattleMemberRuntimeData> Members => members;
+    public IReadOnlyList<FieldMemberRuntimeData> Members => members;
 
-    /// <summary>이번 배틀에서 획득한 자원 수량입니다.</summary>
-    public IReadOnlyList<BattleResourceAmountData> AcquiredResources => acquiredResources;
+    /// <summary>이번 필드에서 획득한 자원 수량입니다.</summary>
+    public IReadOnlyList<FieldResourceAmountData> AcquiredResources => acquiredResources;
 
     /// <summary>입장 데이터와 시작 적 수로 런타임 상태를 초기화합니다.</summary>
-    public void Initialize(BattleEntryData entryData, int enemyCount)
+    public void Initialize(FieldEntryData entryData, int enemyCount)
     {
-        phase = BattlePhase.Ready;
-        battleId = entryData?.BattleId ?? string.Empty;
+        phase = FieldPhase.Ready;
+        fieldId = entryData?.FieldId ?? string.Empty;
         stageId = entryData?.StageId ?? string.Empty;
         elapsedSeconds = 0.0f;
         missionCompleted = false;
@@ -1160,60 +1161,60 @@ public sealed class BattleRuntimeData
         {
             for (int i = 0; i < entryData.Members.Count; i++)
             {
-                members.Add(new BattleMemberRuntimeData(entryData.Members[i]));
+                members.Add(new FieldMemberRuntimeData(entryData.Members[i]));
             }
         }
     }
 
-    /// <summary>준비된 배틀을 진행 상태로 전환합니다.</summary>
-    public void StartBattle()
+    /// <summary>준비된 필드를 진행 상태로 전환합니다.</summary>
+    public void StartField()
     {
-        if (phase == BattlePhase.Ready)
+        if (phase == FieldPhase.Ready)
         {
-            phase = BattlePhase.Running;
+            phase = FieldPhase.Running;
         }
     }
 
-    /// <summary>진행 중인 배틀의 값 변경을 멈추고 결과 확정 단계로 전환합니다.</summary>
+    /// <summary>진행 중인 필드의 값 변경을 멈추고 결과 확정 단계로 전환합니다.</summary>
     public bool BeginFinalization()
     {
-        if (phase == BattlePhase.Uninitialized
-            || phase == BattlePhase.Finalizing
-            || phase == BattlePhase.Completed
-            || phase == BattlePhase.GameOver)
+        if (phase == FieldPhase.Uninitialized
+            || phase == FieldPhase.Finalizing
+            || phase == FieldPhase.Completed
+            || phase == FieldPhase.GameOver)
         {
             return false;
         }
 
-        phase = BattlePhase.Finalizing;
+        phase = FieldPhase.Finalizing;
         return true;
     }
 
-    /// <summary>결과 스냅샷 생성이 끝난 배틀을 완료 상태로 전환합니다.</summary>
+    /// <summary>결과 스냅샷 생성이 끝난 필드를 완료 상태로 전환합니다.</summary>
     public void CompleteFinalization()
     {
-        if (phase == BattlePhase.Finalizing)
+        if (phase == FieldPhase.Finalizing)
         {
-            phase = BattlePhase.Completed;
+            phase = FieldPhase.Completed;
         }
     }
 
     /// <summary>스쿼드 전멸 시 정산 단계를 거치지 않고 게임오버 대기 상태로 전환합니다.</summary>
     public bool EnterGameOver()
     {
-        if (phase != BattlePhase.Ready && phase != BattlePhase.Running)
+        if (phase != FieldPhase.Ready && phase != FieldPhase.Running)
         {
             return false;
         }
 
-        phase = BattlePhase.GameOver;
+        phase = FieldPhase.GameOver;
         return true;
     }
 
-    /// <summary>배틀 진행 중일 때만 경과 시간을 누적합니다.</summary>
+    /// <summary>필드 진행 중일 때만 경과 시간을 누적합니다.</summary>
     public void AddElapsedTime(float deltaSeconds)
     {
-        if (phase == BattlePhase.Running && deltaSeconds > 0.0f)
+        if (phase == FieldPhase.Running && deltaSeconds > 0.0f)
         {
             elapsedSeconds += deltaSeconds;
         }
@@ -1242,7 +1243,7 @@ public sealed class BattleRuntimeData
         aliveEnemyCount = Mathf.Max(0, aliveEnemyCount - 1);
     }
 
-    /// <summary>배틀 시작 후 새로 활성화된 적을 전체 및 생존 적 수에 추가합니다.</summary>
+    /// <summary>필드 시작 후 새로 활성화된 적을 전체 및 생존 적 수에 추가합니다.</summary>
     public void RecordEnemySpawned()
     {
         if (!CanAcceptRuntimeChanges())
@@ -1254,7 +1255,7 @@ public sealed class BattleRuntimeData
         aliveEnemyCount++;
     }
 
-    /// <summary>철수 시점에 다운 상태로 남은 모든 스쿼드원을 전투 이탈로 확정합니다.</summary>
+    /// <summary>철수 시점에 다운 상태로 남은 모든 스쿼드원을 필드 이탈로 확정합니다.</summary>
     public void ConfirmDownMembersAsCombatOut()
     {
         if (!CanAcceptRuntimeChanges())
@@ -1269,26 +1270,26 @@ public sealed class BattleRuntimeData
     }
 
     /// <summary>런타임 ID 또는 캐릭터 ID가 일치하는 멤버의 처치 수를 증가시킵니다.</summary>
-    public void RecordMemberKill(string runtimeId, PlayableCharacterId characterId)
+    public void RecordMemberKill(string runtimeId, PlayerbleCharacterId characterId)
     {
         if (!CanAcceptRuntimeChanges())
         {
             return;
         }
 
-        BattleMemberRuntimeData member = FindMember(runtimeId, characterId);
+        FieldMemberRuntimeData member = FindMember(runtimeId, characterId);
         member?.RecordKill();
     }
 
     /// <summary>런타임 ID 또는 캐릭터 ID가 일치하는 멤버의 현재 씬 상태를 갱신합니다.</summary>
     public void UpdateMemberState(
         string runtimeId,
-        PlayableCharacterId characterId,
+        PlayerbleCharacterId characterId,
         int currentHp,
         int maxHp,
         float injuryGauge,
         float maxInjuryGauge,
-        PlayerInjuryState injuryState,
+        CharacterInjuryState injuryState,
         bool isDown,
         bool isCombatOut,
         string weaponId,
@@ -1303,7 +1304,7 @@ public sealed class BattleRuntimeData
             return;
         }
 
-        BattleMemberRuntimeData member = FindMember(runtimeId, characterId);
+        FieldMemberRuntimeData member = FindMember(runtimeId, characterId);
         member?.SetSceneState(
             currentHp,
             maxHp,
@@ -1328,11 +1329,11 @@ public sealed class BattleRuntimeData
             return;
         }
 
-        BattleMemberRuntimeData member = FindMember(snapshot.RuntimeId, snapshot.CharacterId);
+        FieldMemberRuntimeData member = FindMember(snapshot.RuntimeId, snapshot.CharacterId);
         member?.SetSceneSnapshot(snapshot);
     }
 
-    /// <summary>이번 배틀에서 획득한 자원 수량을 종류별로 누적합니다.</summary>
+    /// <summary>이번 필드에서 획득한 자원 수량을 종류별로 누적합니다.</summary>
     public void RecordResource(string resourceId, int amount)
     {
         string id = ResourceIds.Normalize(resourceId);
@@ -1343,7 +1344,7 @@ public sealed class BattleRuntimeData
             return;
         }
 
-        BattleResourceAmountData existing = acquiredResources.Find(
+        FieldResourceAmountData existing = acquiredResources.Find(
             entry => string.Equals(
                 entry.ResourceId,
                 id,
@@ -1354,16 +1355,16 @@ public sealed class BattleRuntimeData
             return;
         }
 
-        acquiredResources.Add(new BattleResourceAmountData(id, amount));
+        acquiredResources.Add(new FieldResourceAmountData(id, amount));
     }
 
-    /// <summary>전체 배틀 런타임 상태를 깊은 복사하여 반환합니다.</summary>
-    public BattleRuntimeData Clone()
+    /// <summary>전체 필드 런타임 상태를 깊은 복사하여 반환합니다.</summary>
+    public FieldRuntimeData Clone()
     {
-        BattleRuntimeData clone = new BattleRuntimeData
+        FieldRuntimeData clone = new FieldRuntimeData
         {
             phase = Phase,
-            battleId = BattleId,
+            fieldId = FieldId,
             stageId = StageId,
             elapsedSeconds = ElapsedSeconds,
             missionCompleted = MissionCompleted,
@@ -1394,22 +1395,22 @@ public sealed class BattleRuntimeData
     /// <summary>현재 단계에서 진행 중 데이터 변경을 허용하는지 확인합니다.</summary>
     private bool CanAcceptRuntimeChanges()
     {
-        return phase == BattlePhase.Ready || phase == BattlePhase.Running;
+        return phase == FieldPhase.Ready || phase == FieldPhase.Running;
     }
 
     /// <summary>런타임 ID를 우선 사용하고 캐릭터 ID를 보조로 사용해 런타임 멤버를 찾습니다.</summary>
-    private BattleMemberRuntimeData FindMember(string runtimeId, PlayableCharacterId characterId)
+    private FieldMemberRuntimeData FindMember(string runtimeId, PlayerbleCharacterId characterId)
     {
         if (!string.IsNullOrWhiteSpace(runtimeId))
         {
-            BattleMemberRuntimeData byRuntimeId = members.Find(member => member != null && member.RuntimeId == runtimeId);
+            FieldMemberRuntimeData byRuntimeId = members.Find(member => member != null && member.RuntimeId == runtimeId);
             if (byRuntimeId != null)
             {
                 return byRuntimeId;
             }
         }
 
-        return characterId != PlayableCharacterId.Unknown
+        return characterId != PlayerbleCharacterId.Unknown
             ? members.Find(member => member != null && member.CharacterId == characterId)
             : null;
     }
@@ -1417,7 +1418,7 @@ public sealed class BattleRuntimeData
 
 /// <summary>귀환 정산에 저장하는 스쿼드원 한 명의 최종 결과입니다.</summary>
 [Serializable]
-public sealed class BattleMemberResultData
+public sealed class FieldMemberResultData
 {
     [SerializeField] private CharacterSnapshotData snapshot;
 
@@ -1425,69 +1426,70 @@ public sealed class BattleMemberResultData
     public CharacterSnapshotData Snapshot => snapshot?.Clone();
 
     /// <summary>멤버 런타임 상태에서 공용 캐릭터·총기 최종 스냅샷만 복제해 결과로 고정합니다.</summary>
-    public BattleMemberResultData(BattleMemberRuntimeData runtimeData)
+    public FieldMemberResultData(FieldMemberRuntimeData runtimeData)
     {
         snapshot = runtimeData?.Snapshot;
     }
 
     /// <summary>이미 생성된 공용 캐릭터·총기 스냅샷을 멤버 최종 결과로 고정합니다.</summary>
-    public BattleMemberResultData(CharacterSnapshotData snapshot)
+    public FieldMemberResultData(CharacterSnapshotData snapshot)
     {
         this.snapshot = snapshot?.Clone();
     }
 
     /// <summary>멤버 최종 결과를 깊은 복사하여 반환합니다.</summary>
-    public BattleMemberResultData Clone()
+    public FieldMemberResultData Clone()
     {
-        return new BattleMemberResultData(snapshot);
+        return new FieldMemberResultData(snapshot);
     }
 }
 
-/// <summary>배틀 종료 후 GameDataManager와 저장 시스템에 전달할 최종 결과 스냅샷입니다.</summary>
+/// <summary>필드 종료 후 GameDataManager와 저장 시스템에 전달할 최종 결과 스냅샷입니다.</summary>
 [Serializable]
-public sealed class BattleResultData
+public sealed class FieldResultData
 {
-    [SerializeField] private string battleId = string.Empty;
+    [FormerlySerializedAs("battleId")]
+    [SerializeField] private string fieldId = string.Empty;
     [SerializeField] private string stageId = string.Empty;
-    [SerializeField] private BattleOutcome outcome;
-    [SerializeField] private BattleEndReason endReason;
+    [SerializeField] private FieldOutcome outcome;
+    [SerializeField] private FieldEndReason endReason;
     [SerializeField] private bool missionCompleted;
     [Min(0.0f)][SerializeField] private float elapsedSeconds;
     [Min(0)][SerializeField] private int totalKillCount;
-    [SerializeField] private List<BattleMemberResultData> members = new();
-    [SerializeField] private List<BattleResourceAmountData> acquiredResources = new();
+    [SerializeField] private List<FieldMemberResultData> members = new();
+    [SerializeField] private List<FieldResourceAmountData> acquiredResources = new();
 
     /// <summary>종료된 출격 한 회의 고유 ID입니다.</summary>
-    public string BattleId => battleId ?? string.Empty;
+    public string FieldId => fieldId ?? string.Empty;
 
-    /// <summary>종료된 배틀의 스테이지 ID입니다.</summary>
+    /// <summary>종료된 필드의 스테이지 ID입니다.</summary>
     public string StageId => stageId ?? string.Empty;
 
     /// <summary>귀환 정산에 표시할 최종 성공·실패 결과입니다.</summary>
-    public BattleOutcome Outcome => outcome;
+    public FieldOutcome Outcome => outcome;
 
-    /// <summary>배틀이 종료된 직접적인 사유입니다.</summary>
-    public BattleEndReason EndReason => endReason;
+    /// <summary>필드가 종료된 직접적인 사유입니다.</summary>
+    public FieldEndReason EndReason => endReason;
 
-    /// <summary>배틀 종료 전에 임무 목표를 달성했는지 여부입니다.</summary>
+    /// <summary>필드 종료 전에 임무 목표를 달성했는지 여부입니다.</summary>
     public bool MissionCompleted => missionCompleted;
 
-    /// <summary>배틀 종료까지 누적된 경과 시간입니다.</summary>
+    /// <summary>필드 종료까지 누적된 경과 시간입니다.</summary>
     public float ElapsedSeconds => Mathf.Max(0.0f, elapsedSeconds);
 
-    /// <summary>배틀 전체에서 확정된 적 처치 수입니다.</summary>
+    /// <summary>필드 전체에서 확정된 적 처치 수입니다.</summary>
     public int TotalKillCount => Mathf.Max(0, totalKillCount);
 
     /// <summary>스쿼드원별 최종 결과입니다.</summary>
-    public IReadOnlyList<BattleMemberResultData> Members => members;
+    public IReadOnlyList<FieldMemberResultData> Members => members;
 
-    /// <summary>배틀에서 최종 획득한 자원 수량입니다.</summary>
-    public IReadOnlyList<BattleResourceAmountData> AcquiredResources => acquiredResources;
+    /// <summary>필드에서 최종 획득한 자원 수량입니다.</summary>
+    public IReadOnlyList<FieldResourceAmountData> AcquiredResources => acquiredResources;
 
     /// <summary>현재 런타임 상태와 종료 판정을 복제해 최종 결과를 생성합니다.</summary>
-    public BattleResultData(BattleRuntimeData runtimeData, BattleOutcome outcome, BattleEndReason endReason)
+    public FieldResultData(FieldRuntimeData runtimeData, FieldOutcome outcome, FieldEndReason endReason)
     {
-        battleId = runtimeData?.BattleId ?? string.Empty;
+        fieldId = runtimeData?.FieldId ?? string.Empty;
         stageId = runtimeData?.StageId ?? string.Empty;
         this.outcome = outcome;
         this.endReason = endReason;
@@ -1502,7 +1504,7 @@ public sealed class BattleResultData
 
         for (int i = 0; i < runtimeData.Members.Count; i++)
         {
-            members.Add(new BattleMemberResultData(runtimeData.Members[i]));
+            members.Add(new FieldMemberResultData(runtimeData.Members[i]));
         }
 
         for (int i = 0; i < runtimeData.AcquiredResources.Count; i++)
@@ -1512,18 +1514,18 @@ public sealed class BattleResultData
     }
 
     /// <summary>평탄화된 영속 정산값을 모아 씬 전달 또는 저장용 결과 패킷을 생성합니다.</summary>
-    public BattleResultData(
-        string battleId,
+    public FieldResultData(
+        string fieldId,
         string stageId,
-        BattleOutcome outcome,
-        BattleEndReason endReason,
+        FieldOutcome outcome,
+        FieldEndReason endReason,
         bool missionCompleted,
         float elapsedSeconds,
         int totalKillCount,
-        IEnumerable<BattleMemberResultData> members,
-        IEnumerable<BattleResourceAmountData> acquiredResources)
+        IEnumerable<FieldMemberResultData> members,
+        IEnumerable<FieldResourceAmountData> acquiredResources)
     {
-        this.battleId = battleId?.Trim() ?? string.Empty;
+        this.fieldId = fieldId?.Trim() ?? string.Empty;
         this.stageId = stageId?.Trim() ?? string.Empty;
         this.outcome = outcome;
         this.endReason = endReason;
@@ -1533,7 +1535,7 @@ public sealed class BattleResultData
 
         if (members != null)
         {
-            foreach (BattleMemberResultData member in members)
+            foreach (FieldMemberResultData member in members)
             {
                 if (member != null)
                 {
@@ -1544,7 +1546,7 @@ public sealed class BattleResultData
 
         if (acquiredResources != null)
         {
-            foreach (BattleResourceAmountData resource in acquiredResources)
+            foreach (FieldResourceAmountData resource in acquiredResources)
             {
                 if (resource != null)
                 {
@@ -1555,11 +1557,11 @@ public sealed class BattleResultData
     }
 
     /// <summary>최종 결과 전체를 깊은 복사하여 반환합니다.</summary>
-    public BattleResultData Clone()
+    public FieldResultData Clone()
     {
-        BattleResultData clone = new BattleResultData
+        FieldResultData clone = new FieldResultData
         {
-            battleId = BattleId,
+            fieldId = FieldId,
             stageId = StageId,
             outcome = Outcome,
             endReason = EndReason,
@@ -1587,7 +1589,7 @@ public sealed class BattleResultData
         return clone;
     }
 
-    private BattleResultData()
+    private FieldResultData()
     {
     }
 }

@@ -230,7 +230,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             return false;
 
         // 완치(Healthy)면 치료 불필요 (enum 기준).
-        if (character.InjuryState == PlayerInjuryState.Normal)
+        if (character.InjuryState == CharacterInjuryState.Normal)
             return false;
 
         return !character.IsAssignedToFacility;
@@ -337,8 +337,8 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
             return false;
 
         // 도우미는 건강 또는 경상만 가능 (중상·위독 제외).
-        PlayerInjuryState state = character.InjuryState;
-        if (state != PlayerInjuryState.Normal && state != PlayerInjuryState.Minor)
+        CharacterInjuryState state = character.InjuryState;
+        if (state != CharacterInjuryState.Normal && state != CharacterInjuryState.Minor)
             return false;
 
         return !character.IsAssignedToFacility;
@@ -667,7 +667,7 @@ public readonly struct PatientStatus
     public float GaugeNormalized => MaxInjuryGauge > 0f ? Mathf.Clamp01(InjuryGauge / MaxInjuryGauge) : 0f;
 
     /// <summary>현재 환자 부상 상태</summary>
-    public PlayerInjuryState InjuryState => Patient != null ? Patient.InjuryState : PlayerInjuryState.Normal;
+    public CharacterInjuryState InjuryState => Patient != null ? Patient.InjuryState : CharacterInjuryState.Normal;
 
     /// <summary>UI에 표시할 환자 이름</summary>
     public string DisplayName => Patient != null

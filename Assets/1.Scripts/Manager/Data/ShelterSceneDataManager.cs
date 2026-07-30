@@ -51,13 +51,13 @@ public class ShelterSceneDataManager : MonoBehaviour
     public int TotalOwnedCharacterCount => RuntimeData.TotalOwnedCharacterCount;
 
     /// <summary>현재 플레이어블 캐릭터 수</summary>
-    public int PlayableCharacterCount => RuntimeData.PlayableCharacterCount;
+    public int PlayerbleCharacterCount => RuntimeData.PlayerbleCharacterCount;
 
     /// <summary>현재 비플레이어 NPC 수</summary>
-    public int NonPlayableNpcCount => RuntimeData.NonPlayableNpcCount;
+    public int NonPlayerbleNpcCount => RuntimeData.NonPlayerbleNpcCount;
 
     /// <summary>현재 전투 출격 스쿼드 캐릭터 런타임 ID 목록</summary>
-    public IReadOnlyList<string> BattleSquadRuntimeIds => RuntimeData.BattleSquadRuntimeIds;
+    public IReadOnlyList<string> FieldSquadRuntimeIds => RuntimeData.FieldSquadRuntimeIds;
 
     /// <summary>현재 셸터 날짜</summary>
     public int CurrentDay => RuntimeData.CurrentDay;
@@ -207,12 +207,12 @@ public class ShelterSceneDataManager : MonoBehaviour
     /// </summary>
     /// <param name="runtimeIds">스쿼드에 포함할 캐릭터 런타임 ID 목록</param>
     /// <returns>유효한 스쿼드로 설정됐으면 <c>true</c></returns>
-    public bool TrySetBattleSquad(IEnumerable<string> runtimeIds)
+    public bool TrySetFieldSquad(IEnumerable<string> runtimeIds)
     {
-        if (!CanUseBattleSquad(runtimeIds))
+        if (!CanUseFieldSquad(runtimeIds))
             return false;
 
-        bool result = RuntimeData.TrySetBattleSquad(runtimeIds);
+        bool result = RuntimeData.TrySetFieldSquad(runtimeIds);
         if (result)
             NotifyShelterDataChanged();
 
@@ -224,12 +224,12 @@ public class ShelterSceneDataManager : MonoBehaviour
     /// </summary>
     /// <param name="runtimeId">추가할 캐릭터 런타임 ID</param>
     /// <returns>추가됐거나 이미 포함되어 있으면 <c>true</c></returns>
-    public bool TryAddBattleSquadCharacter(string runtimeId)
+    public bool TryAddFieldSquadCharacter(string runtimeId)
     {
-        if (!CanUseBattleSquadCharacter(runtimeId))
+        if (!CanUseFieldSquadCharacter(runtimeId))
             return false;
 
-        bool result = RuntimeData.TryAddBattleSquadCharacter(runtimeId);
+        bool result = RuntimeData.TryAddFieldSquadCharacter(runtimeId);
         if (result)
             NotifyShelterDataChanged();
 
@@ -241,9 +241,9 @@ public class ShelterSceneDataManager : MonoBehaviour
     /// </summary>
     /// <param name="runtimeId">제거할 캐릭터 런타임 ID</param>
     /// <returns>제거에 성공하면 <c>true</c></returns>
-    public bool TryRemoveBattleSquadCharacter(string runtimeId)
+    public bool TryRemoveFieldSquadCharacter(string runtimeId)
     {
-        bool result = RuntimeData.TryRemoveBattleSquadCharacter(runtimeId);
+        bool result = RuntimeData.TryRemoveFieldSquadCharacter(runtimeId);
         if (result)
             NotifyShelterDataChanged();
 
@@ -253,9 +253,9 @@ public class ShelterSceneDataManager : MonoBehaviour
     /// <summary>
     /// 전투 출격 스쿼드 목록을 모두 비움.
     /// </summary>
-    public void ClearBattleSquad()
+    public void ClearFieldSquad()
     {
-        RuntimeData.ClearBattleSquad();
+        RuntimeData.ClearFieldSquad();
         NotifyShelterDataChanged();
     }
 
@@ -292,7 +292,7 @@ public class ShelterSceneDataManager : MonoBehaviour
         ShelterDataChanged?.Invoke();
     }
 
-    private bool CanUseBattleSquad(IEnumerable<string> runtimeIds)
+    private bool CanUseFieldSquad(IEnumerable<string> runtimeIds)
     {
         if (runtimeIds == null)
             return false;
@@ -302,14 +302,14 @@ public class ShelterSceneDataManager : MonoBehaviour
             if (string.IsNullOrWhiteSpace(runtimeId))
                 continue;
 
-            if (!CanUseBattleSquadCharacter(runtimeId))
+            if (!CanUseFieldSquadCharacter(runtimeId))
                 return false;
         }
 
         return true;
     }
 
-    private bool CanUseBattleSquadCharacter(string runtimeId)
+    private bool CanUseFieldSquadCharacter(string runtimeId)
     {
         return !string.IsNullOrWhiteSpace(runtimeId) && RuntimeData.TryGetCharacter(runtimeId, out _);
     }

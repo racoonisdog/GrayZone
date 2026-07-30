@@ -64,13 +64,14 @@ public sealed class ShelterEntryData
 [Serializable]
 public sealed class ShelterRuntimeData
 {
-    public const int MinBattleSquadSize = 1;
-    public const int MaxBattleSquadSize = 3;
+    public const int MinFieldSquadSize = 1;
+    public const int MaxFieldSquadSize = 3;
 
     [SerializeField] private int shelterStability = 100;
     [SerializeField] private int currentDay = 1;
     [FormerlySerializedAs("battleSquadNpcDefinitionIds")]
-    [SerializeField] private List<string> battleSquadRuntimeIds = new();
+    [FormerlySerializedAs("battleSquadRuntimeIds")]
+    [SerializeField] private List<string> fieldSquadRuntimeIds = new();
     [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
     [SerializeField] private List<ShelterMemberRuntimeData> characters = new();
     [SerializeField] private ManufacturingRuntimeData manufacturing = new();
@@ -79,12 +80,12 @@ public sealed class ShelterRuntimeData
     private ResourceStorage resources;
 
     public int ShelterStability => Mathf.Clamp(shelterStability, 0, 100);
-    public int PlayableCharacterCount => CharacterCount;
-    public int NonPlayableNpcCount => 0;
+    public int PlayerbleCharacterCount => CharacterCount;
+    public int NonPlayerbleNpcCount => 0;
     public int TotalOwnedCharacterCount => CharacterCount;
     public int CharacterCount => Characters.Count;
     public int CurrentDay => Mathf.Max(1, currentDay);
-    public IReadOnlyList<string> BattleSquadRuntimeIds => battleSquadRuntimeIds;
+    public IReadOnlyList<string> FieldSquadRuntimeIds => fieldSquadRuntimeIds;
     public IReadOnlyList<FacilityRuntimeState> FacilityStates => facilityStates;
     public IReadOnlyList<ShelterMemberRuntimeData> Characters => characters;
     public IReadOnlyList<ItemStorageEntry> ItemStorageEntries => itemStorageEntries;
@@ -121,7 +122,7 @@ public sealed class ShelterRuntimeData
     {
         shelterStability = Mathf.Clamp(shelterStability, 0, 100);
         currentDay = Mathf.Max(1, currentDay);
-        battleSquadRuntimeIds ??= new List<string>();
+        fieldSquadRuntimeIds ??= new List<string>();
         facilityStates ??= new List<FacilityRuntimeState>();
         characters ??= new List<ShelterMemberRuntimeData>();
         itemStorageEntries ??= new List<ItemStorageEntry>();
@@ -129,7 +130,7 @@ public sealed class ShelterRuntimeData
         _ = Manufacturing;
 
         NormalizeCharacters();
-        NormalizeBattleSquad();
+        NormalizeFieldSquad();
         NormalizeItemStorageEntries();
         for (int i = facilityStates.Count - 1; i >= 0; i--)
         {
@@ -147,7 +148,7 @@ public sealed class ShelterRuntimeData
         {
             shelterStability = ShelterStability,
             currentDay = CurrentDay,
-            battleSquadRuntimeIds = new List<string>(battleSquadRuntimeIds),
+            fieldSquadRuntimeIds = new List<string>(fieldSquadRuntimeIds),
             facilityStates = CloneFacilityStates(facilityStates),
             characters = CloneCharacters(characters),
             manufacturing = Manufacturing.Clone(),
@@ -166,7 +167,7 @@ public sealed class ShelterRuntimeData
         itemStorageEntries ??= new List<ItemStorageEntry>();
         shelterStability = source.ShelterStability;
         currentDay = source.CurrentDay;
-        battleSquadRuntimeIds = new List<string>(source.battleSquadRuntimeIds);
+        fieldSquadRuntimeIds = new List<string>(source.fieldSquadRuntimeIds);
         facilityStates = CloneFacilityStates(source.facilityStates);
         characters = CloneCharacters(source.characters);
         Manufacturing.CopyFrom(source.Manufacturing);
@@ -193,11 +194,11 @@ public sealed class ShelterRuntimeData
         IEnumerable<FacilityRuntimeState> savedFacilityStates)
     {
         SetCurrentDay(day);
-        battleSquadRuntimeIds.Clear();
+        fieldSquadRuntimeIds.Clear();
         if (squadRuntimeIds != null)
         {
             foreach (string runtimeId in squadRuntimeIds)
-                TryAddBattleSquadCharacter(runtimeId);
+                TryAddFieldSquadCharacter(runtimeId);
         }
 
         facilityStates.Clear();
@@ -297,7 +298,7 @@ public sealed class ShelterRuntimeData
         return created;
     }
 
-    public bool TrySetBattleSquad(IEnumerable<string> runtimeIds)
+    public bool TrySetFieldSquad(IEnumerable<string> runtimeIds)
     {
         if (runtimeIds == null)
             return false;
@@ -313,47 +314,47 @@ public sealed class ShelterRuntimeData
                 continue;
 
             normalized.Add(id);
-            if (normalized.Count > MaxBattleSquadSize)
+            if (normalized.Count > MaxFieldSquadSize)
                 return false;
         }
 
-        if (normalized.Count < MinBattleSquadSize)
+        if (normalized.Count < MinFieldSquadSize)
             return false;
 
-        battleSquadRuntimeIds = normalized;
+        fieldSquadRuntimeIds = normalized;
         return true;
     }
 
-    public bool TryAddBattleSquadCharacter(string runtimeId)
+    public bool TryAddFieldSquadCharacter(string runtimeId)
     {
         string id = ResolveRuntimeId(runtimeId);
         if (string.IsNullOrEmpty(id))
             return false;
-        if (battleSquadRuntimeIds.Contains(id))
+        if (fieldSquadRuntimeIds.Contains(id))
             return true;
-        if (battleSquadRuntimeIds.Count >= MaxBattleSquadSize)
+        if (fieldSquadRuntimeIds.Count >= MaxFieldSquadSize)
             return false;
 
-        battleSquadRuntimeIds.Add(id);
+        fieldSquadRuntimeIds.Add(id);
         return true;
     }
 
-    public bool TryRemoveBattleSquadCharacter(string runtimeId)
+    public bool TryRemoveFieldSquadCharacter(string runtimeId)
     {
-        if (battleSquadRuntimeIds.Count <= MinBattleSquadSize)
+        if (fieldSquadRuntimeIds.Count <= MinFieldSquadSize)
             return false;
 
         string id = ResolveRuntimeId(runtimeId);
-        return !string.IsNullOrEmpty(id) && battleSquadRuntimeIds.Remove(id);
+        return !string.IsNullOrEmpty(id) && fieldSquadRuntimeIds.Remove(id);
     }
 
-    public void ClearBattleSquad() => battleSquadRuntimeIds.Clear();
+    public void ClearFieldSquad() => fieldSquadRuntimeIds.Clear();
 
     public void RemoveCharacterReferences(string runtimeId)
     {
         string id = ResolveRuntimeId(runtimeId);
         if (!string.IsNullOrEmpty(id))
-            battleSquadRuntimeIds.RemoveAll(value => value == id);
+            fieldSquadRuntimeIds.RemoveAll(value => value == id);
     }
 
     private string ResolveRuntimeId(string id)
@@ -378,18 +379,18 @@ public sealed class ShelterRuntimeData
         }
     }
 
-    private void NormalizeBattleSquad()
+    private void NormalizeFieldSquad()
     {
         List<string> normalized = new List<string>();
-        foreach (string value in battleSquadRuntimeIds)
+        foreach (string value in fieldSquadRuntimeIds)
         {
             string id = ResolveRuntimeId(value);
             if (!string.IsNullOrEmpty(id) && !normalized.Contains(id))
                 normalized.Add(id);
-            if (normalized.Count == MaxBattleSquadSize)
+            if (normalized.Count == MaxFieldSquadSize)
                 break;
         }
-        battleSquadRuntimeIds = normalized;
+        fieldSquadRuntimeIds = normalized;
     }
 
     private static List<ShelterMemberRuntimeData> CloneCharacters(IEnumerable<ShelterMemberRuntimeData> source)

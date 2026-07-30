@@ -5,6 +5,10 @@ using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 using VInspector;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 /// <summary>
 /// 스쿼드 멤버의 조작 주체, 생존 상태, 참조 컴포넌트 활성 상태를 관리하는 컴포넌트입니다.
 /// </summary>
@@ -113,6 +117,9 @@ public class SquadMemberController : MonoBehaviour
     [FormerlySerializedAs("characterController")]
     [SerializeField] private CharacterController m_characterController;
 
+    [Tooltip("AI 조작 중 CharacterController 대신 활성화할 물리 충돌용 CapsuleCollider입니다.")]
+    [SerializeField] private CapsuleCollider m_aiCollisionCollider;
+
     [Tooltip("이 멤버의 체력 컴포넌트입니다. 사망/부활 시 생존 플래그를 동기화합니다.")]
     [SerializeField] private PlayerHealth m_playerHealth;
 
@@ -190,6 +197,7 @@ public class SquadMemberController : MonoBehaviour
         m_playerHealth.OnDown += HandleHealthDowned;
         m_playerHealth.OnDeath += HandleHealthDeath;
         m_playerHealth.OnRevive += HandleHealthRevive;
+        m_playerHealth.OnDebugInstantRevive += HandleDebugInstantRevive;
     }
 
     private void OnDisable()
@@ -202,6 +210,7 @@ public class SquadMemberController : MonoBehaviour
         m_playerHealth.OnDown -= HandleHealthDowned;
         m_playerHealth.OnDeath -= HandleHealthDeath;
         m_playerHealth.OnRevive -= HandleHealthRevive;
+        m_playerHealth.OnDebugInstantRevive -= HandleDebugInstantRevive;
     }
 
     /// <summary>
@@ -231,6 +240,25 @@ public class SquadMemberController : MonoBehaviour
     {
         SetAlive(true);
         SetDown(false);
+    }
+
+    /// <summary>
+    /// 트레이너/Inspector에서 즉시 부활했을 때 다운 애니메이션을 바로 로코모션으로 복귀시킵니다.
+    /// </summary>
+    /// <remarks>
+    /// 일반 구조는 <see cref="DownedAllyInteractable"/>가 기립 모션을 끝낸 뒤
+    /// <see cref="CompleteAssistedStandingAnimator"/>를 호출한다. 여기서 같은 호출을 일반
+    /// <see cref="HealthSystemBase.OnRevive"/>에 넣으면 기립 모션을 건너뛰므로, 디버그 전용
+    /// 이벤트로만 분리한다.
+    /// </remarks>
+    private void HandleDebugInstantRevive()
+    {
+        if (!m_isAlive || m_isDown)
+        {
+            return;
+        }
+
+        CompleteAssistedStandingAnimator();
     }
 
     /// <summary>
@@ -278,6 +306,11 @@ public class SquadMemberController : MonoBehaviour
             m_characterController = GetComponent<CharacterController>();
         }
 
+        if (m_aiCollisionCollider == null)
+        {
+            m_aiCollisionCollider = GetComponent<CapsuleCollider>();
+        }
+
         if (m_playerHealth == null)
         {
             m_playerHealth = GetComponent<PlayerHealth>();
@@ -322,13 +355,60 @@ public class SquadMemberController : MonoBehaviour
     /// <param name="value">직접 조작 대상이면 true입니다.</param>
     public void SetPlayerSquadMember(bool value)
     {
+        ApplyRoleSetup(value, clearInteractionLock: !value, isInitialSetup: false);
+    }
+
+    /// <summary>
+    /// 새 플레이어블 프리팹과 필드 입장 시 사용할 PlayerSquadMember 초기 역할 프리셋을 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 생존/다운/체력 상태는 건드리지 않고, 직접 조작에 필요한 입력·이동·조준 컴포넌트만 Player 역할에 맞춥니다.
+    /// Edit Mode에서는 Input/Navigation 런타임 API를 호출하지 않고 직렬화되는 활성 상태만 갱신합니다.
+    /// </remarks>
+    public void ApplyPlayerInitialSetup()
+    {
+        ApplyRoleSetup(true, clearInteractionLock: true, isInitialSetup: true);
+    }
+
+    /// <summary>
+    /// 새 플레이어블 프리팹과 필드 입장 시 사용할 AiSquadMember 초기 역할 프리셋을 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 생존/다운/체력 상태는 건드리지 않고, AI 이동·충돌 컴포넌트만 AI 역할에 맞춥니다.
+    /// </remarks>
+    public void ApplyAiInitialSetup()
+    {
+        ApplyRoleSetup(false, clearInteractionLock: true, isInitialSetup: true);
+    }
+
+    /// <summary>
+    /// 역할 값과 역할별 컴포넌트 활성 상태를 한 진입점에서 적용합니다.
+    /// </summary>
+    private void ApplyRoleSetup(bool value, bool clearInteractionLock, bool isInitialSetup)
+    {
+#if UNITY_EDITOR
+        if (!Application.isPlaying && isInitialSetup)
+        {
+            Undo.RecordObject(this, value ? "Apply Player Initial Setup" : "Apply AI Initial Setup");
+        }
+#endif
+
+        AutoFindReferences();
+
+#if UNITY_EDITOR
+        if (!Application.isPlaying && isInitialSetup)
+        {
+            RecordRoleSetupComponentUndo(value ? "Apply Player Initial Setup" : "Apply AI Initial Setup");
+        }
+#endif
+
         bool wasPlayerSquadMember = m_isPlayerSquadMember;
         m_isPlayerSquadMember = value;
-        if (!m_isPlayerSquadMember)
+        if (clearInteractionLock || !m_isPlayerSquadMember)
         {
             m_isInteractionLocked = false;
         }
-        ApplyControlState();
+        ApplyRoleControlState();
 
         if (wasPlayerSquadMember != m_isPlayerSquadMember)
         {
@@ -812,6 +892,11 @@ public class SquadMemberController : MonoBehaviour
             m_characterController.enabled = allowDirectControl;
         }
 
+        if (m_aiCollisionCollider != null)
+        {
+            m_aiCollisionCollider.enabled = allowAiSquadMember;
+        }
+
         ApplyNavMeshAgentState(allowAiSquadMember);
 
         if (m_thirdPersonController != null)
@@ -850,6 +935,111 @@ public class SquadMemberController : MonoBehaviour
 
         ApplyPlayerInputState(allowPlayerInput);
     }
+
+    /// <summary>
+    /// Play Mode와 Edit Mode에서 각각 안전한 방식으로 역할별 활성 상태를 반영합니다.
+    /// </summary>
+    private void ApplyRoleControlState()
+    {
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            ApplyEditorRoleControlState();
+            MarkRoleSetupComponentsDirty();
+            return;
+        }
+#endif
+
+        ApplyControlState();
+    }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// Inspector 프리셋 버튼용 활성 상태 반영입니다. Input/NaviMesh의 런타임 API는 호출하지 않습니다.
+    /// </summary>
+    private void ApplyEditorRoleControlState()
+    {
+        bool allowPlayerInput = m_isAlive && !m_isDown && m_isPlayerSquadMember;
+        bool allowDirectControl = allowPlayerInput && !m_isInteractionLocked;
+        bool allowAiSquadMember = m_isAlive && !m_isDown && !m_isPlayerSquadMember;
+
+        SetBehaviourEnabled(m_playerInputs, allowPlayerInput);
+        SetColliderEnabled(m_characterController, allowDirectControl);
+        SetColliderEnabled(m_aiCollisionCollider, allowAiSquadMember);
+        SetBehaviourEnabled(m_navMeshAgent, allowAiSquadMember);
+        SetBehaviourEnabled(m_thirdPersonController, allowDirectControl);
+        SetBehaviourEnabled(m_aimController, allowDirectControl);
+        SetBehaviourEnabled(m_weaponController, true);
+        SetBehaviourEnabled(m_followerAI, allowAiSquadMember);
+        SetBehaviourEnabled(m_playerInput, allowPlayerInput);
+    }
+
+    private void RecordRoleSetupComponentUndo(string actionName)
+    {
+        RecordUndo(m_playerInputs, actionName);
+        RecordUndo(m_characterController, actionName);
+        RecordUndo(m_aiCollisionCollider, actionName);
+        RecordUndo(m_navMeshAgent, actionName);
+        RecordUndo(m_thirdPersonController, actionName);
+        RecordUndo(m_aimController, actionName);
+        RecordUndo(m_weaponController, actionName);
+        RecordUndo(m_followerAI, actionName);
+        RecordUndo(m_playerInput, actionName);
+    }
+
+    private void MarkRoleSetupComponentsDirty()
+    {
+        MarkDirty(this);
+        MarkDirty(m_playerInputs);
+        MarkDirty(m_characterController);
+        MarkDirty(m_aiCollisionCollider);
+        MarkDirty(m_navMeshAgent);
+        MarkDirty(m_thirdPersonController);
+        MarkDirty(m_aimController);
+        MarkDirty(m_weaponController);
+        MarkDirty(m_followerAI);
+        MarkDirty(m_playerInput);
+    }
+
+    private static void SetBehaviourEnabled(Behaviour component, bool value)
+    {
+        if (component != null)
+        {
+            component.enabled = value;
+        }
+    }
+
+    private static void SetColliderEnabled(Collider component, bool value)
+    {
+        if (component != null)
+        {
+            component.enabled = value;
+        }
+    }
+
+    private static void RecordUndo(UnityEngine.Object target, string actionName)
+    {
+        if (target != null)
+        {
+            Undo.RecordObject(target, actionName);
+        }
+    }
+
+    private static void MarkDirty(UnityEngine.Object target)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        EditorUtility.SetDirty(target);
+
+        if (PrefabUtility.IsPartOfPrefabInstance(target))
+        {
+            PrefabUtility.RecordPrefabInstancePropertyModifications(target);
+        }
+    }
+#endif
 
     private void SuppressNonInteractionInputs()
     {

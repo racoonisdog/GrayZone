@@ -49,6 +49,9 @@ public class PlayerInputs : MonoBehaviour
     [Tooltip("상호작용 입력이 눌린 상태(홀드 포함)인지 여부입니다.")]
     [SerializeField] private bool m_interact;
 
+    // UI 커서 모드에서는 Input System 콜백이 게임플레이 상태를 다시 채우지 않도록 막습니다.
+    private bool m_isInputEnabled = true;
+
 #if ENABLE_INPUT_SYSTEM
     private PlayerInput m_playerInput;
     private InputAction m_interactionAction;
@@ -94,6 +97,11 @@ public class PlayerInputs : MonoBehaviour
     {
         get
         {
+            if (!m_isInputEnabled)
+            {
+                return false;
+            }
+
             RefreshInteractionInputFromAction();
             return m_interact;
         }
@@ -210,6 +218,11 @@ public class PlayerInputs : MonoBehaviour
     /// <param name="value">Input System에서 전달된 이동 입력값입니다.</param>
     public void OnMove(InputValue value)
     {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
         MoveInput(value.Get<Vector2>());
     }
 
@@ -219,7 +232,7 @@ public class PlayerInputs : MonoBehaviour
     /// <param name="value">Input System에서 전달된 시점 입력값입니다.</param>
     public void OnLook(InputValue value)
     {
-        if (m_cursorInputForLook)
+        if (m_isInputEnabled && m_cursorInputForLook)
         {
             LookInput(value.Get<Vector2>());
         }
@@ -231,6 +244,11 @@ public class PlayerInputs : MonoBehaviour
     /// <param name="value">Input System에서 전달된 점프 입력 상태입니다.</param>
     public void OnJump(InputValue value)
     {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
         JumpInput(value.isPressed);
     }
 
@@ -240,6 +258,11 @@ public class PlayerInputs : MonoBehaviour
     /// <param name="value">Input System에서 전달된 전력질주 입력 상태입니다.</param>
     public void OnSprint(InputValue value)
     {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
         SprintInput(value.isPressed);
     }
 
@@ -249,6 +272,11 @@ public class PlayerInputs : MonoBehaviour
     /// <param name="value">Input System에서 전달된 조준 입력 상태입니다.</param>
     public void OnAim(InputValue value)
     {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
         AimInput(value.isPressed);
     }
 
@@ -258,6 +286,11 @@ public class PlayerInputs : MonoBehaviour
     /// <param name="value">Input System에서 전달된 발사 입력 상태입니다.</param>
     public void OnShoot(InputValue value)
     {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
         ShootInput(value.isPressed);
     }
 
@@ -267,6 +300,11 @@ public class PlayerInputs : MonoBehaviour
     /// <param name="value">Input System에서 전달된 재장전 입력 상태입니다.</param>
     public void OnReload(InputValue value)
     {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
         ReloadInput(value.isPressed);
     }
 
@@ -277,6 +315,11 @@ public class PlayerInputs : MonoBehaviour
     /// <remarks>버튼 액션이라 누름/뗌 모두 호출되며, <c>isPressed</c>로 홀드 상태를 그대로 보관합니다.</remarks>
     public void OnInteraction(InputValue value)
     {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
         InteractInput(value.isPressed);
     }
 #endif
@@ -413,6 +456,22 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
+    /// 필드 플레이어의 TPS 입력과 UI 커서 입력을 전환합니다.
+    /// </summary>
+    /// <param name="cursorMode">true이면 UI 커서 모드, false이면 TPS 게임플레이 모드입니다.</param>
+    /// <remarks>
+    /// 이 메서드는 필드 PlayerInputs 전용입니다. 셸터의 입력 구조는 자체 구현으로 같은 입력 모드 계약을 처리합니다.
+    /// </remarks>
+    public void SetPlayerCursorMode(bool cursorMode)
+    {
+        m_isInputEnabled = !cursorMode;
+        ResetInputState();
+        SetCursorInputForLook(!cursorMode);
+        SetCursorLocked(!cursorMode);
+        Cursor.visible = cursorMode;
+    }
+
+    /// <summary>
     /// 아날로그 이동 입력 사용 여부를 설정합니다.
     /// </summary>
     /// <param name="value">입력 세기를 이동 속도에 반영하려면 true입니다.</param>
@@ -458,6 +517,9 @@ public class PlayerInputs : MonoBehaviour
         m_interact = false;
     }
 
+    /// <summary>
+    /// 상호작용 상태를 유지한 채 이동·시점·행동 입력만 초기화합니다.
+    /// </summary>
     public void ResetNonInteractionInputState()
     {
         bool wasInteracting = m_interact;

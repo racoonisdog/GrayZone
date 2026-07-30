@@ -19,7 +19,7 @@ public class TestButton : MonoBehaviour, ICharacterListItemView
     [SerializeField] private Button button;
 
     private string runtimeId;
-    private PlayerInjuryState injuryState;
+    private CharacterInjuryState injuryState;
     private Action<string> clicked;
 
     private void Awake()
@@ -83,7 +83,7 @@ public class TestButton : MonoBehaviour, ICharacterListItemView
         CacheReferences();
 
         runtimeId = null;
-        injuryState = PlayerInjuryState.Normal;
+        injuryState = CharacterInjuryState.Normal;
         clicked = null;
 
         if (portraitImage != null)

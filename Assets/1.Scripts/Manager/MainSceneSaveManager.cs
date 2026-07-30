@@ -11,7 +11,7 @@ public class MainSceneSaveManager : MonoBehaviour
     [SerializeField] private int newGameStartDay = 1;
     [SerializeField] private string newGameStartStageId = string.Empty;
     [FormerlySerializedAs("startingNpcChars")]
-    [SerializeField] private PlayableCharacterDefinition[] startingCharacterDefinitions;
+    [SerializeField] private PlayerbleCharacterDefinition[] startingCharacterDefinitions;
     [SerializeField] private FacilityDefinition[] startingFacilityDefinitions;
 
     private void Awake()
@@ -106,7 +106,7 @@ public class MainSceneSaveManager : MonoBehaviour
 
         for (int i = 0; i < startingCharacterDefinitions.Length; i++)
         {
-            PlayableCharacterDefinition definition = startingCharacterDefinitions[i];
+            PlayerbleCharacterDefinition definition = startingCharacterDefinitions[i];
             if (definition == null)
             {
                 continue;

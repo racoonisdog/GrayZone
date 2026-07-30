@@ -2,7 +2,7 @@
 public static class LegacyNpcSaveDataMapper
 {
     /// <summary>NPC 정의 데이터의 초기 상태를 파일 저장 구조로 변환합니다.</summary>
-    public static SaveData.NpcSaveData FromDefinition(PlayableCharacterDefinition definition)
+    public static SaveData.NpcSaveData FromDefinition(PlayerbleCharacterDefinition definition)
     {
         if (definition == null)
         {

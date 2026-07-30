@@ -152,6 +152,7 @@ public class SquadManager : MonoBehaviour
     {
         AutoFindReferences();
         NormalizeMemberIndex();
+        ApplyInitialMemberRolePresets();
     }
 
     private void OnEnable()
@@ -171,17 +172,12 @@ public class SquadManager : MonoBehaviour
     /// <returns>Unity 코루틴 실행을 위한 IEnumerator입니다.</returns>
     private IEnumerator Start()
     {
-        SetAllMembersAsAiSquadMembers();
         UpdateCameraTarget();
 
-        // PlayerInput, Controller, NavMeshAgent의 초기 활성 상태가 안정화될 때까지 대기합니다.
+        // Awake에서 역할 프리셋을 이미 적용했습니다. PlayerInput, Controller, NavMeshAgent의 초기 활성 상태가
+        // 안정화될 때까지 대기한 뒤 현재 상태를 한 번 더 확인합니다.
         yield return null;
         yield return null;
-
-        if (PlayerSquadMember != null)
-        {
-            PlayerSquadMember.SetPlayerSquadMember(true);
-        }
 
         UpdateCameraTarget();
         RefreshPlayerSquadMemberWeaponUI();
@@ -575,10 +571,9 @@ public class SquadManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 모든 스쿼드 멤버의 직접 조작 상태를 일괄 설정합니다.
+    /// 시작 시 스쿼드 인덱스 기준으로 각 멤버의 역할별 초기 프리셋을 적용합니다.
     /// </summary>
-    /// <param name="value">직접 조작 상태로 설정하려면 true입니다.</param>
-    private void SetAllMembersAsAiSquadMembers()
+    private void ApplyInitialMemberRolePresets()
     {
         if (m_squadMembers == null)
         {
@@ -592,7 +587,33 @@ public class SquadManager : MonoBehaviour
                 continue;
             }
 
-            m_squadMembers[i].SetPlayerSquadMember(false);
+            ApplyInitialRolePreset(m_squadMembers[i], i == m_playerSquadMemberIndex);
+        }
+    }
+
+    /// <summary>
+    /// 필드 씬에서 새 플레이어블 캐릭터를 만든 직후 호출할 역할별 초기 프리셋 진입점입니다.
+    /// </summary>
+    /// <remarks>
+    /// 이 메서드는 스쿼드 목록 등록을 대신하지 않습니다. 생성 시스템은 멤버를 목록에 등록한 뒤,
+    /// 해당 멤버의 첫 역할에 맞춰 이 메서드를 호출합니다.
+    /// </remarks>
+    /// <param name="member">초기화할 플레이어블 스쿼드 멤버입니다.</param>
+    /// <param name="isPlayerSquadMember">첫 프레임부터 직접 조작할 멤버이면 true입니다.</param>
+    public void ApplyInitialRolePreset(SquadMemberController member, bool isPlayerSquadMember)
+    {
+        if (member == null)
+        {
+            return;
+        }
+
+        if (isPlayerSquadMember)
+        {
+            member.ApplyPlayerInitialSetup();
+        }
+        else
+        {
+            member.ApplyAiInitialSetup();
         }
     }
 

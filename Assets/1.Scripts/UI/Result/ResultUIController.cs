@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -17,35 +17,18 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class ResultUIController : MonoBehaviour
 {
-    /// <summary>파티원 생존 상태입니다. 상태 텍스트 색·치명상 오버레이 표시에 사용합니다.</summary>
-    public enum CharacterState
-    {
-        /// <summary>정상 생존입니다.</summary>
-        Normal,
-
-        /// <summary>부상(경상)입니다.</summary>
-        Injured,
-
-        /// <summary>치명상입니다.</summary>
-        Critical,
-    }
-
     /// <summary>결과창에 표시할 파티원 한 명의 정보입니다.</summary>
     [Serializable]
     public struct CharacterResult
     {
         public string Name;
-        public CharacterState State;
+        public CharacterInjuryState InjuryState;
+        public bool IsCombatOut;
 
-        /// <summary>캐릭터 초상화 선택에 사용하는 고정 식별자입니다. 알 수 없으면 <see cref="PlayableCharacterId.Unknown"/>입니다.</summary>
-        public PlayableCharacterId CharacterId;
-    }
+        /// <summary>캐릭터 초상화 선택에 사용하는 고정 식별자입니다. 알 수 없으면 <see cref="PlayerbleCharacterId.Unknown"/>입니다.</summary>
+        public PlayerbleCharacterId CharacterId;
 
-    /// <summary>캐릭터 식별자 하나에 매칭되는 풀바디 초상화입니다. 아트가 아직 없으면 <see cref="Portrait"/>를 비워 둡니다.</summary>
-    [Serializable]
-    public struct CharacterPortraitEntry
-    {
-        public PlayableCharacterId CharacterId;
+        /// <summary>PlayerbleUnitData에서 필드 결과로 직접 전달한 초상화입니다.</summary>
         public Sprite Portrait;
     }
 
@@ -64,10 +47,6 @@ public class ResultUIController : MonoBehaviour
     [SerializeField] private Button m_returnButton;
     [SerializeField] private Image m_characterImage;
 
-    [Header("Character Portraits")]
-    [Tooltip("캐릭터 식별자별 풀바디 초상화입니다. 아트가 아직 없는 캐릭터는 Portrait를 비워 두면 선택 대상에서 제외됩니다.")]
-    [SerializeField] private CharacterPortraitEntry[] m_characterPortraits;
-
     [Header("Scene Transition")]
     [Tooltip("'셸터로 복귀' 버튼을 누르면 전환할 씬 이름입니다(Build Settings에 등록되어 있어야 합니다).")]
     [SerializeField] private string m_returnSceneName = "TEst";
@@ -78,8 +57,6 @@ public class ResultUIController : MonoBehaviour
     private static readonly Color s_normalColor = new Color(0.3f, 0.9f, 0.3f);
     private static readonly Color s_injuredColor = new Color(0.95f, 0.65f, 0.15f);
     private static readonly Color s_criticalColor = new Color(0.85f, 0.1f, 0.1f);
-    private static readonly string[] s_stateLabels = { "정상", "부상", "치명상" };
-
     private void Reset()
     {
         AutoFindReferences();
@@ -88,18 +65,6 @@ public class ResultUIController : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
-        if (m_returnButton != null)
-        {
-            m_returnButton.onClick.AddListener(HandleReturnClicked);
-        }
-    }
-
-    private void OnDestroy()
-    {
-        if (m_returnButton != null)
-        {
-            m_returnButton.onClick.RemoveListener(HandleReturnClicked);
-        }
     }
 
     /// <summary>
@@ -115,10 +80,20 @@ public class ResultUIController : MonoBehaviour
         SetCharacterPortrait(characters);
         SetResources(resources);
         gameObject.SetActive(true);
+        TestSceneUiEventSystemBridge.EnableForResultUI();
+
+        // TODO(Save integration): 결과 오버레이를 연 직후, 확정된 FieldResultData를
+        // GameDataManager에 반영한 뒤 AutoSave()를 요청한다.
+        // AutoSave 반환 규약: 1 = 정상 성공, 0 = 정상 실패, -1 = 비정상 실패.
+        // 1이 오기 전에는 FieldPhase를 Completed로 바꾸거나 셸터 복귀를 허용하지 않는다.
+        // 성공 후 셸터 전환 시 셸터 측은 현재 GameDataManager에서 초기화한다.
+        // 이 경로에서 저장 파일을 다시 읽지는 않으며, 재시작/명시적 불러오기가 파일 복구를 담당한다.
+        // TODO(FieldManager): AutoSave 성공을 받은 뒤에만 ReturnButton을 활성화하는 게이트를 연결한다.
+        // 현재는 테스트 전환 확인 단계라 ReturnToShelter()가 즉시 씬 전환을 수행한다.
     }
 
     /// <summary>전투 매니저가 확정한 귀환 정산 스냅샷을 표시합니다.</summary>
-    public void ShowResult(BattleSceneDataManager.ResultSnapshot result)
+    public void ShowResult(FieldSceneDataManager.ResultSnapshot result)
     {
         if (result == null)
         {
@@ -128,19 +103,21 @@ public class ResultUIController : MonoBehaviour
         List<CharacterResult> characters = new();
         for (int i = 0; i < result.Characters.Count; i++)
         {
-            BattleSceneDataManager.PlayerbleResult character = result.Characters[i];
+            FieldSceneDataManager.PlayerbleResult character = result.Characters[i];
             characters.Add(new CharacterResult
             {
                 Name = character.DisplayName,
-                State = ToUiCharacterState(character.InjuryState, character.IsCombatOut),
-                CharacterId = character.CharacterId
+                InjuryState = character.InjuryState,
+                IsCombatOut = character.IsCombatOut,
+                CharacterId = character.CharacterId,
+                Portrait = character.Portrait
             });
         }
 
         List<ResourceResult> resources = new();
         for (int i = 0; i < result.Resources.Count; i++)
         {
-            BattleSceneDataManager.ResourceResult resource = result.Resources[i];
+            FieldSceneDataManager.ResourceResult resource = result.Resources[i];
             resources.Add(new ResourceResult
             {
                 Icon = resource.Icon,
@@ -157,9 +134,13 @@ public class ResultUIController : MonoBehaviour
         gameObject.SetActive(false);
     }
 
-    private void HandleReturnClicked()
+    /// <summary>
+    /// ReturnButton의 Inspector OnClick에서 호출하는 셸터 복귀 진입점입니다.
+    /// </summary>
+    public void ReturnToShelter()
     {
         OnReturnToShelter?.Invoke();
+        TestSceneUiEventSystemBridge.DisableBeforeShelterTransition();
         SceneTransitionController.LoadScene(m_returnSceneName);
     }
 
@@ -203,27 +184,23 @@ public class ResultUIController : MonoBehaviour
             TextMeshProUGUI stateText = row.Find("StateText")?.GetComponent<TextMeshProUGUI>();
             if (stateText != null)
             {
-                int stateIndex = (int)character.State;
-                stateText.text = s_stateLabels[stateIndex];
-                stateText.color = ResolveStateColor(character.State);
+                stateText.text = ResolveStateLabel(character.InjuryState, character.IsCombatOut);
+                stateText.color = ResolveStateColor(character.InjuryState, character.IsCombatOut);
             }
 
             Transform overlay = row.Find("CriticalOverlay");
             if (overlay != null)
             {
-                overlay.gameObject.SetActive(character.State == CharacterState.Critical);
+                overlay.gameObject.SetActive(character.IsCombatOut || character.InjuryState == CharacterInjuryState.Critical);
             }
         }
     }
 
     /// <summary>
-    /// 이번 전투에 참여한 캐릭터 중 풀바디 초상화(<see cref="m_characterPortraits"/>)가 준비된 캐릭터를
-    /// 무작위로 하나 골라 표시합니다. 아트가 준비된 캐릭터가 하나도 없으면 초상화를 숨깁니다.
+    /// 이번 필드에 참여한 캐릭터가 직접 전달한 풀바디 초상화 중 첫 번째를 표시합니다.
     /// </summary>
     /// <remarks>
-    /// 다수 캐릭터가 아직 풀바디 아트 없이 프로토타입 단계인 상황을 고려해, 매칭 실패는 예외가 아니라
-    /// "이번엔 표시하지 않음"으로 처리합니다. 아트가 추가되면 <see cref="m_characterPortraits"/>에
-    /// 캐릭터 식별자-스프라이트 항목만 추가하면 되고, 이 로직은 변경할 필요가 없습니다.
+    /// 초상화는 PlayerbleUnitData에서 필드 결과 스냅샷으로 직접 전달됩니다.
     /// </remarks>
     private void SetCharacterPortrait(IList<CharacterResult> characters)
     {
@@ -234,21 +211,15 @@ public class ResultUIController : MonoBehaviour
 
         Sprite chosen = null;
 
-        if (characters != null && m_characterPortraits != null && m_characterPortraits.Length > 0)
+        if (characters != null)
         {
-            List<Sprite> candidates = new List<Sprite>();
             for (int i = 0; i < characters.Count; i++)
             {
-                Sprite portrait = ResolvePortrait(characters[i].CharacterId);
-                if (portrait != null)
+                if (characters[i].Portrait != null)
                 {
-                    candidates.Add(portrait);
+                    chosen = characters[i].Portrait;
+                    break;
                 }
-            }
-
-            if (candidates.Count > 0)
-            {
-                chosen = candidates[UnityEngine.Random.Range(0, candidates.Count)];
             }
         }
 
@@ -256,23 +227,6 @@ public class ResultUIController : MonoBehaviour
         m_characterImage.enabled = chosen != null;
     }
 
-    private Sprite ResolvePortrait(PlayableCharacterId characterId)
-    {
-        if (characterId == PlayableCharacterId.Unknown || m_characterPortraits == null)
-        {
-            return null;
-        }
-
-        for (int i = 0; i < m_characterPortraits.Length; i++)
-        {
-            if (m_characterPortraits[i].CharacterId == characterId)
-            {
-                return m_characterPortraits[i].Portrait;
-            }
-        }
-
-        return null;
-    }
 
     private void SetResources(IList<ResourceResult> resources)
     {
@@ -306,29 +260,28 @@ public class ResultUIController : MonoBehaviour
         }
     }
 
-    private static Color ResolveStateColor(CharacterState state)
+    private static Color ResolveStateColor(CharacterInjuryState injuryState, bool isCombatOut)
     {
-        switch (state)
+        if (isCombatOut || injuryState == CharacterInjuryState.Critical)
         {
-            case CharacterState.Critical:
-                return s_criticalColor;
-            case CharacterState.Injured:
-                return s_injuredColor;
-            default:
-                return s_normalColor;
+            return s_criticalColor;
         }
+
+        return injuryState == CharacterInjuryState.Normal
+            ? s_normalColor
+            : s_injuredColor;
     }
 
-    private static CharacterState ToUiCharacterState(PlayerInjuryState injuryState, bool isCombatOut)
+    private static string ResolveStateLabel(CharacterInjuryState injuryState, bool isCombatOut)
     {
-        if (isCombatOut || injuryState == PlayerInjuryState.Critical)
+        if (isCombatOut || injuryState == CharacterInjuryState.Critical)
         {
-            return CharacterState.Critical;
+            return "치명상";
         }
 
-        return injuryState == PlayerInjuryState.Normal
-            ? CharacterState.Normal
-            : CharacterState.Injured;
+        return injuryState == CharacterInjuryState.Normal
+            ? "정상"
+            : "부상";
     }
 
     /// <summary>
