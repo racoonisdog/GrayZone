@@ -67,7 +67,7 @@
 
 ```
 PlayerCommonBalanceSO  →  PlayerCommonBalanceCSV.csv
-WeaponControllerSO     →  WeaponControllerCSV.csv
+GunBalanceSO           →  GunBalanceCSV.csv
 ```
 
 폴더에서 에셋과 시트를 눈으로 구분하기 위한 것입니다. 가져오기는 **파일명이 아니라 시트 안의 `__Type` 행**으로 타입을 찾으므로, 이름을 바꿔도 왕복은 그대로 동작합니다.
