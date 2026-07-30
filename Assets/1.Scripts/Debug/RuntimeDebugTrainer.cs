@@ -54,7 +54,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private bool m_trainerEnabled = true;
 
     [SerializeField, Tooltip("트레이너 창을 열고 닫을 키입니다. None이면 키 입력으로 열 수 없습니다.")]
-    private Key m_toggleKey = Key.Escape;
+    private Key m_toggleKey = Key.F9;
 
     /// <summary>개발 모드 상태를 바꾸지 않고 트레이너 UI와 입력만 켜거나 끕니다.</summary>
     public bool TrainerEnabled
@@ -99,6 +99,28 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private const float WindowMargin = 10f;
     private const float ResizeGripSize = 20f;
 
+    /// <summary>창 테두리에서 크기 조절을 잡을 수 있는 두께입니다.</summary>
+    private const float ResizeBorderSize = 6f;
+
+    /// <summary>글자 배율 1을 적용할 기준 창 너비입니다. 기본 창 크기와 같게 두어 처음에는 배율이 1이 됩니다.</summary>
+    private const float ReferenceWindowWidth = 500f;
+
+    /// <summary>글자가 읽을 수 없을 만큼 작아지지 않게 하는 하한입니다.</summary>
+    private const float MinUiScale = 0.75f;
+
+    /// <summary>창을 넓혀도 글자가 지나치게 커지지 않게 하는 상한입니다.</summary>
+    private const float MaxUiScale = 2.0f;
+
+    /// <summary>지금 스타일에 반영된 배율입니다.</summary>
+    private float m_appliedUiScale = -1f;
+
+    /// <summary>배율을 적용한 스킨과 그 배율입니다.</summary>
+    private GUISkin m_scaledSkin;
+    private float m_scaledSkinScale = -1f;
+
+    /// <summary>창을 그리기 직전의 전역 스킨입니다. 다 그린 뒤 되돌립니다.</summary>
+    private GUISkin m_previousSkin;
+
     // 좀비 스폰 좌표 입력 버퍼입니다.
     private string m_spawnX = "0";
     private string m_spawnY = "0";
@@ -128,11 +150,13 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         s_instance = this;
 
-        if (!GameDevMode.DebugFeaturesEnabled)
-        {
-            Debug.LogWarning("[RuntimeDebugTrainer] 개발 모드가 꺼져 있어 런타임 디버그 트레이너가 비활성화됩니다.");
-            enabled = false;
-        }
+        // 여기서 개발 모드를 보고 스스로 끄지 않습니다.
+        // 개발 모드는 GameManager가 자기 Awake에서 켜는데, Awake 실행 순서는 보장되지 않습니다.
+        // 트레이너가 먼저 깨면 아직 꺼져 있는 값을 보고 자신을 끄고, 그 뒤에 켜져도 다시 살아나지 않습니다.
+        // 실제로 개발 모드가 켜져 있는데도 F9가 먹지 않는 상태가 이렇게 만들어졌습니다.
+        //
+        // Update가 매 프레임 개발 모드를 확인해 열려 있던 창을 닫고 입력을 무시하므로,
+        // 컴포넌트를 켜 둔 채로도 꺼진 것과 같이 동작합니다.
 #endif
     }
 
@@ -468,8 +492,17 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         ClampWindowRectToScreen();
-        Rect movedWindow = GUI.Window(GetInstanceID(), m_windowRect, DrawWindow, "런타임 디버그 트레이너");
-        m_windowRect.position = movedWindow.position;
+
+        try
+        {
+            Rect movedWindow = GUI.Window(GetInstanceID(), m_windowRect, DrawWindow, "런타임 디버그 트레이너");
+            m_windowRect.position = movedWindow.position;
+        }
+        finally
+        {
+            // 전역 스킨은 반드시 되돌립니다. 남겨 두면 다른 IMGUI 창이 이 배율을 물려받습니다.
+            RestoreSkin();
+        }
     }
 
     private void DrawWindow(int windowId)
@@ -547,42 +580,107 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private void DrawWindowChrome(int windowId)
     {
         HandleWindowResize();
-        GUI.DragWindow(new Rect(0f, 0f, m_windowRect.width - ResizeGripSize, 24f));
+        // 좌우 위 테두리는 크기 조절이 먼저 잡아야 하므로 그만큼 안쪽에서 시작합니다.
+        GUI.DragWindow(new Rect(
+            ResizeBorderSize,
+            ResizeBorderSize,
+            m_windowRect.width - ResizeBorderSize * 2f - ResizeGripSize,
+            24f));
     }
 
+    /// <summary>어느 테두리를 잡고 있는지입니다.</summary>
+    /// <remarks>가로와 세로를 따로 두어 모서리를 잡으면 두 축이 함께 움직입니다.</remarks>
+    private int m_resizeEdgeX;
+    private int m_resizeEdgeY;
+
+    /// <summary>크기 조절을 시작한 시점의 창 위치와 크기입니다.</summary>
+    private Rect m_resizeStartRect;
+
+    /// <summary>
+    /// 창 테두리를 잡아 크기를 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// 일반 창처럼 네 변과 네 모서리 어디를 잡아도 조절됩니다.
+    /// 왼쪽이나 위쪽을 잡으면 반대쪽 변이 제자리에 남아야 하므로 위치도 함께 옮깁니다.
+    ///
+    /// 마우스 좌표는 창 안쪽 기준이라 창을 옮기는 도중에도 값이 흔들리지 않도록
+    /// 시작 시점의 화면 좌표를 따로 기억해 두고 그 차이로 계산합니다.
+    /// </remarks>
     private void HandleWindowResize()
     {
-        Rect gripRect = new Rect(
-            m_windowRect.width - ResizeGripSize,
-            m_windowRect.height - ResizeGripSize,
-            ResizeGripSize,
-            ResizeGripSize);
-        GUI.Label(gripRect, "↘");
+        Rect inner = new Rect(0f, 0f, m_windowRect.width, m_windowRect.height);
+
+        // 테두리 판정 영역. 제목 표시줄은 창을 옮기는 데 쓰므로 위쪽만 조금 안쪽에서 시작합니다.
+        bool onLeft = Event.current.mousePosition.x <= ResizeBorderSize;
+        bool onRight = Event.current.mousePosition.x >= inner.width - ResizeBorderSize;
+        bool onTop = Event.current.mousePosition.y <= ResizeBorderSize;
+        bool onBottom = Event.current.mousePosition.y >= inner.height - ResizeBorderSize;
+        bool onEdge = (onLeft || onRight || onTop || onBottom) && inner.Contains(Event.current.mousePosition);
+
+        // 잡을 수 있는 곳임을 알 수 있도록 모서리에 표시를 남깁니다.
+        GUI.Label(new Rect(inner.width - ResizeGripSize, inner.height - ResizeGripSize,
+                           ResizeGripSize, ResizeGripSize), "↘");
 
         Event currentEvent = Event.current;
         switch (currentEvent.type)
         {
-            case EventType.MouseDown when gripRect.Contains(currentEvent.mousePosition):
+            case EventType.MouseDown when onEdge:
                 m_isResizing = true;
-                m_resizeStartMouse = currentEvent.mousePosition;
-                m_resizeStartSize = m_windowRect.size;
+                m_resizeEdgeX = onLeft ? -1 : (onRight ? 1 : 0);
+                m_resizeEdgeY = onTop ? -1 : (onBottom ? 1 : 0);
+                m_resizeStartMouse = GUIUtility.GUIToScreenPoint(currentEvent.mousePosition);
+                m_resizeStartRect = m_windowRect;
                 currentEvent.Use();
                 break;
 
             case EventType.MouseDrag when m_isResizing:
-                Vector2 delta = currentEvent.mousePosition - m_resizeStartMouse;
-                float maxWidth = Mathf.Max(MinWindowWidth, Screen.width - m_windowRect.x - WindowMargin);
-                float maxHeight = Mathf.Max(MinWindowHeight, Screen.height - m_windowRect.y - WindowMargin);
-                m_windowRect.width = Mathf.Clamp(m_resizeStartSize.x + delta.x, MinWindowWidth, maxWidth);
-                m_windowRect.height = Mathf.Clamp(m_resizeStartSize.y + delta.y, MinWindowHeight, maxHeight);
+                Vector2 delta = GUIUtility.GUIToScreenPoint(currentEvent.mousePosition) - m_resizeStartMouse;
+                ApplyResize(delta);
                 GUI.changed = true;
                 currentEvent.Use();
                 break;
 
             case EventType.MouseUp when m_isResizing:
                 m_isResizing = false;
+                m_resizeEdgeX = 0;
+                m_resizeEdgeY = 0;
                 currentEvent.Use();
                 break;
+        }
+    }
+
+    /// <summary>잡은 테두리에 따라 창의 위치와 크기를 갱신합니다.</summary>
+    /// <param name="delta">크기 조절을 시작한 지점에서 마우스가 움직인 거리입니다.</param>
+    private void ApplyResize(Vector2 delta)
+    {
+        Rect r = m_resizeStartRect;
+
+        if (m_resizeEdgeX > 0)
+        {
+            float maxWidth = Mathf.Max(MinWindowWidth, Screen.width - r.x - WindowMargin);
+            m_windowRect.width = Mathf.Clamp(r.width + delta.x, MinWindowWidth, maxWidth);
+        }
+        else if (m_resizeEdgeX < 0)
+        {
+            // 오른쪽 변을 제자리에 두고 왼쪽만 움직입니다.
+            float right = r.x + r.width;
+            float maxWidth = Mathf.Max(MinWindowWidth, right - WindowMargin);
+            m_windowRect.width = Mathf.Clamp(r.width - delta.x, MinWindowWidth, maxWidth);
+            m_windowRect.x = right - m_windowRect.width;
+        }
+
+        if (m_resizeEdgeY > 0)
+        {
+            float maxHeight = Mathf.Max(MinWindowHeight, Screen.height - r.y - WindowMargin);
+            m_windowRect.height = Mathf.Clamp(r.height + delta.y, MinWindowHeight, maxHeight);
+        }
+        else if (m_resizeEdgeY < 0)
+        {
+            // 아래쪽 변을 제자리에 두고 위쪽만 움직입니다.
+            float bottom = r.y + r.height;
+            float maxHeight = Mathf.Max(MinWindowHeight, bottom - WindowMargin);
+            m_windowRect.height = Mathf.Clamp(r.height - delta.y, MinWindowHeight, maxHeight);
+            m_windowRect.y = bottom - m_windowRect.height;
         }
     }
 
@@ -1232,21 +1330,96 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private void EnsureStyles()
     {
-        if (m_titleStyle == null)
+        // 창 크기를 바꾸면 글자와 위젯도 같이 커지고 작아져야 인스펙터처럼 보입니다.
+        // 기준 너비에서 얼마나 벗어났는지로 배율을 구하고, 읽을 수 없을 만큼 작아지지 않게 제한합니다.
+        float scale = Mathf.Clamp(m_windowRect.width / ReferenceWindowWidth, MinUiScale, MaxUiScale);
+
+        // 배율이 바뀌지 않았으면 스타일을 다시 만들지 않습니다. OnGUI는 프레임마다 여러 번 불립니다.
+        if (m_titleStyle != null && Mathf.Approximately(scale, m_appliedUiScale))
         {
-            m_titleStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 18,
-                fontStyle = FontStyle.Bold,
-            };
+            ApplyScaledSkin(scale);
+            return;
         }
 
-        if (m_headerStyle == null)
+        m_appliedUiScale = scale;
+
+        m_titleStyle = new GUIStyle(GUI.skin.label)
         {
-            m_headerStyle = new GUIStyle(GUI.skin.label)
+            fontSize = Mathf.RoundToInt(18f * scale),
+            fontStyle = FontStyle.Bold,
+        };
+
+        m_headerStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = Mathf.RoundToInt(GUI.skin.label.fontSize <= 0 ? 12f * scale : GUI.skin.label.fontSize * scale),
+            fontStyle = FontStyle.Bold,
+        };
+
+        ApplyScaledSkin(scale);
+    }
+
+    /// <summary>
+    /// 이번 창에 쓸 기본 위젯 크기를 배율에 맞게 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GUI.skin"/>은 전역이라 창을 그리는 동안만 바꾸고 <see cref="RestoreSkin"/>으로 되돌립니다.
+    /// 되돌리지 않으면 다른 IMGUI 창까지 이 배율을 물려받습니다.
+    ///
+    /// 글꼴 크기가 0인 스타일은 스킨 기본값을 쓰겠다는 뜻이라, 그런 경우에만 기준값을 곱해 넣습니다.
+    /// 0이 아닌 값을 그대로 곱하면 매 프레임 누적되어 글자가 계속 커집니다.
+    /// </remarks>
+    private void ApplyScaledSkin(float scale)
+    {
+        if (m_scaledSkin == null || !Mathf.Approximately(scale, m_scaledSkinScale))
+        {
+            m_scaledSkin = Object.Instantiate(GUI.skin);
+            m_scaledSkinScale = scale;
+
+            int baseSize = Mathf.RoundToInt(12f * scale);
+
+            foreach (GUIStyle style in m_scaledSkin.customStyles)
             {
-                fontStyle = FontStyle.Bold,
-            };
+                ScaleStyle(style, scale, baseSize);
+            }
+
+            ScaleStyle(m_scaledSkin.label, scale, baseSize);
+            ScaleStyle(m_scaledSkin.button, scale, baseSize);
+            ScaleStyle(m_scaledSkin.box, scale, baseSize);
+            ScaleStyle(m_scaledSkin.textField, scale, baseSize);
+            ScaleStyle(m_scaledSkin.toggle, scale, baseSize);
+            ScaleStyle(m_scaledSkin.window, scale, baseSize);
+
+            m_scaledSkin.horizontalSlider.fixedHeight = GUI.skin.horizontalSlider.fixedHeight * scale;
+            m_scaledSkin.horizontalSliderThumb.fixedWidth = GUI.skin.horizontalSliderThumb.fixedWidth * scale;
+            m_scaledSkin.horizontalSliderThumb.fixedHeight = GUI.skin.horizontalSliderThumb.fixedHeight * scale;
+        }
+
+        m_previousSkin = GUI.skin;
+        GUI.skin = m_scaledSkin;
+
+        static void ScaleStyle(GUIStyle style, float s, int baseSize)
+        {
+            if (style == null)
+            {
+                return;
+            }
+
+            style.fontSize = style.fontSize <= 0 ? baseSize : Mathf.RoundToInt(style.fontSize * s);
+
+            if (style.fixedHeight > 0f)
+            {
+                style.fixedHeight *= s;
+            }
+        }
+    }
+
+    /// <summary>창을 다 그린 뒤 전역 스킨을 되돌립니다.</summary>
+    private void RestoreSkin()
+    {
+        if (m_previousSkin != null)
+        {
+            GUI.skin = m_previousSkin;
+            m_previousSkin = null;
         }
     }
 }
