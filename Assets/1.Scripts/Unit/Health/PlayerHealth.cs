@@ -11,7 +11,7 @@ public enum CharacterInjuryState
     Critical
 }
 
-public class PlayerHealth : HealthSystemBase
+public class PlayerHealth : HealthSystemBase, IBalancePostProcess
 {
     /// <summary>
     /// 이 컴포넌트를 쓰는 유닛은 진영이 정해져 있으므로 레이어 추론을 쓰지 않습니다.
@@ -34,61 +34,75 @@ public class PlayerHealth : HealthSystemBase
     [ReadOnly][SerializeField] private CharacterInjuryState m_currentInjuryState = CharacterInjuryState.Normal;
 
     [Tooltip("부상 게이지 최대값입니다. 1차 프로토타입 기준값은 100입니다.")]
+    [Clamp(Min = 1)]
     [SerializeField] private float m_maxInjuryGauge = 100.0f;
 
     [Tooltip("실제 HP 피해량을 부상 게이지로 변환할 때 곱하는 비율입니다. 기획 공식의 r 값입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_injuryConversionRatio = 0.35f;
 
     [Tooltip("정상 상태로 판정되는 반올림 부상 게이지 최대값입니다. 1차 프로토타입 기준 0~10입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_normalInjuryMaxGauge = 10;
 
     [Tooltip("경상 상태로 판정되는 반올림 부상 게이지 최대값입니다. 1차 프로토타입 기준 11~40입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_minorInjuryMaxGauge = 40;
 
     [Tooltip("치명상 상태로 판정되기 시작하는 반올림 부상 게이지 최소값입니다. 1차 프로토타입 기준 71입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_criticalInjuryMinGauge = 71;
 
     [Tooltip("아직 구조된 적이 없을 때 적용되는 부상 게이지 배율입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_baseInjuryMultiplier = 1.0f;
 
     [Tooltip("첫 번째 구조 이후 적용되는 부상 게이지 배율입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_revivedOnceInjuryMultiplier = 1.2f;
 
     [Tooltip("두 번째 구조 이후 적용되는 부상 게이지 배율입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_revivedTwiceInjuryMultiplier = 1.5f;
 
     [Tooltip("세 번째 구조 이후 적용되는 부상 게이지 배율입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_revivedThreeTimesInjuryMultiplier = 1.8f;
     [Foldout("Down Options")]
     [Tooltip("다운된 플레이어가 구조되지 않았을 때 전투 이탈 처리되기까지 걸리는 시간입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_downDuration = 30.0f;
 
     [Tooltip("이 횟수만큼 구조된 뒤 다시 HP가 0이 되면 즉시 전투 이탈 처리됩니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_maxReviveCount = 3;
 
     [Tooltip("현재 출격에서 첫 번째 구조 시 최대 HP 기준으로 회복되는 비율입니다.")]
     [Range(1, 100)]
-    [BalanceField(Min = 0, Max = 100)]
+    [BalanceField]
+    [Clamp(Min = 0, Max = 100)]
     [SerializeField] private int m_firstReviveHpPercent = 50;
 
     [Tooltip("현재 출격에서 두 번째 구조 시 최대 HP 기준으로 회복되는 비율입니다.")]
     [Range(1, 100)]
-    [BalanceField(Min = 0, Max = 100)]
+    [BalanceField]
+    [Clamp(Min = 0, Max = 100)]
     [SerializeField] private int m_secondReviveHpPercent = 25;
 
     [Tooltip("현재 출격에서 세 번째 구조 시 최대 HP 기준으로 회복되는 비율입니다.")]
     [Range(1, 100)]
-    [BalanceField(Min = 0, Max = 100)]
+    [BalanceField]
+    [Clamp(Min = 0, Max = 100)]
     [SerializeField] private int m_thirdReviveHpPercent = 10;
 
     private bool m_isDowned;
@@ -122,7 +136,7 @@ public class PlayerHealth : HealthSystemBase
 
     public bool IsDownTimerPaused => m_downTimerPaused;
 
-    public float DownDuration => Mathf.Max(0.0f, m_downDuration);
+    public float DownDuration => m_downDuration;
 
     public float DownTimeRemaining => Mathf.Max(0.0f, m_downTimeRemaining);
 
@@ -132,7 +146,7 @@ public class PlayerHealth : HealthSystemBase
 
     public int ReviveCount => m_reviveCount;
 
-    public int MaxReviveCount => Mathf.Max(1, m_maxReviveCount);
+    public int MaxReviveCount => m_maxReviveCount;
 
     /// <summary>부상 게이지가 변경될 때 발생합니다. 인자는 현재 부상 게이지와 정규화된 게이지 값입니다.</summary>
     public event Action<float, float> OnInjuryGaugeChanged;
@@ -162,26 +176,35 @@ public class PlayerHealth : HealthSystemBase
     {
         base.OnValidate();
 
-        m_maxInjuryGauge = Mathf.Max(1.0f, m_maxInjuryGauge);
-        m_injuryConversionRatio = Mathf.Max(0.0f, m_injuryConversionRatio);
+        // 인스펙터에서 값을 만졌을 때도 같은 규칙을 적용합니다. 규칙 본문은 한 곳에만 둡니다.
+        OnBalanceApplied();
+    }
+#endif
+
+    /// <summary>
+    /// 밸런스 값이 대입된 직후 필드 간 관계를 정리합니다.
+    /// </summary>
+    /// <remarks>
+    /// 단일 필드 경계는 <see cref="ClampAttribute"/>가 담당하므로 여기 두지 않습니다.
+    /// 여기 남은 것은 다른 필드가 경계라서 선언 하나로 표현할 수 없는 규칙들입니다.
+    /// 부상 단계는 정상 &lt;= 경상 &lt;= 치명상 순서를 지켜야 하고, 현재 게이지는 최대치를 넘을 수 없습니다.
+    ///
+    /// 이 정리를 <c>OnValidate</c>에만 두면 안 됩니다. <c>OnValidate</c>는 에디터에서 값을 만질 때만 돌고
+    /// 빌드에서는 아예 실행되지 않아, 시트에서 뒤집힌 단계 값이 들어와도 그대로 게임에 적용됩니다.
+    /// Bind 직후에 한 번 도는 이 지점이 시트 경로를 막는 자리입니다.
+    /// </remarks>
+    public void OnBalanceApplied()
+    {
         int maxRoundedGauge = Mathf.Max(1, Mathf.RoundToInt(m_maxInjuryGauge));
         m_normalInjuryMaxGauge = Mathf.Clamp(m_normalInjuryMaxGauge, 0, maxRoundedGauge);
         m_minorInjuryMaxGauge = Mathf.Clamp(m_minorInjuryMaxGauge, m_normalInjuryMaxGauge, maxRoundedGauge);
         int criticalMinLowerBound = Mathf.Min(m_minorInjuryMaxGauge + 1, maxRoundedGauge);
         m_criticalInjuryMinGauge = Mathf.Clamp(m_criticalInjuryMinGauge, criticalMinLowerBound, maxRoundedGauge);
-        m_baseInjuryMultiplier = Mathf.Max(0.0f, m_baseInjuryMultiplier);
-        m_revivedOnceInjuryMultiplier = Mathf.Max(0.0f, m_revivedOnceInjuryMultiplier);
-        m_revivedTwiceInjuryMultiplier = Mathf.Max(0.0f, m_revivedTwiceInjuryMultiplier);
-        m_revivedThreeTimesInjuryMultiplier = Mathf.Max(0.0f, m_revivedThreeTimesInjuryMultiplier);
         m_currentInjuryGauge = Mathf.Clamp(m_currentInjuryGauge, 0.0f, MaxInjuryGauge);
-        m_downDuration = Mathf.Max(0.0f, m_downDuration);
-        m_maxReviveCount = Mathf.Max(1, m_maxReviveCount);
-        m_firstReviveHpPercent = Mathf.Clamp(m_firstReviveHpPercent, 1, 100);
-        m_secondReviveHpPercent = Mathf.Clamp(m_secondReviveHpPercent, 1, 100);
-        m_thirdReviveHpPercent = Mathf.Clamp(m_thirdReviveHpPercent, 1, 100);
+
+        // 클램프가 아니라 표시용 상태 재계산입니다.
         m_currentInjuryState = GetInjuryState(RoundedInjuryGauge);
     }
-#endif
 
     private void Update()
     {
@@ -275,7 +298,7 @@ public class PlayerHealth : HealthSystemBase
         AddInjuryGaugeFromDamage(actualDamage);
     }
 
-    public override bool TakeDamage(int damage)
+    public override bool TakeDamage(int damage, GameObject attacker = null)
     {
         // 무한 체력 디버그는 런타임 트레이너가 활성화된 Editor/Development Build에서만 효과가 있습니다.
         if (m_debugInfiniteHealth && GameDevMode.DebugFeaturesEnabled)
@@ -283,7 +306,7 @@ public class PlayerHealth : HealthSystemBase
             return false;
         }
 
-        return base.TakeDamage(damage);
+        return base.TakeDamage(damage, attacker);
     }
 
     /// <summary>

@@ -6,12 +6,17 @@ using UnityEngine;
 using UnityEngine.Scripting;
 
 /// <summary>
-/// 밸런스 값을 받을 런타임 필드임을 선언하고, 대입 전에 강제할 값 범위를 지정합니다.
+/// 밸런스 값을 받을 런타임 필드임을 선언합니다.
 /// </summary>
 /// <remarks>
 /// 데이터 원본 SO에는 이 특성을 붙이지 않습니다. 원본과 대상은 <b>필드 이름</b>으로 연결되며,
 /// SO는 이 특성이 붙은 스크립트에서 생성하므로 이름이 어긋날 여지가 없습니다.
-/// 범위는 값을 실제로 받는 이 쪽에서 선언합니다. <see cref="Min"/>·<see cref="Max"/>를 적지 않으면 제한하지 않습니다.
+/// <para>
+/// 값의 범위는 이 특성이 아니라 <see cref="ClampAttribute"/>가 선언합니다. 둘을 나눈 이유는
+/// 경계가 SO 주입에만 필요한 것이 아니기 때문입니다. SO를 쓰지 않는 필드도 Inspector 입력을 제한해야 하고,
+/// 그 경계는 SO를 쓰게 되더라도 그대로 유효합니다. 그래서 경계는 독립 선언으로 두고 여기서는
+/// "이 필드는 SO에서 값을 받는다"만 표시합니다. 둘을 함께 붙이면 Inspector 입력과 SO 주입이 같은 범위를 따릅니다.
+/// </para>
 /// <para>
 /// <b>붙일 수 있는 값의 범위(중요)</b>: 이 특성은 <b>상수 또는 첫 초기화 기본값</b>에만 붙입니다.
 /// 플레이 중 변하는 값(현재 탄약, 현재 체력, 부품으로 증감한 실효 수치 등)은 SO에 두지 않습니다.
@@ -28,11 +33,6 @@ using UnityEngine.Scripting;
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
 public sealed class BalanceFieldAttribute : Attribute
 {
-    /// <summary>대입 전에 강제로 적용할 최솟값입니다. 설정하지 않으면 제한하지 않습니다.</summary>
-    public double Min { get; set; } = double.NaN;
-
-    /// <summary>대입 전에 강제로 적용할 최댓값입니다. 설정하지 않으면 제한하지 않습니다.</summary>
-    public double Max { get; set; } = double.NaN;
 }
 
 /// <summary>
@@ -305,17 +305,24 @@ public sealed class BindManager
                 continue;
             }
 
-            // 범위를 선언했지만 보정할 수 없는 타입이면, 선언이 조용히 무시되지 않도록 오류로 보고합니다.
-            bool declaresRange = !double.IsNaN(attribute.Min) || !double.IsNaN(attribute.Max);
-            if (declaresRange && !IsClampableType(field.FieldType))
+            // 범위는 별도 선언이므로 없을 수도 있습니다. 없으면 이 필드는 자르지 않고 그대로 대입합니다.
+            ClampAttribute clamp = field.GetCustomAttribute<ClampAttribute>(true);
+            if (clamp != null && !clamp.Validate(field.FieldType, out string clampError))
             {
-                errors.Add(
-                    $"대상 '{type.Name}.{field.Name}'은 '{field.FieldType.Name}' 타입이라 Min/Max를 적용할 수 없습니다. " +
-                    "범위 선언을 제거하세요.");
-                continue;
+                if (clamp.IsInverted)
+                {
+                    // 선언이 뒤집힌 것은 기획 데이터가 아니라 코드 오타입니다.
+                    // 조용히 넘기면 원인을 찾기 어려우므로 경고하되, 서로 바꿔 적용해 동작은 유지합니다.
+                    Debug.LogWarning($"[BindManager] '{type.Name}.{field.Name}' {clampError}");
+                }
+                else
+                {
+                    errors.Add($"대상 '{type.Name}.{field.Name}': {clampError}");
+                    continue;
+                }
             }
 
-            entries.Add(new TargetEntry(field, attribute));
+            entries.Add(new TargetEntry(field, clamp));
         }
 
         return new TargetLayout(entries, errors);
@@ -375,24 +382,21 @@ public sealed class BindManager
         UnityEngine.Object context,
         ref int clampedValues)
     {
+        // 범위 선언이 없는 필드는 그대로 대입합니다.
+        if (entry.Clamp == null)
+        {
+            return value;
+        }
+
         // enum·bool·string 등은 보정 대상이 아닙니다. 범위 선언 자체는 레이아웃 검사에서 이미 걸러집니다.
         if (!TryToDouble(value, out double numeric))
         {
             return value;
         }
 
-        double clamped = numeric;
-        if (!double.IsNaN(entry.Attribute.Min))
-        {
-            clamped = Math.Max(entry.Attribute.Min, clamped);
-        }
-
-        if (!double.IsNaN(entry.Attribute.Max))
-        {
-            clamped = Math.Min(entry.Attribute.Max, clamped);
-        }
-
-        if (clamped.Equals(numeric))
+        // 어떻게 자를지는 선언이 알고 있으므로 여기서는 부르기만 합니다.
+        double clamped = entry.Clamp.Apply(numeric, out bool changed);
+        if (!changed)
         {
             return value;
         }
@@ -469,7 +473,7 @@ public sealed class BindManager
             }
         }
 
-        if (TryToDouble(value, out _) && IsClampableType(targetType))
+        if (TryToDouble(value, out _) && ClampAttribute.IsClampableType(targetType))
         {
             try
             {
@@ -484,36 +488,6 @@ public sealed class BindManager
 
         converted = null;
         return false;
-    }
-
-    /// <summary>지정한 타입에 Min/Max 보정을 적용할 수 있는지 확인합니다.</summary>
-    /// <param name="type">검사할 타입입니다.</param>
-    /// <returns>enum이 아닌 정수·실수 계열이면 true입니다.</returns>
-    /// <remarks>enum은 기반 타입이 정수라 수치로 보이지만 범위로 자르는 것이 의미가 없어 제외합니다.</remarks>
-    private static bool IsClampableType(Type type)
-    {
-        if (type.IsEnum)
-        {
-            return false;
-        }
-
-        switch (Type.GetTypeCode(type))
-        {
-            case TypeCode.Byte:
-            case TypeCode.SByte:
-            case TypeCode.Int16:
-            case TypeCode.UInt16:
-            case TypeCode.Int32:
-            case TypeCode.UInt32:
-            case TypeCode.Int64:
-            case TypeCode.UInt64:
-            case TypeCode.Single:
-            case TypeCode.Double:
-            case TypeCode.Decimal:
-                return true;
-            default:
-                return false;
-        }
     }
 
     private sealed class SourceLayout
@@ -548,16 +522,18 @@ public sealed class BindManager
 
     private sealed class TargetEntry
     {
-        /// <summary>Reflection 필드와 해당 대상 바인딩 메타데이터(범위 포함)를 묶습니다.</summary>
+        /// <summary>Reflection 필드와 그 필드에 선언된 범위를 묶습니다.</summary>
         /// <param name="field">밸런스 값을 받을 Reflection 필드입니다.</param>
-        /// <param name="attribute">필드에 선언된 바인딩 메타데이터입니다.</param>
-        public TargetEntry(FieldInfo field, BalanceFieldAttribute attribute)
+        /// <param name="clamp">필드에 선언된 범위입니다. 선언이 없으면 null이며 그 경우 자르지 않습니다.</param>
+        public TargetEntry(FieldInfo field, ClampAttribute clamp)
         {
             Field = field;
-            Attribute = attribute;
+            Clamp = clamp;
         }
 
         public FieldInfo Field { get; }
-        public BalanceFieldAttribute Attribute { get; }
+
+        /// <summary>이 필드에 선언된 범위입니다. null이면 범위 제한이 없습니다.</summary>
+        public ClampAttribute Clamp { get; }
     }
 }

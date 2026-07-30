@@ -46,23 +46,27 @@ public class ThirdPersonController : MonoBehaviour
     [Foldout("Move Options")]
     [Tooltip("캐릭터의 기본 이동 속도입니다. 단위는 m/s입니다.")]
     [FormerlySerializedAs("MoveSpeed")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_moveSpeed = 2.0f;
 
     [Tooltip("캐릭터의 전력질주 속도입니다. 단위는 m/s입니다.")]
     [FormerlySerializedAs("SprintSpeed")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_sprintSpeed = 5.335f;
 
     [Tooltip("캐릭터가 이동 방향을 바라보도록 회전하는 데 걸리는 보간 시간입니다.")]
     [Range(0.0f, 0.3f)]
     [FormerlySerializedAs("RotationSmoothTime")]
-    [BalanceField(Min = 0, Max = 0.3)]
+    [BalanceField]
+    [Clamp(Min = 0, Max = 0.3)]
     [SerializeField] private float m_rotationSmoothTime = 0.12f;
 
     [Tooltip("가속과 감속 반응 속도입니다.")]
     [FormerlySerializedAs("SpeedChangeRate")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_speedChangeRate = 10.0f;
 
 
@@ -71,7 +75,8 @@ public class ThirdPersonController : MonoBehaviour
     [Foldout("Jump Options")]
     [Tooltip("캐릭터가 점프할 수 있는 높이입니다.")]
     [FormerlySerializedAs("JumpHeight")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_jumpHeight = 1.2f;
 
     [Tooltip("캐릭터에 적용할 중력 값입니다. Unity 기본 중력은 -9.81입니다.")]
@@ -81,12 +86,14 @@ public class ThirdPersonController : MonoBehaviour
 
     [Tooltip("다음 점프가 가능해지기까지 필요한 대기 시간입니다. 0이면 즉시 다시 점프할 수 있습니다.")]
     [FormerlySerializedAs("JumpTimeout")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_jumpTimeout = 0.50f;
 
     [Tooltip("낙하 상태로 전환되기 전까지의 대기 시간입니다. 계단 이동 같은 작은 단차 처리에 유용합니다.")]
     [FormerlySerializedAs("FallTimeout")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_fallTimeout = 0.15f;
 
 
@@ -100,7 +107,8 @@ public class ThirdPersonController : MonoBehaviour
 
     [Tooltip("지면 감지 구체의 반지름입니다. CharacterController 반지름과 맞추는 것이 좋습니다.")]
     [FormerlySerializedAs("GroundedRadius")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_groundedRadius = 0.28f;
 
     [Tooltip("지면으로 판정할 레이어 마스크입니다.")]
@@ -140,19 +148,22 @@ public class ThirdPersonController : MonoBehaviour
     [Foldout("Recoil Options")]
     [Tooltip("반동 오프셋이 0(원래 조준)으로 복귀하는 속도입니다. 클수록 빠르게 제자리로 돌아옵니다.")]
     [FormerlySerializedAs("m_cameraKickRecoverySpeed")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilRecoverySpeed = 8.0f;
 
     [Tooltip("마지막 발사 이후 이 시간(초)이 지나야 반동 회복을 시작합니다. 사격 중에는 오프셋을 유지하고, 멈춘 뒤에야 복귀시키기 위한 지연입니다. 무기 풀오토 사격 간격(ShootDelay)보다 커야 연사 중 반동이 유지·누적됩니다.")]
     [FormerlySerializedAs("m_cameraKickRecoveryDelay")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilRecoveryDelay = 0.15f;
 
     [Tooltip("켜면 발사 순간의 반동 상승을 즉시 계단식이 아니라 보간(앞쪽으로 쏠린 이징 — 빠르게 확 올랐다 정착)으로 넣습니다. 끄면(기본) 기존처럼 즉시 반영합니다.")]
     [SerializeField] private bool m_recoilOnsetInterp = false;
 
     [Tooltip("반동 온셋 보간 속도입니다. 클수록 더 빠르게(앞쪽으로 더 쏠려) 목표에 도달합니다. Recoil Onset Interp가 켜져 있을 때만 적용됩니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilOnsetSpeed = 35.0f;
 
     [Tooltip("켜면(기본) 반동 반대 방향으로 넣은 조준 입력이 조준을 움직이기 전에 반동을 먼저 상쇄합니다. 자동회복이 플레이어의 되잡기를 이중으로 걷어가 시점이 과하게 쳐지는(오버 컴펜세이션) 현상을 막습니다. 반동과 같은 방향 입력(의도적 재조준·트래킹)은 그대로 통과합니다.")]
@@ -163,7 +174,8 @@ public class ThirdPersonController : MonoBehaviour
 
     [Tooltip("세로(피치) 반동 회복분 오프셋의 고정 상한 각도(도)입니다. Use Pitch Offset Cap이 켜져 있을 때만 적용됩니다.")]
     [FormerlySerializedAs("m_cameraKickMaxPitch")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilMaxPitch = 4.0f;
 
     [Tooltip("켜면(기본) 좌우 반동 회복분을 고정 상한(Recoil Max Yaw)으로 제한합니다. yaw는 조준 클램프가 없어(360 자유) 끄면 무제한으로 쌓일 수 있으니 보통 켜둡니다.")]
@@ -171,17 +183,20 @@ public class ThirdPersonController : MonoBehaviour
 
     [Tooltip("좌우(요) 반동 회복분 오프셋의 고정 상한 각도(도)입니다. Use Yaw Offset Cap이 켜져 있을 때만 적용됩니다(회복분에만).")]
     [FormerlySerializedAs("m_cameraKickMaxYaw")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilMaxYaw = 3.0f;
 
     [Tooltip("세로(pitch) 반동 회복 비율입니다. 1=자동(멈추면 완전 회복), 0=하드(조준에 영구 반영·안 돌아옴 → 상하 조준 한계까지 상승), 중간=부분(일부만 회복). 영구분은 상하 조준 한계로 제한됩니다.")]
     [Range(0.0f, 1.0f)]
-    [BalanceField(Min = 0, Max = 1)]
+    [BalanceField]
+    [Clamp(Min = 0, Max = 1)]
     [SerializeField] private float m_pitchRecoveryRatio = 1.0f;
 
     [Tooltip("좌우(yaw) 반동 회복 비율입니다. 1=자동(완전 회복), 0=하드(영구 반영·안 돌아옴 → 플레이어가 되잡음, Strinova식), 중간=부분. 하드는 Alternate 패턴과 궁합이 좋습니다.")]
     [Range(0.0f, 1.0f)]
-    [BalanceField(Min = 0, Max = 1)]
+    [BalanceField]
+    [Clamp(Min = 0, Max = 1)]
     [SerializeField] private float m_yawRecoveryRatio = 1.0f;
 
 
@@ -196,7 +211,8 @@ public class ThirdPersonController : MonoBehaviour
 
     [Range(0, 1)]
     [FormerlySerializedAs("FootstepAudioVolume")]
-    [BalanceField(Min = 0, Max = 1)]
+    [BalanceField]
+    [Clamp(Min = 0, Max = 1)]
     [SerializeField] private float m_footstepAudioVolume = 0.5f;
 
     /// <summary>카메라 회전 보간에 사용하는 현재 yaw 값입니다.</summary>
@@ -362,12 +378,12 @@ public class ThirdPersonController : MonoBehaviour
     /// 기본 이동 속도를 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetMoveSpeed(float value) => m_moveSpeed = Mathf.Max(0.0f, value);
+    public void SetMoveSpeed(float value) => m_moveSpeed = value;
     /// <summary>
     /// 전력질주 속도를 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetSprintSpeed(float value) => m_sprintSpeed = Mathf.Max(0.0f, value);
+    public void SetSprintSpeed(float value) => m_sprintSpeed = value;
     /// <summary>
     /// 회전 보간 시간을 설정합니다. 0에서 0.3 사이로 보정합니다.
     /// </summary>
@@ -377,13 +393,13 @@ public class ThirdPersonController : MonoBehaviour
     /// 가속과 감속 반응 속도를 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetSpeedChangeRate(float value) => m_speedChangeRate = Mathf.Max(0.0f, value);
+    public void SetSpeedChangeRate(float value) => m_speedChangeRate = value;
 
     /// <summary>
     /// 점프 높이를 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetJumpHeight(float value) => m_jumpHeight = Mathf.Max(0.0f, value);
+    public void SetJumpHeight(float value) => m_jumpHeight = value;
     /// <summary>
     /// 중력 값을 설정합니다.
     /// </summary>
@@ -393,12 +409,12 @@ public class ThirdPersonController : MonoBehaviour
     /// 점프 재입력 제한 시간을 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetJumpTimeout(float value) => m_jumpTimeout = Mathf.Max(0.0f, value);
+    public void SetJumpTimeout(float value) => m_jumpTimeout = value;
     /// <summary>
     /// 낙하 상태 전환 지연 시간을 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetFallTimeout(float value) => m_fallTimeout = Mathf.Max(0.0f, value);
+    public void SetFallTimeout(float value) => m_fallTimeout = value;
 
     /// <summary>
     /// 지면 감지 위치의 Y축 오프셋을 설정합니다.
@@ -409,7 +425,7 @@ public class ThirdPersonController : MonoBehaviour
     /// 지면 감지 구체의 반지름을 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetGroundedRadius(float value) => m_groundedRadius = Mathf.Max(0.0f, value);
+    public void SetGroundedRadius(float value) => m_groundedRadius = value;
     /// <summary>
     /// 지면으로 판정할 레이어 마스크를 설정합니다.
     /// </summary>
@@ -575,16 +591,16 @@ public class ThirdPersonController : MonoBehaviour
     public Vector3 LogicalAimForward => LogicalAimRotation * Vector3.forward;
 
     /// <summary>반동 오프셋이 0으로 복귀하는 속도입니다. 시각 킥(AimController)이 회복 속도를 이 값에 맞춰 이질감을 줄일 때 읽습니다.</summary>
-    public float RecoilRecoverySpeed => Mathf.Max(0.0f, m_recoilRecoverySpeed);
+    public float RecoilRecoverySpeed => m_recoilRecoverySpeed;
 
     /// <summary>마지막 발사 후 논리 반동 회복을 시작하기까지의 지연 시간입니다.</summary>
-    public float RecoilRecoveryDelay => Mathf.Max(0.0f, m_recoilRecoveryDelay);
+    public float RecoilRecoveryDelay => m_recoilRecoveryDelay;
 
     /// <summary>논리 반동 온셋을 보간할지 여부입니다.</summary>
     public bool RecoilOnsetInterpolationEnabled => m_recoilOnsetInterp;
 
     /// <summary>논리 반동 온셋 보간 속도입니다.</summary>
-    public float RecoilOnsetSpeed => Mathf.Max(0.0f, m_recoilOnsetSpeed);
+    public float RecoilOnsetSpeed => m_recoilOnsetSpeed;
 
     /// <summary>반동 반대 방향 조준 입력으로 회복 오프셋을 우선 상쇄할지 여부입니다.</summary>
     public bool RecoilCompensationAbsorbEnabled => m_recoilCompensationAbsorb;
@@ -593,13 +609,13 @@ public class ThirdPersonController : MonoBehaviour
     public bool UsePitchOffsetCap => m_usePitchOffsetCap;
 
     /// <summary>피치 반동 오프셋 고정 상한입니다.</summary>
-    public float RecoilMaxPitch => Mathf.Max(0.0f, m_recoilMaxPitch);
+    public float RecoilMaxPitch => m_recoilMaxPitch;
 
     /// <summary>회복 가능한 요 반동 오프셋의 고정 상한 사용 여부입니다.</summary>
     public bool UseYawOffsetCap => m_useYawOffsetCap;
 
     /// <summary>요 반동 오프셋 고정 상한입니다.</summary>
-    public float RecoilMaxYaw => Mathf.Max(0.0f, m_recoilMaxYaw);
+    public float RecoilMaxYaw => m_recoilMaxYaw;
 
     /// <summary>피치 반동 중 자동 회복할 비율입니다.</summary>
     public float PitchRecoveryRatio => Mathf.Clamp01(m_pitchRecoveryRatio);
@@ -615,11 +631,11 @@ public class ThirdPersonController : MonoBehaviour
 
     /// <summary>반동 오프셋이 0으로 복귀하는 속도를 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetRecoilRecoverySpeed(float value) => m_recoilRecoverySpeed = Mathf.Max(0.0f, value);
+    public void SetRecoilRecoverySpeed(float value) => m_recoilRecoverySpeed = value;
 
     /// <summary>마지막 발사 후 논리 반동 회복을 시작하기까지의 지연 시간을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetRecoilRecoveryDelay(float value) => m_recoilRecoveryDelay = Mathf.Max(0.0f, value);
+    public void SetRecoilRecoveryDelay(float value) => m_recoilRecoveryDelay = value;
 
     /// <summary>논리 반동 온셋 보간 사용 여부를 설정합니다.</summary>
     /// <param name="value">사용하려면 <c>true</c>입니다.</param>
@@ -627,7 +643,7 @@ public class ThirdPersonController : MonoBehaviour
 
     /// <summary>논리 반동 온셋 보간 속도를 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetRecoilOnsetSpeed(float value) => m_recoilOnsetSpeed = Mathf.Max(0.0f, value);
+    public void SetRecoilOnsetSpeed(float value) => m_recoilOnsetSpeed = value;
 
     /// <summary>반동 반대 방향 조준 입력으로 회복 오프셋을 우선 상쇄할지 여부를 설정합니다.</summary>
     /// <param name="value">사용하려면 <c>true</c>입니다.</param>
@@ -639,7 +655,7 @@ public class ThirdPersonController : MonoBehaviour
 
     /// <summary>피치 반동 오프셋의 고정 상한을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetRecoilMaxPitch(float value) => m_recoilMaxPitch = Mathf.Max(0.0f, value);
+    public void SetRecoilMaxPitch(float value) => m_recoilMaxPitch = value;
 
     /// <summary>요 반동 오프셋의 고정 상한 사용 여부를 설정합니다.</summary>
     /// <param name="value">사용하려면 <c>true</c>입니다.</param>
@@ -647,7 +663,7 @@ public class ThirdPersonController : MonoBehaviour
 
     /// <summary>요 반동 오프셋의 고정 상한을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetRecoilMaxYaw(float value) => m_recoilMaxYaw = Mathf.Max(0.0f, value);
+    public void SetRecoilMaxYaw(float value) => m_recoilMaxYaw = value;
 
     /// <summary>피치 반동 중 자동 회복할 비율을 설정합니다.</summary>
     /// <param name="value">0~1 범위로 보정됩니다.</param>

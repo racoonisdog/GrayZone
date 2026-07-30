@@ -404,14 +404,28 @@ public class EnemyController : MonoBehaviour
         Dead = new DeadState(this);
     }
 
-    /// <summary>피해를 받으면 교전으로 전이합니다.</summary>
+    /// <summary>피해를 받으면 공격자를 인식하고 교전으로 전이합니다.</summary>
     /// <param name="damage">이번에 적용된 피해량입니다.</param>
-    /// <remarks>슬라이스 1: 뼈대. TODO(후속): 도발·대상=공격자 지정·경직 처리.</remarks>
-    private void HandleDamaged(int damage)
+    /// <param name="attacker">피해를 입힌 대상입니다. 공격자를 알 수 없는 경로면 null입니다.</param>
+    /// <remarks>
+    /// 직접 피격은 비전투 감지 보호(§5.6)를 무시합니다. 시야·접촉·소음은 AI 동료를 감지 대상에서 빼지만,
+    /// 실제로 맞았다면 누가 쐈든 알아채야 합니다. 오사로 맞은 변이체가 쏜 쪽을 쫓아오는 규칙이 여기서 성립합니다.
+    /// TODO(후속): 경직 처리.
+    /// </remarks>
+    private void HandleDamaged(int damage, GameObject attacker)
     {
         if (m_current == Dead)
         {
             return;
+        }
+
+        if (attacker != null && targetSensor != null)
+        {
+            SquadMemberController member = attacker.GetComponentInParent<SquadMemberController>();
+            if (member != null)
+            {
+                targetSensor.NotifyDamagedBy(member);
+            }
         }
 
         TransitionTo(Combat);

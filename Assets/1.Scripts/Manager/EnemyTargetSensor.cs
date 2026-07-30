@@ -336,13 +336,41 @@ public class EnemyTargetSensor : MonoBehaviour
     }
 
     /// <summary>
+    /// 몸이 맞닿은 캐릭터를 즉시 인식합니다.
+    /// </summary>
+    /// <param name="member">몸이 닿은 스쿼드 캐릭터입니다.</param>
+    /// <remarks>
+    /// 평소에는 시야로만 찾고, 실제로 부딪히면 그 순간 위치를 알게 하는 규칙입니다(기획 확정).
+    /// 공용 문서 §5.4.2는 반경 기반 360도 근접 감지를 규정하지만, 이 프로젝트는 접촉 기준으로 좁혀 씁니다.
+    /// 뒤로 몰래 지나가는 것을 허용해 잠입을 너그럽게 만들려는 선택입니다.
+    /// 비전투 감지 보호(§5.6)는 접촉에도 그대로 적용합니다.
+    /// AI 동료가 스쳤다고 주변 변이체가 깨어나면 플레이어 의도와 무관하게 교전이 시작되기 때문입니다.
+    /// 교전에 들어간 뒤에는 보호가 풀리므로 누가 부딪히든 인식합니다.
+    /// </remarks>
+    public void NotifyContact(SquadMemberController member)
+    {
+        TargetInfo info = FindInfo(member);
+        if (info == null || !IsAliveMember(member))
+        {
+            return;
+        }
+
+        if (!m_isEngaged && member.IsAiSquadMember)
+        {
+            return;
+        }
+
+        MarkDirectlyPerceived(info);
+    }
+
+    /// <summary>
     /// 직접 피격당했을 때 공격자를 인식 대상으로 기록합니다.
     /// </summary>
     /// <param name="attacker">이 변이체를 공격한 스쿼드 캐릭터입니다.</param>
     /// <remarks>
-    /// 아직 배선되지 않은 Push 진입점입니다. <c>HealthSystemBase.OnDamaged</c>가 공격자를 전달하지 않아
-    /// 슬라이스 1에서는 호출되지 않습니다. 피해 경로가 공격자를 넘겨주도록 바뀌면 그때 연결합니다.
-    /// 규칙: 공격자를 즉시 현재 대상으로 선택하고, AI 조작 캐릭터라도 비전투 감지 보호를 무시합니다(§5.6, §5.7.3).
+    /// 공격자를 즉시 현재 대상으로 선택합니다(§5.7.3 직접 공격자 우선).
+    /// 시야·접촉과 달리 <b>비전투 감지 보호를 무시</b>합니다. AI 동료가 쐈더라도 실제로 맞았으면 알아채야 하기 때문입니다(§5.6).
+    /// 조준이 빗나간 총알이 멀리 있던 변이체를 맞혔을 때 그 변이체가 쏜 쪽을 쫓아오는 규칙이 이 경로로 성립합니다.
     /// </remarks>
     public void NotifyDamagedBy(SquadMemberController attacker)
     {
@@ -493,7 +521,8 @@ public class EnemyTargetSensor : MonoBehaviour
     /// </remarks>
     private bool CanSee(Vector3 origin, SquadMemberController member)
     {
-        // 슬라이스 2: 몸통 전용 시각 감지 콜라이더가 생기면 이 지점을 그 콜라이더로 교체합니다.
+        // 캐릭터의 가슴 높이를 겨눕니다. 발밑을 겨누면 턱이나 경사에 가려 안 보이는 판정이 잦습니다.
+        // 공용 문서 §5.4.1은 몸통 전용 시각 감지 콜라이더를 규정하지만, 이 프로젝트는 쓰지 않기로 했습니다(기획 확정).
         Vector3 target = member.transform.position + Vector3.up;
         Vector3 delta = target - origin;
 

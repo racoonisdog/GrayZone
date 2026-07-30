@@ -77,7 +77,8 @@ public class AimController : MonoBehaviour
     [Tooltip("지향점(LookPoint)을 카메라 전방 이 거리에 항상 둡니다. 레이캐스트와 무관하게 늘 먼 지점을 바라보며, 무기 히트스캔 사거리보다 작으면 사거리만큼으로 보정됩니다.")]
     [FormerlySerializedAs("m_aimTargetDistance")]
     [FormerlySerializedAs("aimObjDis")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_lookDistance = 100.0f;
 
     [Tooltip("조준점(카메라 트레이스) 및 탄착점(총구 히트스캔) 판정에 사용할 레이어입니다. 비어 있으면 무기 히트스캔 레이어 또는 전체를 사용합니다.")]
@@ -94,20 +95,24 @@ public class AimController : MonoBehaviour
 
     [Foldout("Hipfire Options")]
     [Tooltip("힙파이어(비조준 사격) 후 백뷰를 유지하다 자유 시점으로 복귀하기까지의 유지 시간(초)입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireHoldDuration = 2.0f;
 
     [Foldout("Combat Zoom Options")]
     [Tooltip("ADS(조준) 시 백뷰 카메라 FOV입니다. 값이 작을수록 더 확대됩니다.")]
-    [BalanceField(Min = 1)]
+    [BalanceField]
+    [Clamp(Min = 1)]
     [SerializeField] private float m_adsFov = 20.0f;
 
     [Tooltip("힙파이어(비조준) 시 백뷰 카메라 FOV입니다. 줌 없는 기본 시야 값(기본 30)입니다.")]
-    [BalanceField(Min = 1)]
+    [BalanceField]
+    [Clamp(Min = 1)]
     [SerializeField] private float m_hipfireFov = 30.0f;
 
     [Tooltip("ADS↔힙파이어 전환 시 FOV 보간 속도입니다. 매우 크게 두면 즉시 전환에 가까워집니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_zoomLerpSpeed = 10.0f;
 
     [Foldout("Recoil Visual Kick Options")]
@@ -122,16 +127,19 @@ public class AimController : MonoBehaviour
 
     [Tooltip("PerShotReset일 때, 시각 킥이 거의(~95%) 회복되는 데 걸리는 발수(무기 ShootDelay 기준)입니다. 1이면 다음 발 전에 거의 리셋됩니다.")]
     [ShowIf(nameof(m_visualKickRecoveryMode), VisualKickRecoveryMode.PerShotReset)]
-    [BalanceField(Min = 0.01)]
+    [BalanceField]
+    [Clamp(Min = 0.01)]
     [SerializeField] private float m_visualKickRecoverShots = 1.0f;
 
     [EndIf]
     [Tooltip("누적될 수 있는 카메라 롤(Dutch) 상한(도)입니다. 유지 없이 발당 순간 펀치 후 회복합니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_visualKickMaxRoll = 3.0f;
 
     [Tooltip("누적될 수 있는 FOV 펀치 상한(도)입니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_visualKickMaxFovPunch = 5.0f;
 
 
@@ -239,19 +247,19 @@ public class AimController : MonoBehaviour
     public bool ShowAimImageAlways => m_showAimImageAlways;
 
     /// <summary>총구 히트스캔이 장애물에 막힐 때 마커를 표면에서 띄울 거리입니다.</summary>
-    public float HitscanBlockMarkerOffset => Mathf.Max(0.0f, m_hitscanBlockMarkerOffset);
+    public float HitscanBlockMarkerOffset => m_hitscanBlockMarkerOffset;
 
     /// <summary>힙파이어 사격 후 전투 자세를 유지하는 시간입니다.</summary>
-    public float HipfireHoldDuration => Mathf.Max(0.0f, m_hipfireHoldDuration);
+    public float HipfireHoldDuration => m_hipfireHoldDuration;
 
     /// <summary>ADS 카메라 기본 FOV입니다.</summary>
-    public float AdsFov => Mathf.Max(1.0f, m_adsFov);
+    public float AdsFov => m_adsFov;
 
     /// <summary>힙파이어 카메라 기본 FOV입니다.</summary>
-    public float HipfireFov => Mathf.Max(1.0f, m_hipfireFov);
+    public float HipfireFov => m_hipfireFov;
 
     /// <summary>ADS와 힙파이어 FOV 전환 보간 속도입니다.</summary>
-    public float ZoomLerpSpeed => Mathf.Max(0.0f, m_zoomLerpSpeed);
+    public float ZoomLerpSpeed => m_zoomLerpSpeed;
 
     /// <summary>현재 히트스캔이 조준 중인 적입니다.</summary>
     public EnemyController CurrentAimEnemy => m_currentAimEnemy;
@@ -335,7 +343,7 @@ public class AimController : MonoBehaviour
     /// 지향점(LookPoint)을 둘 카메라 전방 거리를 설정합니다.
     /// </summary>
     /// <param name="value">새 지향점 거리입니다.</param>
-    public void SetLookDistance(float value) => m_lookDistance = Mathf.Max(0.0f, value);
+    public void SetLookDistance(float value) => m_lookDistance = value;
 
     /// <summary>
     /// 조준 Raycast 대상 레이어를 설정합니다.
@@ -356,19 +364,19 @@ public class AimController : MonoBehaviour
 
     /// <summary>힙파이어 사격 후 전투 자세를 유지하는 시간을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetHipfireHoldDuration(float value) => m_hipfireHoldDuration = Mathf.Max(0.0f, value);
+    public void SetHipfireHoldDuration(float value) => m_hipfireHoldDuration = value;
 
     /// <summary>ADS 카메라 기본 FOV를 설정합니다.</summary>
     /// <param name="value">1보다 작은 값은 1로 보정됩니다.</param>
-    public void SetAdsFov(float value) => m_adsFov = Mathf.Max(1.0f, value);
+    public void SetAdsFov(float value) => m_adsFov = value;
 
     /// <summary>힙파이어 카메라 기본 FOV를 설정합니다.</summary>
     /// <param name="value">1보다 작은 값은 1로 보정됩니다.</param>
-    public void SetHipfireFov(float value) => m_hipfireFov = Mathf.Max(1.0f, value);
+    public void SetHipfireFov(float value) => m_hipfireFov = value;
 
     /// <summary>ADS와 힙파이어 FOV 전환 보간 속도를 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetZoomLerpSpeed(float value) => m_zoomLerpSpeed = Mathf.Max(0.0f, value);
+    public void SetZoomLerpSpeed(float value) => m_zoomLerpSpeed = value;
 
     /// <summary>
     /// 총구 기준 히트스캔 장애물 마커 오브젝트를 설정합니다.
@@ -459,15 +467,15 @@ public class AimController : MonoBehaviour
 
     /// <summary>PerShotReset 회복에 사용할 발수를 설정합니다.</summary>
     /// <param name="value">0보다 작은 값은 0.01로 보정됩니다.</param>
-    public void SetVisualKickRecoverShots(float value) => m_visualKickRecoverShots = Mathf.Max(0.01f, value);
+    public void SetVisualKickRecoverShots(float value) => m_visualKickRecoverShots = value;
 
     /// <summary>누적 가능한 카메라 롤 상한을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetVisualKickMaxRoll(float value) => m_visualKickMaxRoll = Mathf.Max(0.0f, value);
+    public void SetVisualKickMaxRoll(float value) => m_visualKickMaxRoll = value;
 
     /// <summary>누적 가능한 FOV 펀치 상한을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
-    public void SetVisualKickMaxFovPunch(float value) => m_visualKickMaxFovPunch = Mathf.Max(0.0f, value);
+    public void SetVisualKickMaxFovPunch(float value) => m_visualKickMaxFovPunch = value;
 
     /// <summary>발사 시 탄착점 임팩트 마커 생성 여부를 설정합니다.</summary>
     /// <param name="value">생성하려면 <c>true</c>입니다.</param>

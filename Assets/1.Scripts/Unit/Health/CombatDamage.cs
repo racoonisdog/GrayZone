@@ -47,7 +47,8 @@ public static class CombatDamage
     /// <summary>
     /// Applies damage to an already resolved damageable target when faction and life-state checks pass.
     /// </summary>
-    public static bool TryApplyDamage(IDamageable target, Faction attacker, int damage)
+    /// <param name="attackerObject">피해를 입힌 대상입니다. 피격자가 반격 대상을 알기 위해 그대로 전달합니다.</param>
+    public static bool TryApplyDamage(IDamageable target, Faction attacker, int damage, GameObject attackerObject = null)
     {
         if (target == null || target.IsDead || damage <= 0)
         {
@@ -59,7 +60,7 @@ public static class CombatDamage
             return false;
         }
 
-        return target.TakeDamage(damage);
+        return target.TakeDamage(damage, attackerObject);
     }
 
     /// <summary>
@@ -71,7 +72,7 @@ public static class CombatDamage
     /// 약점 판정이 필요한 사격은 <see cref="ResolveHit"/>를 쓰십시오. 근접 공격을 그쪽으로 옮기면
     /// 변이체에게도 약점 배율이 생기므로 바꾸지 마십시오.
     /// </remarks>
-    public static bool TryApplyDamage(Collider collider, Faction attacker, int damage, out IDamageable target)
+    public static bool TryApplyDamage(Collider collider, Faction attacker, int damage, out IDamageable target, GameObject attackerObject = null)
     {
         target = null;
 
@@ -81,15 +82,15 @@ public static class CombatDamage
         }
 
         target = collider.GetComponentInParent<IDamageable>();
-        return TryApplyDamage(target, attacker, damage);
+        return TryApplyDamage(target, attacker, damage, attackerObject);
     }
 
     /// <summary>
     /// Finds an <see cref="IDamageable"/> from a collider parent and applies damage when valid.
     /// </summary>
-    public static bool TryApplyDamage(Collider collider, Faction attacker, int damage)
+    public static bool TryApplyDamage(Collider collider, Faction attacker, int damage, GameObject attackerObject = null)
     {
-        return TryApplyDamage(collider, attacker, damage, out _);
+        return TryApplyDamage(collider, attacker, damage, out _, attackerObject);
     }
 
     /// <summary>
@@ -110,7 +111,8 @@ public static class CombatDamage
         Faction attacker,
         int baseDamage,
         float headshotDamageMultiplier = 1.0f,
-        bool allowHeadshot = true)
+        bool allowHeadshot = true,
+        GameObject attackerObject = null)
     {
         if (collider == null || baseDamage <= 0)
         {
@@ -133,7 +135,7 @@ public static class CombatDamage
         float multiplier = headshot ? Mathf.Max(0.0f, headshotDamageMultiplier) : 1.0f;
         int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * multiplier));
 
-        if (!target.TakeDamage(damage))
+        if (!target.TakeDamage(damage, attackerObject))
         {
             return HitFeedback.None;
         }

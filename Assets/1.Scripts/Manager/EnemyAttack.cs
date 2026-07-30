@@ -185,7 +185,8 @@ public class EnemyAttack : MonoBehaviour
         }
 
         // 진영 판정과 실제 피해 적용은 공용 경로로 처리합니다.
-        if (!CombatDamage.TryApplyDamage(other, m_ownerFaction, m_attackDamage))
+        // 맞은 쪽이 누구에게 맞았는지 알 수 있도록 이 변이체를 함께 넘깁니다.
+        if (!CombatDamage.TryApplyDamage(other, m_ownerFaction, m_attackDamage, gameObject))
         {
             return false;
         }

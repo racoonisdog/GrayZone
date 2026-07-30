@@ -48,17 +48,20 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
     [Tooltip("최대 탄약 수입니다.")]
     [FormerlySerializedAs("maxBullet")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_maxBullet = 30;
 
     [Tooltip("사격 후 다음 사격이 가능해질 때까지의 지연 시간입니다.")]
     [FormerlySerializedAs("shootDelay")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_shootDelay = 0.12f;
 
     [Tooltip("재장전에 필요한 시간입니다. 현재 스크립트에서는 상태값 용도로 보관하며, 실제 완료 타이밍은 애니메이션 이벤트에서 처리할 수 있습니다.")]
     [FormerlySerializedAs("reloadTime")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_reloadTime = 1.5f;
 
     [Tooltip("탄약이 최대치일 때도 재장전을 허용할지 여부입니다. 기본값은 false로, 풀 탄창에서는 재장전이 막히고 빈 장전 사운드만 재생됩니다. 디버그 용도로만 true로 켭니다.")]
@@ -127,7 +130,8 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     [SerializeField] private ParticleSystem m_muzzleFlashParticle;
 
     [Foldout("Hitscan Options")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_hitscanDamage = 1;
 
     [Tooltip("이 무기가 약점 판정을 사용하는지 여부입니다. 끄면 약점 부위를 맞혀도 일반 피해로 처리하고 약점 표시도 뜨지 않습니다.")]
@@ -135,10 +139,12 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     [SerializeField] private bool m_allowHeadshot = true;
 
     [Tooltip("약점 부위를 맞혔을 때 곱하는 피해 배율입니다. 약점 판정이 꺼져 있으면 사용하지 않습니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_headshotDamageMultiplier = 2.0f;
 
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_hitscanRange = 100.0f;
 
     [SerializeField] private LayerMask m_hitscanLayerMask = ~0;
@@ -147,11 +153,13 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     [Header("Hipfire")]
     [Tooltip("힙파이어(비조준) 시 최소 방사각(도).")]
     [FormerlySerializedAs("m_hipfireBaseSpread")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireMinSpread = 4.0f;
 
     [Tooltip("힙파이어(비조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireMaxSpread = 10.0f;
 
     [ReadOnly][SerializeField] private float m_hipfireCurrentSpread;
@@ -159,53 +167,63 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     [Tooltip("힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
     [FormerlySerializedAs("m_accurateShotCount")]
     [FormerlySerializedAs("m_minSpreadShotCount")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_hipfireMinSpreadShotCount = 3;
 
     [Tooltip("힙파이어 발사마다 누적되는 방사각 증가량(도).")]
     [FormerlySerializedAs("m_bloomPerShot")]
     [FormerlySerializedAs("m_spreadIncreasePerShot")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireSpreadIncreasePerShot = 1.0f;
 
     [Tooltip("힙파이어 사격을 멈춘 뒤 초당 회복(감소)하는 방사각(도/초).")]
     [FormerlySerializedAs("m_bloomRecovery")]
     [FormerlySerializedAs("m_spreadRecoveryPerSecond")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireSpreadRecoveryPerSecond = 8.0f;
 
     [Tooltip("힙파이어 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다.")]
     [FormerlySerializedAs("m_spreadResetTime")]
     [FormerlySerializedAs("m_spreadRecoveryDelay")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireSpreadRecoveryDelay = 0.3f;
 
     [Header("ADS")]
     [Tooltip("ADS(조준) 시 최소 방사각(도). 0이면 정밀 사격입니다.")]
     [FormerlySerializedAs("m_adsBaseSpread")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_adsMinSpread = 0.0f;
 
     [Tooltip("ADS(조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_adsMaxSpread = 6.0f;
 
     [ReadOnly][SerializeField] private float m_adsCurrentSpread;
 
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private int m_adsMinSpreadShotCount = 3;
 
     [Tooltip("ADS 발사마다 누적되는 방사각 증가량(도).")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_adsSpreadIncreasePerShot = 1.0f;
 
     [Tooltip("ADS 사격을 멈춘 뒤 초당 회복(감소)하는 방사각(도/초).")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_adsSpreadRecoveryPerSecond = 8.0f;
 
     [Tooltip("ADS 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_adsSpreadRecoveryDelay = 0.3f;
 
     [Header("Distribution")]
@@ -214,17 +232,20 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     [SerializeField] private SpreadDistribution m_spreadDistribution = SpreadDistribution.Gaussian;
 
     [Tooltip("Gaussian 분포의 중심 집중도입니다. 콘 반각(최대 방사각)을 몇 σ로 볼지 정합니다. 값이 클수록 탄이 중심에 더 몰립니다(기본 3 = 약 99%가 콘 안, 평균 편향은 반각의 약 0.42배). 낮출수록 가장자리로 퍼집니다. Uniform에는 영향이 없습니다.")]
-    [BalanceField(Min = 1)]
+    [BalanceField]
+    [Clamp(Min = 1)]
     [SerializeField] private float m_spreadConcentration = 3.0f;
 
     [Foldout("Recoil Options")]
     [Header("Aim Recoil (탄착에 영향)")]
     [Tooltip("발사 1회당 세로(피치) 반동 각도(도)입니다. 양수면 조준이 위로 솟습니다(머즐 클라임). 실제 조준을 밀어 탄착에도 영향을 주며(LogicalAim), 사격을 멈추면 자동 회복됩니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilPitchKick = 0.6f;
 
     [Tooltip("발사 1회당 좌우(요) 반동 각도(도)의 크기입니다. 실제 조준을 밀어 탄착에도 영향을 줍니다. 0이면 좌우 반동이 없습니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilYawKick = 0.2f;
 
     [Tooltip("좌우 반동(Yaw)의 방향 패턴입니다. Random=매 발 ±범위 무작위, AlternateLeftFirst=좌·우 번갈아(첫 발 왼쪽), AlternateRightFirst=우·좌 번갈아(첫 발 오른쪽). Alternate는 위 크기를 그대로 좌우로 씁니다.")]
@@ -233,7 +254,8 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
     [Header("Visual Kick (에임 무영향, juice)")]
     [Tooltip("발사 1회당 카메라 롤(Dutch) 크기(도)입니다. 화면만 살짝 기울입니다. 조준/탄착에는 영향이 없습니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilRoll = 0.5f;
 
     [Tooltip("카메라 롤(Dutch)의 방향 패턴입니다. Random=매 발 ±범위 무작위, AlternateLeftFirst=좌·우 번갈아(첫 발 왼쪽), AlternateRightFirst=우·좌 번갈아(첫 발 오른쪽). Yaw 반동과 독립적으로 설정됩니다.")]
@@ -241,7 +263,8 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     [SerializeField] private KickSidePattern m_rollKickPattern = KickSidePattern.Random;
 
     [Tooltip("발사 1회당 카메라 FOV 펀치(도)입니다. 순간적으로 시야가 벌어졌다 회복되는 시각 반동 연출입니다. 조준/탄착에는 영향이 없습니다.")]
-    [BalanceField(Min = 0)]
+    [BalanceField]
+    [Clamp(Min = 0)]
     [SerializeField] private float m_recoilFovPunch = 1.0f;
 
 #if UNITY_EDITOR
@@ -273,6 +296,9 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     private float m_reloadStartTime;
     private bool m_hasRequiredReferences;
     private Faction m_ownerFaction = Faction.Player;
+
+    /// <summary>이 무기를 소유한 유닛입니다. 피격자가 반격 대상을 알 수 있도록 피해와 함께 전달합니다.</summary>
+    private GameObject m_ownerObject;
     private float m_hipfireCurrentSpreadAdd;
     private float m_adsCurrentSpreadAdd;
     private int m_hipfireShotsInBurst;
@@ -363,13 +389,13 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     public float RecoilPitchKick => m_recoilPitchKick;
 
     /// <summary>발사 1회당 좌우(요) 반동 각도(도)의 최대 크기입니다. 실제 조준을 밀어 탄착에도 영향을 줍니다.</summary>
-    public float RecoilYawKick => Mathf.Max(0.0f, m_recoilYawKick);
+    public float RecoilYawKick => m_recoilYawKick;
 
     /// <summary>발사 1회당 카메라 롤(Dutch) 최대 크기(도)입니다. 시각 전용 juice이며 조준/탄착에는 영향이 없습니다.</summary>
-    public float RecoilRoll => Mathf.Max(0.0f, m_recoilRoll);
+    public float RecoilRoll => m_recoilRoll;
 
     /// <summary>발사 1회당 카메라 FOV 펀치(도)입니다. 시각 전용 juice이며 조준/탄착에는 영향이 없습니다.</summary>
-    public float RecoilFovPunch => Mathf.Max(0.0f, m_recoilFovPunch);
+    public float RecoilFovPunch => m_recoilFovPunch;
 
     /// <summary>좌우 반동(Yaw)의 좌우 방향 패턴입니다.</summary>
     public KickSidePattern YawKickPattern => m_yawKickPattern;
@@ -399,31 +425,31 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     public SpreadDistribution Distribution => m_spreadDistribution;
 
     /// <summary>Gaussian 분포의 중심 집중도(σ=1/이 값)입니다. 크로스헤어가 표시 배율을 계산할 때 읽습니다(읽기 전용, 최소 1).</summary>
-    public float SpreadConcentration => Mathf.Max(1.0f, m_spreadConcentration);
+    public float SpreadConcentration => m_spreadConcentration;
 
     /// <summary>힙파이어에서 최소 탄퍼짐을 유지하는 연속 발사 수입니다.</summary>
-    public int HipfireMinSpreadShotCount => Mathf.Max(0, m_hipfireMinSpreadShotCount);
+    public int HipfireMinSpreadShotCount => m_hipfireMinSpreadShotCount;
 
     /// <summary>힙파이어 연사 시 발마다 누적하는 탄퍼짐 각도입니다.</summary>
-    public float HipfireSpreadIncreasePerShot => Mathf.Max(0.0f, m_hipfireSpreadIncreasePerShot);
+    public float HipfireSpreadIncreasePerShot => m_hipfireSpreadIncreasePerShot;
 
     /// <summary>힙파이어 사격 중단 후 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
-    public float HipfireSpreadRecoveryDelay => Mathf.Max(0.0f, m_hipfireSpreadRecoveryDelay);
+    public float HipfireSpreadRecoveryDelay => m_hipfireSpreadRecoveryDelay;
 
     /// <summary>힙파이어 탄퍼짐의 초당 회복량입니다.</summary>
-    public float HipfireSpreadRecoveryPerSecond => Mathf.Max(0.0f, m_hipfireSpreadRecoveryPerSecond);
+    public float HipfireSpreadRecoveryPerSecond => m_hipfireSpreadRecoveryPerSecond;
 
     /// <summary>ADS에서 최소 탄퍼짐을 유지하는 연속 발사 수입니다.</summary>
-    public int AdsMinSpreadShotCount => Mathf.Max(0, m_adsMinSpreadShotCount);
+    public int AdsMinSpreadShotCount => m_adsMinSpreadShotCount;
 
     /// <summary>ADS 연사 시 발마다 누적하는 탄퍼짐 각도입니다.</summary>
-    public float AdsSpreadIncreasePerShot => Mathf.Max(0.0f, m_adsSpreadIncreasePerShot);
+    public float AdsSpreadIncreasePerShot => m_adsSpreadIncreasePerShot;
 
     /// <summary>ADS 사격 중단 후 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
-    public float AdsSpreadRecoveryDelay => Mathf.Max(0.0f, m_adsSpreadRecoveryDelay);
+    public float AdsSpreadRecoveryDelay => m_adsSpreadRecoveryDelay;
 
     /// <summary>ADS 탄퍼짐의 초당 회복량입니다.</summary>
-    public float AdsSpreadRecoveryPerSecond => Mathf.Max(0.0f, m_adsSpreadRecoveryPerSecond);
+    public float AdsSpreadRecoveryPerSecond => m_adsSpreadRecoveryPerSecond;
 
     /// <summary>
     /// 컴포넌트 참조를 캐싱하고 필수 참조를 검증합니다.
@@ -490,6 +516,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
         // (스쿼드 멤버 자식에 부착되어 부모의 HealthSystemBase를 찾습니다. 없으면 Player로 가정.)
         HealthSystemBase ownerHealth = GetComponentInParent<HealthSystemBase>();
         m_ownerFaction = ownerHealth != null ? ownerHealth.Faction : Faction.Player;
+        m_ownerObject = ownerHealth != null ? ownerHealth.gameObject : null;
     }
 
     /// <summary>
@@ -629,34 +656,25 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     /// <summary>
     /// 탄약 관련 수치가 유효 범위를 벗어나지 않도록 보정합니다.
     /// </summary>
+    /// <remarks>
+    /// 단일 필드 경계는 <see cref="ClampAttribute"/>가 담당하므로 여기 두지 않습니다.
+    /// 여기 남은 둘은 다른 필드가 경계라서 선언으로 표현할 수 없는 것들입니다.
+    /// 현재 탄약은 최대 탄창을 넘을 수 없고, 최대 탄퍼짐은 최소 탄퍼짐보다 작을 수 없습니다.
+    /// 뒤집힌 탄퍼짐 범위는 시트에서 값이 잘못 들어와도 조준이 무너지지 않도록 여기서 되돌립니다.
+    /// </remarks>
     private void ClampBulletValues()
     {
-        m_maxBullet = Mathf.Max(0, m_maxBullet);
         m_currentBullet = Mathf.Clamp(m_currentBullet, 0, m_maxBullet);
-        m_shootDelay = Mathf.Max(0.0f, m_shootDelay);
-        m_reloadTime = Mathf.Max(0.0f, m_reloadTime);
-        m_hitscanDamage = Mathf.Max(0, m_hitscanDamage);
-        m_headshotDamageMultiplier = Mathf.Max(0.0f, m_headshotDamageMultiplier);
-        m_hitscanRange = Mathf.Max(0.0f, m_hitscanRange);
-        m_adsMinSpread = Mathf.Max(0.0f, m_adsMinSpread);
-        m_hipfireMinSpread = Mathf.Max(0.0f, m_hipfireMinSpread);
         m_adsMaxSpread = Mathf.Max(m_adsMinSpread, m_adsMaxSpread);
         m_hipfireMaxSpread = Mathf.Max(m_hipfireMinSpread, m_hipfireMaxSpread);
-        m_hipfireMinSpreadShotCount = Mathf.Max(0, m_hipfireMinSpreadShotCount);
-        m_adsMinSpreadShotCount = Mathf.Max(0, m_adsMinSpreadShotCount);
-        m_hipfireSpreadIncreasePerShot = Mathf.Max(0.0f, m_hipfireSpreadIncreasePerShot);
-        m_adsSpreadIncreasePerShot = Mathf.Max(0.0f, m_adsSpreadIncreasePerShot);
-        m_hipfireSpreadRecoveryPerSecond = Mathf.Max(0.0f, m_hipfireSpreadRecoveryPerSecond);
-        m_adsSpreadRecoveryPerSecond = Mathf.Max(0.0f, m_adsSpreadRecoveryPerSecond);
-        m_hipfireSpreadRecoveryDelay = Mathf.Max(0.0f, m_hipfireSpreadRecoveryDelay);
-        m_adsSpreadRecoveryDelay = Mathf.Max(0.0f, m_adsSpreadRecoveryDelay);
-        m_spreadConcentration = Mathf.Max(1.0f, m_spreadConcentration);
     }
 
+    /// <remarks>
+    /// 인스펙터에서 값을 만졌을 때도 Bind 직후와 같은 규칙을 적용합니다. 규칙 본문은 한 곳에만 둡니다.
+    /// </remarks>
     private void OnValidate()
     {
-        ClampBulletValues();
-        UpdateCurrentSpreadInspectorFields();
+        OnBalanceApplied();
     }
 
     /// <summary>
@@ -1061,7 +1079,8 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
             m_ownerFaction,
             m_hitscanDamage,
             m_headshotDamageMultiplier,
-            m_allowHeadshot);
+            m_allowHeadshot,
+            m_ownerObject);
         if (feedback.Applied)
         {
             OnHitFeedback?.Invoke(feedback);
@@ -1289,7 +1308,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
     /// <summary>히트스캔 사격 피해량을 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 피해량입니다.</param>
-    public void SetHitscanDamage(int value) => m_hitscanDamage = Mathf.Max(0, value);
+    public void SetHitscanDamage(int value) => m_hitscanDamage = value;
 
     /// <summary>이 무기의 약점 판정 사용 여부를 설정합니다.</summary>
     /// <param name="value">약점 판정을 쓰면 true입니다.</param>
@@ -1297,11 +1316,11 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
     /// <summary>헤드샷 피해 배율을 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 배율입니다.</param>
-    public void SetHeadshotDamageMultiplier(float value) => m_headshotDamageMultiplier = Mathf.Max(0.0f, value);
+    public void SetHeadshotDamageMultiplier(float value) => m_headshotDamageMultiplier = value;
 
     /// <summary>히트스캔 사거리를 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 사거리입니다.</param>
-    public void SetHitscanRange(float value) => m_hitscanRange = Mathf.Max(0.0f, value);
+    public void SetHitscanRange(float value) => m_hitscanRange = value;
 
     /// <summary>세로(피치) 반동 각도(도)를 설정합니다.</summary>
     /// <param name="value">새 반동 각도입니다.</param>
@@ -1309,15 +1328,15 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
     /// <summary>좌우(요) 반동 각도(도)를 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 반동 각도입니다.</param>
-    public void SetRecoilYawKick(float value) => m_recoilYawKick = Mathf.Max(0.0f, value);
+    public void SetRecoilYawKick(float value) => m_recoilYawKick = value;
 
     /// <summary>카메라 롤(Dutch) 시각 킥 크기(도)를 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 시각 킥 크기입니다.</param>
-    public void SetRecoilRoll(float value) => m_recoilRoll = Mathf.Max(0.0f, value);
+    public void SetRecoilRoll(float value) => m_recoilRoll = value;
 
     /// <summary>카메라 FOV 펀치 시각 킥 크기(도)를 설정합니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 FOV 펀치 크기입니다.</param>
-    public void SetRecoilFovPunch(float value) => m_recoilFovPunch = Mathf.Max(0.0f, value);
+    public void SetRecoilFovPunch(float value) => m_recoilFovPunch = value;
 
     /// <summary>좌우 반동 방향 패턴을 설정합니다.</summary>
     /// <param name="value">새 반동 방향 패턴입니다.</param>
@@ -1337,7 +1356,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
     /// <summary>Gaussian 탄퍼짐 분포의 중심 집중도를 설정합니다.</summary>
     /// <param name="value">1보다 작은 값은 1로 보정됩니다.</param>
-    public void SetSpreadConcentration(float value) => m_spreadConcentration = Mathf.Max(1.0f, value);
+    public void SetSpreadConcentration(float value) => m_spreadConcentration = value;
 
     /// <summary>힙파이어 최소/최대 방사각(도)을 설정합니다. max는 min 이상으로 보정합니다.</summary>
     /// <param name="minSpread">새 최소 방사각입니다.</param>

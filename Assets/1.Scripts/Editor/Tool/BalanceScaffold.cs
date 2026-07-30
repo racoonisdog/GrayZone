@@ -380,10 +380,10 @@ internal static class BalanceScaffold
             {
                 sb.Append("\r\n");
 
-                TooltipAttribute tooltip = field.GetCustomAttribute<TooltipAttribute>(true);
-                if (tooltip != null && !string.IsNullOrWhiteSpace(tooltip.tooltip))
+                string tooltipText = BuildTooltipText(field);
+                if (!string.IsNullOrWhiteSpace(tooltipText))
                 {
-                    sb.Append($"    [Tooltip(\"{EscapeLiteral(tooltip.tooltip)}\")]\r\n");
+                    sb.Append($"    [Tooltip(\"{EscapeLiteral(tooltipText)}\")]\r\n");
                 }
 
                 string initializer = BuildInitializer(field, seed);
@@ -393,6 +393,35 @@ internal static class BalanceScaffold
 
         sb.Append("}\r\n");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// SO 필드에 붙일 설명을 만듭니다. 원본 설명 뒤에 허용 범위를 덧붙입니다.
+    /// </summary>
+    /// <param name="field">설명을 가져올 원본 스크립트 필드입니다.</param>
+    /// <returns>설명이 없고 범위도 없으면 빈 문자열입니다.</returns>
+    /// <remarks>
+    /// 범위는 SO에 <see cref="ClampAttribute"/>로 복사하지 않고 문구로만 싣습니다.
+    /// SO와 시트는 값을 담는 그릇이고, 자르는 것은 게임플레이 직전 Bind 한 곳에서만 해야 하기 때문입니다.
+    /// 시트에 범위 밖 값이 들어가도 그대로 저장되지만 Bind가 잘라내므로, 기획자는 문구로 한계를 알고 값을 넣습니다.
+    /// 범위 자체를 바꾸려면 코드의 선언을 고쳐야 합니다.
+    /// </remarks>
+    private static string BuildTooltipText(FieldInfo field)
+    {
+        TooltipAttribute tooltip = field.GetCustomAttribute<TooltipAttribute>(true);
+        string description = tooltip != null && !string.IsNullOrWhiteSpace(tooltip.tooltip)
+            ? tooltip.tooltip.Trim()
+            : string.Empty;
+
+        ClampAttribute clamp = field.GetCustomAttribute<ClampAttribute>(true);
+        string range = clamp != null ? clamp.DescribeRange() : string.Empty;
+
+        if (string.IsNullOrEmpty(range))
+        {
+            return description;
+        }
+
+        return string.IsNullOrEmpty(description) ? $"({range})" : $"{description} ({range})";
     }
 
     /// <summary>프리팹 값이 있으면 " = 리터럴" 형태의 초기화식을 만듭니다.</summary>
