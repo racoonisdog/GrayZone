@@ -553,8 +553,8 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
             return false;
         }
 
-        return character.InjuryState == PlayerInjuryState.Normal
-            || character.InjuryState == PlayerInjuryState.Minor;
+        return character.InjuryState == CharacterInjuryState.Normal
+            || character.InjuryState == CharacterInjuryState.Minor;
     }
 
     public bool TryAssignHelper(string runtimeId)

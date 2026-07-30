@@ -112,7 +112,7 @@ public class CharacterManager : MonoBehaviour, ICharacterDataContext
         => Query.CanAssignToFacility(character, filter);
 
     // ── 변경 (CharacterEditor 위임) ──────────────────────────────────────────
-    public bool TryRecruitCharacter(PlayableCharacterDefinition characterDefinition, out ShelterMemberRuntimeData character, out CharacterActionFailure failure)
+    public bool TryRecruitCharacter(PlayerbleCharacterDefinition characterDefinition, out ShelterMemberRuntimeData character, out CharacterActionFailure failure)
         => Editor.TryRecruitCharacter(characterDefinition, out character, out failure);
 
     public bool TryRemoveCharacter(string runtimeId, out CharacterActionFailure failure)
