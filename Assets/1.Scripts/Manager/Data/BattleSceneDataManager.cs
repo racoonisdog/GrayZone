@@ -20,8 +20,8 @@ public class BattleSceneDataManager : MonoBehaviour
         /// <summary>자원 데이터를 외부 시스템과 연결할 때 사용할 식별자입니다.</summary>
         public int id;
 
-        /// <summary>셸터 자원 체계와 연결되는 자원 종류입니다.</summary>
-        public CurrencyType Type;
+        /// <summary>셸터 자원 체계와 연결되는 안정적인 자원 ID입니다.</summary>
+        public string ResourceId;
 
         /// <summary>목업 결과 UI에 표시할 자원 아이콘입니다.</summary>
         public Texture2D Icon;
@@ -205,18 +205,25 @@ public class BattleSceneDataManager : MonoBehaviour
     }
 
     /// <summary>외부 획득 시스템이 자원 획득을 기록할 때 사용합니다.</summary>
-    public void RecordResource(CurrencyType type, int amount, Texture2D icon = null)
+    public void RecordResource(
+        string resourceId,
+        int amount,
+        Texture2D icon = null)
     {
-        if (IsFinalized || amount <= 0)
+        string id = ResourceIds.Normalize(resourceId);
+        if (IsFinalized || string.IsNullOrEmpty(id) || amount <= 0)
         {
             return;
         }
 
-        m_runtimeData?.RecordResource(type, amount);
+        m_runtimeData?.RecordResource(id, amount);
 
         for (int i = 0; i < m_mockResources.Count; i++)
         {
-            if (m_mockResources[i].Type != type)
+            if (!string.Equals(
+                    m_mockResources[i].ResourceId,
+                    id,
+                    StringComparison.Ordinal))
             {
                 continue;
             }
@@ -234,7 +241,7 @@ public class BattleSceneDataManager : MonoBehaviour
 
         m_mockResources.Add(new ResourceResult
         {
-            Type = type,
+            ResourceId = id,
             Icon = icon,
             Count = amount
         });
@@ -297,7 +304,9 @@ public class BattleSceneDataManager : MonoBehaviour
         for (int i = 0; i < m_mockResources.Count; i++)
         {
             ResourceResult resource = m_mockResources[i];
-            m_runtimeData.RecordResource(resource.Type, resource.Count);
+            m_runtimeData.RecordResource(
+                resource.ResourceId,
+                resource.Count);
         }
 
         m_runtimeData.StartBattle();
@@ -448,8 +457,9 @@ public class BattleSceneDataManager : MonoBehaviour
                 continue;
             }
 
-            ResourceResult presentation = FindResourcePresentation(resource.Type);
-            presentation.Type = resource.Type;
+            ResourceResult presentation =
+                FindResourcePresentation(resource.ResourceId);
+            presentation.ResourceId = resource.ResourceId;
             presentation.Count = resource.Amount;
             m_resourceResults.Add(presentation);
         }
@@ -462,17 +472,21 @@ public class BattleSceneDataManager : MonoBehaviour
     }
 
     /// <summary>지정한 자원 종류에 대응하는 목업 ID와 아이콘 표시 정보를 찾습니다.</summary>
-    private ResourceResult FindResourcePresentation(CurrencyType type)
+    private ResourceResult FindResourcePresentation(string resourceId)
     {
+        string id = ResourceIds.Normalize(resourceId);
         for (int i = 0; i < m_mockResources.Count; i++)
         {
-            if (m_mockResources[i].Type == type)
+            if (string.Equals(
+                    m_mockResources[i].ResourceId,
+                    id,
+                    StringComparison.Ordinal))
             {
                 return m_mockResources[i];
             }
         }
 
-        return new ResourceResult { Type = type };
+        return new ResourceResult { ResourceId = id };
     }
 
     /// <summary>씬에서 필요한 스쿼드 매니저 참조를 자동으로 탐색합니다.</summary>

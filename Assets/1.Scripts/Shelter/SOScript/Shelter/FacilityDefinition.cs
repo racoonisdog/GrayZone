@@ -12,8 +12,8 @@ public class FacilityDefinition : ScriptableObject
     [System.Serializable]
     public struct CostEntry
     {
-        /// <summary>필요한 재화 타입</summary>
-        public CurrencyType type;
+        /// <summary>필요한 안정적인 자원 ID</summary>
+        public string resourceId;
 
         /// <summary>필요한 재화 수량</summary>
         public int amount;
@@ -42,9 +42,13 @@ public class FacilityDefinition : ScriptableObject
         if (m_unlockCost == null || m_unlockCost.Length == 0)
             return new CostBundle();
 
-        var costs = new CurrencyCost[m_unlockCost.Length];
+        var costs = new ResourceCost[m_unlockCost.Length];
         for (int i = 0; i < m_unlockCost.Length; i++)
-            costs[i] = new CurrencyCost(m_unlockCost[i].type, m_unlockCost[i].amount);
+        {
+            costs[i] = new ResourceCost(
+                m_unlockCost[i].resourceId,
+                m_unlockCost[i].amount);
+        }
 
         return new CostBundle(costs);
     }

@@ -15,6 +15,50 @@ public sealed class CharacterEditor
         this.query = query;
     }
 
+    public bool TryRecruitCharacter(PlayableCharacterDefinition characterDefinition, out ShelterMemberRuntimeData character, out CharacterActionFailure failure)
+    {
+        failure = CharacterActionFailure.None;
+        character = null;
+
+        if (!policy.CanUse(CharacterEditCapability.RosterChange, out failure))
+            return false;
+
+        if (characterDefinition == null)
+        {
+            failure = CharacterActionFailure.InvalidCharacterDefinition;
+            return false;
+        }
+
+        ShelterMemberRuntimeData created = new ShelterMemberRuntimeData(characterDefinition);
+        if (!context.TryAddCharacter(created))
+        {
+            failure = CharacterActionFailure.CharacterAddFailed;
+            return false;
+        }
+
+        character = created;
+        context.NotifyCharactersChanged();
+        return true;
+    }
+
+    public bool TryRemoveCharacter(string runtimeId, out CharacterActionFailure failure)
+    {
+        failure = CharacterActionFailure.None;
+
+        if (!policy.CanUse(CharacterEditCapability.RosterChange, out failure))
+            return false;
+
+        if (!query.TryGetCharacter(runtimeId, out _)
+            || !context.TryRemoveCharacter(runtimeId))
+        {
+            failure = CharacterActionFailure.CharacterNotFound;
+            return false;
+        }
+
+        context.NotifyCharactersChanged();
+        return true;
+    }
+
     public bool TryAssignToFacility(string runtimeId, string facilityId, string roomId, FacilityAssignmentKind kind, out CharacterActionFailure failure)
     {
         return TryAssignToFacility(runtimeId, facilityId, roomId, CharacterAssignmentFilter.AvailableAlive, kind, out failure);
@@ -107,24 +151,6 @@ public sealed class CharacterEditor
         return true;
     }
 
-    public bool TrySetInjuryState(string runtimeId, PlayerInjuryState injuryState, out CharacterActionFailure failure)
-    {
-        failure = CharacterActionFailure.None;
-
-        if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
-            return false;
-
-        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
-        {
-            failure = CharacterActionFailure.CharacterNotFound;
-            return false;
-        }
-
-        bool changed = character.SetInjuryState(injuryState);
-        NotifyChangedIfNeeded(character, changed);
-        return true;
-    }
-
     public bool TrySetInjuryGauge(string runtimeId, float injuryGauge, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;
@@ -139,25 +165,6 @@ public sealed class CharacterEditor
         }
 
         bool changed = character.SetInjuryGauge(injuryGauge);
-        NotifyChangedIfNeeded(character, changed);
-        return true;
-    }
-
-    // 부상상태를 현재 게이지 기준으로 재계산한다(완치/수동해제 시점 사용).
-    public bool TryRefreshInjuryState(string runtimeId, out CharacterActionFailure failure)
-    {
-        failure = CharacterActionFailure.None;
-
-        if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
-            return false;
-
-        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
-        {
-            failure = CharacterActionFailure.CharacterNotFound;
-            return false;
-        }
-
-        bool changed = character.RefreshInjuryStateFromGauge();
         NotifyChangedIfNeeded(character, changed);
         return true;
     }

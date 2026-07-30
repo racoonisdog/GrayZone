@@ -23,6 +23,7 @@ public class GameDataManager : MonoBehaviour
     [Header("자원 정본")]
     [Tooltip("자원 종류별 현재 보유량입니다. 같은 종류는 런타임에 하나로 정규화됩니다.")]
     [SerializeField] private List<ResourceAmountState> resourceAmounts = new();
+    [SerializeField] private List<ItemStorageEntry> itemStorageEntries = new();
 
     [Header("보유 캐릭터 및 장비 정본")]
     [Tooltip("Battle과 Shelter가 공통으로 복사해 사용하는 캐릭터 스냅샷 정본입니다.")]
@@ -38,6 +39,7 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private List<ShelterCharacterAssignmentData> shelterCharacterAssignments = new();
     [Tooltip("시설별 해금 여부와 업그레이드 단계입니다.")]
     [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
+    [SerializeField] private ManufacturingRuntimeData manufacturing = new();
 
     [Header("최근 배틀 정산 정본")]
     [Tooltip("마지막으로 정산 반영이 완료된 배틀 ID이며 중복 반영 방지 키로 사용합니다.")]
@@ -64,6 +66,7 @@ public class GameDataManager : MonoBehaviour
     /// <summary>현재 보유한 전체 캐릭터 수입니다.</summary>
     public int CharacterCount => characters?.Count ?? 0;
     public IReadOnlyList<CharacterSnapshotData> Characters => characters;
+    public IReadOnlyList<ItemStorageEntry> ItemStorageEntries => itemStorageEntries;
 
     /// <summary>플레이어블 캐릭터와 비플레이어 NPC를 합한 전체 보유 수입니다.</summary>
     public int TotalOwnedCharacterCount => CharacterCount;
@@ -166,13 +169,15 @@ public class GameDataManager : MonoBehaviour
         ShelterRuntimeData packet = new ShelterRuntimeData();
         packet.SetShelterStability(shelterStability);
         packet.ApplySavedState(currentDay, playableSquadRuntimeIds, facilityStates);
+        packet.Manufacturing.CopyFrom(manufacturing);
+        packet.SetItemStorageEntries(itemStorageEntries);
 
         for (int i = 0; i < resourceAmounts.Count; i++)
         {
             ResourceAmountState resource = resourceAmounts[i];
             if (resource != null)
             {
-                packet.Resources.SetAmount(resource.Type, resource.Amount);
+                packet.Resources.SetAmount(resource.ResourceId, resource.Amount);
             }
         }
 
@@ -204,9 +209,12 @@ public class GameDataManager : MonoBehaviour
         currentDay = packet.CurrentDay;
         playableSquadRuntimeIds = new List<string>(packet.BattleSquadRuntimeIds);
         facilityStates = CloneFacilityStates(packet.FacilityStates);
+        manufacturing ??= new ManufacturingRuntimeData();
+        manufacturing.CopyFrom(packet.Manufacturing);
+        itemStorageEntries = CloneItemStorageEntries(packet.ItemStorageEntries);
 
         resourceAmounts = new List<ResourceAmountState>();
-        foreach (KeyValuePair<CurrencyType, int> resource in packet.Resources.Amounts)
+        foreach (KeyValuePair<string, int> resource in packet.Resources.Amounts)
         {
             resourceAmounts.Add(new ResourceAmountState(resource.Key, resource.Value));
         }
@@ -295,7 +303,7 @@ public class GameDataManager : MonoBehaviour
             ResourceAmountState resource = resourceAmounts[i];
             if (resource != null)
             {
-                entryData.AddStartingResource(resource.Type, resource.Amount);
+                entryData.AddStartingResource(resource.ResourceId, resource.Amount);
             }
         }
 
@@ -341,7 +349,7 @@ public class GameDataManager : MonoBehaviour
                 BattleResourceAmountData resource = resultData.AcquiredResources[i];
                 if (resource != null)
                 {
-                    AddResource(resource.Type, resource.Amount);
+                    AddResource(resource.ResourceId, resource.Amount);
                 }
             }
         }
@@ -485,7 +493,7 @@ public class GameDataManager : MonoBehaviour
             {
                 saveData.resources.Add(new SaveData.ResourceAmountData
                 {
-                    type = resource.Type,
+                    resourceId = resource.ResourceId,
                     amount = resource.Amount
                 });
             }
@@ -551,7 +559,9 @@ public class GameDataManager : MonoBehaviour
                 SaveData.ResourceAmountData resource = saveData.resources[i];
                 if (resource != null)
                 {
-                    SetResourceAmount(resource.type, resource.amount);
+                    SetResourceAmount(
+                        resource.resourceId,
+                        resource.amount);
                 }
             }
         }
@@ -583,6 +593,8 @@ public class GameDataManager : MonoBehaviour
     private void ApplyShelterSaveData(SaveData.ShelterSaveData saveData)
     {
         currentDay = Mathf.Max(1, saveData.currentDay);
+        manufacturing = new ManufacturingRuntimeData();
+        itemStorageEntries = new List<ItemStorageEntry>();
         IEnumerable<string> savedSquadIds = saveData.battleSquadRuntimeIds != null
             && saveData.battleSquadRuntimeIds.Count > 0
             ? saveData.battleSquadRuntimeIds
@@ -671,37 +683,51 @@ public class GameDataManager : MonoBehaviour
             && assignment.RuntimeId == runtimeId.Trim());
     }
 
-    private int GetResourceAmount(CurrencyType type)
+    private int GetResourceAmount(string resourceId)
     {
-        ResourceAmountState state = FindResource(type);
+        ResourceAmountState state = FindResource(resourceId);
         return state?.Amount ?? 0;
     }
 
-    private void SetResourceAmount(CurrencyType type, int amount)
+    private void SetResourceAmount(string resourceId, int amount)
     {
-        ResourceAmountState state = FindResource(type);
+        string id = ResourceIds.Normalize(resourceId);
+        if (string.IsNullOrEmpty(id))
+            return;
+
+        ResourceAmountState state = FindResource(id);
         if (state == null)
         {
-            resourceAmounts.Add(new ResourceAmountState(type, amount));
+            resourceAmounts.Add(new ResourceAmountState(id, amount));
             return;
         }
 
         state.SetAmount(amount);
     }
 
-    private void AddResource(CurrencyType type, int amount)
+    private void AddResource(string resourceId, int amount)
     {
         if (amount > 0)
         {
-            SetResourceAmount(type, GetResourceAmount(type) + amount);
+            SetResourceAmount(
+                resourceId,
+                GetResourceAmount(resourceId) + amount);
         }
     }
 
-    private ResourceAmountState FindResource(CurrencyType type)
+    private ResourceAmountState FindResource(string resourceId)
     {
+        string id = ResourceIds.Normalize(resourceId);
+        if (string.IsNullOrEmpty(id))
+            return null;
+
         for (int i = 0; i < resourceAmounts.Count; i++)
         {
-            if (resourceAmounts[i] != null && resourceAmounts[i].Type == type)
+            if (resourceAmounts[i] != null
+                && string.Equals(
+                    resourceAmounts[i].ResourceId,
+                    id,
+                    StringComparison.Ordinal))
             {
                 return resourceAmounts[i];
             }
@@ -716,14 +742,17 @@ public class GameDataManager : MonoBehaviour
         shelterStability = Mathf.Clamp(shelterStability, 0, 100);
         currentDay = Mathf.Max(1, currentDay);
         resourceAmounts ??= new List<ResourceAmountState>();
+        itemStorageEntries ??= new List<ItemStorageEntry>();
         characters ??= new List<CharacterSnapshotData>();
         playableSquadRuntimeIds ??= new List<string>();
         shelterCharacterAssignments ??= new List<ShelterCharacterAssignmentData>();
         facilityStates ??= new List<FacilityRuntimeState>();
+        manufacturing ??= new ManufacturingRuntimeData();
         lastBattleMemberResults ??= new List<BattleMemberResultData>();
         lastBattleAcquiredResources ??= new List<BattleResourceAmountData>();
 
         NormalizeResources();
+        NormalizeItemStorageEntries();
         NormalizeOwnedCharacters();
         playableSquadRuntimeIds = NormalizeCharacterIds(
             playableSquadRuntimeIds,
@@ -731,6 +760,7 @@ public class GameDataManager : MonoBehaviour
         NormalizePlayableSquadRuntimeIds();
         NormalizeShelterAssignments();
         facilityStates = CloneFacilityStates(facilityStates);
+        manufacturing.EnsureValid();
 
         if (!HasLastBattleResult)
         {
@@ -744,7 +774,8 @@ public class GameDataManager : MonoBehaviour
         for (int i = 0; i < resourceAmounts.Count; i++)
         {
             ResourceAmountState source = resourceAmounts[i];
-            if (source == null)
+            if (source == null
+                || string.IsNullOrEmpty(source.ResourceId))
             {
                 continue;
             }
@@ -752,7 +783,10 @@ public class GameDataManager : MonoBehaviour
             ResourceAmountState existing = null;
             for (int j = 0; j < normalized.Count; j++)
             {
-                if (normalized[j].Type == source.Type)
+                if (string.Equals(
+                        normalized[j].ResourceId,
+                        source.ResourceId,
+                        StringComparison.Ordinal))
                 {
                     existing = normalized[j];
                     break;
@@ -770,6 +804,36 @@ public class GameDataManager : MonoBehaviour
         }
 
         resourceAmounts = normalized;
+    }
+
+    private void NormalizeItemStorageEntries()
+    {
+        List<ItemStorageEntry> normalized = new();
+        Dictionary<string, int> entryIndexes = new(StringComparer.Ordinal);
+        for (int i = 0; i < itemStorageEntries.Count; i++)
+        {
+            ItemStorageEntry entry = itemStorageEntries[i];
+            if (entry == null)
+                continue;
+
+            entry.EnsureValid();
+            if (!entry.IsValid)
+                continue;
+
+            if (!entryIndexes.TryGetValue(entry.ItemDefinitionId, out int existingIndex))
+            {
+                entryIndexes.Add(entry.ItemDefinitionId, normalized.Count);
+                normalized.Add(entry.Clone());
+                continue;
+            }
+
+            long combinedQuantity = (long)normalized[existingIndex].Quantity + entry.Quantity;
+            normalized[existingIndex] = new ItemStorageEntry(
+                entry.ItemDefinitionId,
+                combinedQuantity > int.MaxValue ? int.MaxValue : (int)combinedQuantity);
+        }
+
+        itemStorageEntries = normalized;
     }
 
     private void NormalizeOwnedCharacters()
@@ -907,6 +971,21 @@ public class GameDataManager : MonoBehaviour
             {
                 clone.Add(new FacilityRuntimeState(state.facilityId, state.isUnlocked, state.upgradeLevel));
             }
+        }
+
+        return clone;
+    }
+
+    private static List<ItemStorageEntry> CloneItemStorageEntries(IEnumerable<ItemStorageEntry> source)
+    {
+        List<ItemStorageEntry> clone = new();
+        if (source == null)
+            return clone;
+
+        foreach (ItemStorageEntry entry in source)
+        {
+            if (entry != null && entry.IsValid)
+                clone.Add(entry.Clone());
         }
 
         return clone;

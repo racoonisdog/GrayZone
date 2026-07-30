@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97be01e77435c8f4d8843da4dc14e168, type: 3}
+  m_Name: ResourceDefinitionCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::ResourceDefinitionCatalog
+  m_entries:
+  - m_resourceId: food
+    m_displayName: "\uC2DD\uB7C9"
+    m_icon: {fileID: 21300000, guid: 01a25e7a3a9febd419787a50b2000991, type: 3}
+  - m_resourceId: fuel
+    m_displayName: "\uC5F0\uB8CC"
+    m_icon: {fileID: 21300000, guid: 71d29989ee2220c439d4ca6da78f6315, type: 3}
+  - m_resourceId: facility_upgrade_part
+    m_displayName: "\uC2DC\uC124 \uC5C5\uADF8\uB808\uC774\uB4DC \uBD80\uD488"
+    m_icon: {fileID: 21300000, guid: 022d2e60845241a47be35a61e32dbfc3, type: 3}
+  - m_resourceId: upgrade_part_material
+    m_displayName: "\uC5C5\uADF8\uB808\uC774\uB4DC \uBD80\uD488 \uC7AC\uB8CC"
+    m_icon: {fileID: 21300000, guid: cf0d974c824e16343b34e5a808ac6a55, type: 3}
+  - m_resourceId: weapon_part_material
+    m_displayName: "\uCD1D\uAE30 \uD30C\uCE20 \uC7AC\uB8CC"
+    m_icon: {fileID: 21300000, guid: ece74b111b37c3d4b809c5de1ce772ab, type: 3}
+  - m_resourceId: medicine_material
+    m_displayName: "\uC57D\uD488 \uC7AC\uB8CC"
+    m_icon: {fileID: 21300000, guid: 3e1b2ff5690f25245804682a5b7e0d34, type: 3}

@@ -13,6 +13,7 @@ public class MedicalStaffSlotView : MonoBehaviour
     [SerializeField] private Image m_slotImage;
     [SerializeField] private Sprite m_unlockedSprite;
     [SerializeField] private Sprite m_lockedSprite;
+    [SerializeField] private Button m_cancelButton;
     [FormerlySerializedAs("m_npccatalog")]
     [SerializeField] private CharacterPortraitCatalog m_characterCatalog;
 
@@ -23,6 +24,7 @@ public class MedicalStaffSlotView : MonoBehaviour
     private string m_helperRuntimeId;   // null/공백 = 비점유
     private string m_helperDefinitionId;
     private Action<MedicalStaffSlotView> m_clicked;
+    private Action<MedicalStaffSlotView> m_cancelClicked;
 
     /// <summary>세이브/로드 시에만 사용하는 슬롯 식별자</summary>
     public string SlotId => m_slotId;
@@ -48,11 +50,16 @@ public class MedicalStaffSlotView : MonoBehaviour
     /// </summary>
     /// <param name="isUnlocked">슬롯 해금 여부</param>
     /// <param name="onClicked">슬롯 클릭 시 호출할 콜백</param>
-    public void Bind(bool isUnlocked, Action<MedicalStaffSlotView> onClicked)
+    /// <param name="onCancelClicked">점유 해제 버튼 클릭 시 호출할 콜백</param>
+    public void Bind(
+        bool isUnlocked,
+        Action<MedicalStaffSlotView> onClicked,
+        Action<MedicalStaffSlotView> onCancelClicked)
     {
         CacheReferences();
         m_isUnlocked = isUnlocked;
         m_clicked = onClicked;
+        m_cancelClicked = onCancelClicked;
 
         UpdateVisual();
 
@@ -60,6 +67,12 @@ public class MedicalStaffSlotView : MonoBehaviour
         {
             m_button.onClick.RemoveAllListeners();
             m_button.onClick.AddListener(HandleClick);
+        }
+
+        if (m_cancelButton != null)
+        {
+            m_cancelButton.onClick.RemoveAllListeners();
+            m_cancelButton.onClick.AddListener(HandleCancelClick);
         }
 
         UpdateButtonStates();
@@ -89,15 +102,23 @@ public class MedicalStaffSlotView : MonoBehaviour
 
     private void HandleClick()
     {
-        // 빈칸/점유 분기는 컨트롤러가 HelperId로 판단.
+        // 빈 슬롯에서만 후보 목록을 여는 콜백이다.
         m_clicked?.Invoke(this);
     }
 
-    // 해금 슬롯은 항상 클릭 가능: 빈 슬롯 클릭=배치, 점유 슬롯 클릭=배치취소(별도 취소 버튼 없음).
+    private void HandleCancelClick()
+    {
+        m_cancelClicked?.Invoke(this);
+    }
+
+    // 빈 슬롯은 슬롯 버튼으로 배치하고, 점유 슬롯은 별도의 취소 버튼으로 해제한다.
     private void UpdateButtonStates()
     {
         if (m_button != null)
-            m_button.interactable = m_isUnlocked;
+            m_button.interactable = m_isUnlocked && !HasHelper;
+
+        if (m_cancelButton != null)
+            m_cancelButton.gameObject.SetActive(m_isUnlocked && HasHelper);
     }
 
     private void UpdateVisual()
@@ -129,5 +150,18 @@ public class MedicalStaffSlotView : MonoBehaviour
 
         if (m_slotImage == null)
             m_slotImage = GetComponent<Image>();
+
+        if (m_cancelButton == null)
+        {
+            Button[] childButtons = GetComponentsInChildren<Button>(true);
+            for (int i = 0; i < childButtons.Length; i++)
+            {
+                if (childButtons[i] != null && childButtons[i] != m_button)
+                {
+                    m_cancelButton = childButtons[i];
+                    break;
+                }
+            }
+        }
     }
 }

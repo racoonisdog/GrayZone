@@ -19,6 +19,8 @@ public class FacilityManager : MonoBehaviour
     /// <summary>시설 ID별 런타임 시설 상태</summary>
     public IReadOnlyDictionary<string, FacilityState> States => m_states;
 
+    private StorageFacility Storage => ShelterSceneDataManager.Instance?.Storage;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -138,13 +140,13 @@ public class FacilityManager : MonoBehaviour
         CostBundle cost = state.Definition.BuildUnlockCost();
         if (!cost.IsFree)
         {
-            if (ShelterSceneDataManager.Instance == null)
+            if (Storage == null)
             {
-                Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Cannot spend unlock cost.", this);
+                Debug.LogWarning("[FacilityManager] StorageFacility is not available. Cannot spend unlock cost.", this);
                 return false;
             }
 
-            if (!ShelterSceneDataManager.Instance.TrySpendResources(cost))
+            if (!Storage.TrySpendResources(cost))
                 return false;
         }
 
@@ -215,8 +217,7 @@ public class FacilityManager : MonoBehaviour
         if (cost.IsFree)
             return true;
 
-        return ShelterSceneDataManager.Instance != null
-            && ShelterSceneDataManager.Instance.CanSpendResources(cost);
+        return Storage != null && Storage.CanSpendResources(cost);
     }
 
     /// <summary>
@@ -235,13 +236,13 @@ public class FacilityManager : MonoBehaviour
         CostBundle cost = facility.GetUpgradeCost(state.UpgradeLevel);
         if (!cost.IsFree)
         {
-            if (ShelterSceneDataManager.Instance == null)
+            if (Storage == null)
             {
-                Debug.LogWarning("[FacilityManager] ShelterSceneDataManager is not available. Cannot spend upgrade cost.", this);
+                Debug.LogWarning("[FacilityManager] StorageFacility is not available. Cannot spend upgrade cost.", this);
                 return false;
             }
 
-            if (!ShelterSceneDataManager.Instance.TrySpendResources(cost))
+            if (!Storage.TrySpendResources(cost))
                 return false;
         }
 
@@ -250,6 +251,47 @@ public class FacilityManager : MonoBehaviour
         ShelterSceneDataManager.Instance?.MarkDirty();
         return true;
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    /// <summary>
+    /// Development trainer entry point. Forces a facility to an unlocked level
+    /// without charging resources, then applies the level to its live visuals.
+    /// </summary>
+    public bool TrySetUpgradeLevelForDebug(string facilityId, int upgradeLevel)
+    {
+        FacilityState state = GetState(facilityId);
+        if (state == null
+            || !m_facilities.TryGetValue(
+                facilityId,
+                out IFacilityUpgradeable facility))
+        {
+            return false;
+        }
+
+        int clampedLevel = Mathf.Clamp(
+            upgradeLevel,
+            0,
+            facility.MaxUpgradeLevel);
+
+        state.Unlock();
+        state.SetUpgradeLevel(clampedLevel);
+        facility.ApplyUnlockState(true);
+        facility.ApplyUpgradeLevel(clampedLevel);
+        ShelterSceneDataManager.Instance?.MarkDirty();
+        return true;
+    }
+
+    /// <summary>Returns the registered facility's maximum internal level index.</summary>
+    public int GetMaxUpgradeLevelForDebug(string facilityId)
+    {
+        return !string.IsNullOrWhiteSpace(facilityId)
+            && m_facilities.TryGetValue(
+                facilityId,
+                out IFacilityUpgradeable facility)
+            ? facility.MaxUpgradeLevel
+            : -1;
+    }
+#endif
 
     private FacilityRuntimeState GetOrCreateRuntimeState(FacilityDefinition definition)
     {

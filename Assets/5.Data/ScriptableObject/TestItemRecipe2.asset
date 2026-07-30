@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11869397ed8d2b8418f9d82e9dbd3d6f, type: 3}
+  m_Name: TestItemRecipe2
+  m_EditorClassIdentifier: Assembly-CSharp::ManufacturingRecipeDefinition
+  m_recipeId: magazine_01
+  m_resultItem: {fileID: 11400000, guid: 331050bb17196b444a5fc0e12a60fd5c, type: 2}
+  m_resultQuantityPerBatch: 1
+  m_requiredFacilityLevel: 2
+  m_unitWork: 5
+  m_unitCosts:
+  - m_resourceId: weapon_part_material
+    m_amount: 10

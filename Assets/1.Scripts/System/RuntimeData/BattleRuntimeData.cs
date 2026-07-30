@@ -63,26 +63,26 @@ public enum BattleEndReason
 [Serializable]
 public sealed class BattleResourceAmountData
 {
-    [SerializeField] private CurrencyType type;
+    [SerializeField] private string resourceId = string.Empty;
     [Min(0)][SerializeField] private int amount;
 
     /// <summary>자원 종류입니다.</summary>
-    public CurrencyType Type => type;
+    public string ResourceId => ResourceIds.Normalize(resourceId);
 
     /// <summary>0 이상으로 보정된 자원 수량입니다.</summary>
     public int Amount => Mathf.Max(0, amount);
 
     /// <summary>지정한 자원 종류와 수량으로 데이터를 생성합니다.</summary>
-    public BattleResourceAmountData(CurrencyType type, int amount)
+    public BattleResourceAmountData(string resourceId, int amount)
     {
-        this.type = type;
+        this.resourceId = ResourceIds.Normalize(resourceId);
         this.amount = Mathf.Max(0, amount);
     }
 
     /// <summary>현재 값을 복제한 새 자원 데이터를 반환합니다.</summary>
     public BattleResourceAmountData Clone()
     {
-        return new BattleResourceAmountData(Type, Amount);
+        return new BattleResourceAmountData(ResourceId, Amount);
     }
 
     /// <summary>현재 수량에 지정한 값을 더하고 0 이상으로 보정합니다.</summary>
@@ -838,21 +838,26 @@ public sealed class BattleEntryData
     }
 
     /// <summary>입장 시점의 공용 자원 수량을 종류별로 누적합니다.</summary>
-    public void AddStartingResource(CurrencyType type, int amount)
+    public void AddStartingResource(string resourceId, int amount)
     {
-        if (amount <= 0)
+        string id = ResourceIds.Normalize(resourceId);
+        if (string.IsNullOrEmpty(id) || amount <= 0)
         {
             return;
         }
 
-        BattleResourceAmountData existing = startingResources.Find(entry => entry.Type == type);
+        BattleResourceAmountData existing = startingResources.Find(
+            entry => string.Equals(
+                entry.ResourceId,
+                id,
+                StringComparison.Ordinal));
         if (existing != null)
         {
             existing.Add(amount);
             return;
         }
 
-        startingResources.Add(new BattleResourceAmountData(type, amount));
+        startingResources.Add(new BattleResourceAmountData(id, amount));
     }
 
     /// <summary>입장 스냅샷 전체를 깊은 복사하여 반환합니다.</summary>
@@ -869,7 +874,7 @@ public sealed class BattleEntryData
             BattleResourceAmountData resource = startingResources[i];
             if (resource != null)
             {
-                clone.AddStartingResource(resource.Type, resource.Amount);
+            clone.AddStartingResource(resource.ResourceId, resource.Amount);
             }
         }
 
@@ -1328,21 +1333,28 @@ public sealed class BattleRuntimeData
     }
 
     /// <summary>이번 배틀에서 획득한 자원 수량을 종류별로 누적합니다.</summary>
-    public void RecordResource(CurrencyType type, int amount)
+    public void RecordResource(string resourceId, int amount)
     {
-        if (!CanAcceptRuntimeChanges() || amount <= 0)
+        string id = ResourceIds.Normalize(resourceId);
+        if (!CanAcceptRuntimeChanges()
+            || string.IsNullOrEmpty(id)
+            || amount <= 0)
         {
             return;
         }
 
-        BattleResourceAmountData existing = acquiredResources.Find(entry => entry.Type == type);
+        BattleResourceAmountData existing = acquiredResources.Find(
+            entry => string.Equals(
+                entry.ResourceId,
+                id,
+                StringComparison.Ordinal));
         if (existing != null)
         {
             existing.Add(amount);
             return;
         }
 
-        acquiredResources.Add(new BattleResourceAmountData(type, amount));
+        acquiredResources.Add(new BattleResourceAmountData(id, amount));
     }
 
     /// <summary>전체 배틀 런타임 상태를 깊은 복사하여 반환합니다.</summary>

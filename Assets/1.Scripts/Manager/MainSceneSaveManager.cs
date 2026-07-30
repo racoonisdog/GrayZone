@@ -82,6 +82,16 @@ public class MainSceneSaveManager : MonoBehaviour
             }
         };
 
+        // Temporary test resources. Remove when new-game resource defaults are designed.
+        for (int i = 0; i < ResourceIds.All.Count; i++)
+        {
+            saveData.shared.resources.Add(new SaveData.ResourceAmountData
+            {
+                resourceId = ResourceIds.All[i],
+                amount = 9999
+            });
+        }
+
         AddStartingCharacters(saveData.shared);
         AddStartingFacilities(saveData.shelter);
         return saveData;

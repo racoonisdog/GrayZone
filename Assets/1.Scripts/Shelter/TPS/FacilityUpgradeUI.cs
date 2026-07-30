@@ -7,7 +7,7 @@ using TMPro;
 /// </summary>
 /// <remarks>
 /// 특정 시설을 알지 않고 <see cref="Open"/>에 받은 facilityId로 <see cref="FacilityManager"/>에서 데이터를 pull합니다.
-/// (시설 이름·제공 기능·비용/보유·업그레이드 실행 모두 FacilityManager/ShelterSceneDataManager 경유)
+/// (시설 이름·제공 기능·업그레이드 실행은 FacilityManager, 보유 자원 조회는 StorageFacility 경유)
 /// </remarks>
 public class FacilityUpgradeUI : MonoBehaviour
 {
@@ -90,15 +90,20 @@ public class FacilityUpgradeUI : MonoBehaviour
 
         // 비용 (줄마다 보유 vs 요구 비교, 부족=lack 색)
         ClearChildren(m_costRoot);
-        ShelterSceneDataManager sdm = ShelterSceneDataManager.Instance;
+        StorageFacility storage = ShelterSceneDataManager.Instance?.Storage;
         if (m_costRoot != null && m_costRowPrefab != null)
         {
-            foreach (CurrencyCost c in fm.GetUpgradeCost(m_facilityId).Costs)
+            foreach (ResourceCost c in fm.GetUpgradeCost(m_facilityId).Costs)
             {
-                int owned = sdm != null ? sdm.GetResourceAmount(c.Type) : 0;
+                int owned = storage != null
+                    ? storage.GetResourceAmount(c.ResourceId)
+                    : 0;
                 bool enough = owned >= c.Amount;
                 Instantiate(m_costRowPrefab, m_costRoot)
-                    .Set(c.Type.ToString(), $"{owned}/{c.Amount}", enough ? m_enoughColor : m_lackColor);
+                    .Set(
+                        c.ResourceId,
+                        $"{owned}/{c.Amount}",
+                        enough ? m_enoughColor : m_lackColor);
             }
         }
 

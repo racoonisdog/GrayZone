@@ -19,7 +19,7 @@ MonoBehaviour:
   npcType: 0
   reliability: 0
   maxHp: 100
-  injuryGauge: 20
+  injuryGauge: 10
   maxInjuryGauge: 100
   weaponSnapshot:
     weaponId: 

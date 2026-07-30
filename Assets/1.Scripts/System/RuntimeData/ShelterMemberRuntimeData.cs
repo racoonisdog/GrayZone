@@ -164,7 +164,7 @@ public sealed class ShelterMemberRuntimeData
         return true;
     }
 
-    public bool SetInjuryState(PlayerInjuryState state)
+    private bool SetInjuryState(PlayerInjuryState state)
     {
         if (injuryState == state)
             return false;
@@ -180,11 +180,6 @@ public sealed class ShelterMemberRuntimeData
         injuryGauge = clamped;
         bool stateChanged = SetInjuryState(PlayerInjuryStateRule.FromGauge(injuryGauge, MaxInjuryGauge));
         return gaugeChanged || stateChanged;
-    }
-
-    public bool RefreshInjuryStateFromGauge()
-    {
-        return SetInjuryState(PlayerInjuryStateRule.FromGauge(injuryGauge, MaxInjuryGauge));
     }
 
     public bool CompleteRecovery()
