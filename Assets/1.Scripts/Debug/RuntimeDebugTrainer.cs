@@ -13,10 +13,15 @@ using UnityEditor;
 /// </summary>
 /// <remarks>
 /// <para>
-/// 이 컴포넌트가 들어 있는 공용 프리팹을 테스트 씬에 배치하면 주변 런타임 컴포넌트를 자동 탐색합니다.
-/// 프리팹이 활성화된 동안에만 <see cref="GameDevMode"/>를 획득하며, Editor에서만 실제 트레이너가
-/// 생존하고 동작합니다. Player 빌드에서는 <c>Awake</c> 첫 단계에서 오브젝트를 제거합니다.
+/// 이 컴포넌트가 들어 있는 공용 프리팹은 필드 씬 시작 시 <see cref="FieldSceneDataManager"/>가 생성하며,
+/// 생성된 뒤 주변 런타임 컴포넌트를 자동 탐색합니다. 씬에 직접 배치해도 동작합니다.
+/// 개발 모드 자체는 <see cref="GameManager"/>가 소유하고 이 트레이너는 <see cref="GameDevMode"/>를 읽기만 합니다.
+/// Editor에서만 실제 트레이너가 생존하며, Player 빌드에서는 <c>Awake</c> 첫 단계에서 오브젝트를 제거합니다.
 /// IMGUI(OnGUI) 기반이라 별도의 uGUI 연결은 필요 없습니다.
+/// </para>
+/// <para>
+/// 동작 범위는 필드 씬으로 한정합니다. 판정 기준은 <see cref="FieldManager"/>의 존재이며,
+/// 셸터에는 별도의 트레이너가 있으므로 이쪽이 남의 씬 입력을 건드리지 않게 합니다.
 /// </para>
 /// <para>
 /// 값 조절은 기존 컴포넌트의 공개 setter를 그대로 사용하고, 무한 체력/장탄수/예비탄약 같은 치트는
@@ -29,7 +34,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
 {
     private static RuntimeDebugTrainer s_instance;
 
-    private bool m_ownsDevelopMode;
     private bool m_isDuplicate;
     private IInputModeController m_sceneInputModeController;
     private bool m_usesSceneInputModeController;
@@ -123,11 +127,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         s_instance = this;
-        AcquireDevelopMode();
 
         if (!GameDevMode.DebugFeaturesEnabled)
         {
-            Debug.LogWarning("[RuntimeDebugTrainer] 일반 Player 빌드에서는 런타임 디버그 트레이너가 비활성화됩니다.");
+            Debug.LogWarning("[RuntimeDebugTrainer] 개발 모드가 꺼져 있어 런타임 디버그 트레이너가 비활성화됩니다.");
             enabled = false;
         }
 #endif
@@ -151,7 +154,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         s_instance = this;
-        AcquireDevelopMode();
 #endif
     }
 
@@ -162,8 +164,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
             m_open = false;
             UnlockControls();
         }
-
-        ReleaseDevelopMode();
     }
 
     private void OnDestroy()
@@ -173,40 +173,47 @@ public class RuntimeDebugTrainer : MonoBehaviour
             s_instance = null;
         }
 
-        ReleaseDevelopMode();
+        // 씬 전환으로 파괴될 때는 OnDisable의 복구가 이미 끝난 뒤이지만, 그 복구는 함께 파괴되는
+        // FieldManager를 거치므로 실패할 수 있습니다. 커서만은 남기지 않도록 여기서 마지막으로 되돌립니다.
+        // 커서 상태는 씬을 넘어 유지되는 전역 값이라, 열린 채로 전환하면 다음 씬이 잠긴 커서를 물려받습니다.
+        RestoreCursorForSceneExit();
 
         // DontDestroyOnLoad로 남겨둔 스폰 원본 홀더를 함께 정리합니다.
+        // 이 홀더는 씬을 넘어 살아남으므로, 트레이너가 사라질 때 반드시 같이 지워야 셸터로 따라가지 않습니다.
         if (m_enemyTemplateHolder != null)
         {
             Destroy(m_enemyTemplateHolder);
+            m_enemyTemplateHolder = null;
+            m_enemyTemplate = null;
         }
+
+        m_sceneInputModeController = null;
+        m_usesSceneInputModeController = false;
     }
 
-    private void AcquireDevelopMode()
+    /// <summary>
+    /// 트레이너가 사라질 때 커서를 게임플레이 기본값으로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// 다음 씬이 셸터처럼 커서를 쓰는 씬이면 그 씬의 UI가 다시 풀어 줍니다.
+    /// 반대로 잠긴 채 넘어가면 커서를 되돌릴 주체가 없어 조작이 막히므로, 잠그는 쪽이 아니라 푸는 쪽으로 둡니다.
+    /// </remarks>
+    private void RestoreCursorForSceneExit()
     {
-        if (m_ownsDevelopMode)
+        if (!m_open)
         {
             return;
         }
 
-        GameDevMode.SetDevelopMode(true);
-        m_ownsDevelopMode = true;
+        m_open = false;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
-    private void ReleaseDevelopMode()
-    {
-        if (!m_ownsDevelopMode)
-        {
-            return;
-        }
-
-        GameDevMode.SetDevelopMode(false);
-        m_ownsDevelopMode = false;
-    }
 
     private void Update()
     {
-        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled)
+        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled || !IsFieldScene())
         {
             if (m_open)
             {
@@ -231,6 +238,17 @@ public class RuntimeDebugTrainer : MonoBehaviour
             Cursor.visible = true;
             SuppressActivePlayerInput();
         }
+    }
+
+    /// <summary>지금 씬이 이 트레이너가 동작해도 되는 필드 씬인지 확인합니다.</summary>
+    /// <remarks>
+    /// 판정 기준은 <see cref="FieldManager"/>의 존재입니다. 씬 이름으로 판정하면 테스트 씬이 늘어날 때마다
+    /// 목록을 고쳐야 하지만, 필드 씬이라면 반드시 이 컨트롤러를 두므로 존재 여부가 더 안정적인 기준입니다.
+    /// 디버그 모드를 켠 빌드에서 필드 씬에 있다면 토글 키로 언제든 열 수 있고, 필드가 아니면 키를 받지 않습니다.
+    /// </remarks>
+    private bool IsFieldScene()
+    {
+        return TryResolveSceneInputModeController();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -293,6 +311,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
     }
 
     /// <summary>커서를 다시 잠그고 현재 조작 캐릭터의 입력을 복구해 TPS 조작으로 돌아갑니다.</summary>
+    /// <remarks>
+    /// 씬을 벗어나는 중이라면 범용 안전장치를 쓰지 않습니다. 그 처리는 커서를 잠그는데,
+    /// 씬이 사라지는 시점에는 되돌려 줄 주체가 없어 다음 씬이 잠긴 커서를 물려받기 때문입니다.
+    /// </remarks>
     private void UnlockControls()
     {
         if (m_usesSceneInputModeController && TryRestoreSceneInputMode())
@@ -302,6 +324,15 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         m_usesSceneInputModeController = false;
+
+        // 필드 씬이 이미 사라진 뒤라면 복구할 대상도 없습니다. 커서만 풀어 두고 끝냅니다.
+        if (!IsFieldScene())
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            return;
+        }
+
         UnlockControlsFallback();
     }
 
@@ -372,25 +403,31 @@ public class RuntimeDebugTrainer : MonoBehaviour
         return TrySetSceneInputMode(m_inputModeBeforeTrainerOpen);
     }
 
-    /// <summary>활성 씬에서 입력 모드 계약 구현체를 캐시합니다.</summary>
+    /// <summary>현재 씬의 <see cref="FieldManager"/>를 입력 모드 계약 구현체로 캐시합니다.</summary>
+    /// <remarks>
+    /// 이 트레이너는 필드 전용이므로 계약 구현체를 아무거나 받지 않고 <see cref="FieldManager"/>로 한정합니다.
+    /// 셸터에는 <c>ShelterTrainerOverlay</c>가 따로 있어, 임의의 구현체를 잡으면 남의 씬 입력을 건드리게 됩니다.
+    /// 캐시는 파괴된 오브젝트를 계속 붙잡지 않도록 Unity의 null 판정으로 매번 확인합니다.
+    /// 씬이 바뀌면 이전 씬의 FieldManager가 파괴되므로 여기서 자연히 재탐색이 일어납니다.
+    /// </remarks>
     private bool TryResolveSceneInputModeController()
     {
-        if (m_sceneInputModeController != null)
+        // MonoBehaviour의 == null은 파괴된 오브젝트도 true를 주므로, 씬 전환으로 죽은 캐시가 걸러집니다.
+        if (m_sceneInputModeController is MonoBehaviour cached && cached != null)
         {
             return true;
         }
 
-        MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-        for (int i = 0; i < behaviours.Length; i++)
+        m_sceneInputModeController = null;
+
+        FieldManager fieldManager = FieldManager.Instance;
+        if (fieldManager == null)
         {
-            if (behaviours[i] is IInputModeController inputModeController)
-            {
-                m_sceneInputModeController = inputModeController;
-                return true;
-            }
+            return false;
         }
 
-        return false;
+        m_sceneInputModeController = fieldManager;
+        return true;
     }
 
     /// <summary>메뉴가 열린 동안 현재 조작 캐릭터의 입력이 다시 활성화됐으면(전환 등) 즉시 비활성화합니다.</summary>

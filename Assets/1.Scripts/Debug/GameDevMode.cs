@@ -4,16 +4,20 @@ using UnityEngine;
 /// 개발/플레이테스트용 디버그·트레이너 기능의 전역 활성화 스위치입니다.
 /// </summary>
 /// <remarks>
-/// 런타임 디버그 트레이너 프리팹이 활성화되어 있는 동안에만 개발 모드를 켭니다.
+/// 이 값의 소유자는 <see cref="GameManager"/>입니다. 게임 시작 시 한 번 설정하고, 이후 게임 수명을 따릅니다.
 /// <para>
-/// 정적 상태의 기본값은 항상 <c>false</c>입니다. 트레이너가 씬에 존재하더라도 Editor 또는
+/// 정적 상태의 기본값은 항상 <c>false</c>입니다. 개발 모드를 켰더라도 Editor 또는
 /// Development Build가 아니면 디버그 기능은 활성화되지 않습니다.
+/// </para>
+/// <para>
+/// 트레이너 같은 디버그 도구는 이 값을 읽기만 합니다. 도구가 자기 활성 상태로 이 값을 켜면,
+/// 그 도구를 만들지 판단하는 쪽이 도구가 켜 줄 값을 봐야 하는 순환이 생기기 때문입니다.
 /// </para>
 /// </remarks>
 public static class GameDevMode
 {
     /// <summary>
-    /// 현재 런타임 디버그 트레이너가 개발 모드를 소유하고 있는지 여부입니다.
+    /// 개발 모드가 켜져 있는지 여부입니다. <see cref="GameManager"/>가 설정합니다.
     /// </summary>
     public static bool IsDevelopMode { get; private set; }
 
@@ -33,7 +37,7 @@ public static class GameDevMode
         IsDevelopMode = false;
     }
 
-    /// <summary>런타임 디버그 트레이너가 활성 상태를 획득하거나 반납할 때 호출합니다.</summary>
+    /// <summary>개발 모드를 켜거나 끕니다. <see cref="GameManager"/>가 호출합니다.</summary>
     public static void SetDevelopMode(bool enabled)
     {
         IsDevelopMode = enabled;

@@ -122,6 +122,31 @@ public class FieldSceneDataManager : MonoBehaviour
     [Tooltip("자원 획득 시스템이 연결되기 전, Result UI 슬롯에 표시할 목업 자원입니다.")]
     [SerializeField] private List<ResourceResult> m_mockResources = new();
 
+    [Foldout("References")]
+    [Tooltip("필드 데이터가 확정된 뒤 생성할 필드 씬 컨트롤러 프리팹입니다. " +
+             "씬에 이미 배치되어 있으면 그쪽을 그대로 쓰고 생성하지 않습니다.")]
+    [SerializeField] private GameObject m_fieldManagerPrefab;
+
+    [Foldout("Debug")]
+    [Tooltip("Editor 또는 Development Build에서 필드 씬 시작 시 생성할 런타임 디버그 트레이너 프리팹입니다. " +
+             "비워 두면 트레이너를 생성하지 않습니다. 일반 빌드에서는 이 값과 무관하게 생성하지 않습니다.")]
+    [SerializeField] private GameObject m_debugTrainerPrefab;
+
+    private static FieldSceneDataManager s_instance;
+
+    /// <summary>현재 필드 씬의 인스턴스입니다. 필드 씬이 아니면 <c>null</c>입니다.</summary>
+    /// <remarks>
+    /// 씬에 속하므로 씬 전환과 함께 사라집니다. 전역 정본은 <see cref="GameDataManager"/>가 따로 소유하며,
+    /// 이쪽은 한 번의 필드 진행 동안만 유효한 데이터입니다.
+    /// </remarks>
+    public static FieldSceneDataManager Instance => s_instance;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticState()
+    {
+        s_instance = null;
+    }
+
     private readonly HashSet<EnemyHealth> m_subscribedEnemies = new();
     private readonly HashSet<EnemyHealth> m_countedEnemyActivations = new();
     private readonly Dictionary<WeaponController, Action<CombatDamage.HitFeedback>> m_weaponKillHandlers = new();
@@ -158,7 +183,25 @@ public class FieldSceneDataManager : MonoBehaviour
     /// <summary>런타임 시작 전에 필요한 씬 참조를 확보합니다.</summary>
     private void Awake()
     {
+        // 필드 데이터 정본은 씬에 하나만 있어야 합니다. 중복이 있으면 정산이 두 갈래로 갈립니다.
+        if (s_instance != null && s_instance != this)
+        {
+            Debug.LogWarning("[FieldSceneDataManager] 씬에 이미 인스턴스가 있어 중복된 쪽을 제거합니다.", this);
+            Destroy(gameObject);
+            return;
+        }
+
+        s_instance = this;
+
         AutoFindReferences();
+    }
+
+    private void OnDestroy()
+    {
+        if (s_instance == this)
+        {
+            s_instance = null;
+        }
     }
 
     /// <summary>외부 입장 데이터가 주입되지 않았으면 현재 씬 기준으로 필드 데이터를 초기화합니다.</summary>
@@ -168,6 +211,74 @@ public class FieldSceneDataManager : MonoBehaviour
         {
             Initialize(CreateSceneEntryData());
         }
+
+        // 데이터가 확정된 뒤에 씬 컨트롤러와 디버그 도구를 세웁니다.
+        // 둘 다 스쿼드·무기·적 참조를 전제로 하므로, 바인딩이 끝나기 전에 만들면 잡을 대상이 없습니다.
+        EnsureFieldManager();
+        TrySpawnDebugTrainer();
+    }
+
+    /// <summary>
+    /// 필드 씬 컨트롤러가 없으면 프리팹으로 생성합니다.
+    /// </summary>
+    /// <remarks>
+    /// 데이터 바인딩이 끝난 이 시점에 만들어야 <see cref="FieldManager"/>가 <c>Awake</c>에서
+    /// 곧바로 자기 일을 할 수 있습니다. 실행 순서를 어트리뷰트로 맞추는 대신 생성 시점으로 보장하는 방식이라,
+    /// 컨트롤러 쪽에 "아직 준비되지 않았다"는 분기를 두지 않아도 됩니다.
+    /// 씬에 미리 배치된 것이 있으면 그대로 존중합니다.
+    /// </remarks>
+    private void EnsureFieldManager()
+    {
+        if (FieldManager.Instance != null)
+        {
+            return;
+        }
+
+        if (m_fieldManagerPrefab == null)
+        {
+            Debug.LogWarning(
+                "[FieldSceneDataManager] 씬에 FieldManager가 없고 생성할 프리팹도 지정되지 않았습니다. 입력 모드 전환이 동작하지 않습니다.",
+                this);
+            return;
+        }
+
+        Instantiate(m_fieldManagerPrefab);
+    }
+
+    /// <summary>
+    /// 개발용 실행 환경에서만 런타임 디버그 트레이너를 필드 씬에 생성합니다.
+    /// </summary>
+    /// <remarks>
+    /// 트레이너를 씬에 미리 배치하지 않고 여기서 만드는 이유는, 필드 씬마다 배치를 반복하지 않고
+    /// 트레이너의 수명을 필드 씬에 묶기 위해서입니다. 생성물은 씬에 속하므로 씬 전환과 함께 사라집니다.
+    /// <para>
+    /// 판정에 <see cref="GameDevMode.DebugFeaturesEnabled"/>를 쓰지 않습니다. 그 값은 트레이너가 켜 주는 것이라
+    /// 생성 조건으로 삼으면 아무도 트레이너를 만들지 못합니다. 그래서 실행 환경만 확인하고,
+    /// 실제 기능 활성화 여부는 생성된 트레이너가 스스로 판단하도록 둡니다.
+    /// </para>
+    /// </remarks>
+    private void TrySpawnDebugTrainer()
+    {
+        if (m_debugTrainerPrefab == null)
+        {
+            return;
+        }
+
+        // 일반 Player 빌드에서는 만들지 않습니다. 트레이너 자신도 Awake에서 스스로를 제거하지만,
+        // 애초에 생성하지 않는 편이 한 프레임짜리 오브젝트조차 남기지 않아 깔끔합니다.
+        if (!Application.isEditor && !Debug.isDebugBuild)
+        {
+            return;
+        }
+
+        // 씬에 이미 배치해 둔 트레이너가 있으면 그것을 존중합니다. 트레이너는 중복을 스스로 정리하지만,
+        // 그 정리는 만들어진 뒤에 일어나므로 여기서 미리 막는 편이 낫습니다.
+        if (FindFirstObjectByType<RuntimeDebugTrainer>(FindObjectsInactive.Include) != null)
+        {
+            return;
+        }
+
+        Instantiate(m_debugTrainerPrefab);
     }
 
     /// <summary>필드가 진행 중인 동안 경과 시간을 누적합니다.</summary>

@@ -16,6 +16,18 @@ using VInspector;
 /// </remarks>
 public class SquadManager : MonoBehaviour
 {
+    private static SquadManager s_instance;
+
+    /// <summary>현재 씬의 인스턴스입니다. 스쿼드가 없는 씬이면 <c>null</c>입니다.</summary>
+    /// <remarks>씬에 속하므로 씬 전환과 함께 사라집니다. 셸터처럼 스쿼드가 없는 씬에서는 없는 것이 정상입니다.</remarks>
+    public static SquadManager Instance => s_instance;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticState()
+    {
+        s_instance = null;
+    }
+
     [Foldout("Squad Options")]
     [Tooltip("관리할 스쿼드 멤버 목록입니다.")]
     [FormerlySerializedAs("squadMembers")]
@@ -150,9 +162,27 @@ public class SquadManager : MonoBehaviour
     /// </summary>
     private void Awake()
     {
+        // 스쿼드 구성은 씬에 하나만 있어야 합니다. 중복이 있으면 조작 캐릭터가 둘로 갈립니다.
+        if (s_instance != null && s_instance != this)
+        {
+            Debug.LogWarning("[SquadManager] 씬에 이미 인스턴스가 있어 중복된 쪽을 제거합니다.", this);
+            Destroy(gameObject);
+            return;
+        }
+
+        s_instance = this;
+
         AutoFindReferences();
         NormalizeMemberIndex();
         ApplyInitialMemberRolePresets();
+    }
+
+    private void OnDestroy()
+    {
+        if (s_instance == this)
+        {
+            s_instance = null;
+        }
     }
 
     private void OnEnable()

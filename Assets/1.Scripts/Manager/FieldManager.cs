@@ -11,6 +11,8 @@ using UnityEngine;
 /// </remarks>
 public class FieldManager : MonoBehaviour, IInputModeController
 {
+    private static FieldManager s_instance;
+
     [Tooltip("현재 직접 조작 중인 스쿼드 멤버를 제공하는 필드 스쿼드 매니저입니다. 비어 있으면 Awake에서 한 번 탐색합니다.")]
     [SerializeField] private SquadManager m_squadManager;
 
@@ -20,11 +22,38 @@ public class FieldManager : MonoBehaviour, IInputModeController
     private ThirdPersonController m_cachedThirdPersonController;
     private AimController m_cachedAimController;
 
+    /// <summary>현재 필드 씬의 인스턴스입니다. 필드 씬이 아니면 <c>null</c>입니다.</summary>
+    /// <remarks>씬에 속하므로 씬 전환과 함께 사라집니다. 필드 밖에서는 존재하지 않는 것이 정상입니다.</remarks>
+    public static FieldManager Instance => s_instance;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticState()
+    {
+        s_instance = null;
+    }
+
     private void Awake()
     {
+        // 씬에 미리 배치된 것이 있으면 그쪽이 먼저 자리를 잡고, 뒤에 생긴 쪽이 물러납니다.
+        if (s_instance != null && s_instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        s_instance = this;
+
         if (m_squadManager == null)
         {
             m_squadManager = FindFirstObjectByType<SquadManager>();
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (s_instance == this)
+        {
+            s_instance = null;
         }
     }
 
