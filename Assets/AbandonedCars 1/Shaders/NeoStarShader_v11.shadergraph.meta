@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: fe2c82df5efc2d74daa6c427b734e3b5
+ScriptedImporter:
+  internalIDToNameTable: []
+  externalObjects: {}
+  serializedVersion: 2
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+  script: {fileID: 11500000, guid: 625f186215c104763be7675aa2d941aa, type: 3}
+AssetOrigin:
+  serializedVersion: 1
+  productId: 307215
+  packageName: Post Apocalyptic Abandoned Cars Vol1
+  packageVersion: 1.0
+  assetPath: Assets/AbandonedCars/Shaders/NeoStarShader_v11.shadergraph
+  uploadId: 722036
