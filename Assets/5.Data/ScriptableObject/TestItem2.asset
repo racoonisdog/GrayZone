@@ -14,6 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
   m_itemDefinitionId: magazine
   m_displayName: magazine
-  m_info: "\uD0C4\uCC3D \uC6A9\uB7C9 +5\n\uC774\uB3D9\uC18D\uB3C4 -5%"
+  m_info: "\uD0C4\uCC3D \uC6A9\uB7C9 +5\n\uC2DC\uC124 2\uB808\uBCA8 \uD574\uAE08"
   m_icon: {fileID: 21300000, guid: d2ca5627890dbf24bb7c532a8d15606d, type: 3}
   m_category: 2
