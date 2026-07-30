@@ -19,6 +19,7 @@ MonoBehaviour:
   m_shootDelay: 0.12
   m_reloadTime: 1.5
   m_hitscanDamage: 1
+  m_allowHeadshot: 1
   m_headshotDamageMultiplier: 2
   m_hitscanRange: 100
   m_hipfireMinSpread: 4
@@ -28,7 +29,7 @@ MonoBehaviour:
   m_hipfireSpreadRecoveryPerSecond: 8
   m_hipfireSpreadRecoveryDelay: 0.3
   m_adsMinSpread: 0
-  m_adsMaxSpread: 6
+  m_adsMaxSpread: 4.2
   m_adsMinSpreadShotCount: 3
   m_adsSpreadIncreasePerShot: 1
   m_adsSpreadRecoveryPerSecond: 8
@@ -41,3 +42,4 @@ MonoBehaviour:
   m_recoilRoll: 0.5
   m_rollKickPattern: 0
   m_recoilFovPunch: 1
+  m_stoppingPower: 0
