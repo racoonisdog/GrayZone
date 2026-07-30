@@ -153,7 +153,7 @@ public class AimController : MonoBehaviour
     [SerializeField] private Rig m_aimRig;
 
     [Foldout("Audio Options")]
-    [Tooltip("사격 사운드입니다. 실제 사격 사운드를 WeaponController가 처리한다면 비워둘 수 있습니다.")]
+    [Tooltip("사격 사운드입니다. 실제 사격 사운드를 Gun가 처리한다면 비워둘 수 있습니다.")]
     [FormerlySerializedAs("shootingSound")]
     [SerializeField] private AudioClip m_shootingSound;
 
@@ -706,7 +706,7 @@ public class AimController : MonoBehaviour
 
         if (m_weaponController == null)
         {
-            Debug.LogWarning("[AimController] WeaponController를 자식 오브젝트에서 찾지 못했습니다. 사격과 재장전 무기 처리는 생략됩니다.", this);
+            Debug.LogWarning("[AimController] Gun를 자식 오브젝트에서 찾지 못했습니다. 사격과 재장전 무기 처리는 생략됩니다.", this);
         }
 
         return isValid;

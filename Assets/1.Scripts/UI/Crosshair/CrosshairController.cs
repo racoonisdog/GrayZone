@@ -381,7 +381,7 @@ public class CrosshairController : MonoBehaviour
 
     // (디버그) 값 복사가 아니라 전환 시점에 연결된 라이브 소스 포인터를 통해 현재값을 읽는 읽기전용 게터입니다.
     // 별도 매 프레임 업데이트 없이 인스펙터 리페인트 때마다 포인터로 현재값을 당겨옵니다.
-    [Tooltip("(디버그) WeaponController에서 읽어온 현재 spread degree입니다. 실제 탄의 랜덤 방향이 아니라 발사 cone의 현재 크기(콘 반각=하드캡)입니다.")]
+    [Tooltip("(디버그) Gun에서 읽어온 현재 spread degree입니다. 실제 탄의 랜덤 방향이 아니라 발사 cone의 현재 크기(콘 반각=하드캡)입니다.")]
     [ShowInInspector] private float DebugSpreadDegrees => m_debugSpreadSource != null ? m_debugSpreadSource() : 0.0f;
 
     [Tooltip("(디버그) 콘 반각 대비 표시 배율(tan 공간, 수정 불가)입니다. 현재 표시 기준(basis)과 마지막으로 받은 무기 분포/집중도로 계산되는 중간값이며, 팔 끝이 탄이 실제로 몰리는 반경을 가리키게 합니다.")]

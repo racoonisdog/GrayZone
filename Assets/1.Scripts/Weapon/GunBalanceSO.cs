@@ -14,7 +14,7 @@ using UnityEngine.Serialization;
 [CreateAssetMenu(fileName = "GunBalanceSO", menuName = "GrayZone/Weapon/Gun Balance SO")]
 public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
 {
-    // 시트에서 이 행이 어느 무기인지 식별하는 값입니다. WeaponController에는 대응 필드가 없어 바인딩되지 않습니다.
+    // 시트에서 이 행이 어느 무기인지 식별하는 값입니다. Gun에는 대응 필드가 없어 바인딩되지 않습니다.
     [Header("Identity")]
     [Tooltip("테이블과 향후 런타임 어댑터에서 사용할 고정 무기 ID입니다.")]
     [SerializeField] private string m_weaponId = "weapon.rifle.01";
@@ -113,7 +113,7 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("발사 1회당 화면 연출용 FOV 펀치 크기(도)입니다.")]
     [SerializeField] private float m_recoilFovPunch = 1f;
 
-    // WeaponController에 대응 필드가 아직 없어 바인딩되지 않습니다. 경직 소비를 구현하면 그때 연결됩니다.
+    // Gun에 대응 필드가 아직 없어 바인딩되지 않습니다. 경직 소비를 구현하면 그때 연결됩니다.
     [Header("Impact")]
     [Tooltip("명중 시 적 경직력 누적에 더하는 저지력입니다. 피해와 별개이며, 경직 전달/소비 구현 전까지 데이터 자리만 둡니다.")]
     [SerializeField] private float m_stoppingPower = 0f;

@@ -554,12 +554,12 @@ public class PlayerbleUnitData : MonoBehaviour
     }
 
     /// <summary>
-    /// 관찰할 무기 컨트롤러를 설정합니다.
+    /// 관찰할 총기를 설정합니다.
     /// </summary>
-    /// <param name="weaponController">새 무기 컨트롤러입니다.</param>
-    public void SetWeaponController(Gun weaponController)
+    /// <param name="gun">새로 관찰할 총기입니다.</param>
+    public void SetGun(Gun gun)
     {
-        if (m_weaponController == weaponController)
+        if (m_weaponController == gun)
         {
             return;
         }
@@ -570,7 +570,7 @@ public class PlayerbleUnitData : MonoBehaviour
             UnsubscribeWeapon();
         }
 
-        m_weaponController = weaponController;
+        m_weaponController = gun;
 
         if (wasActive)
         {

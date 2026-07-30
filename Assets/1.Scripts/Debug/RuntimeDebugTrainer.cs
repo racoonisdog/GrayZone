@@ -708,7 +708,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         Gun weapon = target.Gun;
         if (weapon == null)
         {
-            GUILayout.Label("WeaponController를 찾을 수 없습니다.");
+            GUILayout.Label("Gun를 찾을 수 없습니다.");
             return;
         }
 
