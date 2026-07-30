@@ -511,6 +511,9 @@ public class RuntimeDebugTrainer : MonoBehaviour
         GUILayout.Space(6);
         DrawEnemySpawnSection();
 
+        GUILayout.Space(6);
+        DrawFieldControlSection();
+
         GUILayout.EndScrollView();
 
         DrawWindowFooter();
@@ -1018,6 +1021,43 @@ public class RuntimeDebugTrainer : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
     // 적(좀비) 스폰 섹션
     // ─────────────────────────────────────────────────────────────
+
+    /// <summary>탈출 지점까지 가지 않고 필드를 끝내는 디버그 조작을 그립니다.</summary>
+    /// <remarks>
+    /// 정산과 결과 UI를 확인하는 데 쓰는 지름길입니다. 판정만 건너뛰고 이후 절차는
+    /// <see cref="EscapeSystem.ForceEscape"/>를 통해 실제 탈출과 같은 경로를 타므로 결과가 달라지지 않습니다.
+    /// </remarks>
+    private void DrawFieldControlSection()
+    {
+        GUILayout.Label("■ 필드 제어", m_headerStyle);
+
+        EscapeSystem escapeSystem = FindFirstObjectByType<EscapeSystem>(FindObjectsInactive.Include);
+        FieldSceneDataManager fieldData = FieldSceneDataManager.Instance;
+
+        if (escapeSystem == null)
+        {
+            GUILayout.Label("EscapeSystem을 찾을 수 없어 즉시 탈출을 쓸 수 없습니다.");
+            return;
+        }
+
+        if (fieldData != null && fieldData.IsFinalized)
+        {
+            GUILayout.Label($"이미 정산이 끝났습니다. (처치 {fieldData.KillCount})");
+            return;
+        }
+
+        GUILayout.Label(fieldData != null
+            ? $"현재 처치 {fieldData.KillCount} / 임무 {(fieldData.MissionCompleted ? "달성" : "미달성")}"
+            : "필드 데이터 매니저를 찾을 수 없습니다. 정산 없이 결과 UI만 열릴 수 있습니다.");
+
+        if (GUILayout.Button("즉시 탈출 (정산 후 결과 UI)", GUILayout.Height(26)))
+        {
+            // 결과 UI가 입력을 가져가므로 트레이너를 먼저 닫습니다.
+            // 열어 둔 채로 두면 트레이너와 결과 UI가 같은 커서를 두고 다툽니다.
+            SetMenuOpen(false);
+            escapeSystem.ForceEscape();
+        }
+    }
 
     private void DrawEnemySpawnSection()
     {

@@ -164,6 +164,18 @@ public class EscapeSystem : MonoBehaviour
         return playerData != null && playerData.IsPlayerSquadMember;
     }
 
+    /// <summary>
+    /// 탈출 지점 진입 없이 즉시 탈출 절차를 실행합니다.
+    /// </summary>
+    /// <remarks>
+    /// 디버그 트레이너처럼 판정을 건너뛰고 정산을 확인해야 하는 도구가 쓰는 진입점입니다.
+    /// 실제 탈출과 같은 경로를 타야 정산 결과가 달라지지 않으므로, 절차를 복제하지 않고 이 메서드를 공유합니다.
+    /// </remarks>
+    public void ForceEscape()
+    {
+        ShowResultUI();
+    }
+
     /// <summary>필드를 탈출 사유로 최종 확정한 뒤 기존 Result UI에 정산 값을 표시합니다.</summary>
     private void ShowResultUI()
     {
