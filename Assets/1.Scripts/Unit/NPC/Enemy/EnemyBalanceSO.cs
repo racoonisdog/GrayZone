@@ -37,6 +37,13 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("대상 방향으로 회전할 때 사용하는 보간 속도입니다.")]
     [SerializeField] private float m_rotationSpeed = 8f;
 
+    [Header("Idle Variation")]
+    [Tooltip("대기 동작 혼합 비율의 최솟값입니다. 개체마다 이 범위에서 한 번 뽑아 고정합니다.")]
+    [SerializeField] private float m_idleTypeMin = 0f;
+
+    [Tooltip("대기 동작 혼합 비율의 최댓값입니다. 최솟값과 같으면 모든 개체가 같은 대기 동작을 씁니다.")]
+    [SerializeField] private float m_idleTypeMax = 1f;
+
     [Header("Detection")]
     [Tooltip("시야 판정을 다시 수행하는 주기(초)입니다. 최소값은 0.01초입니다.")]
     [FormerlySerializedAs("m_targetRefreshInterval")]
@@ -123,6 +130,13 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
 
     /// <summary>대상을 교체하는 데 필요한 경로 거리 차이(m)입니다.</summary>
     public float TargetSwitchPathDistanceDelta => Mathf.Max(0f, m_targetSwitchPathDistanceDelta);
+
+    /// <summary>대기 동작 혼합 비율의 최솟값입니다.</summary>
+    public float IdleTypeMin => Mathf.Min(m_idleTypeMin, m_idleTypeMax);
+
+    /// <summary>대기 동작 혼합 비율의 최댓값입니다.</summary>
+    /// <remarks>뒤집혀 적혀 있으면 둘을 바꿔 읽습니다. 뒤집힌 범위로는 값이 나오지 않기 때문입니다.</remarks>
+    public float IdleTypeMax => Mathf.Max(m_idleTypeMin, m_idleTypeMax);
 
     /// <summary>시야 감지 거리(m)입니다.</summary>
     public float SightRange => Mathf.Max(0f, m_sightRange);

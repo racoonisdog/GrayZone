@@ -36,10 +36,25 @@ public class AttackState : EnemyStateBase
         // 공격 중에는 이동하지 않습니다. 애니메이션의 짧은 전진은 슬라이스 2에서 다룹니다.
         Controller.StopMoving();
 
+        m_comboStep = 1;
+
         Controller.Attack?.BeginSwing();
         Controller.SetInAttackRangeAnimation(true);
-        Controller.PlayAttackAnimation();
+        Controller.PlayAttackAnimation(m_comboStep);
     }
+
+    /// <summary>
+    /// 지금 몇 번째 공격인지입니다. 1이 빠른 횡타, 2가 이어지는 어퍼컷입니다.
+    /// </summary>
+    /// <remarks>
+    /// 두 공격은 하나의 취소 불가능한 연타가 아닙니다. 앞 공격의 후딜레이가 정상적으로 끝났을 때만
+    /// 다음 공격으로 이어지며, 도중에 끊기면 이어지지 않습니다.
+    /// 설계 근거: 공용 `변이체 잡몹 1 콘텐츠` §8.3(패턴 B-2 진입 판단).
+    /// </remarks>
+    private int m_comboStep;
+
+    /// <summary>이어지는 공격까지 포함한 한 교전에서의 최대 공격 수입니다.</summary>
+    private const int MaxComboStep = 2;
 
     public override void Tick()
     {
@@ -71,6 +86,13 @@ public class AttackState : EnemyStateBase
     public override void Exit()
     {
         Controller.SetInAttackRangeAnimation(false);
+
+        // 공격 스테이트는 IsAttack이 false가 되어야 이동으로 돌아갑니다.
+        Controller.EndAttackAnimation();
+
+        // 판정 콜라이더는 클립의 Off 이벤트가 끄는 것이 정상 경로입니다.
+        // 다만 클립이 중간에 끊기면 그 이벤트가 오지 않으므로, 상태를 벗어날 때 반드시 다시 끕니다.
+        Controller.Attack?.SetHitboxActive(false);
     }
 
     /// <summary>
@@ -91,8 +113,9 @@ public class AttackState : EnemyStateBase
     /// <remarks>
     /// 피해를 여기서 넣지 않습니다. 실제 적중은 손에 달린 판정 콜라이더가 켜져 있는 동안 닿은 것으로 결정되며,
     /// 그 콜라이더가 <see cref="EnemyAttack.TryApplyDamageTo"/>를 부릅니다.
-    /// TODO(판정 콜라이더): 이 지점에서 AttackPoint_L/_R을 켜고 끄는 배선이 아직 없습니다.
-    /// 켜고 끄는 주체를 애니메이션 키프레임으로 할지 애니메이션 이벤트로 할지 미결이며, 정해지면 연결합니다.
+    /// 콜라이더를 켜고 끄는 주체는 공격 클립의 애니메이션 이벤트로 정했습니다.
+    /// 클립이 <c>OnAttackHitboxOn</c>과 <c>OnAttackHitboxOff</c>를 부르고, 그 둘이
+    /// <see cref="EnemyAttack.SetHitboxActive"/>까지 이어집니다.
     /// </remarks>
     private void DoImpact()
     {
@@ -107,11 +130,25 @@ public class AttackState : EnemyStateBase
     private void FinishSwing()
     {
         SquadMemberController target = Controller.Sensor != null ? Controller.Sensor.CurrentTarget : null;
+        bool canAttackAgain = target != null && Controller.Attack != null && Controller.Attack.CanStartAttack(target);
 
-        if (target != null && Controller.Attack != null && Controller.Attack.CanStartAttack(target))
+        if (canAttackAgain && m_comboStep < MaxComboStep)
         {
-            // 같은 상태로 다시 들어가기 위해 진입 처리를 직접 호출합니다.
-            // SetSubState는 같은 상태면 무시하므로 여기서는 쓸 수 없습니다.
+            // 앞 공격의 후딜레이가 정상적으로 끝났으므로 이어지는 공격으로 넘어갑니다.
+            m_comboStep++;
+            m_startTime = Time.time;
+            m_impactDone = false;
+            m_impactTime = 0f;
+
+            Controller.Attack?.BeginSwing();
+            Controller.PlayAttackAnimation(m_comboStep);
+            return;
+        }
+
+        if (canAttackAgain)
+        {
+            // 이어지는 공격까지 마쳤으면 연계를 풀고 첫 공격부터 다시 시작합니다.
+            // SetSubState는 같은 상태면 무시하므로 진입 처리를 직접 호출합니다.
             Enter();
             return;
         }

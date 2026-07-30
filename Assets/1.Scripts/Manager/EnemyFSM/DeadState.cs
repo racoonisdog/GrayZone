@@ -23,6 +23,10 @@ public class DeadState : EnemyStateBase
         m_destroyTime = Time.time + Controller.DestroyDelay;
 
         DisableNavigation();
+
+        // 공격 도중 죽으면 Off 이벤트가 오지 않습니다. 상태 표시까지 함께 내려 둡니다.
+        Controller.Attack?.SetHitboxActive(false);
+
         DisableColliders();
 
         // 교전 중이었다면 알고 있던 대상 정보를 정리합니다.

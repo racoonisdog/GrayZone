@@ -38,6 +38,16 @@ public class EnemyController : MonoBehaviour
     /// <summary>대상 방향으로 회전할 때 사용하는 보간 속도입니다.</summary>
     [SerializeField] private float rotationSpeed = 8f;
 
+    [Header("Idle Variation")]
+    /// <summary>대기 동작 혼합 비율의 최솟값입니다.</summary>
+    [SerializeField] private float idleTypeMin = 0f;
+
+    /// <summary>대기 동작 혼합 비율의 최댓값입니다.</summary>
+    [SerializeField] private float idleTypeMax = 1f;
+
+    /// <summary>이 개체가 쓰는 대기 동작 혼합 비율입니다. 초기화 때 한 번 뽑아 바뀌지 않습니다.</summary>
+    public float IdleType { get; private set; }
+
     [Header("Detect")]
     /// <summary>대상을 처음 발견했을 때 경계 상태에 머무는 시간입니다.</summary>
     [SerializeField] private float alertDuration = 0.5f;
@@ -212,6 +222,8 @@ public class EnemyController : MonoBehaviour
         wanderSpeed = balance.WanderSpeed;
         chaseSpeed = balance.ChaseSpeed;
         rotationSpeed = balance.RotationSpeed;
+        idleTypeMin = balance.IdleTypeMin;
+        idleTypeMax = balance.IdleTypeMax;
         alertDuration = balance.AlertDuration;
         loseSightDelay = balance.LoseSightDelay;
         targetReevaluateInterval = balance.TargetReevaluateInterval;
@@ -257,6 +269,8 @@ public class EnemyController : MonoBehaviour
     /// <summary>초기 상태로 진입합니다.</summary>
     private void Start()
     {
+        RollIdleType();
+
         // TODO(슬라이스 2): 휴면/배회 배치 구분, 스폰 기준점 기록.
         TransitionTo(Wander);
     }
@@ -271,25 +285,103 @@ public class EnemyController : MonoBehaviour
     /// <summary>NavMeshAgent 속도를 애니메이터 MoveSpeed 파라미터로 전달합니다.</summary>
     private void UpdateLocomotionAnimator()
     {
-        if (animator != null && agent != null)
+        if (animator == null || agent == null)
         {
-            animator.SetFloat(AnimMoveSpeed, agent.velocity.magnitude);
+            return;
         }
+
+        Vector3 velocity = agent.velocity;
+        float speed = velocity.magnitude;
+
+        animator.SetFloat(AnimMoveSpeed, speed);
+
+        // 이동 방향을 자기 기준으로 바꿔 2D 블렌드 축에 넣습니다.
+        // 월드 방향을 그대로 쓰면 몸이 어디를 보든 같은 값이 되어 옆걸음과 앞걸음을 구분하지 못합니다.
+        if (speed <= 0.01f)
+        {
+            animator.SetFloat(AnimMoveX, 0f);
+            animator.SetFloat(AnimMoveY, 0f);
+            return;
+        }
+
+        Vector3 local = transform.InverseTransformDirection(velocity / speed);
+        animator.SetFloat(AnimMoveX, local.x);
+        animator.SetFloat(AnimMoveY, local.z);
     }
 
     // =========================
     // 애니메이터 연동
     // 파라미터 이름을 여기 모아 두어 상태 클래스들이 같은 문자열을 각자 들고 있지 않게 합니다.
     // =========================
-    private const string AnimMoveSpeed = "MoveSpeed";
-    private const string AnimInAttackRange = "InAttackRange";
-    private const string AnimAttack = "Attack";
-    private const string AnimDead = "Dead";
+    private static readonly int AnimMoveSpeed = Animator.StringToHash("MoveSpeed");
+    private static readonly int AnimInAttackRange = Animator.StringToHash("InAttackRange");
+    private static readonly int AnimAttack = Animator.StringToHash("DoAttack");
+    private static readonly int AnimDead = Animator.StringToHash("DoDeath");
+
+    /// <summary>공격 중인지 여부입니다. 공격 스테이트를 유지하는 조건입니다.</summary>
+    private static readonly int AnimIsAttack = Animator.StringToHash("IsAttack");
+
+    /// <summary>몇 번째 공격인지입니다. 1이 첫 공격, 2가 이어지는 공격입니다.</summary>
+    private static readonly int AnimAttackCombo = Animator.StringToHash("AttackCombo");
+
+    /// <summary>어느 손으로 치는지입니다. 0이 왼손, 1이 오른손입니다.</summary>
+    private static readonly int AnimAttackSide = Animator.StringToHash("AttackSide");
+
+    /// <summary>이동 방향의 좌우 성분입니다. 2D 이동 블렌드의 X축입니다.</summary>
+    private static readonly int AnimMoveX = Animator.StringToHash("MoveX");
+
+    /// <summary>이동 방향의 앞뒤 성분입니다. 2D 이동 블렌드의 Y축입니다.</summary>
+    private static readonly int AnimMoveY = Animator.StringToHash("MoveY");
+
+    /// <summary>대기 동작 혼합 비율입니다. 개체마다 한 번 뽑아 고정합니다.</summary>
+    private static readonly int AnimIdleType = Animator.StringToHash("IdleType");
+
+    /// <summary>애니메이터를 기본 상태로 되돌리는 트리거입니다.</summary>
+    private static readonly int AnimReset = Animator.StringToHash("DoReset");
+
+    /// <summary>
+    /// 애니메이터를 기본 상태로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// 어떤 상태에 걸려 빠져나오지 못할 때 쓰는 탈출구입니다.
+    /// 지금은 부르는 곳이 없습니다. 필요한 시점이 정해지면 그때 연결합니다.
+    /// </remarks>
+    public void ResetAnimation()
+    {
+        animator?.SetTrigger(AnimReset);
+    }
 
     /// <summary>공격 애니메이션을 재생합니다.</summary>
-    public void PlayAttackAnimation()
+    /// <param name="comboStep">1이면 첫 공격, 2면 이어지는 두 번째 공격입니다.</param>
+    public void PlayAttackAnimation(int comboStep = 1)
     {
-        animator?.SetTrigger(AnimAttack);
+        if (animator == null)
+        {
+            return;
+        }
+
+        // 같은 동작만 반복되면 단조로워 보이므로 휘두르는 손을 매번 새로 고릅니다.
+        // 중간값을 넣으면 좌우 동작이 섞여 어색해지므로 0이나 1만 넣습니다.
+        animator.SetFloat(AnimAttackSide, Random.value < 0.5f ? 0f : 1f);
+
+        animator.SetBool(AnimIsAttack, true);
+        animator.SetInteger(AnimAttackCombo, comboStep);
+        animator.SetTrigger(AnimAttack);
+    }
+
+    /// <summary>
+    /// 공격 상태에서 빠져나왔음을 애니메이터에 알립니다.
+    /// </summary>
+    /// <remarks>공격 스테이트는 이 값이 false가 되어야 이동으로 돌아갑니다.</remarks>
+    public void EndAttackAnimation()
+    {
+        if (animator == null)
+        {
+            return;
+        }
+
+        animator.SetBool(AnimIsAttack, false);
+        animator.SetInteger(AnimAttackCombo, 0);
     }
 
     /// <summary>사망 애니메이션을 재생합니다.</summary>
@@ -332,6 +424,33 @@ public class EnemyController : MonoBehaviour
     /// 클립을 새로 만들 때 이벤트 이름을 정리하면 그때 함께 바꿉니다.
     /// 상태는 이 통보와 자체 타이머 중 먼저 오는 것을 판정 시점으로 삼고 한 번의 공격에서 한 번만 처리합니다.
     /// </remarks>
+    /// <summary>공격 클립의 애니메이션 이벤트에서 호출되어 판정 콜라이더를 켭니다.</summary>
+    /// <remarks>
+    /// 이 시점부터 손에 달린 판정 콜라이더가 닿은 것에 피해를 줍니다.
+    /// 판정 시점 통보도 함께 처리해 상태가 후딜레이로 넘어갈 수 있게 합니다.
+    /// </remarks>
+    public void OnAttackHitboxOn()
+    {
+        if (m_current == Dead)
+        {
+            return;
+        }
+
+        // Attack은 판정을 담당하는 모듈이고, Combat.Attack은 공격 상태입니다. 이름이 같으니 주의합니다.
+        Attack?.SetHitboxActive(true);
+        Combat?.Attack?.NotifyAnimationImpact();
+    }
+
+    /// <summary>공격 클립의 애니메이션 이벤트에서 호출되어 판정 콜라이더를 끕니다.</summary>
+    /// <remarks>
+    /// 죽은 상태에서도 반드시 꺼야 합니다. 켜진 채로 남으면 다음 공격 전까지 스치는 것마다 피해가 들어갑니다.
+    /// 클립이 중간에 끊겨 이 이벤트가 오지 않는 경우는 <see cref="AttackState"/>가 종료 시 다시 끕니다.
+    /// </remarks>
+    public void OnAttackHitboxOff()
+    {
+        Attack?.SetHitboxActive(false);
+    }
+
     public void ApplyAttackDamage()
     {
         if (m_current == Dead)
@@ -340,6 +459,22 @@ public class EnemyController : MonoBehaviour
         }
 
         Combat?.Attack?.NotifyAnimationImpact();
+    }
+
+    /// <summary>
+    /// 이 개체가 쓸 대기 동작 혼합 비율을 한 번 뽑아 고정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 개체마다 대기 자세가 조금씩 달라 보이게 하려는 것이라 매번 새로 뽑지 않습니다.
+    /// 계속 흔들리면 대기 중에 몸이 미세하게 떨리는 것처럼 보입니다.
+    ///
+    /// 범위는 밸런스 SO가 소유하는 상수이고, 뽑힌 값은 이 개체의 런타임 상태입니다.
+    /// Awake가 아니라 Start에서 뽑는 것은 ApplyBalance가 Awake에서 범위를 채우기 때문입니다.
+    /// </remarks>
+    private void RollIdleType()
+    {
+        IdleType = Random.Range(idleTypeMin, idleTypeMax);
+        animator?.SetFloat(AnimIdleType, IdleType);
     }
 
     /// <summary>지정한 월드 좌표로 NavMesh 이동을 지시합니다.</summary>

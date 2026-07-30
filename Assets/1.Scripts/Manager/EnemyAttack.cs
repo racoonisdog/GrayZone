@@ -35,6 +35,16 @@ public class EnemyAttack : MonoBehaviour
     [Tooltip("공격 판정을 가로막는 고정 환경 장애물 레이어입니다. 다른 변이체는 포함하지 않습니다.")]
     [SerializeField] private LayerMask m_obstacleLayer;
 
+    [Header("Melee")]
+    [Tooltip("이 변이체가 쓰는 근접 무기입니다. 보통 좌우 손 두 개이며, 각자 자기 판정 콜라이더를 소유합니다.")]
+    [SerializeField] private Melee[] m_melees;
+
+    [Tooltip("공격 스테이트를 판별할 애니메이터입니다. 비어 있으면 상위에서 찾습니다.")]
+    [SerializeField] private Animator m_animator;
+
+    /// <summary>판정 콜라이더가 현재 켜져 있는지 여부입니다.</summary>
+    public bool IsHitboxActive { get; private set; }
+
     /// <summary>공격 주체(이 변이체)의 진영입니다.</summary>
     private Faction m_ownerFaction = Faction.Enemy;
 
@@ -54,13 +64,13 @@ public class EnemyAttack : MonoBehaviour
     /// <summary>한 번의 공격에서 성립한 적중 하나입니다.</summary>
     private readonly struct SwingHit
     {
-        /// <summary>피해를 발생시킨 판정 콜라이더입니다.</summary>
-        public readonly Collider Source;
+        /// <summary>피해를 발생시킨 근접 무기입니다. 좌우 손을 구분하는 데 씁니다.</summary>
+        public readonly Melee Source;
 
         /// <summary>피해를 입은 캐릭터입니다.</summary>
         public readonly SquadMemberController Member;
 
-        public SwingHit(Collider source, SquadMemberController member)
+        public SwingHit(Melee source, SquadMemberController member)
         {
             Source = source;
             Member = member;
@@ -101,6 +111,20 @@ public class EnemyAttack : MonoBehaviour
         m_ownerFaction = ownerHealth != null ? ownerHealth.Faction : Faction.Enemy;
 
         m_resolvedObstacleMask = EnemyLayers.ResolveObstacleMask(m_obstacleLayer, this, "공격 판정 차단");
+
+        if (m_animator == null)
+        {
+            m_animator = GetComponentInParent<Animator>();
+        }
+
+        // 근접 무기를 지정하지 않았으면 자식에서 찾습니다. 손이 둘이면 둘 다 잡힙니다.
+        if (m_melees == null || m_melees.Length == 0)
+        {
+            m_melees = GetComponentsInChildren<Melee>(true);
+        }
+
+        // 판정 콜라이더는 공격 구간에서만 켜집니다. 시작은 항상 꺼진 상태입니다.
+        SetHitboxActive(false);
     }
 
     /// <summary>
@@ -148,9 +172,58 @@ public class EnemyAttack : MonoBehaviour
     }
 
     /// <summary>
+    /// 판정 콜라이더를 켜거나 끕니다.
+    /// </summary>
+    /// <param name="active">켜면 true입니다.</param>
+    /// <remarks>
+    /// 켜고 끄는 시점은 공격 클립의 애니메이션 이벤트가 정합니다.
+    /// 콜라이더가 꺼져 있는 동안에는 <see cref="TryApplyDamageTo"/>가 호출될 일이 없으므로
+    /// 휘두르기 전후로 스쳐도 피해가 들어가지 않습니다.
+    /// </remarks>
+    public void SetHitboxActive(bool active)
+    {
+        IsHitboxActive = active;
+
+        if (m_melees == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < m_melees.Length; i++)
+        {
+            if (m_melees[i] != null)
+            {
+                m_melees[i].SetActive(active);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 지금 재생 중인 공격 스테이트의 짧은 이름 해시를 돌려줍니다.
+    /// </summary>
+    /// <returns>스테이트 이름 해시이며, 애니메이터가 없으면 0입니다.</returns>
+    /// <remarks>
+    /// 전이 중에는 아직 이전 스테이트가 현재로 잡히므로 넘어가는 쪽을 봅니다.
+    /// 연타 사이의 전이 구간에서 판정이 열리면 앞 타의 피해가 적용되는 것을 막기 위해서입니다.
+    /// </remarks>
+    private int GetCurrentAttackStateHash()
+    {
+        if (m_animator == null)
+        {
+            return 0;
+        }
+
+        AnimatorStateInfo info = m_animator.IsInTransition(0)
+            ? m_animator.GetNextAnimatorStateInfo(0)
+            : m_animator.GetCurrentAnimatorStateInfo(0);
+
+        return info.shortNameHash;
+    }
+
+    /// <summary>
     /// 판정 콜라이더에 닿은 후보 하나에 대해 피해를 적용할지 판단하고 적용합니다.
     /// </summary>
-    /// <param name="source">피해를 낼 판정 콜라이더입니다. 좌우 손을 구분하는 데 씁니다.</param>
+    /// <param name="source">피해를 낼 근접 무기입니다. 좌우 손을 구분하고 피해량을 가져오는 데 씁니다.</param>
     /// <param name="other">판정 콜라이더에 닿은 상대 콜라이더입니다.</param>
     /// <returns>실제로 피해를 입혔으면 true입니다.</returns>
     /// <remarks>
@@ -160,10 +233,18 @@ public class EnemyAttack : MonoBehaviour
     /// 좌우 콜라이더가 각각 발화하고, 대상이 빠져나갔다 다시 들어와도 또 발화하기 때문입니다.
     /// 그 중복을 어떻게 취급할지는 스윙당 1회 고정 토글이 정합니다.
     /// 다른 변이체는 피해 대상이 아니고 판정을 가리지도 않습니다. 고정 환경 장애물만 판정을 막습니다.
+    ///
+    /// 피해량은 무기가 정합니다. 몇 타째인지에 따라 값이 달라질 수 있어 매번 무기에 물어봅니다.
     /// </remarks>
-    public bool TryApplyDamageTo(Collider source, Collider other)
+    public bool TryApplyDamageTo(Melee source, Collider other)
     {
         if (source == null || other == null || IsSwingConsumed)
+        {
+            return false;
+        }
+
+        Collider sourceCollider = source.HitCollider;
+        if (sourceCollider == null)
         {
             return false;
         }
@@ -179,14 +260,30 @@ public class EnemyAttack : MonoBehaviour
             return false;
         }
 
-        if (IsBlockedByObstacle(source.bounds.center, other))
+        if (IsBlockedByObstacle(sourceCollider.bounds.center, other))
         {
             return false;
         }
 
+        // 몇 타째인지는 재생 중인 스테이트가 정하고, 그 타의 피해량은 무기가 정합니다.
+        int damage = source.ResolveDamage(GetCurrentAttackStateHash(), m_attackDamage);
+
         // 진영 판정과 실제 피해 적용은 공용 경로로 처리합니다.
         // 맞은 쪽이 누구에게 맞았는지 알 수 있도록 이 변이체를 함께 넘깁니다.
-        if (!CombatDamage.TryApplyDamage(other, m_ownerFaction, m_attackDamage, gameObject))
+        MeleeBalanceSO balance = source.Balance;
+        if (balance != null && balance.AllowHeadshot)
+        {
+            // 약점 판정을 쓰는 무기만 Hitbox를 요구하는 경로로 갑니다.
+            // 변이체의 공격은 약점 없이 정배수로 확정되어 있어 보통 아래 경로를 씁니다.
+            CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
+                other, m_ownerFaction, damage, balance.HeadshotDamageMultiplier, true, gameObject);
+
+            if (!feedback.Applied)
+            {
+                return false;
+            }
+        }
+        else if (!CombatDamage.TryApplyDamage(other, m_ownerFaction, damage, gameObject))
         {
             return false;
         }
@@ -202,7 +299,7 @@ public class EnemyAttack : MonoBehaviour
     /// 스윙당 1회 고정이면 출처와 무관하게 같은 캐릭터를 다시 때리지 않습니다.
     /// 손별 독립이면 같은 손이 같은 캐릭터를 다시 때리는 것만 막고, 반대 손은 따로 판정합니다.
     /// </remarks>
-    private bool IsAlreadyHit(Collider source, SquadMemberController member)
+    private bool IsAlreadyHit(Melee source, SquadMemberController member)
     {
         for (int i = 0; i < m_swingHits.Count; i++)
         {
