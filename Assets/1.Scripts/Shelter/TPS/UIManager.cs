@@ -16,7 +16,10 @@ public enum ShelterUIType
     Manufacturing,
 
     /// <summary>시설 업그레이드 UI가 열려 있음</summary>
-    FacilityUpgrade
+    FacilityUpgrade,
+
+    /// <summary>셸터 공용 인벤토리가 열려 있음</summary>
+    Inventory
 }
 
 /// <summary>
@@ -36,6 +39,9 @@ public class UIManager : MonoBehaviour
 
     [Header("Facility Upgrade UI")]
     [SerializeField] private FacilityUpgradeUI m_facilityUpgradeUI;
+
+    [Header("Inventory UI")]
+    [SerializeField] private ShelterInventoryUI m_inventoryUI;
 
     [Header("Debug")]
     [SerializeField] private bool m_logMessages = true;
@@ -59,6 +65,7 @@ public class UIManager : MonoBehaviour
     private void Awake()
     {
         CacheManufacturingUI();
+        CacheInventoryUI();
 
         // The manager object should stay active; only the assigned UI object is hidden.
         if (m_hideInteractionUIOnAwake)
@@ -76,6 +83,10 @@ public class UIManager : MonoBehaviour
 
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed += HandleFacilityUpgradeUIClosed;
+
+        ShelterInventoryUI inventoryUI = CacheInventoryUI();
+        if (inventoryUI != null)
+            inventoryUI.Closed += HandleInventoryUIClosed;
     }
 
     private void OnDisable()
@@ -88,6 +99,9 @@ public class UIManager : MonoBehaviour
 
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed -= HandleFacilityUpgradeUIClosed;
+
+        if (m_inventoryUI != null)
+            m_inventoryUI.Closed -= HandleInventoryUIClosed;
 
         m_returnUIAfterFacilityUpgrade = ShelterUIType.None;
         SetActiveUI(ShelterUIType.None);
@@ -250,6 +264,45 @@ public class UIManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 다른 차단형 UI가 없을 때 셸터 공용 인벤토리를 엽니다.
+    /// </summary>
+    public bool TryOpenInventoryUI()
+    {
+        ShelterInventoryUI inventoryUI = CacheInventoryUI();
+        if (inventoryUI == null || m_activeUI != ShelterUIType.None)
+            return false;
+
+        if (!inventoryUI.Open())
+            return false;
+
+        SetInteractionUIActive(false);
+        SetActiveUI(ShelterUIType.Inventory);
+        return true;
+    }
+
+    /// <summary>I키 또는 인벤토리 버튼의 열기/닫기 요청을 처리합니다.</summary>
+    public bool TryToggleInventoryUI()
+    {
+        if (m_activeUI == ShelterUIType.Inventory)
+        {
+            CloseInventoryUI();
+            return true;
+        }
+
+        return TryOpenInventoryUI();
+    }
+
+    /// <summary>셸터 공용 인벤토리를 닫고 플레이어 제어를 복원합니다.</summary>
+    public void CloseInventoryUI()
+    {
+        if (m_inventoryUI != null)
+            m_inventoryUI.Close();
+
+        if (m_activeUI == ShelterUIType.Inventory)
+            SetActiveUI(ShelterUIType.None);
+    }
+
+    /// <summary>
     /// 시설 ID에 해당하는 공용 업그레이드 UI를 연다.
     /// </summary>
     /// <param name="facilityId">업그레이드 정보를 표시할 시설 ID</param>
@@ -311,6 +364,12 @@ public class UIManager : MonoBehaviour
             RestoreUIAfterFacilityUpgrade();
     }
 
+    private void HandleInventoryUIClosed()
+    {
+        if (m_activeUI == ShelterUIType.Inventory)
+            SetActiveUI(ShelterUIType.None);
+    }
+
     private void RestoreUIAfterFacilityUpgrade()
     {
         ShelterUIType returnUI = m_returnUIAfterFacilityUpgrade;
@@ -337,6 +396,8 @@ public class UIManager : MonoBehaviour
             CloseMedicalUI();
         else if (m_activeUI == ShelterUIType.Manufacturing)
             CloseManufacturingUI();
+        else if (m_activeUI == ShelterUIType.Inventory)
+            CloseInventoryUI();
     }
 
     private ManufacturingUI CacheManufacturingUI()
@@ -348,6 +409,18 @@ public class UIManager : MonoBehaviour
         }
 
         return m_manufacturingUI;
+    }
+
+    private ShelterInventoryUI CacheInventoryUI()
+    {
+        if (m_inventoryUI == null)
+        {
+            m_inventoryUI =
+                FindFirstObjectByType<ShelterInventoryUI>(
+                    FindObjectsInactive.Include);
+        }
+
+        return m_inventoryUI;
     }
 
     private void SetInteractionUIActive(bool active)

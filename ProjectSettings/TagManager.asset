@@ -9,6 +9,9 @@ TagManager:
   - NPC
   - CinemachineTarget
   - Prop
+  - Frame
+  - Door
+  - Container
   layers:
   - Default
   - TransparentFX
@@ -40,7 +43,7 @@ TagManager:
   - 
   - 
   - 
-  - 
+  - ShelterRoof
   - ShelterFacility
   m_SortingLayers:
   - name: Default

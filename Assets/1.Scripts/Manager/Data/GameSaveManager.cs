@@ -84,7 +84,15 @@ public class GameSaveManager : MonoBehaviour
             return false;
         }
 
-        saveData.schemaVersion = saveData.schemaVersion <= 0 ? SaveData.CurrentSchemaVersion : saveData.schemaVersion;
+        if (saveData.schemaVersion != SaveData.CurrentSchemaVersion)
+        {
+            Debug.LogWarning(
+                $"[GameSaveManager] 지원하지 않는 게임 저장 버전입니다. "
+                + $"현재={SaveData.CurrentSchemaVersion}, "
+                + $"파일={saveData.schemaVersion}. 새 게임을 시작하세요.");
+            return false;
+        }
+
         GameDataManager.Instance.ApplySaveData(saveData);
         if (ShelterSceneDataManager.Instance != null)
         {

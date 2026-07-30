@@ -93,12 +93,17 @@ public class FacilityUpgradeUI : MonoBehaviour
         StorageFacility storage = ShelterSceneDataManager.Instance?.Storage;
         if (m_costRoot != null && m_costRowPrefab != null)
         {
-            foreach (CurrencyCost c in fm.GetUpgradeCost(m_facilityId).Costs)
+            foreach (ResourceCost c in fm.GetUpgradeCost(m_facilityId).Costs)
             {
-                int owned = storage != null ? storage.GetResourceAmount(c.Type) : 0;
+                int owned = storage != null
+                    ? storage.GetResourceAmount(c.ResourceId)
+                    : 0;
                 bool enough = owned >= c.Amount;
                 Instantiate(m_costRowPrefab, m_costRoot)
-                    .Set(c.Type.ToString(), $"{owned}/{c.Amount}", enough ? m_enoughColor : m_lackColor);
+                    .Set(
+                        c.ResourceId,
+                        $"{owned}/{c.Amount}",
+                        enough ? m_enoughColor : m_lackColor);
             }
         }
 

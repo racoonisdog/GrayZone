@@ -2,6 +2,43 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum ManufacturingStartJobFailureReason
+{
+    None = 0,
+    InvalidSlot = 1,
+    SlotLocked = 2,
+    InvalidQuantity = 3,
+    RecipeNotFound = 4,
+    RecipeLocked = 5,
+    InvalidResultItem = 6,
+    ContextUnavailable = 7,
+    SlotOccupied = 8,
+    CostOverflow = 9,
+    ResultQuantityOverflow = 10,
+    InsufficientResources = 11,
+    InvalidJobData = 12,
+    RuntimeDataRejected = 13,
+    ResourceRollbackFailed = 14
+}
+
+public readonly struct ManufacturingMaterialQuoteLine
+{
+    public string ResourceId { get; }
+    public int RequiredAmount { get; }
+    public int OwnedAmount { get; }
+    public bool IsEnough => OwnedAmount >= RequiredAmount;
+
+    public ManufacturingMaterialQuoteLine(
+        string resourceId,
+        int requiredAmount,
+        int ownedAmount)
+    {
+        ResourceId = ResourceIds.Normalize(resourceId);
+        RequiredAmount = Math.Max(0, requiredAmount);
+        OwnedAmount = Math.Max(0, ownedAmount);
+    }
+}
+
 /// <summary>
 /// 제조 시설의 공용 해금/업그레이드 연결과 제조 전용 작업 흐름을 담당합니다.
 /// </summary>
@@ -168,13 +205,13 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
         if (entries == null || entries.Length == 0)
             return new CostBundle();
 
-        CurrencyCost[] costs = new CurrencyCost[entries.Length];
+        ResourceCost[] costs = new ResourceCost[entries.Length];
         for (int i = 0; i < entries.Length; i++)
         {
             UpgradeCostEntry entry = entries[i];
             costs[i] = entry != null
-                ? new CurrencyCost(entry.type, entry.amount)
-                : new CurrencyCost(default, 0);
+                ? new ResourceCost(entry.resourceId, entry.amount)
+                : new ResourceCost(string.Empty, 0);
         }
 
         return new CostBundle(costs);
@@ -265,17 +302,105 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
     }
 
     /// <summary>
+    /// 레시피 실행 횟수에 필요한 전체 재료와 현재 보유 수량을 호출자 목록에 채웁니다.
+    /// UI는 이 읽기 전용 견적을 표시하며 실제 차감은 <see cref="TryStartJob(int,string,int)"/>이 다시 검증합니다.
+    /// </summary>
+    public bool TryFillMaterialQuote(
+        string recipeId,
+        int requestedBatchCount,
+        List<ManufacturingMaterialQuoteLine> results,
+        out bool canAfford)
+    {
+        if (results == null)
+            throw new ArgumentNullException(nameof(results));
+
+        results.Clear();
+        canAfford = false;
+
+        if (requestedBatchCount < 1
+            || requestedBatchCount > maxOrderQuantity
+            || !TryGetRecipe(recipeId, out ManufacturingRecipeDefinition recipe)
+            || !TryGetContext(
+                out _,
+                out StorageFacility storage,
+                out _)
+            || !TryBuildQuantityCost(
+                recipe.BuildUnitCost(),
+                requestedBatchCount,
+                out CostBundle totalCost))
+        {
+            return false;
+        }
+
+        canAfford = true;
+        foreach (ResourceCost cost in totalCost.Costs)
+        {
+            int ownedAmount =
+                storage.GetResourceAmount(cost.ResourceId);
+            ManufacturingMaterialQuoteLine line = new(
+                cost.ResourceId,
+                cost.Amount,
+                ownedAmount);
+            results.Add(line);
+            if (!line.IsEnough)
+                canAfford = false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// 전체 재료를 선차감하고 비어 있는 슬롯에 제조 작업을 생성합니다.
     /// </summary>
     public bool TryStartJob(int slotIndex, string recipeId, int quantity)
     {
-        if (!IsCraftingSlotUnlocked(slotIndex)
-            || quantity < 1
-            || quantity > maxOrderQuantity
-            || !TryGetRecipe(recipeId, out ManufacturingRecipeDefinition recipe)
-            || !IsRecipeUnlocked(recipe)
-            || string.IsNullOrWhiteSpace(recipe.ResultItemDefinitionId))
+        return TryStartJob(slotIndex, recipeId, quantity, out _);
+    }
+
+    /// <summary>
+    /// 전체 재료를 선차감하고 비어 있는 슬롯에 제조 작업을 생성하며 실패 원인을 반환합니다.
+    /// </summary>
+    public bool TryStartJob(
+        int slotIndex,
+        string recipeId,
+        int requestedBatchCount,
+        out ManufacturingStartJobFailureReason failureReason)
+    {
+        failureReason = ManufacturingStartJobFailureReason.None;
+
+        if (slotIndex < 0 || slotIndex >= TotalCraftingSlotCount)
         {
+            failureReason = ManufacturingStartJobFailureReason.InvalidSlot;
+            return false;
+        }
+
+        if (!IsCraftingSlotUnlocked(slotIndex))
+        {
+            failureReason = ManufacturingStartJobFailureReason.SlotLocked;
+            return false;
+        }
+
+        if (requestedBatchCount < 1 || requestedBatchCount > maxOrderQuantity)
+        {
+            failureReason = ManufacturingStartJobFailureReason.InvalidQuantity;
+            return false;
+        }
+
+        if (!TryGetRecipe(recipeId, out ManufacturingRecipeDefinition recipe))
+        {
+            failureReason = ManufacturingStartJobFailureReason.RecipeNotFound;
+            return false;
+        }
+
+        if (!IsRecipeUnlocked(recipe))
+        {
+            failureReason = ManufacturingStartJobFailureReason.RecipeLocked;
+            return false;
+        }
+
+        if (!recipe.HasValidResult)
+        {
+            failureReason = ManufacturingStartJobFailureReason.InvalidResultItem;
             return false;
         }
 
@@ -284,36 +409,71 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
                 out StorageFacility storage,
                 out ManufacturingRuntimeData runtimeData))
         {
+            failureReason = ManufacturingStartJobFailureReason.ContextUnavailable;
             return false;
         }
 
         if (runtimeData.TryGetJob(slotIndex, out _))
+        {
+            failureReason = ManufacturingStartJobFailureReason.SlotOccupied;
             return false;
+        }
 
         CostBundle unitCost = recipe.BuildUnitCost();
-        if (!TryBuildQuantityCost(unitCost, quantity, out CostBundle totalCost))
+        if (!TryBuildQuantityCost(unitCost, requestedBatchCount, out CostBundle totalCost))
+        {
+            failureReason = ManufacturingStartJobFailureReason.CostOverflow;
             return false;
+        }
 
         ManufacturingJobRuntimeData job = new(
             slotIndex,
             recipe.RecipeId,
-            recipe.ResultItemDefinitionId,
-            quantity,
+            recipe.ResultKind,
+            recipe.ResultDefinitionId,
+            requestedBatchCount,
+            recipe.ResultQuantityPerBatch,
             recipe.UnitWork,
             unitCost.Costs);
 
-        if (!job.IsValid || !storage.TrySpendResources(totalCost))
+        if (!job.IsValid)
+        {
+            failureReason = ManufacturingStartJobFailureReason.InvalidJobData;
             return false;
+        }
+
+        if (!TryCalculateResultQuantity(
+                job.RequestedBatchCount,
+                job.ResultQuantityPerBatchSnapshot,
+                out int totalResultQuantity)
+            || !CanStoreResultQuantity(
+                storage,
+                job.ResultKind,
+                job.ResultDefinitionId,
+                totalResultQuantity))
+        {
+            failureReason = ManufacturingStartJobFailureReason.ResultQuantityOverflow;
+            return false;
+        }
+
+        if (!storage.TrySpendResources(totalCost))
+        {
+            failureReason = ManufacturingStartJobFailureReason.InsufficientResources;
+            return false;
+        }
 
         if (!runtimeData.TryAddJob(job))
         {
             if (!storage.TryAddResources(totalCost))
             {
+                failureReason = ManufacturingStartJobFailureReason.ResourceRollbackFailed;
                 Debug.LogError(
                     "[ManufacturingManager] Failed to rollback resources after job creation failed.",
                     this);
+                return false;
             }
 
+            failureReason = ManufacturingStartJobFailureReason.RuntimeDataRejected;
             return false;
         }
 
@@ -457,31 +617,48 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
                 continue;
             }
 
-            int newCompletedQuantity = PredictNewCompletedQuantity(job, productivity);
-            if (newCompletedQuantity > 0
-                && storage.GetItemQuantity(job.ResultItemDefinitionId)
-                    > int.MaxValue - newCompletedQuantity)
+            int newCompletedBatchCount = PredictNewCompletedBatchCount(job, productivity);
+            if (newCompletedBatchCount > 0
+                && (!TryCalculateResultQuantity(
+                        newCompletedBatchCount,
+                        job.ResultQuantityPerBatchSnapshot,
+                        out int predictedResultQuantity)
+                    || !CanStoreResultQuantity(
+                        storage,
+                        job.ResultKind,
+                        job.ResultDefinitionId,
+                        predictedResultQuantity)))
             {
                 Debug.LogError(
-                    $"[ManufacturingManager] Item quantity overflow for '{job.ResultItemDefinitionId}'.",
+                    $"[ManufacturingManager] Result quantity overflow for "
+                    + $"'{job.ResultDefinitionId}' ({job.ResultKind}).",
                     this);
                 continue;
             }
 
             int processedWorkBefore = job.ProcessedWork;
-            int actualCompletedQuantity = job.ApplyWork(productivity);
+            int actualCompletedBatchCount = job.ApplyWork(productivity);
             if (job.ProcessedWork == processedWorkBefore)
                 continue;
 
             changed = true;
-            if (actualCompletedQuantity <= 0 && !job.IsComplete)
+            if (actualCompletedBatchCount <= 0 && !job.IsComplete)
                 continue;
 
-            if (actualCompletedQuantity > 0
-                && !storage.TryAddItem(job.ResultItemDefinitionId, actualCompletedQuantity))
+            if (actualCompletedBatchCount > 0
+                && (!TryCalculateResultQuantity(
+                        actualCompletedBatchCount,
+                        job.ResultQuantityPerBatchSnapshot,
+                        out int resultQuantity)
+                    || !TryStoreCompletedResult(
+                        storage,
+                        job.ResultKind,
+                        job.ResultDefinitionId,
+                        resultQuantity)))
             {
                 Debug.LogError(
-                    $"[ManufacturingManager] Failed to store completed item '{job.ResultItemDefinitionId}'.",
+                    $"[ManufacturingManager] Failed to store completed result "
+                    + $"'{job.ResultDefinitionId}' ({job.ResultKind}).",
                     this);
                 continue;
             }
@@ -573,17 +750,17 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
         return level >= 2 ? level3ProductivityBonus : 0;
     }
 
-    private static int PredictNewCompletedQuantity(
+    private static int PredictNewCompletedBatchCount(
         ManufacturingJobRuntimeData job,
         int workAmount)
     {
         if (job == null || !job.IsValid || workAmount <= 0 || job.IsComplete)
             return 0;
 
-        int completedBefore = job.CompletedQuantity;
+        int completedBefore = job.CompletedBatchCount;
         int appliedWork = Math.Min(workAmount, job.RemainingWork);
         int completedAfter = Math.Min(
-            job.RequestedQuantity,
+            job.RequestedBatchCount,
             (job.ProcessedWork + appliedWork) / job.UnitWorkSnapshot);
         return completedAfter - completedBefore;
     }
@@ -600,14 +777,26 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
         if (unitCost == null || unitCost.IsFree)
             return true;
 
-        Dictionary<CurrencyType, int> totals = new();
-        foreach (CurrencyCost cost in unitCost.Costs)
+        Dictionary<string, int> totals =
+            new(StringComparer.Ordinal);
+        List<string> orderedResourceIds = new();
+        foreach (ResourceCost cost in unitCost.Costs)
         {
-            if (!TryAccumulateCost(totals, cost.Type, cost.Amount, quantity))
+            if (cost.IsValid
+                && !totals.ContainsKey(cost.ResourceId))
+            {
+                orderedResourceIds.Add(cost.ResourceId);
+            }
+
+            if (!TryAccumulateCost(
+                    totals,
+                    cost.ResourceId,
+                    cost.Amount,
+                    quantity))
                 return false;
         }
 
-        totalCost = CreateCostBundle(totals);
+        totalCost = CreateCostBundle(totals, orderedResourceIds);
         return true;
     }
 
@@ -619,15 +808,16 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
         if (job == null || !job.IsValid)
             return false;
 
-        Dictionary<CurrencyType, int> totals = new();
+        Dictionary<string, int> totals =
+            new(StringComparer.Ordinal);
         foreach (ManufacturingMaterialCostSnapshot cost in job.UnitCostSnapshots)
         {
             if (cost != null
                 && !TryAccumulateCost(
                     totals,
-                    cost.Type,
+                    cost.ResourceId,
                     cost.UnitAmount,
-                    job.RemainingQuantity))
+                    job.RemainingBatchCount))
             {
                 return false;
             }
@@ -638,30 +828,107 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
     }
 
     private static bool TryAccumulateCost(
-        Dictionary<CurrencyType, int> totals,
-        CurrencyType type,
+        Dictionary<string, int> totals,
+        string resourceId,
         int unitAmount,
         int quantity)
     {
         if (unitAmount <= 0 || quantity <= 0)
             return true;
 
+        string id = ResourceIds.Normalize(resourceId);
+        if (string.IsNullOrEmpty(id))
+            return false;
+
         long added = (long)unitAmount * quantity;
-        totals.TryGetValue(type, out int current);
+        totals.TryGetValue(id, out int current);
         long total = current + added;
         if (total > int.MaxValue)
             return false;
 
-        totals[type] = (int)total;
+        totals[id] = (int)total;
         return true;
     }
 
-    private static CostBundle CreateCostBundle(Dictionary<CurrencyType, int> totals)
+    private static bool TryCalculateResultQuantity(
+        int completedBatchCount,
+        int resultQuantityPerBatch,
+        out int resultQuantity)
     {
-        CurrencyCost[] costs = new CurrencyCost[totals.Count];
+        resultQuantity = 0;
+        if (completedBatchCount <= 0 || resultQuantityPerBatch <= 0)
+            return false;
+
+        long calculated = (long)completedBatchCount * resultQuantityPerBatch;
+        if (calculated > int.MaxValue)
+            return false;
+
+        resultQuantity = (int)calculated;
+        return true;
+    }
+
+    private static bool CanStoreResultQuantity(
+        StorageFacility storage,
+        ManufacturingResultKind resultKind,
+        string resultDefinitionId,
+        int amount)
+    {
+        if (storage == null || amount <= 0)
+            return false;
+
+        int current = resultKind == ManufacturingResultKind.Resource
+            ? storage.GetResourceAmount(resultDefinitionId)
+            : storage.GetItemQuantity(resultDefinitionId);
+        return current <= int.MaxValue - amount;
+    }
+
+    private static bool TryStoreCompletedResult(
+        StorageFacility storage,
+        ManufacturingResultKind resultKind,
+        string resultDefinitionId,
+        int amount)
+    {
+        if (!CanStoreResultQuantity(
+                storage,
+                resultKind,
+                resultDefinitionId,
+                amount))
+        {
+            return false;
+        }
+
+        return resultKind == ManufacturingResultKind.Resource
+            ? storage.TryAddResource(resultDefinitionId, amount)
+            : storage.TryAddItem(resultDefinitionId, amount);
+    }
+
+    private static CostBundle CreateCostBundle(
+        Dictionary<string, int> totals)
+    {
+        ResourceCost[] costs = new ResourceCost[totals.Count];
         int index = 0;
-        foreach (KeyValuePair<CurrencyType, int> total in totals)
-            costs[index++] = new CurrencyCost(total.Key, total.Value);
+        foreach (KeyValuePair<string, int> total in totals)
+        {
+            costs[index++] =
+                new ResourceCost(total.Key, total.Value);
+        }
+
+        return new CostBundle(costs);
+    }
+
+    private static CostBundle CreateCostBundle(
+        Dictionary<string, int> totals,
+        IReadOnlyList<string> orderedResourceIds)
+    {
+        ResourceCost[] costs =
+            new ResourceCost[orderedResourceIds.Count];
+        for (int i = 0; i < orderedResourceIds.Count; i++)
+        {
+            string resourceId = orderedResourceIds[i];
+            costs[i] = new ResourceCost(
+                resourceId,
+                totals[resourceId]);
+        }
 
         return new CostBundle(costs);
     }
@@ -753,7 +1020,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
     [Serializable]
     private sealed class UpgradeCostEntry
     {
-        public CurrencyType type = default;
+        public string resourceId = string.Empty;
         [Min(0)] public int amount = 0;
     }
 

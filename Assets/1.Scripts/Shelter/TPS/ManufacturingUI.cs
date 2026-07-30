@@ -15,20 +15,15 @@ public sealed class ManufacturingUI : MonoBehaviour
     [Header("Manufacturing Slots")]
     [SerializeField] private ManufacturingSlotView[] m_slots;
 
-    [Header("Recipe Selection")]
-    [SerializeField] private CharacterCandidateListPanel m_candidateListPanel;
-    [Tooltip("없으면 Default Order Quantity를 사용합니다.")]
-    [SerializeField] private TMP_InputField m_quantityInput;
-    [Min(1)]
-    [SerializeField] private int m_defaultOrderQuantity = 1;
+    [Header("Create View")]
+    [SerializeField] private ManufacturingCreateView m_createView;
     [SerializeField] private TMP_Text m_noticeText;
 
     [Header("Staff")]
     [SerializeField] private ManufacturingStaffSlotController m_staffSlotController;
 
     private ManufacturingManager m_currentManager;
-    private CharacterCandidateListPanel m_boundCandidateListPanel;
-    private int m_pendingSlotIndex = -1;
+    private ManufacturingCreateView m_boundCreateView;
     private bool m_isOpening;
     private bool m_isOpen;
 
@@ -52,8 +47,15 @@ public sealed class ManufacturingUI : MonoBehaviour
         CacheChildViews();
     }
 
+    private void OnEnable()
+    {
+        CacheChildViews();
+        BindCreateView();
+    }
+
     private void OnDisable()
     {
+        UnbindCreateView();
         UnbindManager();
         if (!m_isOpening)
             SetOpenState(false);
@@ -61,8 +63,7 @@ public sealed class ManufacturingUI : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (m_boundCandidateListPanel != null)
-            m_boundCandidateListPanel.ClosedBy -= HandleCandidateListClosedBy;
+        UnbindCreateView();
     }
 
     private void Update()
@@ -70,11 +71,10 @@ public sealed class ManufacturingUI : MonoBehaviour
         if (Keyboard.current == null || !Keyboard.current.escapeKey.wasPressedThisFrame)
             return;
 
-        CharacterCandidateListPanel panel = CacheCandidateListPanel();
-        if (panel != null && panel.IsOpenFor(this))
-            HideRecipeList();
-        else
-            Close();
+        if (m_createView != null && m_createView.TryHandleEscape())
+            return;
+
+        Close();
     }
 
     public void Open(ManufacturingManager manager)
@@ -90,15 +90,17 @@ public sealed class ManufacturingUI : MonoBehaviour
         m_isOpening = false;
 
         CacheChildViews();
+        BindCreateView();
+        CloseCreateView();
         m_staffSlotController?.SetManager(m_currentManager);
-        HideRecipeList();
         ClearNotice();
         Refresh();
     }
 
     public void Close()
     {
-        HideRecipeList();
+        CloseCreateView();
+        UnbindCreateView();
         UnbindManager();
         SetRootActive(false);
         SetOpenState(false);
@@ -110,6 +112,7 @@ public sealed class ManufacturingUI : MonoBehaviour
         if (m_slots == null)
             return;
 
+        bool allowSlotInput = m_createView == null || !m_createView.IsOpen;
         for (int i = 0; i < m_slots.Length; i++)
         {
             ManufacturingSlotView slot = m_slots[i];
@@ -129,6 +132,7 @@ public sealed class ManufacturingUI : MonoBehaviour
                 m_currentManager != null ? m_currentManager.FinalProductivity : 0,
                 HandleSlotClicked,
                 HandleCancelClicked);
+            slot.SetInteractionEnabled(allowSlotInput);
         }
 
         m_staffSlotController?.RefreshSlots();
@@ -137,41 +141,75 @@ public sealed class ManufacturingUI : MonoBehaviour
     private void HandleSlotClicked(int slotIndex)
     {
         if (m_currentManager == null
-            || !m_currentManager.IsCraftingSlotUnlocked(slotIndex))
+            || !m_currentManager.IsCraftingSlotUnlocked(slotIndex)
+            || FindJob(slotIndex) != null
+            || (m_createView != null && m_createView.IsOpen))
         {
             return;
         }
 
-        m_pendingSlotIndex = slotIndex;
-        CharacterCandidateListPanel panel = CacheCandidateListPanel();
-        if (panel == null)
+        if (m_createView == null)
         {
-            SetNotice("레시피 선택 패널을 찾을 수 없습니다.");
+            SetNotice("제작 상세 창을 찾을 수 없습니다.");
             return;
         }
 
-        panel.OpenRecipes(
-            this,
-            m_currentManager.Recipes,
-            m_currentManager.IsRecipeUnlocked,
-            HandleRecipeSelected);
+        ClearNotice();
+        if (!m_createView.Open(slotIndex))
+        {
+            SetNotice("선택한 슬롯에서 제작을 시작할 수 없습니다.");
+            return;
+        }
+
+        Refresh();
     }
 
-    private void HandleRecipeSelected(string recipeId)
+    private void HandleCreateRequested(ManufacturingCreateRequest request)
     {
-        if (m_currentManager == null || m_pendingSlotIndex < 0)
-            return;
-
-        int quantity = ResolveOrderQuantity();
-        if (m_currentManager.TryStartJob(m_pendingSlotIndex, recipeId, quantity))
+        if (m_currentManager == null
+            || m_createView == null
+            || !m_createView.IsOpen)
         {
-            HideRecipeList();
+            return;
+        }
+
+        if (request.SlotIndex != m_createView.PendingSlotIndex
+            || request.RequestedBatchCount != m_createView.RequestedBatchCount
+            || !string.Equals(
+                request.RecipeId,
+                m_createView.SelectedRecipeId,
+                StringComparison.Ordinal))
+        {
+            Debug.LogWarning(
+                "[ManufacturingUI] Ignored a stale CreateView confirmation request.",
+                this);
+            return;
+        }
+
+        if (m_currentManager.TryStartJob(
+                request.SlotIndex,
+                request.RecipeId,
+                request.RequestedBatchCount,
+                out ManufacturingStartJobFailureReason failureReason))
+        {
             ClearNotice();
+            m_createView.CloseAfterConfirmed();
+            return;
+        }
+
+        m_createView.Refresh();
+        if (TryGetExpectedStartFailureMessage(failureReason, out string message))
+        {
+            SetNotice(message);
             Refresh();
             return;
         }
 
-        SetNotice("제작을 시작할 수 없습니다. 재료, 수량, 슬롯 상태를 확인하세요.");
+        SetNotice("제작 시작 중 오류가 발생했습니다.");
+        Debug.LogError(
+            $"[ManufacturingUI] Unexpected manufacturing start failure: {failureReason}.",
+            this);
+        Refresh();
     }
 
     private void HandleCancelClicked(int slotIndex)
@@ -202,52 +240,40 @@ public sealed class ManufacturingUI : MonoBehaviour
         return null;
     }
 
-    private int ResolveOrderQuantity()
+    private void HandleCreateViewClosed()
     {
-        int quantity = Mathf.Max(1, m_defaultOrderQuantity);
-        if (m_quantityInput != null
-            && int.TryParse(m_quantityInput.text, out int parsedQuantity))
-        {
-            quantity = parsedQuantity;
-        }
-
-        return m_currentManager != null
-            ? Mathf.Clamp(quantity, 1, m_currentManager.MaxOrderQuantity)
-            : quantity;
+        ClearNotice();
+        Refresh();
     }
 
-    private void HideRecipeList()
+    private void BindCreateView()
     {
-        m_pendingSlotIndex = -1;
-        if (m_candidateListPanel != null)
-            m_candidateListPanel.Close(this);
+        if (m_boundCreateView == m_createView)
+            return;
+
+        UnbindCreateView();
+        m_boundCreateView = m_createView;
+        if (m_boundCreateView == null)
+            return;
+
+        m_boundCreateView.ConfirmRequested += HandleCreateRequested;
+        m_boundCreateView.Closed += HandleCreateViewClosed;
     }
 
-    private void HandleCandidateListClosedBy(object requester)
+    private void UnbindCreateView()
     {
-        if (ReferenceEquals(requester, this))
-            m_pendingSlotIndex = -1;
+        if (m_boundCreateView == null)
+            return;
+
+        m_boundCreateView.ConfirmRequested -= HandleCreateRequested;
+        m_boundCreateView.Closed -= HandleCreateViewClosed;
+        m_boundCreateView = null;
     }
 
-    private CharacterCandidateListPanel CacheCandidateListPanel()
+    private void CloseCreateView()
     {
-        if (m_candidateListPanel == null)
-        {
-            m_candidateListPanel =
-                FindFirstObjectByType<CharacterCandidateListPanel>(FindObjectsInactive.Include);
-        }
-
-        if (m_candidateListPanel == m_boundCandidateListPanel)
-            return m_candidateListPanel;
-
-        if (m_boundCandidateListPanel != null)
-            m_boundCandidateListPanel.ClosedBy -= HandleCandidateListClosedBy;
-
-        m_boundCandidateListPanel = m_candidateListPanel;
-        if (m_boundCandidateListPanel != null)
-            m_boundCandidateListPanel.ClosedBy += HandleCandidateListClosedBy;
-
-        return m_candidateListPanel;
+        if (m_createView != null && m_createView.IsOpen)
+            m_createView.Cancel();
     }
 
     private void CacheChildViews()
@@ -258,7 +284,35 @@ public sealed class ManufacturingUI : MonoBehaviour
         if (m_staffSlotController == null)
             m_staffSlotController = GetComponentInChildren<ManufacturingStaffSlotController>(true);
 
-        CacheCandidateListPanel();
+        if (m_createView == null)
+            m_createView = GetComponentInChildren<ManufacturingCreateView>(true);
+    }
+
+    private static bool TryGetExpectedStartFailureMessage(
+        ManufacturingStartJobFailureReason failureReason,
+        out string message)
+    {
+        switch (failureReason)
+        {
+            case ManufacturingStartJobFailureReason.InsufficientResources:
+                message = "제작에 필요한 재료가 부족합니다.";
+                return true;
+            case ManufacturingStartJobFailureReason.SlotOccupied:
+                message = "이미 제작 중인 슬롯입니다.";
+                return true;
+            case ManufacturingStartJobFailureReason.SlotLocked:
+                message = "잠긴 제작 슬롯입니다.";
+                return true;
+            case ManufacturingStartJobFailureReason.RecipeLocked:
+                message = "아직 해금되지 않은 레시피입니다.";
+                return true;
+            case ManufacturingStartJobFailureReason.InvalidQuantity:
+                message = "제작 수량을 확인하세요.";
+                return true;
+            default:
+                message = string.Empty;
+                return false;
+        }
     }
 
     private void UnbindManager()

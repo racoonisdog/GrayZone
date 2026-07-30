@@ -26,6 +26,7 @@ public sealed class ManufacturingSlotView : MonoBehaviour
     private int m_slotIndex = -1;
     private bool m_isUnlocked;
     private bool m_hasJob;
+    private bool m_isInteractionEnabled = true;
     private Action<int> m_slotClicked;
     private Action<int> m_cancelClicked;
 
@@ -63,7 +64,8 @@ public sealed class ManufacturingSlotView : MonoBehaviour
         {
             m_itemButton.onClick.RemoveListener(HandleSlotClicked);
             m_itemButton.onClick.AddListener(HandleSlotClicked);
-            m_itemButton.interactable = m_isUnlocked && !m_hasJob;
+            m_itemButton.interactable =
+                m_isInteractionEnabled && m_isUnlocked && !m_hasJob;
         }
 
         if (m_cancelButton != null)
@@ -71,9 +73,27 @@ public sealed class ManufacturingSlotView : MonoBehaviour
             m_cancelButton.onClick.RemoveListener(HandleCancelClicked);
             m_cancelButton.onClick.AddListener(HandleCancelClicked);
             m_cancelButton.gameObject.SetActive(m_isUnlocked && m_hasJob);
+            m_cancelButton.interactable = m_isInteractionEnabled;
         }
 
         RefreshVisual(job, recipe, productivity);
+    }
+
+    /// <summary>
+    /// CreateView 같은 상위 팝업이 열렸을 때 슬롯과 작업 취소 입력을 함께 차단합니다.
+    /// </summary>
+    public void SetInteractionEnabled(bool isEnabled)
+    {
+        m_isInteractionEnabled = isEnabled;
+
+        if (m_itemButton != null)
+        {
+            m_itemButton.interactable =
+                m_isInteractionEnabled && m_isUnlocked && !m_hasJob;
+        }
+
+        if (m_cancelButton != null)
+            m_cancelButton.interactable = m_isInteractionEnabled;
     }
 
     private void RefreshVisual(
@@ -91,7 +111,7 @@ public sealed class ManufacturingSlotView : MonoBehaviour
         if (job == null)
         {
             SetImage(m_emptySprite);
-            SetTexts("비어 있음", "남은 수량: -", "남은 일자: -");
+            SetTexts("비어 있음", "남은 제작 횟수: -", "남은 일자: -");
             return;
         }
 
@@ -107,7 +127,7 @@ public sealed class ManufacturingSlotView : MonoBehaviour
 
         SetTexts(
             displayName,
-            $"남은 수량: {job.RemainingQuantity}",
+            $"남은 제작 횟수: {job.RemainingBatchCount}",
             $"남은 일자: {remainingDays}");
     }
 

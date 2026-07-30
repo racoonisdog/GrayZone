@@ -1,27 +1,27 @@
 using System.Collections.Generic;
 
 /// <summary>
-/// 여러 <see cref="CurrencyCost"/>를 하나로 묶은 시설 비용 묶음
+/// 여러 <see cref="ResourceCost"/>를 하나로 묶은 시설 비용 묶음
 /// </summary>
 public sealed class CostBundle
 {
-    private readonly List<CurrencyCost> m_costs = new();
+    private readonly List<ResourceCost> m_costs = new();
 
     /// <summary>유효 수량을 가진 비용 항목 목록</summary>
-    public IReadOnlyList<CurrencyCost> Costs => m_costs;
+    public IReadOnlyList<ResourceCost> Costs => m_costs;
 
     /// <summary>
     /// 0 이하 수량을 제외하고 비용 묶음을 생성
     /// </summary>
     /// <param name="costs">묶음에 포함할 재화 비용 항목</param>
-    public CostBundle(params CurrencyCost[] costs)
+    public CostBundle(params ResourceCost[] costs)
     {
         if (costs == null)
             return;
 
-        foreach (CurrencyCost cost in costs)
+        foreach (ResourceCost cost in costs)
         {
-            if (cost.Amount > 0)
+            if (cost.IsValid)
                 m_costs.Add(cost);
         }
     }

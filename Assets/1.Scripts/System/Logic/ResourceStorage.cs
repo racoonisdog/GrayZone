@@ -1,50 +1,70 @@
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 
-//Ã¢°í½Ã½ºÅÛ
-public class ResourceStorage
+/// <summary>
+/// ì•ˆì •ì ì¸ ìì› IDë³„ ìˆ˜ëŸ‰ì„ ë³´ê´€í•˜ëŠ” ëŸ°íƒ€ì„ ì €ì¥ì†Œì…ë‹ˆë‹¤.
+/// </summary>
+public sealed class ResourceStorage
 {
-    private readonly Dictionary<CurrencyType, int> m_amounts = new();
+    private readonly Dictionary<string, int> m_amounts =
+        new(StringComparer.Ordinal);
 
-    public IReadOnlyDictionary<CurrencyType, int> Amounts => m_amounts;
+    public IReadOnlyDictionary<string, int> Amounts => m_amounts;
 
-    public int GetAmount(CurrencyType type)
+    public int GetAmount(string resourceId)
     {
-        return m_amounts.TryGetValue(type, out int amount) ? amount : 0;
+        string id = ResourceIds.Normalize(resourceId);
+        return !string.IsNullOrEmpty(id)
+            && m_amounts.TryGetValue(id, out int amount)
+                ? amount
+                : 0;
     }
 
-    public bool Add(CurrencyType type, int amount)
+    public bool Add(string resourceId, int amount)
     {
-        if (amount <= 0)
+        string id = ResourceIds.Normalize(resourceId);
+        if (string.IsNullOrEmpty(id) || amount <= 0)
             return false;
 
-        m_amounts[type] = GetAmount(type) + amount;
+        int current = GetAmount(id);
+        if (current > int.MaxValue - amount)
+            return false;
+
+        m_amounts[id] = current + amount;
         return true;
     }
 
-    public void SetAmount(CurrencyType type, int amount)
+    public bool SetAmount(string resourceId, int amount)
     {
-        m_amounts[type] = Math.Max(0, amount);
+        string id = ResourceIds.Normalize(resourceId);
+        if (string.IsNullOrEmpty(id))
+            return false;
+
+        m_amounts[id] = Math.Max(0, amount);
+        return true;
     }
 
-    public bool CanSpend(CurrencyCost cost)
+    public bool CanSpend(ResourceCost cost)
     {
-        return cost.Amount <= 0 || GetAmount(cost.Type) >= cost.Amount;
+        return cost.IsValid
+            && GetAmount(cost.ResourceId) >= cost.Amount;
     }
 
-    public bool TrySpend(CurrencyCost cost)
+    public bool TrySpend(ResourceCost cost)
     {
-        //ToDo : ÀÚ¿øÀçÈ­°¡ ºÎÁ·ÇÏ´Ù´Â ÀÌº¥Æ® ¿¬°á
         if (!CanSpend(cost))
             return false;
 
-        m_amounts[cost.Type] = GetAmount(cost.Type) - cost.Amount;
+        m_amounts[cost.ResourceId] =
+            GetAmount(cost.ResourceId) - cost.Amount;
         return true;
     }
 
-    public Dictionary<CurrencyType, int> CreateSnapshot()
+    public Dictionary<string, int> CreateSnapshot()
     {
-        return new Dictionary<CurrencyType, int>(m_amounts);
+        return new Dictionary<string, int>(
+            m_amounts,
+            StringComparer.Ordinal);
     }
 
     public void CopyFrom(ResourceStorage source)
@@ -58,16 +78,14 @@ public class ResourceStorage
         ApplySnapshot(source.m_amounts);
     }
 
-    public void ApplySnapshot(IReadOnlyDictionary<CurrencyType, int> snapshot)
+    public void ApplySnapshot(IReadOnlyDictionary<string, int> snapshot)
     {
         m_amounts.Clear();
         if (snapshot == null)
             return;
 
-        foreach (KeyValuePair<CurrencyType, int> entry in snapshot)
-        {
+        foreach (KeyValuePair<string, int> entry in snapshot)
             SetAmount(entry.Key, entry.Value);
-        }
     }
 
     public void Clear()

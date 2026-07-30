@@ -11,7 +11,7 @@ public enum SaveSlotType
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 9;
 
     public int schemaVersion = CurrentSchemaVersion;
     public string profileId = "default";
@@ -60,7 +60,8 @@ public class SaveData
     [Serializable]
     public class ResourceAmountData
     {
-        public CurrencyType type;
+        /// <summary>저장과 런타임에서 사용하는 안정적인 자원 ID입니다.</summary>
+        public string resourceId = string.Empty;
         public int amount;
     }
 

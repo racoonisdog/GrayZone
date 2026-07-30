@@ -169,9 +169,13 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
         if (entries == null || entries.Length == 0)
             return new CostBundle();
 
-        CurrencyCost[] costs = new CurrencyCost[entries.Length];
+        ResourceCost[] costs = new ResourceCost[entries.Length];
         for (int i = 0; i < entries.Length; i++)
-            costs[i] = new CurrencyCost(entries[i].type, entries[i].amount);
+        {
+            costs[i] = new ResourceCost(
+                entries[i].resourceId,
+                entries[i].amount);
+        }
 
         return new CostBundle(costs);
     }
@@ -580,7 +584,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable
     [System.Serializable]
     private struct UpgradeCostEntry
     {
-        public CurrencyType type;
+        public string resourceId;
         public int amount;
     }
 

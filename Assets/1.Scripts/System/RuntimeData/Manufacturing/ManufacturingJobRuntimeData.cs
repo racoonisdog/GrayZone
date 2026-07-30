@@ -3,36 +3,42 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 제조 작업이 시작될 때 고정하는 아이템 1개당 실제 재료 비용입니다.
+/// 제조 작업이 시작될 때 고정하는 배치 1회당 실제 재료 비용입니다.
 /// </summary>
 [Serializable]
 public sealed class ManufacturingMaterialCostSnapshot
 {
-    [SerializeField] private CurrencyType m_type;
+    [SerializeField] private string m_resourceId = string.Empty;
     [Min(0)]
     [SerializeField] private int m_unitAmount;
 
-    public CurrencyType Type => m_type;
+    public string ResourceId => ResourceIds.Normalize(m_resourceId);
     public int UnitAmount => Math.Max(0, m_unitAmount);
-    public bool IsValid => UnitAmount > 0;
+    public bool IsValid =>
+        !string.IsNullOrEmpty(ResourceId) && UnitAmount > 0;
 
     public ManufacturingMaterialCostSnapshot()
     {
     }
 
-    public ManufacturingMaterialCostSnapshot(CurrencyType type, int unitAmount)
+    public ManufacturingMaterialCostSnapshot(
+        string resourceId,
+        int unitAmount)
     {
-        m_type = type;
+        m_resourceId = ResourceIds.Normalize(resourceId);
         m_unitAmount = Math.Max(0, unitAmount);
     }
 
     public ManufacturingMaterialCostSnapshot Clone()
     {
-        return new ManufacturingMaterialCostSnapshot(Type, UnitAmount);
+        return new ManufacturingMaterialCostSnapshot(
+            ResourceId,
+            UnitAmount);
     }
 
     public void EnsureValid()
     {
+        m_resourceId = ResourceIds.Normalize(m_resourceId);
         m_unitAmount = Math.Max(0, m_unitAmount);
     }
 
@@ -56,9 +62,13 @@ public sealed class ManufacturingJobRuntimeData
     [Min(0)]
     [SerializeField] private int m_slotIndex;
     [SerializeField] private string m_recipeId = string.Empty;
-    [SerializeField] private string m_resultItemDefinitionId = string.Empty;
+    [SerializeField] private ManufacturingResultKind m_resultKind =
+        ManufacturingResultKind.Item;
+    [SerializeField] private string m_resultDefinitionId = string.Empty;
     [Min(0)]
     [SerializeField] private int m_requestedQuantity;
+    [Min(1)]
+    [SerializeField] private int m_resultQuantityPerBatchSnapshot = 1;
     [Min(0)]
     [SerializeField] private int m_unitWorkSnapshot;
     [Min(0)]
@@ -69,16 +79,43 @@ public sealed class ManufacturingJobRuntimeData
 
     public int SlotIndex => m_slotIndex;
     public string RecipeId => m_recipeId ?? string.Empty;
-    public string ResultItemDefinitionId => m_resultItemDefinitionId ?? string.Empty;
-    public int RequestedQuantity => Math.Max(0, m_requestedQuantity);
+    public ManufacturingResultKind ResultKind => m_resultKind;
+    public string ResultDefinitionId => m_resultDefinitionId ?? string.Empty;
+    public string ResultItemDefinitionId =>
+        ResultKind == ManufacturingResultKind.Item
+            ? ResultDefinitionId
+            : string.Empty;
+    public string ResultResourceId =>
+        ResultKind == ManufacturingResultKind.Resource
+            ? ResultDefinitionId
+            : string.Empty;
+    public int RequestedBatchCount => Math.Max(0, m_requestedQuantity);
+    public int ResultQuantityPerBatchSnapshot => Math.Max(1, m_resultQuantityPerBatchSnapshot);
     public int UnitWorkSnapshot => Math.Max(0, m_unitWorkSnapshot);
     public int TotalWork => Math.Max(0, m_totalWork);
     public int ProcessedWork => Mathf.Clamp(m_processedWork, 0, TotalWork);
     public int RemainingWork => TotalWork - ProcessedWork;
-    public int CompletedQuantity => UnitWorkSnapshot <= 0
+    public int CompletedBatchCount => UnitWorkSnapshot <= 0
         ? 0
-        : Math.Min(RequestedQuantity, ProcessedWork / UnitWorkSnapshot);
-    public int RemainingQuantity => RequestedQuantity - CompletedQuantity;
+        : Math.Min(RequestedBatchCount, ProcessedWork / UnitWorkSnapshot);
+    public int RemainingBatchCount => RequestedBatchCount - CompletedBatchCount;
+    public long RequestedResultQuantity =>
+        (long)RequestedBatchCount * ResultQuantityPerBatchSnapshot;
+    public long CompletedResultQuantity =>
+        (long)CompletedBatchCount * ResultQuantityPerBatchSnapshot;
+    public long RemainingResultQuantity =>
+        (long)RemainingBatchCount * ResultQuantityPerBatchSnapshot;
+    public long RequestedResultItemQuantity => RequestedResultQuantity;
+    public long CompletedResultItemQuantity => CompletedResultQuantity;
+    public long RemainingResultItemQuantity => RemainingResultQuantity;
+
+    /// <summary>이전 호출부 호환용 별칭입니다. 값의 의미는 요청 배치 수입니다.</summary>
+    public int RequestedQuantity => RequestedBatchCount;
+    /// <summary>이전 호출부 호환용 별칭입니다. 값의 의미는 완료 배치 수입니다.</summary>
+    public int CompletedQuantity => CompletedBatchCount;
+    /// <summary>이전 호출부 호환용 별칭입니다. 값의 의미는 남은 배치 수입니다.</summary>
+    public int RemainingQuantity => RemainingBatchCount;
+
     public bool IsComplete => IsValid && ProcessedWork >= TotalWork;
     public float Progress01 => TotalWork <= 0 ? 0.0f : (float)ProcessedWork / TotalWork;
     public IReadOnlyList<ManufacturingMaterialCostSnapshot> UnitCostSnapshots
@@ -96,10 +133,14 @@ public sealed class ManufacturingJobRuntimeData
         {
             return SlotIndex >= 0
                 && !string.IsNullOrWhiteSpace(RecipeId)
-                && !string.IsNullOrWhiteSpace(ResultItemDefinitionId)
-                && RequestedQuantity > 0
+                && IsValidResultDefinition(ResultKind, ResultDefinitionId)
+                && RequestedBatchCount > 0
+                && ResultQuantityPerBatchSnapshot > 0
                 && UnitWorkSnapshot > 0
-                && TryCalculateTotalWork(UnitWorkSnapshot, RequestedQuantity, out int expectedTotalWork)
+                && TryCalculateTotalWork(
+                    UnitWorkSnapshot,
+                    RequestedBatchCount,
+                    out int expectedTotalWork)
                 && TotalWork == expectedTotalWork;
         }
     }
@@ -113,14 +154,79 @@ public sealed class ManufacturingJobRuntimeData
         int slotIndex,
         string recipeId,
         string resultItemDefinitionId,
-        int requestedQuantity,
+        int requestedBatchCount,
         int unitWorkSnapshot,
-        IEnumerable<CurrencyCost> unitCosts)
+        IEnumerable<ResourceCost> unitCosts)
+        : this(
+            slotIndex,
+            recipeId,
+            ManufacturingResultKind.Item,
+            resultItemDefinitionId,
+            requestedBatchCount,
+            1,
+            unitWorkSnapshot,
+            unitCosts)
+    {
+    }
+
+    public ManufacturingJobRuntimeData(
+        int slotIndex,
+        string recipeId,
+        string resultItemDefinitionId,
+        int requestedBatchCount,
+        int resultQuantityPerBatchSnapshot,
+        int unitWorkSnapshot,
+        IEnumerable<ResourceCost> unitCosts)
+        : this(
+            slotIndex,
+            recipeId,
+            ManufacturingResultKind.Item,
+            resultItemDefinitionId,
+            requestedBatchCount,
+            resultQuantityPerBatchSnapshot,
+            unitWorkSnapshot,
+            unitCosts)
+    {
+    }
+
+    public ManufacturingJobRuntimeData(
+        int slotIndex,
+        string recipeId,
+        ManufacturingResultKind resultKind,
+        string resultDefinitionId,
+        int requestedBatchCount,
+        int unitWorkSnapshot,
+        IEnumerable<ResourceCost> unitCosts)
+        : this(
+            slotIndex,
+            recipeId,
+            resultKind,
+            resultDefinitionId,
+            requestedBatchCount,
+            1,
+            unitWorkSnapshot,
+            unitCosts)
+    {
+    }
+
+    public ManufacturingJobRuntimeData(
+        int slotIndex,
+        string recipeId,
+        ManufacturingResultKind resultKind,
+        string resultDefinitionId,
+        int requestedBatchCount,
+        int resultQuantityPerBatchSnapshot,
+        int unitWorkSnapshot,
+        IEnumerable<ResourceCost> unitCosts)
     {
         m_slotIndex = slotIndex;
         m_recipeId = NormalizeId(recipeId);
-        m_resultItemDefinitionId = NormalizeId(resultItemDefinitionId);
-        m_requestedQuantity = Math.Max(0, requestedQuantity);
+        m_resultKind = NormalizeResultKind(resultKind);
+        m_resultDefinitionId = NormalizeResultDefinitionId(
+            m_resultKind,
+            resultDefinitionId);
+        m_requestedQuantity = Math.Max(0, requestedBatchCount);
+        m_resultQuantityPerBatchSnapshot = Math.Max(1, resultQuantityPerBatchSnapshot);
         m_unitWorkSnapshot = Math.Max(0, unitWorkSnapshot);
         m_totalWork = TryCalculateTotalWork(m_unitWorkSnapshot, m_requestedQuantity, out int totalWork)
             ? totalWork
@@ -131,7 +237,7 @@ public sealed class ManufacturingJobRuntimeData
     }
 
     /// <summary>
-    /// 작업량을 더하고 이번 호출로 새로 완성된 아이템 수량을 반환합니다.
+    /// 작업량을 더하고 이번 호출로 새로 완료된 배치 수를 반환합니다.
     /// </summary>
     public int ApplyWork(int workAmount)
     {
@@ -139,11 +245,11 @@ public sealed class ManufacturingJobRuntimeData
         if (!IsValid || workAmount <= 0 || IsComplete)
             return 0;
 
-        int completedBefore = CompletedQuantity;
+        int completedBefore = CompletedBatchCount;
         m_processedWork = workAmount >= RemainingWork
             ? TotalWork
             : ProcessedWork + workAmount;
-        return CompletedQuantity - completedBefore;
+        return CompletedBatchCount - completedBefore;
     }
 
     public ManufacturingJobRuntimeData Clone()
@@ -153,8 +259,10 @@ public sealed class ManufacturingJobRuntimeData
         {
             m_slotIndex = SlotIndex,
             m_recipeId = RecipeId,
-            m_resultItemDefinitionId = ResultItemDefinitionId,
-            m_requestedQuantity = RequestedQuantity,
+            m_resultKind = ResultKind,
+            m_resultDefinitionId = ResultDefinitionId,
+            m_requestedQuantity = RequestedBatchCount,
+            m_resultQuantityPerBatchSnapshot = ResultQuantityPerBatchSnapshot,
             m_unitWorkSnapshot = UnitWorkSnapshot,
             m_totalWork = TotalWork,
             m_processedWork = ProcessedWork,
@@ -165,8 +273,12 @@ public sealed class ManufacturingJobRuntimeData
     public void EnsureValid()
     {
         m_recipeId = NormalizeId(m_recipeId);
-        m_resultItemDefinitionId = NormalizeId(m_resultItemDefinitionId);
+        m_resultKind = NormalizeResultKind(m_resultKind);
+        m_resultDefinitionId = NormalizeResultDefinitionId(
+            m_resultKind,
+            m_resultDefinitionId);
         m_requestedQuantity = Math.Max(0, m_requestedQuantity);
+        m_resultQuantityPerBatchSnapshot = Math.Max(1, m_resultQuantityPerBatchSnapshot);
         m_unitWorkSnapshot = Math.Max(0, m_unitWorkSnapshot);
         m_totalWork = TryCalculateTotalWork(m_unitWorkSnapshot, m_requestedQuantity, out int totalWork)
             ? totalWork
@@ -175,13 +287,13 @@ public sealed class ManufacturingJobRuntimeData
         m_unitCostSnapshots = NormalizeCostSnapshots(m_unitCostSnapshots);
     }
 
-    private static bool TryCalculateTotalWork(int unitWork, int quantity, out int totalWork)
+    private static bool TryCalculateTotalWork(int unitWork, int batchCount, out int totalWork)
     {
         totalWork = 0;
-        if (unitWork <= 0 || quantity <= 0)
+        if (unitWork <= 0 || batchCount <= 0)
             return false;
 
-        long calculated = (long)unitWork * quantity;
+        long calculated = (long)unitWork * batchCount;
         if (calculated > int.MaxValue)
             return false;
 
@@ -190,16 +302,20 @@ public sealed class ManufacturingJobRuntimeData
     }
 
     private static List<ManufacturingMaterialCostSnapshot> CreateCostSnapshots(
-        IEnumerable<CurrencyCost> source)
+        IEnumerable<ResourceCost> source)
     {
         List<ManufacturingMaterialCostSnapshot> snapshots = new();
         if (source == null)
             return snapshots;
 
-        foreach (CurrencyCost cost in source)
+        foreach (ResourceCost cost in source)
         {
-            if (cost.Amount > 0)
-                snapshots.Add(new ManufacturingMaterialCostSnapshot(cost.Type, cost.Amount));
+            if (cost.IsValid)
+            {
+                snapshots.Add(new ManufacturingMaterialCostSnapshot(
+                    cost.ResourceId,
+                    cost.Amount));
+            }
         }
 
         return NormalizeCostSnapshots(snapshots);
@@ -237,7 +353,11 @@ public sealed class ManufacturingJobRuntimeData
             if (!cost.IsValid)
                 continue;
 
-            ManufacturingMaterialCostSnapshot existing = normalized.Find(item => item.Type == cost.Type);
+            ManufacturingMaterialCostSnapshot existing = normalized.Find(
+                item => string.Equals(
+                    item.ResourceId,
+                    cost.ResourceId,
+                    StringComparison.Ordinal));
             if (existing == null)
                 normalized.Add(cost.Clone());
             else
@@ -250,5 +370,31 @@ public sealed class ManufacturingJobRuntimeData
     private static string NormalizeId(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+    }
+
+    private static ManufacturingResultKind NormalizeResultKind(
+        ManufacturingResultKind resultKind)
+    {
+        return resultKind == ManufacturingResultKind.Resource
+            ? ManufacturingResultKind.Resource
+            : ManufacturingResultKind.Item;
+    }
+
+    private static string NormalizeResultDefinitionId(
+        ManufacturingResultKind resultKind,
+        string resultDefinitionId)
+    {
+        return resultKind == ManufacturingResultKind.Resource
+            ? ResourceIds.Normalize(resultDefinitionId)
+            : NormalizeId(resultDefinitionId);
+    }
+
+    private static bool IsValidResultDefinition(
+        ManufacturingResultKind resultKind,
+        string resultDefinitionId)
+    {
+        return resultKind == ManufacturingResultKind.Resource
+            ? ResourceIds.IsDefined(resultDefinitionId)
+            : !string.IsNullOrWhiteSpace(resultDefinitionId);
     }
 }

@@ -18,7 +18,7 @@ public sealed class StorageFacility
     public event Action ItemsChanged;
 
     /// <summary>현재 자원 수량을 읽기 전용으로 제공합니다.</summary>
-    public IReadOnlyDictionary<CurrencyType, int> ResourceAmounts => storage.Amounts;
+    public IReadOnlyDictionary<string, int> ResourceAmounts => storage.Amounts;
     /// <summary>현재 보유 중인 수량형 아이템 목록을 읽기 전용으로 제공합니다.</summary>
     public IReadOnlyList<ItemStorageEntry> ItemStorageEntries => readOnlyItemStorageEntries;
 
@@ -34,14 +34,15 @@ public sealed class StorageFacility
         this.notifyShelterDataChanged = notifyShelterDataChanged;
     }
 
-    public int GetResourceAmount(CurrencyType type)
+    public int GetResourceAmount(string resourceId)
     {
-        return storage.GetAmount(type);
+        return storage.GetAmount(resourceId);
     }
 
-    public bool CanSpendResource(CurrencyCost cost)
+    public bool CanSpendResource(ResourceCost cost)
     {
-        return cost.Amount <= 0 || storage.GetAmount(cost.Type) >= cost.Amount;
+        return cost.IsValid
+            && storage.GetAmount(cost.ResourceId) >= cost.Amount;
     }
 
     public bool CanSpendResources(CostBundle costBundle)
@@ -49,10 +50,10 @@ public sealed class StorageFacility
         if (costBundle == null || costBundle.IsFree)
             return true;
 
-        if (!TryBuildCostTotals(costBundle, out Dictionary<CurrencyType, int> totals))
+        if (!TryBuildCostTotals(costBundle, out Dictionary<string, int> totals))
             return false;
 
-        foreach (KeyValuePair<CurrencyType, int> total in totals)
+        foreach (KeyValuePair<string, int> total in totals)
         {
             if (storage.GetAmount(total.Key) < total.Value)
                 return false;
@@ -61,7 +62,7 @@ public sealed class StorageFacility
         return true;
     }
 
-    public bool TrySpendResource(CurrencyCost cost)
+    public bool TrySpendResource(ResourceCost cost)
     {
         if (cost.Amount <= 0)
             return true;
@@ -78,16 +79,16 @@ public sealed class StorageFacility
         if (costBundle == null || costBundle.IsFree)
             return true;
 
-        if (!TryBuildCostTotals(costBundle, out Dictionary<CurrencyType, int> totals))
+        if (!TryBuildCostTotals(costBundle, out Dictionary<string, int> totals))
             return false;
 
-        foreach (KeyValuePair<CurrencyType, int> total in totals)
+        foreach (KeyValuePair<string, int> total in totals)
         {
             if (storage.GetAmount(total.Key) < total.Value)
                 return false;
         }
 
-        foreach (KeyValuePair<CurrencyType, int> total in totals)
+        foreach (KeyValuePair<string, int> total in totals)
         {
             storage.SetAmount(total.Key, storage.GetAmount(total.Key) - total.Value);
         }
@@ -96,9 +97,9 @@ public sealed class StorageFacility
         return true;
     }
 
-    public bool TryAddResource(CurrencyType type, int amount)
+    public bool TryAddResource(string resourceId, int amount)
     {
-        if (!storage.Add(type, amount))
+        if (!storage.Add(resourceId, amount))
             return false;
 
         NotifyResourcesChanged();
@@ -114,16 +115,16 @@ public sealed class StorageFacility
         if (costBundle == null || costBundle.IsFree)
             return true;
 
-        if (!TryBuildCostTotals(costBundle, out Dictionary<CurrencyType, int> totals))
+        if (!TryBuildCostTotals(costBundle, out Dictionary<string, int> totals))
             return false;
 
-        foreach (KeyValuePair<CurrencyType, int> total in totals)
+        foreach (KeyValuePair<string, int> total in totals)
         {
             if (storage.GetAmount(total.Key) > int.MaxValue - total.Value)
                 return false;
         }
 
-        foreach (KeyValuePair<CurrencyType, int> total in totals)
+        foreach (KeyValuePair<string, int> total in totals)
         {
             storage.SetAmount(total.Key, storage.GetAmount(total.Key) + total.Value);
         }
@@ -132,10 +133,10 @@ public sealed class StorageFacility
         return true;
     }
 
-    public void SetResourceAmount(CurrencyType type, int amount)
+    public void SetResourceAmount(string resourceId, int amount)
     {
-        storage.SetAmount(type, amount);
-        NotifyResourcesChanged();
+        if (storage.SetAmount(resourceId, amount))
+            NotifyResourcesChanged();
     }
 
     /// <summary>아이템 정의 ID에 해당하는 현재 총 보유 수량을 반환합니다.</summary>
@@ -212,19 +213,21 @@ public sealed class StorageFacility
         return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
     }
 
-    private static bool TryBuildCostTotals(CostBundle costBundle, out Dictionary<CurrencyType, int> totals)
+    private static bool TryBuildCostTotals(
+        CostBundle costBundle,
+        out Dictionary<string, int> totals)
     {
-        totals = new Dictionary<CurrencyType, int>();
-        foreach (CurrencyCost cost in costBundle.Costs)
+        totals = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (ResourceCost cost in costBundle.Costs)
         {
-            if (cost.Amount <= 0)
+            if (!cost.IsValid)
                 continue;
 
-            totals.TryGetValue(cost.Type, out int current);
+            totals.TryGetValue(cost.ResourceId, out int current);
             if (current > int.MaxValue - cost.Amount)
                 return false;
 
-            totals[cost.Type] = current + cost.Amount;
+            totals[cost.ResourceId] = current + cost.Amount;
         }
 
         return true;
