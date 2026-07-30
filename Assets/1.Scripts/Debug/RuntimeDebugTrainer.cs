@@ -16,7 +16,8 @@ using UnityEditor;
 /// 이 컴포넌트가 들어 있는 공용 프리팹은 필드 씬 시작 시 <see cref="FieldSceneDataManager"/>가 생성하며,
 /// 생성된 뒤 주변 런타임 컴포넌트를 자동 탐색합니다. 씬에 직접 배치해도 동작합니다.
 /// 개발 모드 자체는 <see cref="GameManager"/>가 소유하고 이 트레이너는 <see cref="GameDevMode"/>를 읽기만 합니다.
-/// Editor에서만 실제 트레이너가 생존하며, Player 빌드에서는 <c>Awake</c> 첫 단계에서 오브젝트를 제거합니다.
+/// 동작 여부는 <see cref="GameDevMode.DebugFeaturesEnabled"/>가 정합니다. Editor와 Development Build에서 살아 있고,
+/// 정식 빌드에서는 개발 모드가 켜져 있어도 창이 열리지 않습니다.
 /// IMGUI(OnGUI) 기반이라 별도의 uGUI 연결은 필요 없습니다.
 /// </para>
 /// <para>
@@ -136,11 +137,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private void Awake()
     {
-#if !UNITY_EDITOR
-        enabled = false;
-        Destroy(gameObject);
-        return;
-#else
+        // 빌드에서 오브젝트를 지우지 않습니다.
+        // 포함 여부는 GameDevMode.DebugFeaturesEnabled가 정하며, 그 조건에 Debug.isDebugBuild가 이미 들어 있어
+        // Development Build에서는 살아 있고 정식 빌드에서는 꺼집니다.
+        // 컴파일 단계에서 잘라내면 그 런타임 판단이 도달하지 못해, 개발자용 빌드에서도 트레이너를 쓸 수 없습니다.
         if (s_instance != null && s_instance != this)
         {
             m_isDuplicate = true;
@@ -157,14 +157,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
         //
         // Update가 매 프레임 개발 모드를 확인해 열려 있던 창을 닫고 입력을 무시하므로,
         // 컴포넌트를 켜 둔 채로도 꺼진 것과 같이 동작합니다.
-#endif
     }
 
     private void OnEnable()
     {
-#if !UNITY_EDITOR
-        return;
-#else
         if (m_isDuplicate)
         {
             return;
@@ -178,7 +174,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         s_instance = this;
-#endif
     }
 
     private void OnDisable()
