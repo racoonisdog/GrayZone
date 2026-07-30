@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// 셸터에서 현재 열려 있는 차단형 UI 종류
@@ -70,6 +71,45 @@ public class UIManager : MonoBehaviour
         // The manager object should stay active; only the assigned UI object is hidden.
         if (m_hideInteractionUIOnAwake)
             HideInteraction();
+    }
+
+    private void Update()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame)
+            return;
+
+        TryHandleEscape();
+    }
+
+    /// <summary>
+    /// 현재 최상위 차단형 UI 하나에만 Escape 동작을 전달합니다.
+    /// </summary>
+    public bool TryHandleEscape()
+    {
+        switch (m_activeUI)
+        {
+            case ShelterUIType.Medical:
+                if (m_medicalUI == null || !m_medicalUI.TryHandleEscape())
+                    CloseMedicalUI();
+                return true;
+            case ShelterUIType.Manufacturing:
+                ManufacturingUI manufacturingUI = CacheManufacturingUI();
+                if (manufacturingUI == null
+                    || !manufacturingUI.TryHandleEscape())
+                {
+                    CloseManufacturingUI();
+                }
+                return true;
+            case ShelterUIType.FacilityUpgrade:
+                CloseFacilityUpgradeUI();
+                return true;
+            case ShelterUIType.Inventory:
+                CloseInventoryUI();
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void OnEnable()
@@ -278,18 +318,6 @@ public class UIManager : MonoBehaviour
         SetInteractionUIActive(false);
         SetActiveUI(ShelterUIType.Inventory);
         return true;
-    }
-
-    /// <summary>I키 또는 인벤토리 버튼의 열기/닫기 요청을 처리합니다.</summary>
-    public bool TryToggleInventoryUI()
-    {
-        if (m_activeUI == ShelterUIType.Inventory)
-        {
-            CloseInventoryUI();
-            return true;
-        }
-
-        return TryOpenInventoryUI();
     }
 
     /// <summary>셸터 공용 인벤토리를 닫고 플레이어 제어를 복원합니다.</summary>

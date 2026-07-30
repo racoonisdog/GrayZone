@@ -26,7 +26,7 @@ RenderSettings:
   m_AmbientIntensity: 0.65
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.4784314, g: 0.54901963, b: 0.7176471, a: 1}
-  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: a5178874598f23943883b393c6d9d698, type: 2}
   m_HaloStrength: 0.617
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -22496,7 +22496,9 @@ GameObject:
   - component: {fileID: 178951687}
   - component: {fileID: 178951689}
   - component: {fileID: 178951688}
-  m_Layer: 0
+  - component: {fileID: 178951691}
+  - component: {fileID: 178951690}
+  m_Layer: 31
   m_Name: Weapons_Workbench (3)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -22611,6 +22613,33 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.2687912, y: 1.881383, z: 6.6058226}
   m_Center: {x: 3.764554, y: 0.9429352, z: 1.680356}
+--- !u!114 &178951690
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 178951686}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
+--- !u!114 &178951691
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 178951686}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 2
+  facilityRoot: {fileID: 552893761}
 --- !u!1001 &179943770
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -30723,10 +30752,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FacilityLevelVisuals
   levelRoots:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 645153350}
+  - {fileID: 503245387}
+  - {fileID: 2108986011}
+  - {fileID: 1314893765}
 --- !u!1001 &245469562
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -40079,7 +40108,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &316242660
 Transform:
   m_ObjectHideFlags: 0
@@ -43228,13 +43257,15 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 340352148}
-  m_Layer: 0
+  - component: {fileID: 340352150}
+  - component: {fileID: 340352149}
+  m_Layer: 31
   m_Name: Medical_Room_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &340352148
 Transform:
   m_ObjectHideFlags: 0
@@ -43258,6 +43289,33 @@ Transform:
   - {fileID: 472527151}
   m_Father: {fileID: 579813610}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &340352149
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 340352147}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
+--- !u!114 &340352150
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 340352147}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 1
+  facilityRoot: {fileID: 1536208055}
 --- !u!1001 &340451011
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -44012,7 +44070,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &347765370
 Transform:
   m_ObjectHideFlags: 0
@@ -55308,6 +55366,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PF_Steel_Structure_B (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 3592577318273616087, guid: 0a479e5fb5ae239469280c4a3ba5f012, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -64640,7 +64702,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &503245388
 Transform:
   m_ObjectHideFlags: 0
@@ -72856,6 +72918,184 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6509980852646475928, guid: c6319627a8b09ee44bfb34dc976f4b2d, type: 3}
   m_PrefabInstance: {fileID: 570573494}
   m_PrefabAsset: {fileID: 0}
+--- !u!43 &570595710
+Mesh:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: pb_Mesh493054
+  serializedVersion: 12
+  m_SubMeshes:
+  - serializedVersion: 2
+    firstByte: 0
+    indexCount: 12
+    topology: 0
+    baseVertex: 0
+    firstVertex: 0
+    vertexCount: 8
+    localAABB:
+      m_Center: {x: 0, y: 0, z: 0}
+      m_Extent: {x: 9, y: 0, z: 6}
+  m_Shapes:
+    vertices: []
+    shapes: []
+    channels: []
+    fullWeights: []
+  m_BindPose: []
+  m_BoneNameHashes: 
+  m_RootBoneNameHash: 0
+  m_BonesAABB: []
+  m_VariableBoneCountWeights:
+    m_Data: 
+  m_MeshCompression: 0
+  m_IsReadable: 1
+  m_KeepVertices: 1
+  m_KeepIndices: 1
+  m_IndexFormat: 0
+  m_IndexBuffer: 000001000200010003000200040005000600050007000600
+  m_VertexData:
+    serializedVersion: 3
+    m_VertexCount: 8
+    m_Channels:
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 3
+    - stream: 0
+      offset: 12
+      format: 0
+      dimension: 3
+    - stream: 0
+      offset: 24
+      format: 0
+      dimension: 4
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 40
+      format: 0
+      dimension: 2
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    m_DataSize: 384
+    _typelessdata: 000010c1000000000000c040000000000000803f000000000000803f0000000000000000000080bf000000000000803f00001041000000000000c040000000000000803f000000000000803f0000000000000000000080bf000090410000803f000010c1000000000000c0c0000000000000803f000000000000803f0000000000000000000080bf00000000000030c100001041000000000000c0c0000000000000803f000000000000803f0000000000000000000080bf00009041000030c1000010c1000000000000c0c000000000000080bf00000000000080bf0000000000000000000080bf00009041000030c100001041000000000000c0c000000000000080bf00000000000080bf0000000000000000000080bf00000000000030c1000010c1000000000000c04000000000000080bf00000000000080bf0000000000000000000080bf000090410000803f00001041000000000000c04000000000000080bf00000000000080bf0000000000000000000080bf000000000000803f
+  m_CompressedMesh:
+    m_Vertices:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_UV:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Normals:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Tangents:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Weights:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_NormalSigns:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_TangentSigns:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_FloatColors:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_BoneIndices:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Triangles:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_UVInfo: 0
+  m_LocalAABB:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 9, y: 0, z: 6}
+  m_MeshUsageFlags: 0
+  m_CookingOptions: 30
+  m_BakedConvexCollisionMesh: 
+  m_BakedTriangleCollisionMesh: 
+  'm_MeshMetrics[0]': 1
+  'm_MeshMetrics[1]': 1
+  m_MeshOptimizationFlags: 1
+  m_StreamData:
+    serializedVersion: 2
+    offset: 0
+    size: 0
+    path: 
+  m_MeshLodInfo:
+    serializedVersion: 2
+    m_LodSelectionCurve:
+      serializedVersion: 1
+      m_LodSlope: 0
+      m_LodBias: 0
+    m_NumLevels: 1
+    m_SubMeshes:
+    - serializedVersion: 2
+      m_Levels:
+      - serializedVersion: 1
+        m_IndexStart: 0
+        m_IndexCount: 0
 --- !u!1001 &571928160
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -73374,6 +73614,184 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1030990652, guid: abc00000000005489081601436659745, type: 3}
   m_PrefabInstance: {fileID: 575918558}
   m_PrefabAsset: {fileID: 0}
+--- !u!43 &576094530
+Mesh:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: pb_Mesh489262
+  serializedVersion: 12
+  m_SubMeshes:
+  - serializedVersion: 2
+    firstByte: 0
+    indexCount: 12
+    topology: 0
+    baseVertex: 0
+    firstVertex: 0
+    vertexCount: 8
+    localAABB:
+      m_Center: {x: 0, y: 0, z: 0}
+      m_Extent: {x: 7.5, y: 0, z: 6}
+  m_Shapes:
+    vertices: []
+    shapes: []
+    channels: []
+    fullWeights: []
+  m_BindPose: []
+  m_BoneNameHashes: 
+  m_RootBoneNameHash: 0
+  m_BonesAABB: []
+  m_VariableBoneCountWeights:
+    m_Data: 
+  m_MeshCompression: 0
+  m_IsReadable: 1
+  m_KeepVertices: 1
+  m_KeepIndices: 1
+  m_IndexFormat: 0
+  m_IndexBuffer: 000001000200010003000200040005000600050007000600
+  m_VertexData:
+    serializedVersion: 3
+    m_VertexCount: 8
+    m_Channels:
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 3
+    - stream: 0
+      offset: 12
+      format: 0
+      dimension: 3
+    - stream: 0
+      offset: 24
+      format: 0
+      dimension: 4
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 40
+      format: 0
+      dimension: 2
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    m_DataSize: 384
+    _typelessdata: 0000f0c0000000000000c040000000000000803f000000000000803f0000000000000000000080bf000000000000803f0000f040000000000000c040000000000000803f000000000000803f0000000000000000000080bf000070410000803f0000f0c0000000000000c0c0000000000000803f000000000000803f0000000000000000000080bf00000000000030c10000f040000000000000c0c0000000000000803f000000000000803f0000000000000000000080bf00007041000030c10000f0c0000000000000c0c000000000000080bf00000000000080bf0000000000000000000080bf00007041000030c10000f040000000000000c0c000000000000080bf00000000000080bf0000000000000000000080bf00000000000030c10000f0c0000000000000c04000000000000080bf00000000000080bf0000000000000000000080bf000070410000803f0000f040000000000000c04000000000000080bf00000000000080bf0000000000000000000080bf000000000000803f
+  m_CompressedMesh:
+    m_Vertices:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_UV:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Normals:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Tangents:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Weights:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_NormalSigns:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_TangentSigns:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_FloatColors:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_BoneIndices:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Triangles:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_UVInfo: 0
+  m_LocalAABB:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 7.5, y: 0, z: 6}
+  m_MeshUsageFlags: 0
+  m_CookingOptions: 30
+  m_BakedConvexCollisionMesh: 
+  m_BakedTriangleCollisionMesh: 
+  'm_MeshMetrics[0]': 1
+  'm_MeshMetrics[1]': 1
+  m_MeshOptimizationFlags: 1
+  m_StreamData:
+    serializedVersion: 2
+    offset: 0
+    size: 0
+    path: 
+  m_MeshLodInfo:
+    serializedVersion: 2
+    m_LodSelectionCurve:
+      serializedVersion: 1
+      m_LodSlope: 0
+      m_LodBias: 0
+    m_NumLevels: 1
+    m_SubMeshes:
+    - serializedVersion: 2
+      m_Levels:
+      - serializedVersion: 1
+        m_IndexStart: 0
+        m_IndexCount: 0
 --- !u!1001 &576162765
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -93449,6 +93867,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PF_Roof_3B
       objectReference: {fileID: 0}
+    - target: {fileID: 4791738502725200636, guid: 1c30cc562b5397c41ae2c1d55bef8279, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 7280483907892407997, guid: 1c30cc562b5397c41ae2c1d55bef8279, type: 3}
       propertyPath: m_LocalPosition.x
       value: 21.482649
@@ -111200,6 +111622,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PF_Roof_2B
       objectReference: {fileID: 0}
+    - target: {fileID: 7162376939794449386, guid: 13c46d6cecc3901408faa7a614b8bcdb, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 7163183809673232213, guid: 13c46d6cecc3901408faa7a614b8bcdb, type: 3}
       propertyPath: m_LocalPosition.x
       value: 21.482649
@@ -120353,7 +120779,9 @@ GameObject:
   m_Component:
   - component: {fileID: 938453752}
   - component: {fileID: 938453753}
-  m_Layer: 0
+  - component: {fileID: 938453755}
+  - component: {fileID: 938453754}
+  m_Layer: 31
   m_Name: Reception (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -120426,6 +120854,33 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.0027256, y: 1.388178, z: 3.2975879}
   m_Center: {x: 0.46185017, y: 0.19408906, z: -1.1487939}
+--- !u!114 &938453754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 938453751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
+--- !u!114 &938453755
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 938453751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 0
+  facilityRoot: {fileID: 1536208055}
 --- !u!1001 &938810886
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -134011,13 +134466,15 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1055914301}
-  m_Layer: 0
+  - component: {fileID: 1055914303}
+  - component: {fileID: 1055914302}
+  m_Layer: 31
   m_Name: Medical_Room_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1055914301
 Transform:
   m_ObjectHideFlags: 0
@@ -134041,6 +134498,33 @@ Transform:
   - {fileID: 2145647497}
   m_Father: {fileID: 579813610}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1055914302
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1055914300}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
+--- !u!114 &1055914303
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1055914300}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 1
+  facilityRoot: {fileID: 1536208055}
 --- !u!1001 &1056212074
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -138403,7 +138887,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1097557284
 Transform:
   m_ObjectHideFlags: 0
@@ -146402,7 +146886,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1160219003}
-  m_Mesh: {fileID: 414635373}
+  m_Mesh: {fileID: 576094530}
 --- !u!23 &1160219008
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -146683,7 +147167,7 @@ MonoBehaviour:
     m_AreaError: 15
   m_PreserveMeshAssetOnDestroy: 0
   assetGuid: 
-  m_Mesh: {fileID: 414635373}
+  m_Mesh: {fileID: 576094530}
   m_VersionIndex: 4481
   m_IsSelectable: 1
   m_SelectedFaces: 
@@ -165084,7 +165568,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1314893766
 Transform:
   m_ObjectHideFlags: 0
@@ -186236,6 +186720,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PF_Steel_Structure_B
       objectReference: {fileID: 0}
+    - target: {fileID: 3592577318273616087, guid: 0a479e5fb5ae239469280c4a3ba5f012, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -204718,7 +205206,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1640570439}
-  m_Mesh: {fileID: 2084434898}
+  m_Mesh: {fileID: 570595710}
 --- !u!23 &1640570444
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -204999,7 +205487,7 @@ MonoBehaviour:
     m_AreaError: 15
   m_PreserveMeshAssetOnDestroy: 0
   assetGuid: 
-  m_Mesh: {fileID: 2084434898}
+  m_Mesh: {fileID: 570595710}
   m_VersionIndex: 4451
   m_IsSelectable: 1
   m_SelectedFaces: 
@@ -222843,7 +223331,9 @@ GameObject:
   - component: {fileID: 1775952614}
   - component: {fileID: 1775952616}
   - component: {fileID: 1775952615}
-  m_Layer: 0
+  - component: {fileID: 1775952618}
+  - component: {fileID: 1775952617}
+  m_Layer: 31
   m_Name: Weapons_Workbench
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -222945,6 +223435,33 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.2687912, y: 1.881383, z: 6.5470734}
   m_Center: {x: 3.764554, y: 0.9429352, z: 1.7497334}
+--- !u!114 &1775952617
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1775952613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
+--- !u!114 &1775952618
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1775952613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 2
+  facilityRoot: {fileID: 552893761}
 --- !u!1001 &1776029024
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -228063,7 +228580,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1831947922
 Transform:
   m_ObjectHideFlags: 0
@@ -230851,10 +231368,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FacilityLevelVisuals
   levelRoots:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 1078407528}
+  - {fileID: 347765369}
+  - {fileID: 1055914300}
+  - {fileID: 340352147}
 --- !u!1001 &1851317112
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -241620,6 +242137,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PF_Roof_1B
       objectReference: {fileID: 0}
+    - target: {fileID: 5335458564699394452, guid: fb0db88b3518af64aa5ab066a1c83139, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 7911370123566595159, guid: fb0db88b3518af64aa5ab066a1c83139, type: 3}
       propertyPath: m_LocalPosition.x
       value: 21.48265
@@ -251240,7 +251761,9 @@ GameObject:
   m_Component:
   - component: {fileID: 2030919533}
   - component: {fileID: 2030919534}
-  m_Layer: 0
+  - component: {fileID: 2030919536}
+  - component: {fileID: 2030919535}
+  m_Layer: 31
   m_Name: Reception
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -251293,6 +251816,33 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.963213, y: 1.388178, z: 1.7104096}
   m_Center: {x: 0.48160648, y: 0.19408906, z: -0.35520482}
+--- !u!114 &2030919535
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2030919532}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 1
+  facilityRoot: {fileID: 1536208055}
+--- !u!114 &2030919536
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2030919532}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
 --- !u!1001 &2031092401
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -254920,7 +255470,9 @@ GameObject:
   - component: {fileID: 2060963084}
   - component: {fileID: 2060963086}
   - component: {fileID: 2060963085}
-  m_Layer: 0
+  - component: {fileID: 2060963088}
+  - component: {fileID: 2060963087}
+  m_Layer: 31
   m_Name: Weapons_Workbench (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -255032,6 +255584,33 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.2687912, y: 1.881383, z: 6.5180006}
   m_Center: {x: 3.764554, y: 0.9429352, z: 1.7242671}
+--- !u!114 &2060963087
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2060963083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
+--- !u!114 &2060963088
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2060963083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 2
+  facilityRoot: {fileID: 552893761}
 --- !u!1001 &2061624116
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -259883,7 +260462,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &2108986012
 Transform:
   m_ObjectHideFlags: 0
@@ -261932,7 +262511,9 @@ GameObject:
   - component: {fileID: 2121656697}
   - component: {fileID: 2121656699}
   - component: {fileID: 2121656698}
-  m_Layer: 0
+  - component: {fileID: 2121656701}
+  - component: {fileID: 2121656700}
+  m_Layer: 31
   m_Name: Weapons_Workbench (2)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -262048,6 +262629,33 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.2687912, y: 1.881383, z: 6.591016}
   m_Center: {x: 3.764554, y: 0.9429352, z: 1.6877594}
+--- !u!114 &2121656700
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2121656696}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d10c5c286d21b4499d9ee7d8714958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityUIInteractable
+  m_uiManager: {fileID: 1751716468}
+--- !u!114 &2121656701
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2121656696}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792709939c4fa2240ad5df0f24f6d4cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FacilityInteractionPoint
+  interactionType: 2
+  facilityRoot: {fileID: 552893761}
 --- !u!1001 &2121672535
 PrefabInstance:
   m_ObjectHideFlags: 0

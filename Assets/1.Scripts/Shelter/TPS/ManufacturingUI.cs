@@ -1,7 +1,6 @@
 using System;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// 제조 시설 UI를 열고 제조 슬롯, 레시피 선택, 헬퍼 UI를 매니저 상태로 투영합니다.
@@ -66,15 +65,20 @@ public sealed class ManufacturingUI : MonoBehaviour
         UnbindCreateView();
     }
 
-    private void Update()
+    /// <summary>
+    /// 현재 제조 UI의 최상위 Escape 동작을 처리합니다.
+    /// CreateView가 열려 있으면 그것만 닫고, 아니면 제조 UI 전체를 닫습니다.
+    /// </summary>
+    public bool TryHandleEscape()
     {
-        if (Keyboard.current == null || !Keyboard.current.escapeKey.wasPressedThisFrame)
-            return;
+        if (!m_isOpen)
+            return false;
 
         if (m_createView != null && m_createView.TryHandleEscape())
-            return;
+            return true;
 
         Close();
+        return true;
     }
 
     public void Open(ManufacturingManager manager)

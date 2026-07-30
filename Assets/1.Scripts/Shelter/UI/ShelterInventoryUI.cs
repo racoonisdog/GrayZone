@@ -83,12 +83,9 @@ public sealed class ShelterInventoryUI : MonoBehaviour
 
         if (keyboard.iKey.wasPressedThisFrame)
         {
-            RequestToggle();
-            return;
+            if (!IsOpen)
+                RequestOpen();
         }
-
-        if (IsOpen && keyboard.escapeKey.wasPressedThisFrame)
-            RequestClose();
     }
 
     /// <summary>UIManager가 차단형 UI 상태를 확보한 뒤 인벤토리를 엽니다.</summary>
@@ -187,18 +184,16 @@ public sealed class ShelterInventoryUI : MonoBehaviour
         LayoutRebuilder.ForceRebuildLayoutImmediate(m_contentRoot);
     }
 
-    private void RequestToggle()
+    private void RequestOpen()
     {
         CacheReferences();
         if (m_uiManager != null)
         {
-            m_uiManager.TryToggleInventoryUI();
+            m_uiManager.TryOpenInventoryUI();
             return;
         }
 
-        if (IsOpen)
-            Close();
-        else
+        if (!IsOpen)
             Open();
     }
 
@@ -248,15 +243,15 @@ public sealed class ShelterInventoryUI : MonoBehaviour
 
     private void AddButtonListeners()
     {
-        m_openButton?.onClick.RemoveListener(RequestToggle);
-        m_openButton?.onClick.AddListener(RequestToggle);
+        m_openButton?.onClick.RemoveListener(RequestOpen);
+        m_openButton?.onClick.AddListener(RequestOpen);
         m_closeButton?.onClick.RemoveListener(RequestClose);
         m_closeButton?.onClick.AddListener(RequestClose);
     }
 
     private void RemoveButtonListeners()
     {
-        m_openButton?.onClick.RemoveListener(RequestToggle);
+        m_openButton?.onClick.RemoveListener(RequestOpen);
         m_closeButton?.onClick.RemoveListener(RequestClose);
     }
 

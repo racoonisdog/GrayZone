@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// 의료 시설 UI의 열기/닫기, 환자 슬롯 표시, 환자/헬퍼 후보 목록을 조율
@@ -72,17 +71,21 @@ public class MedicalUI : MonoBehaviour
         }
     }
 
-    private void Update()
+    /// <summary>
+    /// 현재 의료 UI의 최상위 Escape 동작을 처리합니다.
+    /// 후보 목록이 열려 있으면 목록만 닫고, 아니면 의료 UI 전체를 닫습니다.
+    /// </summary>
+    public bool TryHandleEscape()
     {
-        if (Keyboard.current != null &&
-                Keyboard.current.escapeKey.wasPressedThisFrame)
-        {
-            // 후보 목록이 열려 있으면 목록만 먼저 닫는다.
-            if (m_isTreatmentCandidateListOpen)
-                HideTreatmentCandidateList();
-            else
-                Close();
-        }
+        if (!m_isOpen)
+            return false;
+
+        if (m_isTreatmentCandidateListOpen)
+            HideTreatmentCandidateList();
+        else
+            Close();
+
+        return true;
     }
 
 
