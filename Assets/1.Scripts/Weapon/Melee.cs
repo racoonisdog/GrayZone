@@ -109,20 +109,18 @@ public class Melee : MonoBehaviour
         return index >= 0 ? m_balanceSO.GetStaggerPower(index) : m_balanceSO.FallbackStaggerPower;
     }
 
+    /// <summary>
+    /// 판정 콜라이더에 무언가 들어온 순간 피해를 넘깁니다.
+    /// </summary>
+    /// <remarks>
+    /// 진입 순간에만 판정합니다. 겹쳐 있는 동안 계속 보면 맞은 시점이 흐려집니다.
+    /// 실측에서 유지 판정이 진입보다 더 많이 성립했고, 그 적중들은 손이 닿는 순간이 아니라
+    /// 이미 몸 안에 있던 손이 뒤늦게 세어진 것이었습니다.
+    ///
+    /// 판정이 켜지기 전부터 겹쳐 있었다면 진입 이벤트가 오지 않지만,
+    /// 그때는 애초에 휘두르는 궤적이 스친 것이 아니므로 맞지 않는 편이 맞습니다.
+    /// </remarks>
     private void OnTriggerEnter(Collider other)
-    {
-        TryHit(other);
-    }
-
-    private void OnTriggerStay(Collider other)
-    {
-        // 판정이 켜지기 전부터 겹쳐 있었다면 진입 이벤트가 오지 않습니다.
-        // 중복 적중은 EnemyAttack이 스윙 기록으로 걸러 내므로 유지 중에도 넘깁니다.
-        TryHit(other);
-    }
-
-    /// <summary>닿은 상대를 공격 모듈에 넘겨 피해 여부를 판단하게 합니다.</summary>
-    private void TryHit(Collider other)
     {
         if (m_attack == null || other == null)
         {
