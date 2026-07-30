@@ -460,7 +460,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
     /// <param name="scriptType">선택한 스크립트 타입입니다.</param>
     /// <param name="ready">생성 가능한 상태인지 여부입니다.</param>
     /// <remarks>
-    /// 이 프로젝트는 스크립트와 SO를 다른 폴더에 두는 관례라(예: Unit/WeaponController.cs ↔ Weapon/SOScript/WeaponControllerSO.cs)
+    /// 이 프로젝트는 스크립트와 SO를 다른 폴더에 두는 관례라(예: Unit/Gun.cs ↔ Weapon/SOScript/GunBalanceSO.cs)
     /// 위치를 자동으로 유도할 수 없습니다. 기존 파일이 있으면 그 경로로 고정하고, 새로 만들 때만 지정하게 합니다.
     /// </remarks>
     private void DrawGenerateTargetPath(List<Type> scriptTypes, bool ready)

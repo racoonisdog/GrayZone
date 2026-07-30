@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 495c9ece0bf94cb5a87a3b0bf6a94479, type: 3}
   m_Name: Rifle1WeaponBalance
-  m_EditorClassIdentifier: Assembly-CSharp::WeaponControllerSO
+  m_EditorClassIdentifier: Assembly-CSharp::GunBalanceSO
   m_weaponId: weapon.rifle.01
   m_weaponType: 2
   m_weaponName: Rifle 1

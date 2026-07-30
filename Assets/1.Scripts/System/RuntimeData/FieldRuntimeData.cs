@@ -217,7 +217,7 @@ public sealed class WeaponSnapshotData
     }
 
     /// <summary>총기 정의와 현재 씬 탄약값을 합친 스냅샷을 생성합니다.</summary>
-    public static WeaponSnapshotData Create(Weapon definition, WeaponController controller, int reserve, int reserveMaximum)
+    public static WeaponSnapshotData Create(Weapon definition, Gun controller, int reserve, int reserveMaximum)
     {
         int magazineMaximum = controller != null
             ? controller.MaxBullet

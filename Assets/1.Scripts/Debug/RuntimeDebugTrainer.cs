@@ -705,7 +705,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     {
         GUILayout.Label($"■ 무기: {target.CurrentWeaponName}", m_headerStyle);
 
-        WeaponController weapon = target.WeaponController;
+        Gun weapon = target.Gun;
         if (weapon == null)
         {
             GUILayout.Label("WeaponController를 찾을 수 없습니다.");
@@ -760,7 +760,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         DrawBurstSpreadSection(weapon);
     }
 
-    private void DrawBurstSpreadSection(WeaponController weapon)
+    private void DrawBurstSpreadSection(Gun weapon)
     {
         GUILayout.Space(3);
         GUILayout.Label("연사 탄퍼짐 (실제 탄착)", m_headerStyle);

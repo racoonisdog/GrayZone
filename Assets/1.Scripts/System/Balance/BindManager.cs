@@ -26,7 +26,7 @@ using UnityEngine.Scripting;
 /// <para>
 /// 최대 체력·최대 탄창처럼 "기본값은 상수인데 런타임에 보정될 수 있는" 값은 <b>SO가 첫 초기화만</b> 담당합니다.
 /// 바인딩은 대상이 새로 생성될 때마다(Awake) 실행되므로, 그 뒤에 데이터 매니저가 저장된 실효값을 반드시 다시 적용해야 합니다.
-/// 예: <c>WeaponController.m_maxBullet</c>은 이 특성으로 기본값을 받고, 실효값은 스냅샷 복원이 덮어씁니다.
+/// 예: <c>Gun.m_maxBullet</c>은 이 특성으로 기본값을 받고, 실효값은 스냅샷 복원이 덮어씁니다.
 /// </para>
 /// </remarks>
 [Preserve]

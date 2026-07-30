@@ -45,7 +45,7 @@ public class PlayerbleUnitData : MonoBehaviour
     [SerializeField] private PlayerHealth m_health;
     [SerializeField] private SquadMemberController m_squadMember;
     [SerializeField] private InteractionController m_interactionController;
-    [SerializeField] private WeaponController m_weaponController;
+    [SerializeField] private Gun m_weaponController;
     [SerializeField] private Transform m_publicTarget;
 
     [Header("Weapon Public Data")]
@@ -89,7 +89,7 @@ public class PlayerbleUnitData : MonoBehaviour
     }
 
     /// <summary>
-    /// 무한 장탄수(현재 탄창) 디버그 플래그입니다. 실제 저장·판정은 <see cref="WeaponController"/>가 소유하며,
+    /// 무한 장탄수(현재 탄창) 디버그 플래그입니다. 실제 저장·판정은 <see cref="Gun"/>가 소유하며,
     /// 이 프로퍼티는 디버그 트레이너가 단일 진입점(<c>PlayerbleUnitData</c>)으로만 접근하도록 하는 패스스루입니다.
     /// </summary>
     public bool DebugInfiniteMagazine
@@ -240,7 +240,7 @@ public class PlayerbleUnitData : MonoBehaviour
     /// <summary>
     /// 현재 장착 무기의 컨트롤러입니다.
     /// </summary>
-    public WeaponController WeaponController => m_weaponController;
+    public Gun Gun => m_weaponController;
 
     /// <summary>
     /// 현재 장착 무기의 정의 데이터입니다.
@@ -557,7 +557,7 @@ public class PlayerbleUnitData : MonoBehaviour
     /// 관찰할 무기 컨트롤러를 설정합니다.
     /// </summary>
     /// <param name="weaponController">새 무기 컨트롤러입니다.</param>
-    public void SetWeaponController(WeaponController weaponController)
+    public void SetWeaponController(Gun weaponController)
     {
         if (m_weaponController == weaponController)
         {
@@ -649,7 +649,7 @@ public class PlayerbleUnitData : MonoBehaviour
 
         if (m_weaponController == null)
         {
-            m_weaponController = GetComponentInChildren<WeaponController>(true);
+            m_weaponController = GetComponentInChildren<Gun>(true);
         }
 
         if (m_publicTarget == null && m_squadMember != null)

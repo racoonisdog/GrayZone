@@ -62,7 +62,7 @@ public class CrosshairController : MonoBehaviour
     /// <remarks>
     /// 이건 순수하게 "어떻게 보여줄까"의 표현 선택이며, 실제 탄 궤적은 바꾸지 않습니다(실제 분포는 무기가 소유).
     /// 탄은 콘 경계(하드캡)까지 거의 안 가고 중심에 몰리므로, 팔 끝을 콘 경계에 두면 실제 탄착보다 몇 배 넓어 보입니다.
-    /// 무기의 분포·집중도(<see cref="WeaponController.Distribution"/>/<see cref="WeaponController.SpreadConcentration"/>)를
+    /// 무기의 분포·집중도(<see cref="Gun.Distribution"/>/<see cref="Gun.SpreadConcentration"/>)를
     /// 읽어, 선택한 기준의 반경을 표시 배율(factor)로 환산합니다.
     /// </remarks>
     public enum SpreadDisplayBasis
@@ -646,10 +646,10 @@ public class CrosshairController : MonoBehaviour
     /// <remarks>
     /// ApplySpread의 편향 = 단위오프셋(크기 |·|∈[0,1]) × tan(spread)이라, 이 배율을 tan(spread)에 곱하면 선택한 기준의 반경이 됩니다.
     /// 고정 계수의 출처:
-    /// - Gaussian: WeaponController.SampleGaussianUnitOffset이 σ = 1/concentration으로 샘플링(단위원 밖은 경계로 클램프).
+    /// - Gaussian: Gun.SampleGaussianUnitOffset이 σ = 1/concentration으로 샘플링(단위원 밖은 경계로 클램프).
     ///   Rayleigh(σ) 기준 RMS = √2·σ = √2/concentration, 2σ(≈86% 포함) = 2/concentration.
     ///   ※ 이 공식은 클램프를 무시한 해석적 근사입니다. concentration이 낮아 클램프가 자주 걸리면 실제 분포와 벌어집니다(기본 3에서는 클램프 ~1%로 정확).
-    ///     WeaponController.SampleGaussianUnitOffset의 σ 정의를 바꾸면 이 계수도 함께 갱신해야 합니다.
+    ///     Gun.SampleGaussianUnitOffset의 σ 정의를 바꾸면 이 계수도 함께 갱신해야 합니다.
     /// - Uniform: 반경 1 원판(pdf 2r) 기준 RMS = 1/√2 ≈ 0.707, 86% 포함 반경 = √0.86 ≈ 0.927. (클램프·concentration과 무관하게 정확)
     /// - Core: Gaussian 최빈 반경(mode) = σ = 1/concentration(가장 타이트). Uniform은 밀집 코어가 없어 0.5로 둡니다.
     /// - ConeEdge: 하드캡(단위오프셋 최대 = 1)이라 항상 1.

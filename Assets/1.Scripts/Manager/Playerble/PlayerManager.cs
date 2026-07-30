@@ -67,7 +67,7 @@ public class PlayerManager : MonoBehaviour
     private ThirdPersonController m_controller;
     private Animator m_animator;
     private AudioSource m_weaponAudioSource;
-    private WeaponController m_weaponController;
+    private Gun m_weaponController;
     private Camera m_mainCamera;
     private EnemyController m_currentAimEnemy;
     private bool m_hasRequiredReferences;
@@ -179,7 +179,7 @@ public class PlayerManager : MonoBehaviour
         m_controller = GetComponent<ThirdPersonController>();
         m_animator = GetComponent<Animator>();
         m_weaponAudioSource = GetComponent<AudioSource>();
-        m_weaponController = GetComponentInChildren<WeaponController>();
+        m_weaponController = GetComponentInChildren<Gun>();
         m_mainCamera = Camera.main;
     }
 

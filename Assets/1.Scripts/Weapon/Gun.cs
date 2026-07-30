@@ -10,14 +10,14 @@ using VInspector;
 /// 실제 탄환, 탄피, 탄창 오브젝트 생성은 <c>PoolManager</c>를 통해 수행합니다.
 /// 사격 입력 자체는 외부 컨트롤러에서 판단하고, 이 컴포넌트는 <see cref="TryShoot"/> 호출을 통해 사격 가능 여부와 발사 처리를 담당합니다.
 /// </remarks>
-public class WeaponController : MonoBehaviour, IBalancePostProcess
+public class Gun : MonoBehaviour, IBalancePostProcess
 {
     public event System.Action<int, int> OnBulletChanged;
 
     [Foldout("Balance Data")]
     [Tooltip("이 무기에 적용할 순수 수치형 밸런스 SO입니다. 비어 있으면 기존 Inspector 값을 사용합니다.")]
     [FormerlySerializedAs("m_balance")]
-    [SerializeField] private WeaponControllerSO m_balanceSO;
+    [SerializeField] private GunBalanceSO m_balanceSO;
 
     /// <summary>
     /// 조준 중 계산된 총구 기준 히트스캔 사격 정보를 담습니다.
@@ -318,7 +318,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     public int CurrentBullet => m_currentBullet;
 
     /// <summary>현재 이 무기에 지정된 순수 수치형 밸런스 SO입니다.</summary>
-    public WeaponControllerSO Balance => m_balanceSO;
+    public GunBalanceSO Balance => m_balanceSO;
 
     /// <summary>최대 탄약 수입니다.</summary>
     public int MaxBullet => m_maxBullet;
@@ -529,28 +529,28 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
         if (m_firePos == null)
         {
-            Debug.LogError("[WeaponController] FirePos가 할당되지 않았습니다.", this);
+            Debug.LogError("[Gun] FirePos가 할당되지 않았습니다.", this);
             isValid = false;
         }
 
         if (m_shellPos == null)
         {
-            Debug.LogWarning("[WeaponController] ShellPos가 할당되지 않았습니다. 탄피 생성은 생략됩니다.", this);
+            Debug.LogWarning("[Gun] ShellPos가 할당되지 않았습니다. 탄피 생성은 생략됩니다.", this);
         }
 
         if (m_clipPos == null)
         {
-            Debug.LogWarning("[WeaponController] ClipPos가 할당되지 않았습니다. 탄창 드롭은 생략됩니다.", this);
+            Debug.LogWarning("[Gun] ClipPos가 할당되지 않았습니다. 탄창 드롭은 생략됩니다.", this);
         }
 
         if (m_audioSource == null)
         {
-            Debug.LogWarning("[WeaponController] AudioSource가 없습니다. 무기 효과음은 재생되지 않습니다.", this);
+            Debug.LogWarning("[Gun] AudioSource가 없습니다. 무기 효과음은 재생되지 않습니다.", this);
         }
         /*
         if (PoolManager.instance == null)
         {
-            Debug.LogError("[WeaponController] PoolManager 인스턴스를 찾지 못했습니다.", this);
+            Debug.LogError("[Gun] PoolManager 인스턴스를 찾지 못했습니다.", this);
             isValid = false;
         }*/
 
@@ -560,7 +560,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
     /// <summary>
     /// 새로운 무기 밸런스 SO로 교체하고 공용 ID 바인딩을 즉시 다시 수행합니다.
     /// </summary>
-    public BalanceBindResult SetBalance(WeaponControllerSO balance)
+    public BalanceBindResult SetBalance(GunBalanceSO balance)
     {
         m_balanceSO = balance;
         return BindConfiguredBalance();
@@ -619,7 +619,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
         if (m_hipfireMaxSpread < m_hipfireMinSpread)
         {
             Debug.LogWarning(
-                $"[WeaponController] 비조준 방사각 범위가 뒤집혔습니다(min={m_hipfireMinSpread}, max={m_hipfireMaxSpread}). " +
+                $"[Gun] 비조준 방사각 범위가 뒤집혔습니다(min={m_hipfireMinSpread}, max={m_hipfireMaxSpread}). " +
                 $"프리팹 값(min={m_fallbackHipfireMinSpread}, max={m_fallbackHipfireMaxSpread})으로 되돌립니다.",
                 this);
             m_hipfireMinSpread = m_fallbackHipfireMinSpread;
@@ -629,7 +629,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
         if (m_adsMaxSpread < m_adsMinSpread)
         {
             Debug.LogWarning(
-                $"[WeaponController] 조준 방사각 범위가 뒤집혔습니다(min={m_adsMinSpread}, max={m_adsMaxSpread}). " +
+                $"[Gun] 조준 방사각 범위가 뒤집혔습니다(min={m_adsMinSpread}, max={m_adsMaxSpread}). " +
                 $"프리팹 값(min={m_fallbackAdsMinSpread}, max={m_fallbackAdsMaxSpread})으로 되돌립니다.",
                 this);
             m_adsMinSpread = m_fallbackAdsMinSpread;
@@ -696,7 +696,7 @@ public class WeaponController : MonoBehaviour, IBalancePostProcess
 
         if (PoolManager.instance == null)
         {
-            Debug.LogWarning("[WeaponController] PoolManager 인스턴스가 없어 사격을 처리할 수 없습니다.", this);
+            Debug.LogWarning("[Gun] PoolManager 인스턴스가 없어 사격을 처리할 수 없습니다.", this);
             return false;
         }
 

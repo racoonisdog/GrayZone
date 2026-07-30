@@ -2,17 +2,17 @@
 using UnityEngine.Serialization;
 
 /// <summary>
-/// <see cref="WeaponController"/>에 주입할 순수 수치 밸런스 데이터를 보관합니다.
+/// <see cref="Gun"/>에 주입할 순수 수치 밸런스 데이터를 보관합니다.
 /// </summary>
 /// <remarks>
-/// 필드 이름은 <see cref="WeaponController"/>의 <see cref="BalanceFieldAttribute"/> 필드와 <b>완전히 동일</b>합니다.
+/// 필드 이름은 <see cref="Gun"/>의 <see cref="BalanceFieldAttribute"/> 필드와 <b>완전히 동일</b>합니다.
 /// <see cref="BindManager"/>가 이름으로 짝을 찾아 값을 대입하므로, 이름이 어긋나면 바인딩이 실패합니다.
 /// 값의 정본은 엑셀 시트이며 CSV 임포터가 이 SO를 채웁니다. Inspector에서 숫자를 직접 고치지 않습니다.
-/// 허용 범위(Min/Max)는 값을 받는 <see cref="WeaponController"/> 쪽 특성에 선언되어 있고, 실제 보정은 대입 시점에 일어납니다.
+/// 허용 범위(Min/Max)는 값을 받는 <see cref="Gun"/> 쪽 특성에 선언되어 있고, 실제 보정은 대입 시점에 일어납니다.
 /// 프리팹, Transform, AudioClip, ParticleSystem 같은 런타임 및 미디어 참조는 담지 않습니다. 그런 참조는 Inspector에서 직접 배선합니다.
 /// </remarks>
-[CreateAssetMenu(fileName = "WeaponControllerSO", menuName = "GrayZone/Weapon/Weapon Controller SO")]
-public sealed class WeaponControllerSO : ScriptableObject, IBalanceTableData
+[CreateAssetMenu(fileName = "GunBalanceSO", menuName = "GrayZone/Weapon/Gun Balance SO")]
+public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
 {
     // 시트에서 이 행이 어느 무기인지 식별하는 값입니다. WeaponController에는 대응 필드가 없어 바인딩되지 않습니다.
     [Header("Identity")]

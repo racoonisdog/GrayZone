@@ -91,7 +91,7 @@ public class SquadMemberController : MonoBehaviour
 
     [Tooltip("멤버가 장착한 무기 컨트롤러입니다.")]
     [FormerlySerializedAs("weaponController")]
-    [SerializeField] private WeaponController m_weaponController;
+    [SerializeField] private Gun m_weaponController;
 
     [Tooltip("멤버의 애니메이터입니다.")]
     [FormerlySerializedAs("animator")]
@@ -283,7 +283,7 @@ public class SquadMemberController : MonoBehaviour
 
         if (m_weaponController == null)
         {
-            m_weaponController = GetComponentInChildren<WeaponController>();
+            m_weaponController = GetComponentInChildren<Gun>();
         }
 
         if (m_animator == null)
@@ -793,7 +793,7 @@ public class SquadMemberController : MonoBehaviour
     {
         if (m_weaponController == null)
         {
-            m_weaponController = GetComponentInChildren<WeaponController>();
+            m_weaponController = GetComponentInChildren<Gun>();
         }
 
         if (m_weaponController != null)

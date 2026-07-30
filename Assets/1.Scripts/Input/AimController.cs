@@ -201,7 +201,7 @@ public class AimController : MonoBehaviour
     private ThirdPersonController m_controller;
     private Animator m_animator;
     private AudioSource m_weaponAudioSource;
-    private WeaponController m_weaponController;
+    private Gun m_weaponController;
     private Camera m_mainCamera;
     private EnemyController m_currentAimEnemy;
     private bool m_hasRequiredReferences;
@@ -611,7 +611,7 @@ public class AimController : MonoBehaviour
         m_controller = GetComponent<ThirdPersonController>();
         m_animator = GetComponent<Animator>();
         m_weaponAudioSource = GetComponent<AudioSource>();
-        m_weaponController = GetComponentInChildren<WeaponController>();
+        m_weaponController = GetComponentInChildren<Gun>();
         m_mainCamera = Camera.main;
     }
 
@@ -857,7 +857,7 @@ public class AimController : MonoBehaviour
         Vector3 aimPoint = ResolveAimPoint(lookPoint);
 
         // 탄착점: 총구에서 조준점으로 가다가 걸리는 지점(shotInfo.EndPoint). 실제 사격이 이 결과를 사용합니다.
-        WeaponController.HitscanShotInfo shotInfo = EvaluateHitscanShot(aimPoint);
+        Gun.HitscanShotInfo shotInfo = EvaluateHitscanShot(aimPoint);
         UpdateCurrentAimEnemy(shotInfo);
 
         DrawHitscanDebugRay(shotInfo);
@@ -1099,7 +1099,7 @@ public class AimController : MonoBehaviour
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
     /// <remarks>조준 대상 적 판정은 실제 탄착 경로(총구 히트스캔)를 기준으로 합니다.</remarks>
-    private void UpdateCurrentAimEnemy(WeaponController.HitscanShotInfo shotInfo)
+    private void UpdateCurrentAimEnemy(Gun.HitscanShotInfo shotInfo)
     {
         m_currentAimEnemy = shotInfo.HasHit && shotInfo.Hit.collider != null
             ? shotInfo.Hit.collider.GetComponentInParent<EnemyController>()
@@ -1127,9 +1127,9 @@ public class AimController : MonoBehaviour
     /// <param name="targetPosition">카메라 트레이스로 계산한 조준점(AimPoint)입니다. 총구가 이 지점을 향해 발사합니다.</param>
     /// <returns>총구 원점, 발사 방향, 탄착점(EndPoint), 충돌 및 중간 장애물 여부를 포함한 사격 정보입니다.</returns>
     /// <remarks>이 결과는 조준 마커 표시와 실제 히트스캔 사격 처리에서 동일하게 사용됩니다.</remarks>
-    private WeaponController.HitscanShotInfo EvaluateHitscanShot(Vector3 targetPosition)
+    private Gun.HitscanShotInfo EvaluateHitscanShot(Vector3 targetPosition)
     {
-        WeaponController.HitscanShotInfo shotInfo = new()
+        Gun.HitscanShotInfo shotInfo = new()
         {
             AimPoint = targetPosition,
             EndPoint = targetPosition,
@@ -1154,7 +1154,7 @@ public class AimController : MonoBehaviour
             ? hitscanRange
             : Mathf.Min(hitscanRange, aimDistance);
 
-        shotInfo.IsValid = rayDistance > WeaponController.HitscanAimTolerance;
+        shotInfo.IsValid = rayDistance > Gun.HitscanAimTolerance;
         shotInfo.Origin = origin;
         shotInfo.Direction = direction;
         shotInfo.EndPoint = origin + direction * rayDistance;
@@ -1179,7 +1179,7 @@ public class AimController : MonoBehaviour
         shotInfo.Hit = hit;
         shotInfo.EndPoint = hit.point;
         shotInfo.IsObstructed = aimDistance > 0.0001f
-            && hit.distance < aimDistance - WeaponController.HitscanAimTolerance;
+            && hit.distance < aimDistance - Gun.HitscanAimTolerance;
 
         return shotInfo;
     }
@@ -1188,7 +1188,7 @@ public class AimController : MonoBehaviour
     /// 히트스캔 사격 정보에 중간 장애물이 있으면 월드 마커를 탄착점에 표시합니다.
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
-    private void UpdateHitscanBlockMarker(WeaponController.HitscanShotInfo shotInfo)
+    private void UpdateHitscanBlockMarker(Gun.HitscanShotInfo shotInfo)
     {
         if (m_hitscanBlockMarker == null || m_weaponController == null)
         {
@@ -1252,7 +1252,7 @@ public class AimController : MonoBehaviour
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    private void DrawHitscanDebugRay(WeaponController.HitscanShotInfo shotInfo)
+    private void DrawHitscanDebugRay(Gun.HitscanShotInfo shotInfo)
     {
         if (!m_drawHitscanDebugRay || !shotInfo.IsValid)
         {
@@ -1270,9 +1270,9 @@ public class AimController : MonoBehaviour
     /// <summary>
     /// 카메라에서 조준점까지의 트레이스 선을 그립니다(캠→조준점). 총구 기준 탄착점 레이와의 벌어짐 확인용입니다.
     /// </summary>
-    /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다. <see cref="WeaponController.HitscanShotInfo.AimPoint"/>가 조준점입니다.</param>
+    /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다. <see cref="Gun.HitscanShotInfo.AimPoint"/>가 조준점입니다.</param>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    private void DrawAimTraceDebugLine(WeaponController.HitscanShotInfo shotInfo)
+    private void DrawAimTraceDebugLine(Gun.HitscanShotInfo shotInfo)
     {
         if (!m_drawAimTraceLine)
         {
@@ -1318,9 +1318,9 @@ public class AimController : MonoBehaviour
     /// </summary>
     /// <param name="lookPoint">이번 프레임의 지향점(캐릭터가 바라보는 먼 지점)입니다.</param>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
-    /// <remarks>조준점은 <see cref="WeaponController.HitscanShotInfo.AimPoint"/>(카메라 트레이스 목표), 탄착점은 <see cref="WeaponController.HitscanShotInfo.EndPoint"/>(총구 히트스캔 최종 지점)입니다.</remarks>
+    /// <remarks>조준점은 <see cref="Gun.HitscanShotInfo.AimPoint"/>(카메라 트레이스 목표), 탄착점은 <see cref="Gun.HitscanShotInfo.EndPoint"/>(총구 히트스캔 최종 지점)입니다.</remarks>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    private void DrawAimDebugSpheres(Vector3 lookPoint, WeaponController.HitscanShotInfo shotInfo)
+    private void DrawAimDebugSpheres(Vector3 lookPoint, Gun.HitscanShotInfo shotInfo)
     {
         if (m_drawLookPointSphere)
         {
@@ -1375,7 +1375,7 @@ public class AimController : MonoBehaviour
     /// </remarks>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
     [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-    private void SpawnImpactMarker(WeaponController.HitscanShotInfo shotInfo)
+    private void SpawnImpactMarker(Gun.HitscanShotInfo shotInfo)
     {
         if (!GameDevMode.DebugFeaturesEnabled || !m_spawnImpactMarkerOnShot)
         {
@@ -1439,7 +1439,7 @@ public class AimController : MonoBehaviour
     /// 사격 입력 상태를 애니메이터와 무기 컨트롤러에 반영합니다.
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
-    private void UpdateShootState(WeaponController.HitscanShotInfo shotInfo)
+    private void UpdateShootState(Gun.HitscanShotInfo shotInfo)
     {
         if (m_input.Shoot)
         {
@@ -1448,7 +1448,7 @@ public class AimController : MonoBehaviour
             if (m_weaponController != null)
             {
                 //m_weaponController.TryShoot(targetPosition); // 오브젝트 풀링
-                bool fired = m_weaponController.TryLayShoot(shotInfo, m_isAds, out WeaponController.HitscanShotInfo firedShot); // 히트스캔(탄퍼짐 적용)
+                bool fired = m_weaponController.TryLayShoot(shotInfo, m_isAds, out Gun.HitscanShotInfo firedShot); // 히트스캔(탄퍼짐 적용)
 
                 if (fired)
                 {

@@ -5824,7 +5824,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3cf83ecd0e7fe5b4495e6c7e38d3f669, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::WeaponController
+  m_EditorClassIdentifier: Assembly-CSharp::Gun
   m_balanceSO: {fileID: 11400000, guid: 79421e9565ae4bfbae970dbcb5176c96, type: 2}
   m_currentBullet: 30
   m_maxBullet: 30

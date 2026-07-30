@@ -149,7 +149,7 @@ public class FieldSceneDataManager : MonoBehaviour
 
     private readonly HashSet<EnemyHealth> m_subscribedEnemies = new();
     private readonly HashSet<EnemyHealth> m_countedEnemyActivations = new();
-    private readonly Dictionary<WeaponController, Action<CombatDamage.HitFeedback>> m_weaponKillHandlers = new();
+    private readonly Dictionary<Gun, Action<CombatDamage.HitFeedback>> m_weaponKillHandlers = new();
     private readonly Dictionary<PlayerbleUnitData, Action> m_playerDataHandlers = new();
     private readonly Dictionary<PlayerbleUnitData, int> m_characterKillCounts = new();
     private readonly List<PlayerbleResult> m_characterResults = new();
@@ -889,7 +889,7 @@ public class FieldSceneDataManager : MonoBehaviour
         for (int i = 0; i < players.Count; i++)
         {
             PlayerbleUnitData player = players[i];
-            WeaponController weapon = player != null ? player.WeaponController : null;
+            Gun weapon = player != null ? player.Gun : null;
             if (weapon == null || m_weaponKillHandlers.ContainsKey(weapon))
             {
                 continue;
@@ -904,7 +904,7 @@ public class FieldSceneDataManager : MonoBehaviour
     /// <summary>현재 등록된 모든 무기 명중 결과 이벤트 구독을 해제합니다.</summary>
     private void UnsubscribeWeapons()
     {
-        foreach (KeyValuePair<WeaponController, Action<CombatDamage.HitFeedback>> entry in m_weaponKillHandlers)
+        foreach (KeyValuePair<Gun, Action<CombatDamage.HitFeedback>> entry in m_weaponKillHandlers)
         {
             if (entry.Key != null)
             {
