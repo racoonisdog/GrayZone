@@ -212026,59 +212026,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1929638485473086115, guid: 6770f971506b36f4d9d59a490042bfb4, type: 3}
   m_PrefabInstance: {fileID: 1683851982}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &1685441698
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1685441700}
-  - component: {fileID: 1685441699}
-  m_Layer: 0
-  m_Name: MainMenuSaveManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1685441699
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1685441698}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c01b2c9bfdf4a5084909b65bfe3910e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MainSceneSaveManager
-  defaultProfileId: default
-  newGameStartDay: 1
-  newGameStartStageId: 
-  startingCharacterDefinitions:
-  - {fileID: 11400000, guid: d9fa4f3014d8cc64ba58aebb2a6827c2, type: 2}
-  - {fileID: 11400000, guid: 6ebffd95315760a44ae6b35e6f84bf68, type: 2}
-  - {fileID: 11400000, guid: 5a8c15051019b3a469542db2111b6d61, type: 2}
-  startingFacilityDefinitions:
-  - {fileID: 0}
---- !u!4 &1685441700
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1685441698}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -1.5615616, y: 200, z: -2.469841}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1685454605
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -297895,7 +297842,6 @@ SceneRoots:
   - {fileID: 1655556015}
   - {fileID: 876761858}
   - {fileID: 1819593658}
-  - {fileID: 1685441700}
   - {fileID: 1892554803}
   - {fileID: 1290571915}
   - {fileID: 1065056491}
