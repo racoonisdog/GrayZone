@@ -14,30 +14,30 @@ OcclusionCullingSettings:
 RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 10
-  m_Fog: 0
-  m_FogColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  m_Fog: 1
+  m_FogColor: {r: 0.357, g: 0.396, b: 0.435, a: 1}
   m_FogMode: 3
-  m_FogDensity: 0.01
+  m_FogDensity: 0.024
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
-  m_AmbientIntensity: 1
+  m_AmbientIntensity: 0.65
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: a5178874598f23943883b393c6d9d698, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
   m_HaloTexture: {fileID: 0}
   m_SpotCookie: {fileID: 10001, guid: 0000000000000000e000000000000000, type: 0}
   m_DefaultReflectionMode: 0
-  m_DefaultReflectionResolution: 128
-  m_ReflectionBounces: 1
+  m_DefaultReflectionResolution: 1024
+  m_ReflectionBounces: 2
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
-  m_Sun: {fileID: 0}
+  m_Sun: {fileID: 1114927107}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -73205,8 +73205,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
   m_faction: 0
-  m_maxHp: 150
-  m_currentHp: 150
+  m_maxHp: 50
+  m_currentHp: 50
   m_hpSlider: {fileID: 0}
   m_hpText: {fileID: 0}
   m_balanceSO: {fileID: 0}
@@ -75429,6 +75429,11 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!108 &1114927107 stripped
+Light:
+  m_CorrespondingSourceObject: {fileID: 5445154632837192475, guid: 565308f51a4e66947a469a1a952ec7c1, type: 3}
+  m_PrefabInstance: {fileID: 995336196}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1116717271
 GameObject:
   m_ObjectHideFlags: 0
@@ -76740,8 +76745,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
   m_faction: 0
-  m_maxHp: 150
-  m_currentHp: 150
+  m_maxHp: 50
+  m_currentHp: 50
   m_hpSlider: {fileID: 0}
   m_hpText: {fileID: 0}
   m_balanceSO: {fileID: 0}
@@ -150448,11 +150453,11 @@ PrefabInstance:
       objectReference: {fileID: 505246653}
     - target: {fileID: 3967947080513916520, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_maxHp
-      value: 150
+      value: 50
       objectReference: {fileID: 0}
     - target: {fileID: 3967947080513916520, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_currentHp
-      value: 150
+      value: 50
       objectReference: {fileID: 0}
     - target: {fileID: 3967947080513916520, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_debugLogInjuryStateChange
