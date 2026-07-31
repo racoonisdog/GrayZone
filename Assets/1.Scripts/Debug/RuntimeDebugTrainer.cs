@@ -81,6 +81,15 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <summary>트레이너 패널(메뉴)이 열려 있는지 여부입니다. 열려 있으면 TPS 조작이 잠깁니다.</summary>
     private bool m_open;
 
+    /// <summary>
+    /// 트레이너 창이 지금 열려 있는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 다른 디버그 창(<see cref="CrosshairDebugInspector"/> 등)이 커서와 플레이어 입력을 겹쳐 잡지 않도록 알려 줍니다.
+    /// 둘이 각자 잠그고 각자 풀면, 먼저 닫은 쪽이 아직 열려 있는 창의 커서까지 다시 잠가 버립니다.
+    /// </remarks>
+    public static bool IsMenuOpen => s_instance != null && s_instance.m_open;
+
     /// <summary>인스펙터 대상 인덱스입니다. -1이면 "현재 조작 중인 캐릭터"를 계속 따라갑니다.</summary>
     private int m_targetIndex = -1;
 
@@ -483,6 +492,9 @@ public class RuntimeDebugTrainer : MonoBehaviour
         if (!m_open)
         {
             GUI.Label(new Rect(10, 10, 600, 24), $"{m_toggleKey}: 런타임 디버그 트레이너 열기 / 닫기", m_headerStyle);
+
+            // 창을 그리지 않고 빠져나갈 때도 전역 스킨은 되돌립니다. 남겨 두면 다른 IMGUI 창이 이 배율을 물려받습니다.
+            RestoreSkin();
             return;
         }
 

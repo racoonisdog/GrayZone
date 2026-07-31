@@ -25,7 +25,7 @@ public class CrosshairController : MonoBehaviour
     private const float RingReferenceThicknessPixels = 1.0f;
 
     /// <summary>중앙 표시(Main) 형태입니다.</summary>
-    private enum MainShape
+    public enum MainShape
     {
         /// <summary>중앙 표시를 그리지 않습니다.</summary>
         None = 0,
@@ -38,7 +38,7 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>보조 표시(Sub, 상하좌우 팔) 형태입니다.</summary>
-    private enum SubShape
+    public enum SubShape
     {
         /// <summary>보조 표시(팔)를 그리지 않습니다.</summary>
         None = 0,
@@ -81,7 +81,7 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>탄약 게이지가 채워지는 방향입니다.</summary>
-    private enum AmmoGaugeFillDirection
+    public enum AmmoGaugeFillDirection
     {
         /// <summary>시계 방향으로 채웁니다.</summary>
         Clockwise,
@@ -741,6 +741,364 @@ public class CrosshairController : MonoBehaviour
     /// <summary>조준선 간격 보간 속도를 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
     public void SetSpreadLerpSpeed(float value) => m_lerpSpeed = Mathf.Max(0.0f, value);
+
+    // ─────────────────────────────────────────────────────────────
+    // 런타임 조절용 접근자
+    //
+    // 트레이너가 값을 바꾼 뒤 화면에 바로 반영되도록 재빌드를 함께 수행합니다.
+    // 인스펙터에서 고칠 때와 같은 경로를 쓰기 위해 ClampSettings와 SetSpreadInternal을 거칩니다.
+    // ─────────────────────────────────────────────────────────────
+
+    // 모양 ─────────────────────────────────────────────────────
+
+    /// <summary>중앙 표시의 형태입니다.</summary>
+    public MainShape CurrentMainShape
+    {
+        get => m_mainShape;
+        set { m_mainShape = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 표시(상하좌우 팔)의 형태입니다.</summary>
+    public SubShape CurrentSubShape
+    {
+        get => m_subShape;
+        set { m_subShape = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>중앙 링의 지름(픽셀)입니다.</summary>
+    public float MainRingSizePixels
+    {
+        get => m_mainRingSizePixels;
+        set { m_mainRingSizePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>중앙 링의 두께(픽셀)입니다.</summary>
+    public float MainRingThicknessPixels
+    {
+        get => m_mainRingThicknessPixels;
+        set { m_mainRingThicknessPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>중앙 표시의 색입니다.</summary>
+    public Color MainColor
+    {
+        get => m_mainColor;
+        set { m_mainColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>중앙 표시 테두리의 색입니다.</summary>
+    public Color MainStrokeColor
+    {
+        get => m_mainStrokeColor;
+        set { m_mainStrokeColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 팔의 길이(픽셀)입니다.</summary>
+    public float SubSizePixels
+    {
+        get => m_subSizePixels;
+        set { m_subSizePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 팔의 폭(픽셀)입니다.</summary>
+    public float SubWidthPixels
+    {
+        get => m_subWidthPixels;
+        set { m_subWidthPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 팔의 두께(픽셀)입니다.</summary>
+    public float SubThicknessPixels
+    {
+        get => m_subThicknessPixels;
+        set { m_subThicknessPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 링의 지름(픽셀)입니다.</summary>
+    public float SubRingSizePixels
+    {
+        get => m_subRingSizePixels;
+        set { m_subRingSizePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 링의 두께(픽셀)입니다.</summary>
+    public float SubRingThicknessPixels
+    {
+        get => m_subRingThicknessPixels;
+        set { m_subRingThicknessPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 표시의 색입니다.</summary>
+    public Color SubColor
+    {
+        get => m_subColor;
+        set { m_subColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 표시 테두리의 두께(픽셀)입니다.</summary>
+    public float SubStrokeThicknessPixels
+    {
+        get => m_subStrokeThicknessPixels;
+        set { m_subStrokeThicknessPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>보조 표시 테두리의 색입니다.</summary>
+    public Color SubStrokeColor
+    {
+        get => m_subStrokeColor;
+        set { m_subStrokeColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>모서리를 둥글게 하는 반지름(픽셀)입니다.</summary>
+    public float CornerRadiusPixels
+    {
+        get => m_cornerRadiusPixels;
+        set { m_cornerRadiusPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    // 재장전 ───────────────────────────────────────────────────
+
+    /// <summary>재장전 중 조준선을 탄약 아이콘으로 바꿀지 여부입니다.</summary>
+    public bool SwapCrosshairOnReload
+    {
+        get => m_swapCrosshairOnReload;
+        set { m_swapCrosshairOnReload = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>재장전 탄약 아이콘의 크기(픽셀)입니다.</summary>
+    public float ReloadBulletSizePixels
+    {
+        get => m_reloadBulletSizePixels;
+        set { m_reloadBulletSizePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>재장전 아이콘 깜빡임 속도입니다.</summary>
+    public float ReloadBlinkSpeed
+    {
+        get => m_reloadBlinkSpeed;
+        set { m_reloadBlinkSpeed = Mathf.Max(0.0f, value); }
+    }
+
+    /// <summary>재장전 아이콘이 가장 흐려질 때의 투명도입니다.</summary>
+    public float ReloadBlinkMinAlpha
+    {
+        get => m_reloadBlinkMinAlpha;
+        set { m_reloadBlinkMinAlpha = Mathf.Clamp01(value); }
+    }
+
+    // 탄약 게이지 ───────────────────────────────────────────────
+
+    /// <summary>탄약 게이지를 표시할지 여부입니다.</summary>
+    public bool ShowAmmoGauge
+    {
+        get => m_showAmmoGauge;
+        set { m_showAmmoGauge = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지를 항상 보이게 할지 여부입니다.</summary>
+    public bool AmmoGaugeAlwaysVisible
+    {
+        get => m_ammoGaugeAlwaysVisible;
+        set { m_ammoGaugeAlwaysVisible = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지의 크기(픽셀)입니다.</summary>
+    public float AmmoGaugeSizePixels
+    {
+        get => m_ammoGaugeSizePixels;
+        set { m_ammoGaugeSizePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지의 두께(픽셀)입니다.</summary>
+    public float AmmoGaugeThicknessPixels
+    {
+        get => m_ammoGaugeThicknessPixels;
+        set { m_ammoGaugeThicknessPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지가 차지하는 각도(도)입니다.</summary>
+    public float AmmoGaugeSweepDegrees
+    {
+        get => m_ammoGaugeSweepDegrees;
+        set { m_ammoGaugeSweepDegrees = Mathf.Clamp(value, 0.0f, 360.0f); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지가 시작하는 각도(도)입니다.</summary>
+    public float AmmoGaugeStartAngleDegrees
+    {
+        get => m_ammoGaugeStartAngleDegrees;
+        set { m_ammoGaugeStartAngleDegrees = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지가 중앙에서 대각선으로 떨어진 거리(픽셀)입니다.</summary>
+    public float AmmoGaugeDiagonalOffset
+    {
+        get => m_ammoGaugeDiagonalOffset;
+        set { m_ammoGaugeDiagonalOffset = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지를 채우는 방향입니다.</summary>
+    public AmmoGaugeFillDirection CurrentAmmoGaugeFillDirection
+    {
+        get => m_ammoGaugeFillDirection;
+        set { m_ammoGaugeFillDirection = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지의 색입니다.</summary>
+    public Color AmmoGaugeColor
+    {
+        get => m_ammoGaugeColor;
+        set { m_ammoGaugeColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약이 적을 때 게이지의 색입니다.</summary>
+    public Color LowAmmoGaugeColor
+    {
+        get => m_lowAmmoGaugeColor;
+        set { m_lowAmmoGaugeColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지 배경을 표시할지 여부입니다.</summary>
+    public bool ShowAmmoGaugeBackground
+    {
+        get => m_showAmmoGaugeBackground;
+        set { m_showAmmoGaugeBackground = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>탄약 게이지 배경의 투명도입니다.</summary>
+    public float AmmoGaugeBackgroundAlpha
+    {
+        get => m_ammoGaugeBackgroundAlpha;
+        set { m_ammoGaugeBackgroundAlpha = Mathf.Clamp01(value); RefreshRuntimeLayout(); }
+    }
+
+    // 적중 표시 ─────────────────────────────────────────────────
+
+    /// <summary>히트마커 밑변의 길이(픽셀)입니다.</summary>
+    public float HitMarkerBaseLengthPixels
+    {
+        get => m_hitMarkerBaseLengthPixels;
+        set { m_hitMarkerBaseLengthPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>몸통 적중 시 히트마커의 색입니다.</summary>
+    public Color HitMarkerColorBody
+    {
+        get => m_hitMarkerColorBody;
+        set => m_hitMarkerColorBody = value;
+    }
+
+    /// <summary>약점 적중 시 히트마커의 색입니다.</summary>
+    public Color HitMarkerColorHead
+    {
+        get => m_hitMarkerColorHead;
+        set => m_hitMarkerColorHead = value;
+    }
+
+    /// <summary>처치 해골의 색조입니다.</summary>
+    public Color KillSkullTint
+    {
+        get => m_killSkullTint;
+        set => m_killSkullTint = value;
+    }
+
+    /// <summary>킬 해골의 표시 크기(픽셀)입니다.</summary>
+    public float KillSkullSizePixels
+    {
+        get => m_killSkullSizePixels;
+        set { m_killSkullSizePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>킬 해골이 완전히 보이는 유지 시간(초)입니다.</summary>
+    public float KillSkullHoldDuration
+    {
+        get => m_killSkullHoldDuration;
+        set { m_killSkullHoldDuration = Mathf.Max(0.0f, value); }
+    }
+
+    /// <summary>킬 해골이 사라지기까지 걸리는 시간(초)입니다.</summary>
+    public float KillSkullFadeDuration
+    {
+        get => m_killSkullFadeDuration;
+        set { m_killSkullFadeDuration = Mathf.Max(0.0f, value); }
+    }
+
+    /// <summary>킬 해골을 표시할지 여부입니다.</summary>
+    public bool ShowKillSkull
+    {
+        get => m_showKillSkull;
+        set => m_showKillSkull = value;
+    }
+
+    /// <summary>히트마커를 표시할지 여부입니다.</summary>
+    /// <remarks>표시를 실행하는 <see cref="ShowHitMarker(bool)"/>와 이름이 겹치지 않도록 Enabled를 붙였습니다.</remarks>
+    public bool HitMarkerEnabled
+    {
+        get => m_showHitMarker;
+        set => m_showHitMarker = value;
+    }
+
+    /// <summary>히트마커 선의 길이(픽셀)입니다.</summary>
+    public float HitMarkerLengthPixels
+    {
+        get => m_hitMarkerLengthPixels;
+        set { m_hitMarkerLengthPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>히트마커 중앙 빈 공간(픽셀)입니다.</summary>
+    public float HitMarkerCenterGapPixels
+    {
+        get => m_hitMarkerCenterGapPixels;
+        set { m_hitMarkerCenterGapPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>히트마커가 사라지기까지 걸리는 시간(초)입니다.</summary>
+    public float HitMarkerFadeDuration
+    {
+        get => m_hitMarkerFadeDuration;
+        set { m_hitMarkerFadeDuration = Mathf.Max(0.0f, value); }
+    }
+
+    /// <summary>조준선 주 선의 길이(픽셀)입니다.</summary>
+    public float MainSizePixels
+    {
+        get => m_mainSizePixels;
+        set { m_mainSizePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>조준선 주 선의 두께(픽셀)입니다.</summary>
+    public float MainStrokeThicknessPixels
+    {
+        get => m_mainStrokeThicknessPixels;
+        set { m_mainStrokeThicknessPixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>조준선 중앙의 빈 공간(픽셀)입니다.</summary>
+    public float CenterSpacePixels
+    {
+        get => m_centerSpacePixels;
+        set { m_centerSpacePixels = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>
+    /// 값을 바꾼 뒤 화면에 즉시 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이 중이 아니면 시각 요소가 준비되지 않아 아무 일도 하지 않습니다.
+    /// 마지막으로 적용한 탄퍼짐 값을 그대로 다시 넣어, 보간 없이 바뀐 크기가 바로 보이게 합니다.
+    /// </remarks>
+    private void RefreshRuntimeLayout()
+    {
+        ClampSettings();
+
+        if (!Application.isPlaying)
+        {
+            return;
+        }
+
+        CacheVisualElements();
+        SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
+    }
 
     /// <summary>
     /// 재장전 상태를 설정합니다. 스왑 토글이 켜져 있으면 재장전 중 크로스헤어를 숨기고 중앙 탄약 아이콘을 표시합니다.
