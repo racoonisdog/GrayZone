@@ -1637,11 +1637,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6ae29e012c37f264f9897571061f92bb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
-  m_balanceSO: {fileID: 11400000, guid: 9199ae7a21bc4dc6a804e2275068cbd5, type: 2}
+  m_balanceSO: {fileID: 0}
   wanderRadius: 8
   wanderInterval: 3
-  wanderSpeed: 1.2
-  chaseSpeed: 3.2
+  wanderSpeed: 2
+  chaseSpeed: 6
   rotationSpeed: 8
   idleTypeMin: 0
   idleTypeMax: 1
@@ -2846,7 +2846,7 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 0
   serializedVersion: 3
-  m_Radius: 0.6
+  m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &222355372486057755
 MonoBehaviour:
