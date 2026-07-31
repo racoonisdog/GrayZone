@@ -922,7 +922,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::StarterAssets.ThirdPersonController
   m_balanceSO: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
   m_moveSpeed: 2
-  m_sprintSpeed: 5.335
+  m_sprintSpeed: 6
   m_rotationSmoothTime: 0.12
   m_speedChangeRate: 10
   m_jumpHeight: 1.2
