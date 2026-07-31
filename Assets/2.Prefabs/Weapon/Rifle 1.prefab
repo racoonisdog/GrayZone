@@ -5846,23 +5846,24 @@ MonoBehaviour:
   m_emptyReloadClip: {fileID: 0}
   m_muzzleFlashParticle: {fileID: 0}
   m_hitscanDamage: 1
+  m_allowHeadshot: 1
   m_headshotDamageMultiplier: 2
   m_hitscanRange: 100
   m_hitscanLayerMask:
     serializedVersion: 2
     m_Bits: 4294966783
-  m_hipfireMinSpread: 4
-  m_hipfireMaxSpread: 10
-  m_hipfireCurrentSpread: 4
+  m_hipfireMinSpread: 2
+  m_hipfireMaxSpread: 7
+  m_hipfireCurrentSpread: 2
   m_hipfireMinSpreadShotCount: 3
-  m_hipfireSpreadIncreasePerShot: 1
+  m_hipfireSpreadIncreasePerShot: 0.5
   m_hipfireSpreadRecoveryPerSecond: 8
   m_hipfireSpreadRecoveryDelay: 0.3
   m_adsMinSpread: 0
-  m_adsMaxSpread: 6
+  m_adsMaxSpread: 3
   m_adsCurrentSpread: 0
   m_adsMinSpreadShotCount: 3
-  m_adsSpreadIncreasePerShot: 1
+  m_adsSpreadIncreasePerShot: 0.4
   m_adsSpreadRecoveryPerSecond: 8
   m_adsSpreadRecoveryDelay: 0.3
   m_spreadDistribution: 1
