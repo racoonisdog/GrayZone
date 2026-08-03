@@ -3,18 +3,21 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// Generic CSV &lt;-&gt; ScriptableObject sync tool for ANY ScriptableObject type
-/// in the project. One CSV per type (columns = serialized fields). Assets are
+/// CSV &lt;-&gt; ScriptableObject sync tool for <see cref="IBalanceTableData"/> types.
+/// One CSV per type (columns = serialized fields). Assets are
 /// identified by GUID so the same file round-trips back onto the same assets.
 ///
-/// Simple fields (numbers, bool, string, enum, Vector*, Color, Object refs) are
+/// Simple fields (numbers, bool, string, enum, Vector*, Color) are
 /// written as human-readable cells; complex fields (nested structs, arrays of
 /// structs, etc.) fall back to JSON encoded inside a single cell.
+/// Unity Object and media references are rejected so Feedback data cannot enter
+/// the balance table path.
 ///
 /// Editor-only. All writes go through SerializedObject (Undo / dirty / save safe).
 /// No runtime code is touched.
@@ -66,11 +69,6 @@ public class ScriptableObjectCsvWindow : EditorWindow
     private int m_selectedIndex;
     [SerializeField]
     private bool m_showFolders;
-    [SerializeField]
-    private bool m_balanceOnly;
-    [SerializeField]
-    private bool m_showOtherTypes;
-
     private static readonly string[] s_tabLabels = { "스크립트 → SO", "SO → 엑셀(CSV)" };
 
     [SerializeField]
@@ -536,9 +534,15 @@ public class ScriptableObjectCsvWindow : EditorWindow
         else
         {
             Type soType = m_exportTarget.GetType();
+            bool validBalanceType = TryValidateBalanceType(soType, out string validationError);
             int count = LoadAllOfType(soType).Count;
 
             EditorGUILayout.LabelField($"타입: {soType.Name}    /    함께 나갈 에셋: {count}개");
+
+            if (!validBalanceType)
+            {
+                EditorGUILayout.HelpBox(validationError, MessageType.Error);
+            }
 
             m_csvFileName = DrawNameRow("CSV 파일 이름", m_csvFileName, GetCsvFileName(soType));
             using (new EditorGUI.DisabledScope(true))
@@ -547,9 +551,12 @@ public class ScriptableObjectCsvWindow : EditorWindow
             }
 
             EditorGUILayout.Space();
-            if (GUILayout.Button($"{soType.Name} → CSV 내보내기", GUILayout.Height(28)))
+            using (new EditorGUI.DisabledScope(!validBalanceType))
             {
-                ExportType(soType, m_csvFileName);
+                if (GUILayout.Button($"{soType.Name} → CSV 내보내기", GUILayout.Height(28)))
+                {
+                    ExportType(soType, m_csvFileName);
+                }
             }
         }
 
@@ -567,21 +574,15 @@ public class ScriptableObjectCsvWindow : EditorWindow
 
     /// <summary>에셋 없이 타입만 골라 내보낼 때 쓰는 목록입니다.</summary>
     /// <remarks>
-    /// 이 프로젝트가 정의한 ScriptableObject 타입만 나옵니다. 밸런스용인지 여부는 변환과 무관하므로 구분하지 않습니다.
+    /// 이 프로젝트가 정의한 <see cref="IBalanceTableData"/> 구현 타입만 나옵니다.
     /// </remarks>
     private void DrawTypePicker()
     {
-        m_balanceOnly = EditorGUILayout.ToggleLeft(
-            $"밸런스 타입만 표시 ({nameof(IBalanceTableData)} 구현)", m_balanceOnly);
-
-        // 목록 자체는 항상 같고, 이 토글은 보여줄 항목만 좁힙니다.
-        List<TypeEntry> shown = m_balanceOnly
-            ? m_types.FindAll(entry => typeof(IBalanceTableData).IsAssignableFrom(entry.type))
-            : m_types;
+        List<TypeEntry> shown = m_types;
 
         using (new EditorGUILayout.HorizontalScope())
         {
-            EditorGUILayout.LabelField($"프로젝트 SO 타입: {shown.Count}개", GUILayout.Width(180));
+            EditorGUILayout.LabelField($"밸런스 SO 타입: {shown.Count}개", GUILayout.Width(180));
             if (GUILayout.Button("다시 검색", GUILayout.Width(90)))
             {
                 ScanTypes();
@@ -590,11 +591,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
 
         if (shown.Count == 0)
         {
-            EditorGUILayout.HelpBox(
-                m_balanceOnly
-                    ? $"{nameof(IBalanceTableData)}를 구현한 타입이 없습니다. 토글을 끄면 전체가 보입니다."
-                    : "이 프로젝트가 정의한 ScriptableObject 타입을 찾지 못했습니다.",
-                MessageType.Warning);
+            EditorGUILayout.HelpBox($"{nameof(IBalanceTableData)}를 구현한 타입이 없습니다.", MessageType.Warning);
             return;
         }
 
@@ -620,7 +617,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
                 ExportType(selected.type);
             }
 
-            if (GUILayout.Button("전체 타입 → CSV 내보내기", GUILayout.Height(26)))
+            if (GUILayout.Button("전체 밸런스 → CSV 내보내기", GUILayout.Height(26)))
             {
                 ExportAllTypes();
             }
@@ -936,7 +933,9 @@ public class ScriptableObjectCsvWindow : EditorWindow
 
         foreach (Type type in TypeCache.GetTypesDerivedFrom<ScriptableObject>())
         {
-            if (type.IsAbstract || !IsProjectType(type))
+            if (type.IsAbstract
+                || !IsProjectType(type)
+                || !typeof(IBalanceTableData).IsAssignableFrom(type))
             {
                 continue;
             }
@@ -968,6 +967,111 @@ public class ScriptableObjectCsvWindow : EditorWindow
         return assembly == "Assembly-CSharp" || assembly == "Assembly-CSharp-Editor";
     }
 
+    /// <summary>CSV 경로에 들어올 수 있는 순수 밸런스 SO인지 검사합니다.</summary>
+    private static bool TryValidateBalanceType(Type type, out string error)
+    {
+        if (type == null
+            || !typeof(ScriptableObject).IsAssignableFrom(type)
+            || !typeof(IBalanceTableData).IsAssignableFrom(type))
+        {
+            error = $"'{type?.Name ?? "(null)"}'은 {nameof(IBalanceTableData)} 구현 SO가 아니므로 밸런스 CSV에서 사용할 수 없습니다.";
+            return false;
+        }
+
+        string referencePath = FindUnityObjectReferenceInSerializedFields(type, type.Name, new HashSet<Type>());
+        if (!string.IsNullOrEmpty(referencePath))
+        {
+            error = $"'{type.Name}'의 '{referencePath}'에 Unity Object 참조가 있습니다. 사운드·이펙트·프리팹 참조는 Feedback SO에 두고 밸런스 CSV에서 제외해야 합니다.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    private static string FindUnityObjectReferenceInSerializedFields(Type type, string path, HashSet<Type> visited)
+    {
+        if (type == null || !visited.Add(type))
+        {
+            return string.Empty;
+        }
+
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        for (Type current = type; current != null && current != typeof(object); current = current.BaseType)
+        {
+            foreach (FieldInfo field in current.GetFields(flags))
+            {
+                if (field.IsStatic || field.IsNotSerialized)
+                {
+                    continue;
+                }
+
+                bool isSerialized = field.IsPublic
+                    || field.GetCustomAttribute<SerializeField>(true) != null
+                    || field.GetCustomAttribute<SerializeReference>(true) != null;
+                if (!isSerialized)
+                {
+                    continue;
+                }
+
+                string found = FindUnityObjectReferencePath(field.FieldType, path + "." + field.Name, visited);
+                if (!string.IsNullOrEmpty(found))
+                {
+                    return found;
+                }
+            }
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>Unity 직렬화 대상 필드 안에서 Object 참조가 처음 나타나는 경로를 찾습니다.</summary>
+    private static string FindUnityObjectReferencePath(Type type, string path, HashSet<Type> visited)
+    {
+        if (type == null)
+        {
+            return string.Empty;
+        }
+
+        if (typeof(UnityEngine.Object).IsAssignableFrom(type))
+        {
+            return path;
+        }
+
+        Type nullableType = Nullable.GetUnderlyingType(type);
+        if (nullableType != null)
+        {
+            return FindUnityObjectReferencePath(nullableType, path, visited);
+        }
+
+        if (type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal))
+        {
+            return string.Empty;
+        }
+
+        if (type.IsArray)
+        {
+            return FindUnityObjectReferencePath(type.GetElementType(), path + "[]", visited);
+        }
+
+        if (type.IsGenericType)
+        {
+            Type[] arguments = type.GetGenericArguments();
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                string found = FindUnityObjectReferencePath(arguments[i], path + "[]", visited);
+                if (!string.IsNullOrEmpty(found))
+                {
+                    return found;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        return FindUnityObjectReferenceInSerializedFields(type, path, visited);
+    }
+
     // ---------------------------------------------------------------- export
 
     private void ExportType(Type type)
@@ -980,6 +1084,13 @@ public class ScriptableObjectCsvWindow : EditorWindow
     /// <param name="fileNameOverride">확장자를 뺀 파일 이름입니다. 비우면 타입 이름을 씁니다.</param>
     private void ExportType(Type type, string fileNameOverride)
     {
+        if (!TryValidateBalanceType(type, out string validationError))
+        {
+            Debug.LogError($"[SoCsv] {validationError}");
+            EditorUtility.DisplayDialog("SO CSV", validationError, "확인");
+            return;
+        }
+
         EnsureFolder(CsvFolder);
         string fileName = string.IsNullOrWhiteSpace(fileNameOverride) ? GetCsvFileName(type) : fileNameOverride.Trim();
         string path = $"{CsvFolder}/{fileName}.csv";
@@ -996,8 +1107,16 @@ public class ScriptableObjectCsvWindow : EditorWindow
         EnsureFolder(CsvFolder);
         int files = 0;
         int total = 0;
+        int rejected = 0;
         foreach (TypeEntry entry in m_types)
         {
+            if (!TryValidateBalanceType(entry.type, out string validationError))
+            {
+                Debug.LogError($"[SoCsv] {validationError}");
+                rejected++;
+                continue;
+            }
+
             string path = $"{CsvFolder}/{GetCsvFileName(entry.type)}.csv";
             total += WriteCsvForType(entry.type, path);
             AssetDatabase.ImportAsset(path);
@@ -1005,8 +1124,11 @@ public class ScriptableObjectCsvWindow : EditorWindow
         }
 
         AssetDatabase.Refresh();
-        Debug.Log($"[SoCsv] 타입 {files}개 / 에셋 {total}개를 {CsvFolder}로 내보냈습니다.");
-        EditorUtility.DisplayDialog("SO CSV", $"CSV {files}개 파일에 에셋 {total}개를 내보냈습니다:\n{CsvFolder}", "확인");
+        Debug.Log($"[SoCsv] 타입 {files}개 / 에셋 {total}개를 {CsvFolder}로 내보냈습니다. 거부:{rejected}");
+        EditorUtility.DisplayDialog(
+            "SO CSV",
+            $"CSV {files}개 파일에 에셋 {total}개를 내보냈습니다.\n거부된 타입: {rejected}개\n{CsvFolder}",
+            "확인");
     }
 
     /// <summary>한 타입의 에셋들을 세로형 CSV로 씁니다.</summary>
@@ -1028,6 +1150,12 @@ public class ScriptableObjectCsvWindow : EditorWindow
     /// </remarks>
     public static (int count, string path) ExportTypeSilently(Type type)
     {
+        if (!TryValidateBalanceType(type, out string validationError))
+        {
+            Debug.LogError($"[SoCsv] {validationError}");
+            return (-1, string.Empty);
+        }
+
         EnsureFolder(CsvFolder);
         string path = $"{CsvFolder}/{GetCsvFileName(type)}.csv";
         int count = WriteCsvForType(type, path);
@@ -1037,6 +1165,11 @@ public class ScriptableObjectCsvWindow : EditorWindow
 
     private static int WriteCsvForType(Type type, string filePath)
     {
+        if (!TryValidateBalanceType(type, out string validationError))
+        {
+            throw new InvalidOperationException(validationError);
+        }
+
         List<ScriptableObject> assets = LoadAllOfType(type);
         List<string> fields = CollectColumns(type, assets);
 
@@ -1243,6 +1376,13 @@ public class ScriptableObjectCsvWindow : EditorWindow
                     continue;
                 }
 
+                if (!TryValidateBalanceType(type, out string validationError))
+                {
+                    Debug.LogWarning($"[SoCsv] {i + 1}번째 행을 건너뜁니다: {validationError}");
+                    skipped++;
+                    continue;
+                }
+
                 string guid = SoCsvText.Cell(row, col, ColGuid).Trim();
                 string assetPath = SoCsvText.Cell(row, col, ColPath).Trim();
 
@@ -1319,6 +1459,13 @@ public class ScriptableObjectCsvWindow : EditorWindow
                 if (type == null)
                 {
                     Debug.LogWarning($"[SoCsv] {c + 1}번째 에셋 열을 건너뜁니다: 알 수 없는 타입 '{typeName}'.");
+                    skipped++;
+                    continue;
+                }
+
+                if (!TryValidateBalanceType(type, out string validationError))
+                {
+                    Debug.LogWarning($"[SoCsv] {c + 1}번째 에셋 열을 건너뜁니다: {validationError}");
                     skipped++;
                     continue;
                 }

@@ -22,6 +22,8 @@ public class WanderState : EnemyStateBase
 
     public override void Enter()
     {
+        Controller.PlayIdleFeedback();
+
         // 배회 기준점 = 진입 시점 위치(최초 스폰 또는 교전 이탈 지점).
         m_anchor = Controller.transform.position;
 

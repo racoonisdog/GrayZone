@@ -18,6 +18,8 @@ public class ChaseState : EnemyStateBase
 
     public override void Enter()
     {
+        Controller.PlayChaseFeedback();
+
         NavMeshAgent agent = Controller.Agent;
         if (agent != null && agent.isOnNavMesh)
         {

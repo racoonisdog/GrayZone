@@ -19,6 +19,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [FormerlySerializedAs("m_balance")]
     [SerializeField] private GunBalanceSO m_balanceSO;
 
+    [Foldout("Feedback Data")]
+    [Tooltip("이 무기 타입이 사용할 사운드, 머즐, 트레이서, 탄피 피드백 데이터입니다.")]
+    [FormerlySerializedAs("m_feedbackProfile")]
+    [SerializeField] private WeaponFeedbackSO m_feedback;
+
     /// <summary>
     /// 조준 중 계산된 총구 기준 히트스캔 사격 정보를 담습니다.
     /// </summary>
@@ -294,11 +299,15 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     private bool m_canShoot = true;
     private bool m_isReloading;
     private float m_reloadStartTime;
+    private float m_nextDryFireTime;
     private bool m_hasRequiredReferences;
     private Faction m_ownerFaction = Faction.Player;
 
     /// <summary>이 무기를 소유한 유닛입니다. 피격자가 반격 대상을 알 수 있도록 피해와 함께 전달합니다.</summary>
     private GameObject m_ownerObject;
+
+    /// <summary>무기 사운드와 시각 피드백의 출력 컴포넌트입니다.</summary>
+    private WeaponFeedbackEmitter m_feedbackEmitter;
     private float m_hipfireCurrentSpreadAdd;
     private float m_adsCurrentSpreadAdd;
     private int m_hipfireShotsInBurst;
@@ -319,6 +328,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess
 
     /// <summary>현재 이 무기에 지정된 순수 수치형 밸런스 SO입니다.</summary>
     public GunBalanceSO Balance => m_balanceSO;
+
+    /// <summary>현재 이 무기 타입에 지정된 피드백 데이터입니다.</summary>
+    public WeaponFeedbackSO Feedback => m_feedback;
 
     /// <summary>최대 탄약 수입니다.</summary>
     public int MaxBullet => m_maxBullet;
@@ -517,6 +529,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         HealthSystemBase ownerHealth = GetComponentInParent<HealthSystemBase>();
         m_ownerFaction = ownerHealth != null ? ownerHealth.Faction : Faction.Player;
         m_ownerObject = ownerHealth != null ? ownerHealth.gameObject : null;
+
+        if (m_feedback != null)
+        {
+            EnsureFeedbackEmitter();
+        }
     }
 
     /// <summary>
@@ -543,7 +560,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             Debug.LogWarning("[Gun] ClipPos가 할당되지 않았습니다. 탄창 드롭은 생략됩니다.", this);
         }
 
-        if (m_audioSource == null)
+        if (m_audioSource == null && m_feedback == null)
         {
             Debug.LogWarning("[Gun] AudioSource가 없습니다. 무기 효과음은 재생되지 않습니다.", this);
         }
@@ -689,8 +706,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             return false;
         }
 
-        if (!m_canShoot || m_isReloading || (m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive))
+        bool isOutOfAmmo = m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive;
+        if (!m_canShoot || m_isReloading || isOutOfAmmo)
         {
+            if (isOutOfAmmo && !m_isReloading)
+            {
+                PlayDryFireWithCooldown();
+            }
+
             return false;
         }
 
@@ -707,11 +730,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         m_canShoot = false;
         // 오브젝트 풀링
         SpawnBullet(targetPosition);
-        SpawnShell();
-
-
-        SpawnMuzzleFlash();
-        PlayShootSound();
+        PlaySuccessfulShotFeedback(m_firePos.position, targetPosition);
         UpdateBulletUI();
 
         Invoke(nameof(ResetShoot), m_shootDelay);
@@ -739,8 +758,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             return false;
         }
 
-        if (!m_canShoot || m_isReloading || (m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive))
+        bool isOutOfAmmo = m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive;
+        if (!m_canShoot || m_isReloading || isOutOfAmmo)
         {
+            if (isOutOfAmmo && !m_isReloading)
+            {
+                PlayDryFireWithCooldown();
+            }
+
             return false;
         }
 
@@ -752,9 +777,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
 
         firedShot = BuildFiredShot(shotInfo, isAds);
         LayShoot(firedShot);
-        SpawnShell();
-        SpawnMuzzleFlash();
-        PlayShootSound();
+        PlaySuccessfulShotFeedback(firedShot.Origin, firedShot.EndPoint);
         UpdateBulletUI();
 
         Invoke(nameof(ResetShoot), m_shootDelay);
@@ -1021,7 +1044,16 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         if (shotInfo.HasHit)
         {
             DrawShotDebugRay(shotInfo, Color.red);
-            ApplyHitscanDamage(shotInfo);
+            CombatDamage.HitFeedback feedback = ApplyHitscanDamage(shotInfo);
+            if (feedback.Applied)
+            {
+                EnemyController enemy = shotInfo.Hit.collider.GetComponentInParent<EnemyController>();
+                enemy?.PlayHitFeedback(shotInfo.Hit.point, shotInfo.Hit.normal, shotInfo.Hit.collider.transform);
+            }
+            else if (!shotInfo.Hit.collider.TryGetComponent(out Hitbox _))
+            {
+                FieldManager.Instance?.SurfaceFeedback?.PlayImpact(shotInfo.Hit);
+            }
             return;
         }
 
@@ -1067,11 +1099,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// </summary>
     /// <param name="shotInfo">사격으로 발생한 히트스캔 충돌 정보입니다.</param>
     /// <remarks>대상 구체 타입을 모른 채 <see cref="CombatDamage"/>가 진영·부위 판정 후 적용하고, 피격 확정 시 <see cref="OnHitFeedback"/>를 발생시킵니다.</remarks>
-    private void ApplyHitscanDamage(HitscanShotInfo shotInfo)
+    private CombatDamage.HitFeedback ApplyHitscanDamage(HitscanShotInfo shotInfo)
     {
         if (m_hitscanDamage <= 0 || shotInfo.Hit.collider == null)
         {
-            return;
+            return CombatDamage.HitFeedback.None;
         }
 
         CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
@@ -1085,6 +1117,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         {
             OnHitFeedback?.Invoke(feedback);
         }
+
+        return feedback;
     }
 
     /// <summary>
@@ -1197,6 +1231,12 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// </summary>
     private void PlayReloadSound()
     {
+        if (m_feedback != null)
+        {
+            EnsureFeedbackEmitter()?.PlayReload(m_feedback);
+            return;
+        }
+
         if (m_audioSource == null || m_reloadClip == null)
         {
             return;
@@ -1211,12 +1251,61 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// <remarks>효과음 클립이 비어 있으면 아무 소리도 내지 않습니다. 사운드 배선 전이라도 호출 틀은 유지됩니다.</remarks>
     public void PlayEmptyReloadSound()
     {
+        if (m_feedback != null)
+        {
+            EnsureFeedbackEmitter()?.PlayDryFire(m_feedback);
+            return;
+        }
+
         if (m_audioSource == null || m_emptyReloadClip == null)
         {
             return;
         }
 
         m_audioSource.PlayOneShot(m_emptyReloadClip);
+    }
+
+    /// <summary>사격 입력을 누르고 있어도 드라이 사운드가 프레임마다 중첩되지 않도록 짧은 간격을 둡니다.</summary>
+    private void PlayDryFireWithCooldown()
+    {
+        if (Time.unscaledTime < m_nextDryFireTime)
+        {
+            return;
+        }
+
+        m_nextDryFireTime = Time.unscaledTime + 0.2f;
+        PlayEmptyReloadSound();
+    }
+
+    /// <summary>Feedback SO가 있으면 새 피드백 출력을 사용하고, 없으면 기존 개별 배선 경로를 유지합니다.</summary>
+    private void PlaySuccessfulShotFeedback(Vector3 tracerStart, Vector3 tracerEnd)
+    {
+        if (m_feedback != null)
+        {
+            Transform muzzleSocket = m_muzzleFlashPos != null ? m_muzzleFlashPos : m_firePos;
+            EnsureFeedbackEmitter()?.PlayShot(
+                m_feedback,
+                muzzleSocket,
+                m_shellPos,
+                tracerStart,
+                tracerEnd);
+            return;
+        }
+
+        SpawnShell();
+        SpawnMuzzleFlash();
+        PlayShootSound();
+    }
+
+    /// <summary>Feedback emitter를 같은 총기 오브젝트에서 찾고, 없으면 런타임에 보강합니다.</summary>
+    private WeaponFeedbackEmitter EnsureFeedbackEmitter()
+    {
+        if (m_feedbackEmitter == null && !TryGetComponent(out m_feedbackEmitter))
+        {
+            m_feedbackEmitter = gameObject.AddComponent<WeaponFeedbackEmitter>();
+        }
+
+        return m_feedbackEmitter;
     }
 
     /// <summary>

@@ -22,6 +22,11 @@ public class EnemyController : MonoBehaviour
     [FormerlySerializedAs("m_balance")]
     [SerializeField] private EnemyBalanceSO m_balanceSO;
 
+    [Header("Feedback Data")]
+    [Tooltip("이 감염체 타입이 사용할 피격 표현, 혈흔, 행동 사운드 피드백 데이터입니다.")]
+    [FormerlySerializedAs("m_feedbackProfile")]
+    [SerializeField] private EnemyFeedbackSO m_feedback;
+
     [Header("Move")]
     /// <summary>스폰 지점을 기준으로 배회 목적지를 고를 반경입니다.</summary>
     [SerializeField] private float wanderRadius = 8f;
@@ -101,6 +106,9 @@ public class EnemyController : MonoBehaviour
     /// <summary>공격 가능 여부, 쿨다운, 실제 피해 적용을 담당하는 공격 모듈입니다.</summary>
     private EnemyAttack enemyAttack;
 
+    /// <summary>행동·피격·사망 피드백의 출력 컴포넌트입니다.</summary>
+    private EnemyFeedbackEmitter feedbackEmitter;
+
     // =========================
     // 최상위 상태 인스턴스 (상태 간 전이에 사용)
     // =========================
@@ -137,6 +145,25 @@ public class EnemyController : MonoBehaviour
 
     /// <summary>공격 모듈입니다.</summary>
     public EnemyAttack Attack => enemyAttack;
+
+    /// <summary>배회 상태 진입 피드백을 출력합니다.</summary>
+    public void PlayIdleFeedback() => EnsureFeedbackEmitter()?.PlayIdle(m_feedback);
+
+    /// <summary>교전 진입 경계 피드백을 출력합니다.</summary>
+    public void PlayAlertFeedback() => EnsureFeedbackEmitter()?.PlayAlert(m_feedback);
+
+    /// <summary>추적 상태 진입 피드백을 출력합니다.</summary>
+    public void PlayChaseFeedback() => EnsureFeedbackEmitter()?.PlayChase(m_feedback);
+
+    /// <summary>공격 시작 피드백을 출력합니다.</summary>
+    public void PlayAttackFeedback() => EnsureFeedbackEmitter()?.PlayAttack(m_feedback);
+
+    /// <summary>실제 피격 위치에 데이터 기반 피격 이펙트·사운드·혈흔을 출력합니다.</summary>
+    public void PlayHitFeedback(Vector3 point, Vector3 normal, Transform hitTransform) =>
+        EnsureFeedbackEmitter()?.PlayHit(m_feedback, point, normal, hitTransform);
+
+    /// <summary>사망 위치에 데이터 기반 사망 사운드를 출력합니다.</summary>
+    public void PlayDeathFeedback() => EnsureFeedbackEmitter()?.PlayDeath(m_feedback);
 
     /// <summary>배회 목적지 반경입니다.</summary>
     public float WanderRadius => wanderRadius;
@@ -185,6 +212,9 @@ public class EnemyController : MonoBehaviour
 
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
     public EnemyBalanceSO Balance => m_balanceSO;
+
+    /// <summary>현재 이 감염체 타입에 지정된 피드백 데이터입니다.</summary>
+    public EnemyFeedbackSO Feedback => m_feedback;
 
     /// <summary>현재 HP입니다. 체력 컴포넌트가 없으면 0을 반환합니다.</summary>
     public int CurrentHP => enemyHealth != null ? enemyHealth.CurrentHP : 0;
@@ -529,6 +559,27 @@ public class EnemyController : MonoBehaviour
         {
             enemyAttack = gameObject.AddComponent<EnemyAttack>();
         }
+
+        if (m_feedback != null)
+        {
+            EnsureFeedbackEmitter();
+        }
+    }
+
+    /// <summary>Feedback SO가 있을 때만 감염체 피드백 emitter를 런타임에 준비합니다.</summary>
+    private EnemyFeedbackEmitter EnsureFeedbackEmitter()
+    {
+        if (m_feedback == null)
+        {
+            return null;
+        }
+
+        if (feedbackEmitter == null && !TryGetComponent(out feedbackEmitter))
+        {
+            feedbackEmitter = gameObject.AddComponent<EnemyFeedbackEmitter>();
+        }
+
+        return feedbackEmitter;
     }
 
     /// <summary>상태 인스턴스를 생성합니다.</summary>

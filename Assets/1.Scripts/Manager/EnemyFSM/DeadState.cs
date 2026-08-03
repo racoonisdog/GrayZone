@@ -20,6 +20,8 @@ public class DeadState : EnemyStateBase
 
     public override void Enter()
     {
+        Controller.PlayDeathFeedback();
+
         m_destroyTime = Time.time + Controller.DestroyDelay;
 
         DisableNavigation();
