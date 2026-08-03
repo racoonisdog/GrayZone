@@ -625,6 +625,61 @@ public class ScriptableObjectCsvWindow : EditorWindow
                 ExportAllTypes();
             }
         }
+
+        DrawReverseSyncSection();
+    }
+
+    /// <summary>
+    /// 선택한 GameObject의 인스펙터 값을 SO와 CSV로 되돌려 쓰는 영역을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 여기 있는 다른 동작이 모두 CSV에서 SO로 가는 방향이라, 반대 방향을 같은 창에 두어
+    /// 어느 쪽으로 값이 흐르는지 한눈에 보이게 합니다. 실제 처리는 인스펙터 기어 메뉴와
+    /// 런타임 트레이너 버튼이 함께 쓰는 <see cref="BalanceReverseSync"/>가 담당합니다.
+    /// </remarks>
+    private void DrawReverseSyncSection()
+    {
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("인스펙터 → SO + CSV (역방향)", EditorStyles.boldLabel);
+
+        GameObject selectedObject = Selection.activeGameObject;
+        if (selectedObject == null)
+        {
+            EditorGUILayout.HelpBox("GameObject를 선택하면 그 아래에서 밸런스 SO를 물고 있는 컴포넌트를 갱신할 수 있습니다.",
+                MessageType.Info);
+            return;
+        }
+
+        List<Component> targets = new List<Component>();
+        foreach (Component component in selectedObject.GetComponentsInChildren<Component>(true))
+        {
+            if (component != null && BalanceReverseSync.FindBoundBalanceAsset(component) != null)
+            {
+                targets.Add(component);
+            }
+        }
+
+        if (targets.Count == 0)
+        {
+            EditorGUILayout.HelpBox($"'{selectedObject.name}' 아래에 밸런스 SO를 물고 있는 컴포넌트가 없습니다.",
+                MessageType.Info);
+            return;
+        }
+
+        foreach (Component target in targets)
+        {
+            ScriptableObject asset = BalanceReverseSync.FindBoundBalanceAsset(target);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField($"{target.GetType().Name} → {asset.name}");
+                if (GUILayout.Button("갱신", GUILayout.Width(60)))
+                {
+                    BalanceReverseSync.Result result = BalanceReverseSync.Run(target);
+                    Debug.Log($"[BalanceReverseSync] {result.Summary()}", target);
+                    EditorUtility.DisplayDialog("밸런스 역동기화", result.Summary(), "확인");
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- 생성 동작
@@ -962,7 +1017,25 @@ public class ScriptableObjectCsvWindow : EditorWindow
     /// 필드가 행, 에셋이 열입니다. 밸런스 시트는 보통 필드가 수십 개인데 에셋은 몇 개뿐이라,
     /// 가로형으로 두면 옆으로 한없이 스크롤해야 합니다. 세로형이면 설명이 필드 이름 바로 옆에 붙어 읽기도 낫습니다.
     /// </remarks>
-    private int WriteCsvForType(Type type, string filePath)
+    /// <summary>
+    /// 창을 열지 않고 한 타입을 CSV로 내보냅니다.
+    /// </summary>
+    /// <param name="type">내보낼 ScriptableObject 타입입니다.</param>
+    /// <returns>내보낸 에셋 수와 쓴 파일 경로입니다.</returns>
+    /// <remarks>
+    /// 인스펙터·트레이너의 역동기화 버튼처럼 창 밖에서 부르는 경로를 위한 진입점입니다.
+    /// 대화상자를 띄우지 않으므로 부르는 쪽이 결과를 알려야 합니다.
+    /// </remarks>
+    public static (int count, string path) ExportTypeSilently(Type type)
+    {
+        EnsureFolder(CsvFolder);
+        string path = $"{CsvFolder}/{GetCsvFileName(type)}.csv";
+        int count = WriteCsvForType(type, path);
+        AssetDatabase.ImportAsset(path);
+        return (count, path);
+    }
+
+    private static int WriteCsvForType(Type type, string filePath)
     {
         List<ScriptableObject> assets = LoadAllOfType(type);
         List<string> fields = CollectColumns(type, assets);
