@@ -469,7 +469,63 @@ public class PlayerInputs : MonoBehaviour
         SetCursorInputForLook(!cursorMode);
         SetCursorLocked(!cursorMode);
         Cursor.visible = cursorMode;
+
+        if (m_isInputEnabled)
+        {
+            ResyncHeldInputFromDevices();
+        }
     }
+
+    /// <summary>
+    /// 지금 눌려 있는 입력을 장치에서 다시 읽어 상태에 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 입력을 다시 켤 때 필요합니다. 이 컴포넌트는 액션맵을 끄지 않고 콜백마다
+    /// <see cref="m_isInputEnabled"/>로 걸러내므로, 꺼져 있는 동안 들어온 입력은 버려집니다.
+    /// 그리고 <see cref="ResetInputState"/>가 상태를 0으로 밀어 놓는데, 키를 계속 누르고 있으면
+    /// 키 상태가 변하지 않아 콜백이 다시 오지 않습니다. 그래서 다시 켠 뒤에도 키를 떼고
+    /// 다시 누를 때까지 입력이 먹지 않습니다. 트레이너를 이동 중에 닫으면 캐릭터가 멈춰 있는 증상이 이것입니다.
+    ///
+    /// 시점 입력은 다시 읽지 않습니다. 그 값은 누적된 상태가 아니라 프레임당 변화량이라,
+    /// 다시 읽으면 지난 프레임의 변화량을 한 번 더 적용하는 셈이 됩니다.
+    /// </remarks>
+    private void ResyncHeldInputFromDevices()
+    {
+#if ENABLE_INPUT_SYSTEM
+        CachePlayerInput();
+        if (m_playerInput == null || m_playerInput.actions == null)
+        {
+            return;
+        }
+
+        InputAction move = m_playerInput.actions.FindAction("Move", false);
+        if (move != null)
+        {
+            m_move = move.ReadValue<Vector2>();
+        }
+
+        m_jump = IsActionPressed("Jump");
+        m_sprint = IsActionPressed("Sprint");
+        m_aim = IsActionPressed("Aim");
+        m_shoot = IsActionPressed("Shoot");
+        m_reload = IsActionPressed("Reload");
+
+        InputAction interaction = ResolveInteractionAction();
+        if (interaction != null)
+        {
+            m_interact = interaction.IsPressed();
+        }
+#endif
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    /// <summary>이름으로 찾은 액션이 지금 눌려 있는지 확인합니다. 없는 액션은 눌리지 않은 것으로 봅니다.</summary>
+    private bool IsActionPressed(string actionName)
+    {
+        InputAction action = m_playerInput.actions.FindAction(actionName, false);
+        return action != null && action.IsPressed();
+    }
+#endif
 
     /// <summary>
     /// 아날로그 이동 입력 사용 여부를 설정합니다.

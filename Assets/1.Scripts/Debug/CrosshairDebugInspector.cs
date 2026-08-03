@@ -87,9 +87,14 @@ public class CrosshairDebugInspector : MonoBehaviour
     private bool m_open;
     private Vector2 m_scroll;
 
-    /// <summary>이 창이 커서와 플레이어 입력을 직접 잡았는지 여부입니다.</summary>
-    /// <remarks>트레이너가 이미 잡고 있으면 손대지 않으며, 그때는 닫을 때도 되돌리지 않습니다.</remarks>
-    private bool m_ownsInputTakeover;
+    /// <summary>
+    /// 이 창이 지금 열려 있는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="RuntimeDebugTrainer"/>가 닫힐 때 이 창이 아직 열려 있는지 보고,
+    /// 열려 있으면 게임플레이로 되돌리지 않게 하기 위한 것입니다.
+    /// </remarks>
+    public static bool IsWindowOpen => s_instance != null && s_instance.m_open;
 
     // 펼침 상태. 항목이 많아 기본은 자주 쓰는 것만 열어 둡니다.
     private bool m_showShape = true;
@@ -188,7 +193,7 @@ public class CrosshairDebugInspector : MonoBehaviour
         }
 
         // 열린 동안 커서가 다시 잠기면(캐릭터 전환 등) 매 프레임 풀어 둡니다.
-        if (m_open && m_ownsInputTakeover)
+        if (m_open)
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -218,18 +223,18 @@ public class CrosshairDebugInspector : MonoBehaviour
     /// 창을 조작할 수 있도록 커서를 풀고 플레이어 입력을 끕니다.
     /// </summary>
     /// <remarks>
-    /// 트레이너가 이미 같은 일을 해 두었으면 손대지 않습니다.
-    /// 둘이 각자 잡으면 먼저 닫은 쪽이 아직 열려 있는 창의 커서까지 다시 잠가 버립니다.
+    /// 씬이 입력 모드 계약을 제공하면 그 구현이 커서와 플레이어 입력을 소유합니다.
+    /// 트레이너와 같은 경로를 쓰는 이유는, 서로 다른 방식으로 잡으면 한쪽이 잠근 것을
+    /// 다른 쪽이 모르는 채로 풀어 버려 커서와 입력 상태가 어긋나기 때문입니다.
     /// </remarks>
     private void AcquireInputTakeover()
     {
-        if (RuntimeDebugTrainer.IsMenuOpen)
+        FieldManager fieldManager = FieldManager.Instance;
+        if (fieldManager != null)
         {
-            m_ownsInputTakeover = false;
+            fieldManager.SetInputMode(InputMode.UI);
             return;
         }
-
-        m_ownsInputTakeover = true;
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -245,19 +250,25 @@ public class CrosshairDebugInspector : MonoBehaviour
         }
     }
 
-    /// <summary>커서와 플레이어 입력을 게임플레이 상태로 되돌립니다.</summary>
+    /// <summary>
+    /// 커서와 플레이어 입력을 게임플레이 상태로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// 트레이너가 아직 열려 있으면 되돌리지 않습니다. 그쪽이 계속 커서를 쓰고 있기 때문입니다.
+    /// 반대로 트레이너가 이미 닫혔다면, 그쪽은 이 창이 열려 있는 것을 보고 되돌리기를 건너뛰었을 것이므로
+    /// 처음 잡은 쪽이 누구였는지와 무관하게 마지막으로 닫히는 이 창이 되돌려야 합니다.
+    /// </remarks>
     private void ReleaseInputTakeover()
     {
-        if (!m_ownsInputTakeover)
+        if (RuntimeDebugTrainer.IsMenuOpen)
         {
             return;
         }
 
-        m_ownsInputTakeover = false;
-
-        // 트레이너가 그 사이에 열렸다면 지금 커서를 잠그면 안 됩니다. 그쪽이 아직 쓰고 있습니다.
-        if (RuntimeDebugTrainer.IsMenuOpen)
+        FieldManager fieldManager = FieldManager.Instance;
+        if (fieldManager != null)
         {
+            fieldManager.SetInputMode(InputMode.Gameplay);
             return;
         }
 
