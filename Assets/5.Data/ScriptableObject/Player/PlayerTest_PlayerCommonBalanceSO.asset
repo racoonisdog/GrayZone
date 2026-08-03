@@ -41,7 +41,14 @@ MonoBehaviour:
   m_zoomLerpSpeed: 10
   m_visualKickRecoverShots: 1
   m_visualKickMaxRoll: 3
-  m_visualKickMaxFovPunch: 0
+  m_visualKickMaxFovPunch: 1.5
+  m_pitchRecoilEnvelopeDuration: 0.5
+  m_yawRecoilEnvelopeDuration: 0.45
+  m_rollKickEnvelopeDuration: 0.35
+  m_hipfireFovPunchEnvelopeDuration: 0.25
+  m_adsFovPunchEnvelopeDuration: 0.22
+  m_zoomInDuration: 0.18
+  m_zoomOutDuration: 0.24
   m_injuryConversionRatio: 0.35
   m_normalInjuryMaxGauge: 10
   m_minorInjuryMaxGauge: 40
