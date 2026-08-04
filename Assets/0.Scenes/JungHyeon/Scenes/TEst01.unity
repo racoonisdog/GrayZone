@@ -30770,6 +30770,22 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1031078239, guid: abc00000000017253688207994647417, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1031078243, guid: abc00000000017253688207994647417, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1031078247, guid: abc00000000017253688207994647417, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1031078251, guid: abc00000000017253688207994647417, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -209422,15 +209438,17 @@ MonoBehaviour:
   facilityStates: []
   manufacturing:
     m_jobs: []
-  lastSettledBattleId: 
-  lastBattleStageId: 
-  lastBattleOutcome: 0
-  lastBattleEndReason: 0
-  lastBattleMissionCompleted: 0
-  lastBattleElapsedSeconds: 0
-  lastBattleTotalKillCount: 0
-  lastBattleMemberResults: []
-  lastBattleAcquiredResources: []
+  lastSettledFieldId: 
+  lastFieldStageId: 
+  lastFieldOutcome: 0
+  lastFieldEndReason: 0
+  lastFieldMissionCompleted: 0
+  lastFieldElapsedSeconds: 0
+  lastFieldKillCount: 0
+  lastFieldMemberResults: []
+  lastFieldAcquiredResources: []
+  totalFieldKillCount: 0
+  fieldKillHistory: 
 --- !u!1001 &1663475141
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -215413,7 +215431,7 @@ MonoBehaviour:
   m_runtimeData:
     shelterStability: 100
     currentDay: 1
-    battleSquadRuntimeIds: []
+    fieldSquadRuntimeIds: []
     facilityStates: []
     characters: []
     manufacturing:
@@ -248271,6 +248289,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   gameDataManager: {fileID: 1663288710}
   gameSettingManager: {fileID: 1735710000}
+  developMode: 1
 --- !u!4 &1997914413
 Transform:
   m_ObjectHideFlags: 0
