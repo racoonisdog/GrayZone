@@ -12,6 +12,9 @@ using UnityEngine.AI;
 /// </remarks>
 public class DeadState : EnemyStateBase
 {
+    /// <summary>현재 시체를 시간 경과 후 삭제할지 여부입니다.</summary>
+    private bool m_destroyCorpse;
+
     /// <summary>오브젝트를 제거할 시각입니다.</summary>
     private float m_destroyTime;
 
@@ -22,25 +25,44 @@ public class DeadState : EnemyStateBase
     {
         Controller.PlayDeathFeedback();
 
-        m_destroyTime = Time.time + Controller.DestroyDelay;
+        EnemyCorpseSettings settings = FieldManager.Instance != null
+            ? FieldManager.Instance.EnemyCorpseSettings
+            : null;
+
+        if (settings == null)
+        {
+            m_destroyCorpse = false;
+            Debug.LogError(
+                "[DeadState] FieldManager의 EnemyCorpseSettings를 찾지 못했습니다. 시체 공통 정책을 적용할 수 없습니다.",
+                Controller);
+        }
+        else
+        {
+            m_destroyCorpse = settings.DestroyCorpse;
+            m_destroyTime = Time.time + settings.CorpseLifetime;
+        }
 
         DisableNavigation();
 
         // 공격 도중 죽으면 Off 이벤트가 오지 않습니다. 상태 표시까지 함께 내려 둡니다.
         Controller.Attack?.SetHitboxActive(false);
 
-        DisableColliders();
-
         // 교전 중이었다면 알고 있던 대상 정보를 정리합니다.
         Controller.Sensor?.ClearAllInfo();
         Controller.Sensor?.SetEngaged(false);
 
-        Controller.PlayDeathAnimation();
+        // FieldManager 공통 설정이 래그돌을 허용하고 물리 골격도 준비된 개체만 래그돌로 전환합니다.
+        // 설정을 찾지 못했거나 래그돌을 끈 경우에는 기존 사망 애니메이션 경로를 유지합니다.
+        if (settings == null || !settings.UseRagdoll || !Controller.TryActivateRagdoll())
+        {
+            DisableColliders();
+            Controller.PlayDeathAnimation();
+        }
     }
 
     public override void Tick()
     {
-        if (Time.time >= m_destroyTime)
+        if (m_destroyCorpse && Time.time >= m_destroyTime)
         {
             Object.Destroy(Controller.gameObject);
         }
