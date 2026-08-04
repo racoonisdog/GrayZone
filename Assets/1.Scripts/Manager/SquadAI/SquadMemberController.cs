@@ -74,6 +74,7 @@ public class SquadMemberController : MonoBehaviour
 
     private bool m_isInteractionLocked;
     private Collider m_reviveDetectionCollider;
+    private RagdollController m_ragdollController;
 
     [Foldout("Reference Options")]
     [Tooltip("입력 값을 보관하는 플레이어 입력 컴포넌트입니다.")]
@@ -316,6 +317,11 @@ public class SquadMemberController : MonoBehaviour
             m_playerHealth = GetComponent<PlayerHealth>();
         }
 
+        if (m_ragdollController == null)
+        {
+            m_ragdollController = GetComponent<RagdollController>();
+        }
+
         if (m_followerAI == null)
         {
             m_followerAI = GetComponent<SquadFollowerAI>();
@@ -423,6 +429,12 @@ public class SquadMemberController : MonoBehaviour
     public void SetAlive(bool value)
     {
         bool wasAlive = m_isAlive;
+
+        if (!wasAlive && value)
+        {
+            m_ragdollController?.DeactivateRagdoll();
+        }
+
         m_isAlive = value;
 
         if (!m_isAlive)
@@ -436,8 +448,9 @@ public class SquadMemberController : MonoBehaviour
 
         if (wasAlive && !m_isAlive)
         {
-            // 사망 진입 순간에만 1회 발동(트리거는 자동 소비되어 재진입 문제가 없습니다).
-            if (m_animator != null)
+            // 물리 골격이 없을 때만 기존 사망 애니메이션으로 폴백합니다.
+            if ((m_ragdollController == null || !m_ragdollController.TryActivateRagdoll())
+                && m_animator != null)
             {
                 m_animator.SetTrigger(DoDeathHash);
             }

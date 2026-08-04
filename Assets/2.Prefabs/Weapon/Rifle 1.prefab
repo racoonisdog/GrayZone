@@ -5826,6 +5826,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Gun
   m_balanceSO: {fileID: 11400000, guid: 79421e9565ae4bfbae970dbcb5176c96, type: 2}
+  m_feedback: {fileID: 0}
   m_currentBullet: 30
   m_maxBullet: 30
   m_shootDelay: 0.12
@@ -5846,33 +5847,42 @@ MonoBehaviour:
   m_emptyReloadClip: {fileID: 0}
   m_muzzleFlashParticle: {fileID: 0}
   m_hitscanDamage: 1
+  m_allowHeadshot: 1
   m_headshotDamageMultiplier: 2
   m_hitscanRange: 100
   m_hitscanLayerMask:
     serializedVersion: 2
-    m_Bits: 4294966783
-  m_hipfireMinSpread: 4
-  m_hipfireMaxSpread: 10
-  m_hipfireCurrentSpread: 4
+    m_Bits: 4294958591
+  m_hipfireMinSpread: 2
+  m_hipfireMaxSpread: 7
+  m_hipfireCurrentSpread: 2
   m_hipfireMinSpreadShotCount: 3
-  m_hipfireSpreadIncreasePerShot: 1
+  m_hipfireSpreadIncreasePerShot: 0.5
   m_hipfireSpreadRecoveryPerSecond: 8
   m_hipfireSpreadRecoveryDelay: 0.3
   m_adsMinSpread: 0
-  m_adsMaxSpread: 6
+  m_adsMaxSpread: 3
   m_adsCurrentSpread: 0
   m_adsMinSpreadShotCount: 3
-  m_adsSpreadIncreasePerShot: 1
+  m_adsSpreadIncreasePerShot: 0.4
   m_adsSpreadRecoveryPerSecond: 8
   m_adsSpreadRecoveryDelay: 0.3
   m_spreadDistribution: 1
   m_spreadConcentration: 3
+  m_shotNoiseLevel: 1
+  m_shotNoiseRange: 40
   m_recoilPitchKick: 0.6
   m_recoilYawKick: 0.2
   m_yawKickPattern: 0
   m_recoilRoll: 0.5
   m_rollKickPattern: 0
   m_recoilFovPunch: 1
+  m_recoilFovPunchAds: 1
+  m_damageFalloff:
+    m_mode: 0
+    m_trackMinDistance: 0
+    m_trackMaxDistance: 0
+    m_steps: []
   m_debugLogSpread: 0
   m_debugInfiniteMagazine: 0
 --- !u!1 &5113173453549473731

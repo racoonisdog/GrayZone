@@ -507,6 +507,8 @@ public class SquadManager : MonoBehaviour
             {
                 previousMember.ApplyFollowCarryoverState(followState);
             }
+
+            SyncPhysicsAfterMemberTeleport();
         }
 
         UpdateCameraTarget();
@@ -757,10 +759,10 @@ public class SquadManager : MonoBehaviour
         Vector3 nextPosition = nextTransform.position;
         Quaternion nextRotation = nextTransform.rotation;
 
-        // 두 멤버를 한 명씩 끝까지 옮기면 안 됩니다.
-        // 먼저 옮긴 멤버가 아직 자리를 비우지 않은 상대 위에 겹쳐 놓이고,
-        // 그 상태로 CharacterController를 다시 켜면 유니티가 겹침을 풀려고 캐릭터를 밀어냅니다.
-        // 그래서 둘 다 끈 뒤에 위치를 정하고, 자리를 다 잡은 다음에 함께 켭니다.
+        // 옮기는 동안에는 두 CharacterController를 모두 끕니다.
+        // 한 명씩 끝까지 옮기면 먼저 옮긴 멤버가 아직 자리를 비우지 않은 상대 위에 겹쳐 놓이므로,
+        // 둘 다 끈 뒤에 위치를 정하고 자리를 다 잡은 다음에 함께 켭니다.
+        // 옮긴 위치가 물리 엔진에 반영되는 것은 이 함수가 아니라 SyncPhysicsAfterMemberTeleport()가 책임집니다.
         CharacterController previousController = previousMember.GetComponent<CharacterController>();
         CharacterController nextController = nextMember.GetComponent<CharacterController>();
 
@@ -808,6 +810,23 @@ public class SquadManager : MonoBehaviour
                 memberTransform.SetPositionAndRotation(position, rotation);
             }
         }
+    }
+
+    /// <summary>
+    /// 멤버를 스크립트로 순간이동시킨 직후 물리 엔진의 콜라이더 위치를 Transform과 강제로 맞춥니다.
+    /// </summary>
+    /// <remarks>
+    /// 이 프로젝트는 `Physics.autoSyncTransforms`가 꺼져 있어, 스크립트로 옮긴 Transform은 다음 FixedUpdate까지
+    /// 물리 엔진에 반영되지 않습니다. 그 상태로 같은 프레임의 <see cref="CharacterController.Move"/>가 돌면
+    /// 상대 멤버의 캡슐이 아직 옛 위치(= 방금 이 멤버가 놓인 자리)에 있는 것으로 보여, 겹침 해소가
+    /// 정확히 `반지름 + 상대 반지름 + skinWidth`(0.58m)만큼 캐릭터를 밀어냅니다. 두 캡슐이 완전히 겹친
+    /// 상태라 밀리는 방향도 월드 +X로 고정됩니다. 스왑과 지면 보정이 모두 끝난 뒤 한 번 동기화하면
+    /// 그 한 프레임 팝과, 팝이 스윕 없는 위치 보정이라 벽을 지나쳐 생기던 건물 관통이 함께 사라집니다.
+    /// 순간이동이 끝난 지점에서만 부르십시오. 옮기는 중간에 부르면 같은 문제가 다시 생깁니다.
+    /// </remarks>
+    private static void SyncPhysicsAfterMemberTeleport()
+    {
+        Physics.SyncTransforms();
     }
 
     /// <summary>

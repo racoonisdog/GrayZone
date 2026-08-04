@@ -10,6 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 4915330871264500002}
   - component: {fileID: 4915330871264500003}
+  - component: {fileID: 4915330871264500004}
+  - component: {fileID: 4915330871264500005}
   m_Layer: 0
   m_Name: FieldManager
   m_TagString: Untagged
@@ -45,3 +47,34 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::FieldManager
   m_squadManager: {fileID: 0}
+  m_surfaceFeedbackSystem: {fileID: 4915330871264500004}
+  m_enemyCorpseSettings: {fileID: 4915330871264500005}
+--- !u!114 &4915330871264500004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4915330871264500001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f03db73e1dcc40cea4a1f97f95139775, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SurfaceFeedbackSystem
+  m_defaultProfile: {fileID: 0}
+  m_profiles: []
+--- !u!114 &4915330871264500005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4915330871264500001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32c10d7c55ce4fee87d12ad3561563ed, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyCorpseSettings
+  m_destroyCorpse: 1
+  m_corpseLifetime: 3
+  m_useRagdoll: 1

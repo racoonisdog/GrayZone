@@ -214,11 +214,39 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         m_playerHealth.SetDownTimerPaused(true);
         FaceInteractorToTarget(interactor);
         LockCameraToHoldStart();
+        EmitInteractionNoise(interactor);
 
         if (m_activeInteractorMember != null)
         {
             m_activeInteractorMember.RefreshInteractionLock();
         }
+    }
+
+    /// <summary>
+    /// 구조 중 소음을 발신합니다.
+    /// </summary>
+    /// <param name="interactor">구조를 수행하는 캐릭터입니다.</param>
+    /// <remarks>
+    /// 소음은 구조하는 쪽이 냅니다. 구조받는 쪽은 움직이지 않으므로 소리를 내는 주체가 아닙니다.
+    /// 매 프레임 불려도 되며, 발신 간격 제한은 <see cref="CharacterNoiseEmitter"/>가 가집니다.
+    ///
+    /// 구조는 시간이 걸리는 행동이라 한 번만 소리를 내면 위치를 알려 주는 의미가 약합니다.
+    /// 홀드가 유지되는 동안 간격을 두고 반복해 내야 "구조 중에는 위험하다"가 성립합니다.
+    /// </remarks>
+    private void EmitInteractionNoise(GameObject interactor)
+    {
+        if (interactor == null)
+        {
+            return;
+        }
+
+        CharacterNoiseEmitter emitter = interactor.GetComponentInParent<CharacterNoiseEmitter>();
+        if (emitter == null)
+        {
+            return;
+        }
+
+        emitter.EmitInteraction();
     }
 
     public void CancelHold(GameObject interactor)

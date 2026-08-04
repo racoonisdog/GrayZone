@@ -5,7 +5,8 @@
 - **메뉴**: `Tools ▸ GrayZone ▸ SO CSV 도구`
 - **스크립트**: `Assets/1.Scripts/Editor/Tool/ScriptableObjectCsvTool.cs` (코드 생성은 `BalanceScaffold.cs`)
 - **런타임 코드 변경 없음**: 모든 쓰기는 `SerializedObject`를 거치므로 Inspector와 똑같이 Undo / dirty / 저장이 동작합니다.
-- 타입별 필드명을 코드에 박지 않고 자동 순회하므로, 새 SO 타입을 추가해도 별도 작업 없이 지원됩니다.
+- 타입별 필드명을 코드에 박지 않고 자동 순회하므로, `IBalanceTableData`를 구현한 새 밸런스 SO 타입도 별도 작업 없이 지원됩니다.
+- 사운드·이펙트·프리팹 같은 Unity Object 참조와 `IFeedbackData` 구현 SO는 이 도구에서 제외됩니다.
 
 > **설계 배경은 여기 적지 않습니다.** SO의 적용 범위 경계(무엇을 SO에 두고 무엇을 데이터 매니저에 두는가), 파이프라인 전체 구조, `BindManager` 동작은 별도 정본 문서에 있습니다. 이 문서는 **툴 사용법**만 다룹니다.
 
@@ -41,11 +42,10 @@
 
 | 항목 | 설명 |
 |---|---|
-| **밸런스 타입만 표시** | `IBalanceTableData` 구현 타입만 목록에 남깁니다. 변환 동작 자체와는 무관한 **표시 필터**일 뿐입니다 |
-| **타입 (에셋 수)** | 프로젝트가 정의한 SO 타입 목록. `Assembly-CSharp` / `Assembly-CSharp-Editor` 것만 나옵니다 |
+| **타입 (에셋 수)** | `IBalanceTableData`를 구현한 프로젝트 밸런스 SO 타입 목록 |
 | **다시 검색** | 타입 목록 재스캔 |
 | **`{타입} → CSV 내보내기`** | 그 타입의 모든 에셋을 CSV 한 장으로 |
-| **`전체 타입 → CSV 내보내기`** | 모든 타입을 각각 한 장씩 |
+| **`전체 밸런스 → CSV 내보내기`** | 모든 밸런스 타입을 각각 한 장씩 |
 | **CSV 가져오기** | 다른 위치의 CSV를 직접 고를 때만 사용(감시 폴더는 자동) |
 
 ---
@@ -126,7 +126,7 @@ m_sprintSpeed,캐릭터의 전력질주 속도입니다. 단위는 m/s입니다.
 | int / long / bool / float / double / string | 값 그대로 (`bool`은 `TRUE`/`FALSE`) |
 | enum | enum 이름 (예: `Medicine`) |
 | Vector2/3/4, Quaternion, Color | `;` 구분 (`1;2;3`, 색은 `r;g;b;a`) |
-| Object 참조 (SO, Sprite, Prefab 등) | `guid:localId` (없으면 빈 칸) |
+| Unity Object 참조 | 지원하지 않음. 발견 시 내보내기·가져오기를 거부 |
 | 중첩 구조체 / 배열 / 리스트 | 셀 안에 JSON (`[{"type":"Credit","amount":100}]`) |
 | AnimationCurve / Gradient / `[SerializeReference]` | **미지원** (라운드트립 제외) |
 
@@ -171,7 +171,7 @@ m_sprintSpeed,캐릭터의 전력질주 속도입니다. 단위는 m/s입니다.
 - **덮어쓰기 주의**: 시트에 존재하는 행을 기준으로 값을 **덮어씁니다.** 빈 셀도 반영되므로(→ 0 / 빈 문자열 / 빈 배열), 내보낸 뒤 필요한 부분만 고치세요.
 - **삭제는 하지 않습니다**: 열을 지워도 에셋은 삭제되지 않습니다(생성·갱신만 수행).
 - **클램프는 여기서 하지 않습니다.** 가져오기는 값을 그대로 넣고, 범위 보정은 게임플레이 직전 `BindManager.Bind()`가 `[BalanceField(Min, Max)]`를 보고 수행합니다. 즉 **시트에 이상한 값이 들어가도 SO에는 그대로 들어가고, 컴포넌트에 들어가기 직전에 막힙니다.**
-- **씬 오브젝트 참조는 지원하지 않습니다.** 같은 프로젝트 내 에셋 참조만 복원됩니다.
+- **Unity Object 참조는 지원하지 않습니다.** 사운드·이펙트·프리팹·머티리얼은 Feedback SO에서 Inspector로 관리합니다.
 
 ---
 

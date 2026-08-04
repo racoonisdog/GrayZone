@@ -129,6 +129,12 @@ public class ResultUIController : MonoBehaviour
     }
 
     /// <summary>결과창을 숨깁니다.</summary>
+    /// <remarks>
+    /// 인게임 HUD는 여기서 끄지 않습니다. 조준선 패널을 이 캔버스보다 아래(sortingOrder −1)로
+    /// 두어 UI 레이어가 가리는 쪽으로 처리합니다. 무엇이 무엇 위에 오는지를 UI 시스템이
+    /// 담당하는 축에서 선언하는 편이 읽기 쉽기 때문입니다.
+    /// 표시 자체를 끄는 경로가 필요해지면 <see cref="FieldHudVisibility"/>가 준비되어 있습니다.
+    /// </remarks>
     public void Hide()
     {
         gameObject.SetActive(false);

@@ -16,7 +16,8 @@ using UnityEditor;
 /// 이 컴포넌트가 들어 있는 공용 프리팹은 필드 씬 시작 시 <see cref="FieldSceneDataManager"/>가 생성하며,
 /// 생성된 뒤 주변 런타임 컴포넌트를 자동 탐색합니다. 씬에 직접 배치해도 동작합니다.
 /// 개발 모드 자체는 <see cref="GameManager"/>가 소유하고 이 트레이너는 <see cref="GameDevMode"/>를 읽기만 합니다.
-/// Editor에서만 실제 트레이너가 생존하며, Player 빌드에서는 <c>Awake</c> 첫 단계에서 오브젝트를 제거합니다.
+/// 동작 여부는 <see cref="GameDevMode.DebugFeaturesEnabled"/>가 정합니다. Editor와 Development Build에서 살아 있고,
+/// 정식 빌드에서는 개발 모드가 켜져 있어도 창이 열리지 않습니다.
 /// IMGUI(OnGUI) 기반이라 별도의 uGUI 연결은 필요 없습니다.
 /// </para>
 /// <para>
@@ -54,7 +55,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private bool m_trainerEnabled = true;
 
     [SerializeField, Tooltip("트레이너 창을 열고 닫을 키입니다. None이면 키 입력으로 열 수 없습니다.")]
-    private Key m_toggleKey = Key.Escape;
+    private Key m_toggleKey = Key.F9;
 
     /// <summary>개발 모드 상태를 바꾸지 않고 트레이너 UI와 입력만 켜거나 끕니다.</summary>
     public bool TrainerEnabled
@@ -80,13 +81,38 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <summary>트레이너 패널(메뉴)이 열려 있는지 여부입니다. 열려 있으면 TPS 조작이 잠깁니다.</summary>
     private bool m_open;
 
+    /// <summary>
+    /// 트레이너 창이 지금 열려 있는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 다른 디버그 창(<see cref="CrosshairDebugInspector"/> 등)이 커서와 플레이어 입력을 겹쳐 잡지 않도록 알려 줍니다.
+    /// 둘이 각자 잠그고 각자 풀면, 먼저 닫은 쪽이 아직 열려 있는 창의 커서까지 다시 잠가 버립니다.
+    /// </remarks>
+    public static bool IsMenuOpen => s_instance != null && s_instance.m_open;
+
     /// <summary>인스펙터 대상 인덱스입니다. -1이면 "현재 조작 중인 캐릭터"를 계속 따라갑니다.</summary>
     private int m_targetIndex = -1;
 
     private Vector2 m_scroll;
 
+    /// <summary>역동기화 버튼을 누른 결과를 창에 남겨 두는 문자열입니다.</summary>
+    private string m_reverseSyncMessage;
+
+    /// <summary>반동·킥 엔벨로프 항목을 펼쳐 둘지 여부입니다. 항목이 많아 기본은 접어 둡니다.</summary>
+    private bool m_showRecoilEnvelope;
+
+    // 곡선 생성기 입력값입니다. 축마다 따로 두지 않고 하나를 공유하고,
+    // 어느 축에 넣을지는 누르는 버튼으로 고릅니다. 축별로 두면 슬라이더가 열다섯 줄이 됩니다.
+    private float m_envelopePeakRatio = 0.25f;
+    private float m_envelopePeakValue = 1.0f;
+    private float m_envelopeEasePower = 1.0f;
+
     private bool m_showWeaponHitscanLayers;
     private bool m_showAimTargetLayers;
+
+    /// <summary>전멸 게임오버 버튼이 확인 단계에 들어가 있는지 여부입니다.</summary>
+    /// <remarks>되돌릴 수 없는 조작이라 한 번 누르면 실행하지 않고 확인을 먼저 받습니다.</remarks>
+    private bool m_confirmForceGameOver;
 
     // IMGUI 런타임 창은 기본 리사이즈 핸들이 없으므로 우하단 그립으로 크기를 바꿉니다.
     private Rect m_windowRect = new Rect(10f, 10f, 500f, 720f);
@@ -98,6 +124,28 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private const float MinWindowHeight = 360f;
     private const float WindowMargin = 10f;
     private const float ResizeGripSize = 20f;
+
+    /// <summary>창 테두리에서 크기 조절을 잡을 수 있는 두께입니다.</summary>
+    private const float ResizeBorderSize = 6f;
+
+    /// <summary>글자 배율 1을 적용할 기준 창 너비입니다. 기본 창 크기와 같게 두어 처음에는 배율이 1이 됩니다.</summary>
+    private const float ReferenceWindowWidth = 500f;
+
+    /// <summary>글자가 읽을 수 없을 만큼 작아지지 않게 하는 하한입니다.</summary>
+    private const float MinUiScale = 0.75f;
+
+    /// <summary>창을 넓혀도 글자가 지나치게 커지지 않게 하는 상한입니다.</summary>
+    private const float MaxUiScale = 2.0f;
+
+    /// <summary>지금 스타일에 반영된 배율입니다.</summary>
+    private float m_appliedUiScale = -1f;
+
+    /// <summary>배율을 적용한 스킨과 그 배율입니다.</summary>
+    private GUISkin m_scaledSkin;
+    private float m_scaledSkinScale = -1f;
+
+    /// <summary>창을 그리기 직전의 전역 스킨입니다. 다 그린 뒤 되돌립니다.</summary>
+    private GUISkin m_previousSkin;
 
     // 좀비 스폰 좌표 입력 버퍼입니다.
     private string m_spawnX = "0";
@@ -114,11 +162,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private void Awake()
     {
-#if !UNITY_EDITOR
-        enabled = false;
-        Destroy(gameObject);
-        return;
-#else
+        // 빌드에서 오브젝트를 지우지 않습니다.
+        // 포함 여부는 GameDevMode.DebugFeaturesEnabled가 정하며, 그 조건에 Debug.isDebugBuild가 이미 들어 있어
+        // Development Build에서는 살아 있고 정식 빌드에서는 꺼집니다.
+        // 컴파일 단계에서 잘라내면 그 런타임 판단이 도달하지 못해, 개발자용 빌드에서도 트레이너를 쓸 수 없습니다.
         if (s_instance != null && s_instance != this)
         {
             m_isDuplicate = true;
@@ -128,19 +175,17 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         s_instance = this;
 
-        if (!GameDevMode.DebugFeaturesEnabled)
-        {
-            Debug.LogWarning("[RuntimeDebugTrainer] 개발 모드가 꺼져 있어 런타임 디버그 트레이너가 비활성화됩니다.");
-            enabled = false;
-        }
-#endif
+        // 여기서 개발 모드를 보고 스스로 끄지 않습니다.
+        // 개발 모드는 GameManager가 자기 Awake에서 켜는데, Awake 실행 순서는 보장되지 않습니다.
+        // 트레이너가 먼저 깨면 아직 꺼져 있는 값을 보고 자신을 끄고, 그 뒤에 켜져도 다시 살아나지 않습니다.
+        // 실제로 개발 모드가 켜져 있는데도 F9가 먹지 않는 상태가 이렇게 만들어졌습니다.
+        //
+        // Update가 매 프레임 개발 모드를 확인해 열려 있던 창을 닫고 입력을 무시하므로,
+        // 컴포넌트를 켜 둔 채로도 꺼진 것과 같이 동작합니다.
     }
 
     private void OnEnable()
     {
-#if !UNITY_EDITOR
-        return;
-#else
         if (m_isDuplicate)
         {
             return;
@@ -154,7 +199,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         s_instance = this;
-#endif
     }
 
     private void OnDisable()
@@ -317,6 +361,14 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// </remarks>
     private void UnlockControls()
     {
+        // 조준선 인스펙터가 아직 열려 있으면 게임플레이로 되돌리지 않습니다.
+        // 되돌리면 커서가 잠겨 그 창을 클릭할 수 없게 되고, 창이 떠 있는 채로 플레이어 입력이 살아납니다.
+        if (CrosshairDebugInspector.IsWindowOpen)
+        {
+            m_usesSceneInputModeController = false;
+            return;
+        }
+
         if (m_usesSceneInputModeController && TryRestoreSceneInputMode())
         {
             m_usesSceneInputModeController = false;
@@ -464,12 +516,24 @@ public class RuntimeDebugTrainer : MonoBehaviour
         if (!m_open)
         {
             GUI.Label(new Rect(10, 10, 600, 24), $"{m_toggleKey}: 런타임 디버그 트레이너 열기 / 닫기", m_headerStyle);
+
+            // 창을 그리지 않고 빠져나갈 때도 전역 스킨은 되돌립니다. 남겨 두면 다른 IMGUI 창이 이 배율을 물려받습니다.
+            RestoreSkin();
             return;
         }
 
         ClampWindowRectToScreen();
-        Rect movedWindow = GUI.Window(GetInstanceID(), m_windowRect, DrawWindow, "런타임 디버그 트레이너");
-        m_windowRect.position = movedWindow.position;
+
+        try
+        {
+            Rect movedWindow = GUI.Window(GetInstanceID(), m_windowRect, DrawWindow, "런타임 디버그 트레이너");
+            m_windowRect.position = movedWindow.position;
+        }
+        finally
+        {
+            // 전역 스킨은 반드시 되돌립니다. 남겨 두면 다른 IMGUI 창이 이 배율을 물려받습니다.
+            RestoreSkin();
+        }
     }
 
     private void DrawWindow(int windowId)
@@ -547,42 +611,107 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private void DrawWindowChrome(int windowId)
     {
         HandleWindowResize();
-        GUI.DragWindow(new Rect(0f, 0f, m_windowRect.width - ResizeGripSize, 24f));
+        // 좌우 위 테두리는 크기 조절이 먼저 잡아야 하므로 그만큼 안쪽에서 시작합니다.
+        GUI.DragWindow(new Rect(
+            ResizeBorderSize,
+            ResizeBorderSize,
+            m_windowRect.width - ResizeBorderSize * 2f - ResizeGripSize,
+            24f));
     }
 
+    /// <summary>어느 테두리를 잡고 있는지입니다.</summary>
+    /// <remarks>가로와 세로를 따로 두어 모서리를 잡으면 두 축이 함께 움직입니다.</remarks>
+    private int m_resizeEdgeX;
+    private int m_resizeEdgeY;
+
+    /// <summary>크기 조절을 시작한 시점의 창 위치와 크기입니다.</summary>
+    private Rect m_resizeStartRect;
+
+    /// <summary>
+    /// 창 테두리를 잡아 크기를 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// 일반 창처럼 네 변과 네 모서리 어디를 잡아도 조절됩니다.
+    /// 왼쪽이나 위쪽을 잡으면 반대쪽 변이 제자리에 남아야 하므로 위치도 함께 옮깁니다.
+    ///
+    /// 마우스 좌표는 창 안쪽 기준이라 창을 옮기는 도중에도 값이 흔들리지 않도록
+    /// 시작 시점의 화면 좌표를 따로 기억해 두고 그 차이로 계산합니다.
+    /// </remarks>
     private void HandleWindowResize()
     {
-        Rect gripRect = new Rect(
-            m_windowRect.width - ResizeGripSize,
-            m_windowRect.height - ResizeGripSize,
-            ResizeGripSize,
-            ResizeGripSize);
-        GUI.Label(gripRect, "↘");
+        Rect inner = new Rect(0f, 0f, m_windowRect.width, m_windowRect.height);
+
+        // 테두리 판정 영역. 제목 표시줄은 창을 옮기는 데 쓰므로 위쪽만 조금 안쪽에서 시작합니다.
+        bool onLeft = Event.current.mousePosition.x <= ResizeBorderSize;
+        bool onRight = Event.current.mousePosition.x >= inner.width - ResizeBorderSize;
+        bool onTop = Event.current.mousePosition.y <= ResizeBorderSize;
+        bool onBottom = Event.current.mousePosition.y >= inner.height - ResizeBorderSize;
+        bool onEdge = (onLeft || onRight || onTop || onBottom) && inner.Contains(Event.current.mousePosition);
+
+        // 잡을 수 있는 곳임을 알 수 있도록 모서리에 표시를 남깁니다.
+        GUI.Label(new Rect(inner.width - ResizeGripSize, inner.height - ResizeGripSize,
+                           ResizeGripSize, ResizeGripSize), "↘");
 
         Event currentEvent = Event.current;
         switch (currentEvent.type)
         {
-            case EventType.MouseDown when gripRect.Contains(currentEvent.mousePosition):
+            case EventType.MouseDown when onEdge:
                 m_isResizing = true;
-                m_resizeStartMouse = currentEvent.mousePosition;
-                m_resizeStartSize = m_windowRect.size;
+                m_resizeEdgeX = onLeft ? -1 : (onRight ? 1 : 0);
+                m_resizeEdgeY = onTop ? -1 : (onBottom ? 1 : 0);
+                m_resizeStartMouse = GUIUtility.GUIToScreenPoint(currentEvent.mousePosition);
+                m_resizeStartRect = m_windowRect;
                 currentEvent.Use();
                 break;
 
             case EventType.MouseDrag when m_isResizing:
-                Vector2 delta = currentEvent.mousePosition - m_resizeStartMouse;
-                float maxWidth = Mathf.Max(MinWindowWidth, Screen.width - m_windowRect.x - WindowMargin);
-                float maxHeight = Mathf.Max(MinWindowHeight, Screen.height - m_windowRect.y - WindowMargin);
-                m_windowRect.width = Mathf.Clamp(m_resizeStartSize.x + delta.x, MinWindowWidth, maxWidth);
-                m_windowRect.height = Mathf.Clamp(m_resizeStartSize.y + delta.y, MinWindowHeight, maxHeight);
+                Vector2 delta = GUIUtility.GUIToScreenPoint(currentEvent.mousePosition) - m_resizeStartMouse;
+                ApplyResize(delta);
                 GUI.changed = true;
                 currentEvent.Use();
                 break;
 
             case EventType.MouseUp when m_isResizing:
                 m_isResizing = false;
+                m_resizeEdgeX = 0;
+                m_resizeEdgeY = 0;
                 currentEvent.Use();
                 break;
+        }
+    }
+
+    /// <summary>잡은 테두리에 따라 창의 위치와 크기를 갱신합니다.</summary>
+    /// <param name="delta">크기 조절을 시작한 지점에서 마우스가 움직인 거리입니다.</param>
+    private void ApplyResize(Vector2 delta)
+    {
+        Rect r = m_resizeStartRect;
+
+        if (m_resizeEdgeX > 0)
+        {
+            float maxWidth = Mathf.Max(MinWindowWidth, Screen.width - r.x - WindowMargin);
+            m_windowRect.width = Mathf.Clamp(r.width + delta.x, MinWindowWidth, maxWidth);
+        }
+        else if (m_resizeEdgeX < 0)
+        {
+            // 오른쪽 변을 제자리에 두고 왼쪽만 움직입니다.
+            float right = r.x + r.width;
+            float maxWidth = Mathf.Max(MinWindowWidth, right - WindowMargin);
+            m_windowRect.width = Mathf.Clamp(r.width - delta.x, MinWindowWidth, maxWidth);
+            m_windowRect.x = right - m_windowRect.width;
+        }
+
+        if (m_resizeEdgeY > 0)
+        {
+            float maxHeight = Mathf.Max(MinWindowHeight, Screen.height - r.y - WindowMargin);
+            m_windowRect.height = Mathf.Clamp(r.height + delta.y, MinWindowHeight, maxHeight);
+        }
+        else if (m_resizeEdgeY < 0)
+        {
+            // 아래쪽 변을 제자리에 두고 위쪽만 움직입니다.
+            float bottom = r.y + r.height;
+            float maxHeight = Mathf.Max(MinWindowHeight, bottom - WindowMargin);
+            m_windowRect.height = Mathf.Clamp(r.height - delta.y, MinWindowHeight, maxHeight);
+            m_windowRect.y = bottom - m_windowRect.height;
         }
     }
 
@@ -693,6 +822,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
             controller.SetMoveSpeed(SliderRow("이동 속도", controller.MoveSpeed, 0f, 15f));
             controller.SetSprintSpeed(SliderRow("질주 속도", controller.SprintSpeed, 0f, 20f));
             controller.SetJumpHeight(SliderRow("점프 높이", controller.JumpHeight, 0f, 5f));
+
+            DrawReverseSyncButton(controller, "이동/반동");
         }
         else
         {
@@ -788,6 +919,44 @@ public class RuntimeDebugTrainer : MonoBehaviour
                 2);
         weapon.SetSpreadDistribution(distribution);
         weapon.SetSpreadConcentration(SliderRow("중심 집중도", weapon.SpreadConcentration, 1f, 10f));
+
+        DrawReverseSyncButton(weapon, "이 무기");
+    }
+
+    /// <summary>
+    /// 지금 값을 밸런스 SO와 CSV로 되돌려 쓰는 버튼을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 에디터에서만 그립니다. SO와 CSV는 프로젝트 자산이라 빌드에서는 쓸 수 없어,
+    /// 버튼을 보여 주면 눌러도 아무 일이 없는 것처럼 보입니다.
+    ///
+    /// 플레이 중에 쓴 값은 Play Mode를 끝내면 사라지므로, 마음에 드는 값을 찾았으면
+    /// 끝내기 전에 눌러 정본으로 올려야 합니다.
+    /// </remarks>
+    private void DrawReverseSyncButton(Component target, string label)
+    {
+        if (target == null || !BalanceReverseSyncHook.IsAvailable)
+        {
+            return;
+        }
+
+        if (!BalanceReverseSyncHook.CanRun(target))
+        {
+            GUILayout.Label($"{label}에 밸런스 SO가 연결되어 있지 않아 갱신할 수 없습니다.");
+            return;
+        }
+
+        GUILayout.Space(3);
+        if (GUILayout.Button($"{label} 현재 값 → SO + CSV 갱신", GUILayout.Height(24)))
+        {
+            m_reverseSyncMessage = BalanceReverseSyncHook.Run(target);
+            Debug.Log($"[BalanceReverseSync] {m_reverseSyncMessage}", target);
+        }
+
+        if (!string.IsNullOrEmpty(m_reverseSyncMessage))
+        {
+            GUILayout.Label(m_reverseSyncMessage);
+        }
     }
 
     private void DrawCombatFeedbackSection(PlayerbleUnitData target)
@@ -907,6 +1076,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         controller.SetUseYawOffsetCap(GUILayout.Toggle(controller.UseYawOffsetCap, " 요 반동 상한 사용"));
+
+        DrawRecoilEnvelopeSection(controller);
         if (controller.UseYawOffsetCap)
         {
             controller.SetRecoilMaxYaw(SliderRow("요 반동 상한", controller.RecoilMaxYaw, 0f, 30f));
@@ -943,6 +1114,119 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         crosshairController.SetSpreadLerpSpeed(SliderRow("간격 보간 속도", crosshairController.SpreadLerpSpeed, 0f, 50f));
+    }
+
+    /// <summary>
+    /// 반동·킥 엔벨로프의 사용 여부와 지속시간, 그리고 곡선 생성기를 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// IMGUI에는 곡선 편집기가 없어 곡선 모양은 여기서 직접 못 만집니다.
+    /// 대신 피크 위치·피크 세기·완급을 숫자로 두고, 적용 버튼을 눌렀을 때만 3키 곡선을 다시 만듭니다.
+    /// 버튼을 눌러야만 바뀌게 한 이유는, 매 프레임 재생성하면 인스펙터에서 손으로 그린 곡선을
+    /// 조용히 덮어써 저작 결과가 사라지기 때문입니다.
+    ///
+    /// 지속시간과 세기는 곡선을 재생성하지 않고 시간축·진폭만 늘리고 줄이므로 실시간으로 계속 돌려볼 수 있습니다.
+    /// </remarks>
+    private void DrawRecoilEnvelopeSection(ThirdPersonController controller)
+    {
+        GUILayout.Space(4);
+        m_showRecoilEnvelope = GUILayout.Toggle(m_showRecoilEnvelope,
+            m_showRecoilEnvelope ? " ▼ 반동·킥 엔벨로프" : " ▶ 반동·킥 엔벨로프", m_headerStyle);
+
+        if (!m_showRecoilEnvelope)
+        {
+            return;
+        }
+
+        controller.SetUsePitchRecoilEnvelope(
+            GUILayout.Toggle(controller.UsePitchRecoilEnvelope, " 상하 반동 곡선 사용 (끄면 즉발+속도 회복)"));
+        if (controller.UsePitchRecoilEnvelope)
+        {
+            controller.SetPitchRecoilEnvelopeDuration(
+                SliderRow("상하 곡선 길이(초)", controller.PitchRecoilEnvelopeDuration, 0.02f, 2f));
+        }
+
+        controller.SetUseYawRecoilEnvelope(
+            GUILayout.Toggle(controller.UseYawRecoilEnvelope, " 좌우 반동 곡선 사용"));
+        if (controller.UseYawRecoilEnvelope)
+        {
+            controller.SetYawRecoilEnvelopeDuration(
+                SliderRow("좌우 곡선 길이(초)", controller.YawRecoilEnvelopeDuration, 0.02f, 2f));
+        }
+
+        AimController aimController = controller.GetComponent<AimController>();
+        if (aimController != null)
+        {
+            aimController.SetUseRollKickEnvelope(
+                GUILayout.Toggle(aimController.UseRollKickEnvelope, " 카메라 롤 곡선 사용"));
+            if (aimController.UseRollKickEnvelope)
+            {
+                aimController.SetRollKickEnvelopeDuration(
+                    SliderRow("롤 곡선 길이(초)", aimController.RollKickEnvelopeDuration, 0.02f, 2f));
+            }
+
+            aimController.SetUseFovPunchEnvelope(
+                GUILayout.Toggle(aimController.UseFovPunchEnvelope, " FOV 펀치 곡선 사용"));
+            if (aimController.UseFovPunchEnvelope)
+            {
+                aimController.SetHipfireFovPunchEnvelopeDuration(
+                    SliderRow("힙 펀치 길이(초)", aimController.HipfireFovPunchEnvelopeDuration, 0.02f, 2f));
+                aimController.SetAdsFovPunchEnvelopeDuration(
+                    SliderRow("ADS 펀치 길이(초)", aimController.AdsFovPunchEnvelopeDuration, 0.02f, 2f));
+            }
+
+            aimController.SetUseZoomEnvelope(
+                GUILayout.Toggle(aimController.UseZoomEnvelope, " ADS 확대·축소 곡선 사용 (끄면 속도 공용)"));
+            if (aimController.UseZoomEnvelope)
+            {
+                aimController.SetZoomInDuration(
+                    SliderRow("확대 시간(초)", aimController.ZoomInDuration, 0.01f, 1f));
+                aimController.SetZoomOutDuration(
+                    SliderRow("축소 시간(초)", aimController.ZoomOutDuration, 0.01f, 1f));
+            }
+        }
+
+        GUILayout.Space(4);
+        GUILayout.Label("곡선 생성기 (누른 축의 곡선을 다시 만듭니다)");
+        m_envelopePeakRatio = SliderRow("피크 위치(0~1)", m_envelopePeakRatio, 0.01f, 0.99f);
+        m_envelopePeakValue = SliderRow("피크 세기(1=목표)", m_envelopePeakValue, 0.1f, 2f);
+        m_envelopeEasePower = SliderRow("완급(1=선형)", m_envelopeEasePower, 0.2f, 4f);
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("상하"))
+        {
+            controller.SetPitchRecoilEnvelopeCurve(BuildEnvelopeCurveFromFields());
+        }
+
+        if (GUILayout.Button("좌우"))
+        {
+            controller.SetYawRecoilEnvelopeCurve(BuildEnvelopeCurveFromFields());
+        }
+
+        if (aimController != null)
+        {
+            if (GUILayout.Button("롤"))
+            {
+                aimController.SetRollKickEnvelopeCurve(BuildEnvelopeCurveFromFields());
+            }
+
+            if (GUILayout.Button("힙 펀치"))
+            {
+                aimController.SetHipfireFovPunchEnvelopeCurve(BuildEnvelopeCurveFromFields());
+            }
+
+            if (GUILayout.Button("ADS 펀치"))
+            {
+                aimController.SetAdsFovPunchEnvelopeCurve(BuildEnvelopeCurveFromFields());
+            }
+        }
+        GUILayout.EndHorizontal();
+    }
+
+    /// <summary>지금 생성기 값으로 엔벨로프 곡선을 만듭니다.</summary>
+    private AnimationCurve BuildEnvelopeCurveFromFields()
+    {
+        return ImpulseEnvelope.BuildCurve(m_envelopePeakRatio, m_envelopePeakValue, m_envelopeEasePower);
     }
 
     private KickSidePattern DrawKickSidePattern(string label, KickSidePattern current)
@@ -1026,6 +1310,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <remarks>
     /// 정산과 결과 UI를 확인하는 데 쓰는 지름길입니다. 판정만 건너뛰고 이후 절차는
     /// <see cref="EscapeSystem.ForceEscape"/>를 통해 실제 탈출과 같은 경로를 타므로 결과가 달라지지 않습니다.
+    /// 전멸 게임오버도 같은 원칙으로, 스쿼드원을 실제 전투 이탈시켜 정상 감지 경로를 타게 합니다.
     /// </remarks>
     private void DrawFieldControlSection()
     {
@@ -1033,12 +1318,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         EscapeSystem escapeSystem = FindFirstObjectByType<EscapeSystem>(FindObjectsInactive.Include);
         FieldSceneDataManager fieldData = FieldSceneDataManager.Instance;
-
-        if (escapeSystem == null)
-        {
-            GUILayout.Label("EscapeSystem을 찾을 수 없어 즉시 탈출을 쓸 수 없습니다.");
-            return;
-        }
 
         if (fieldData != null && fieldData.IsFinalized)
         {
@@ -1050,13 +1329,115 @@ public class RuntimeDebugTrainer : MonoBehaviour
             ? $"현재 처치 {fieldData.KillCount} / 임무 {(fieldData.MissionCompleted ? "달성" : "미달성")}"
             : "필드 데이터 매니저를 찾을 수 없습니다. 정산 없이 결과 UI만 열릴 수 있습니다.");
 
-        if (GUILayout.Button("즉시 탈출 (정산 후 결과 UI)", GUILayout.Height(26)))
+        if (escapeSystem == null)
+        {
+            GUILayout.Label("EscapeSystem을 찾을 수 없어 즉시 탈출을 쓸 수 없습니다.");
+        }
+        else if (GUILayout.Button("즉시 탈출 (정산 후 결과 UI)", GUILayout.Height(26)))
         {
             // 결과 UI가 입력을 가져가므로 트레이너를 먼저 닫습니다.
             // 열어 둔 채로 두면 트레이너와 결과 UI가 같은 커서를 두고 다툽니다.
             SetMenuOpen(false);
             escapeSystem.ForceEscape();
         }
+
+        DrawForceGameOverButton();
+    }
+
+    /// <summary>
+    /// 스쿼드 전원을 전투 이탈시켜 전멸 게임오버를 일으키는 디버그 버튼을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 게임오버 상태를 직접 세우지 않고 <see cref="PlayerHealth.Death"/>를 스쿼드원마다 호출합니다.
+    /// 그래야 전멸 감지(<c>SquadManager.OnSquadEliminated</c>)부터 화면 표시까지 실제와 같은 경로를 타고,
+    /// 정산을 건너뛰는지(<c>FinalizeField</c> 미호출)까지 함께 확인할 수 있습니다.
+    /// 되돌릴 수 없는 조작이라 확인 단계를 한 번 둡니다.
+    /// </remarks>
+    private void DrawForceGameOverButton()
+    {
+        SquadManager squadManager = SquadManager.Instance != null
+            ? SquadManager.Instance
+            : FindFirstObjectByType<SquadManager>();
+
+        if (squadManager == null || squadManager.SquadMembers == null)
+        {
+            GUILayout.Label("SquadManager를 찾을 수 없어 전멸 게임오버를 쓸 수 없습니다.");
+            return;
+        }
+
+        int aliveCount = 0;
+        for (int i = 0; i < squadManager.SquadMembers.Count; i++)
+        {
+            SquadMemberController member = squadManager.SquadMembers[i];
+            if (member != null && member.IsAlive)
+            {
+                aliveCount++;
+            }
+        }
+
+        if (aliveCount == 0)
+        {
+            GUILayout.Label("스쿼드 전원이 이미 전투 이탈했습니다.");
+            m_confirmForceGameOver = false;
+            return;
+        }
+
+        if (!m_confirmForceGameOver)
+        {
+            if (GUILayout.Button($"전멸 게임오버 (생존 {aliveCount}명 전투 이탈)", GUILayout.Height(26)))
+            {
+                m_confirmForceGameOver = true;
+            }
+
+            return;
+        }
+
+        GUILayout.Label($"생존 {aliveCount}명을 전투 이탈시킵니다. 되돌릴 수 없습니다.");
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("실행", GUILayout.Height(26)))
+        {
+            m_confirmForceGameOver = false;
+            // 게임오버 화면이 입력을 가져가므로 트레이너를 먼저 닫습니다.
+            SetMenuOpen(false);
+            ForceSquadElimination(squadManager);
+        }
+
+        if (GUILayout.Button("취소", GUILayout.Height(26)))
+        {
+            m_confirmForceGameOver = false;
+        }
+        GUILayout.EndHorizontal();
+    }
+
+    /// <summary>스쿼드원 전원을 실제 사망 경로로 전투 이탈시킵니다.</summary>
+    /// <param name="squadManager">대상 스쿼드 매니저입니다.</param>
+    private static void ForceSquadElimination(SquadManager squadManager)
+    {
+        // 순회 중 전멸 감지가 멤버 전환을 일으킬 수 있어 목록을 먼저 복사합니다.
+        List<SquadMemberController> members = new List<SquadMemberController>(squadManager.SquadMembers);
+
+        int killed = 0;
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController member = members[i];
+            if (member == null || !member.IsAlive)
+            {
+                continue;
+            }
+
+            PlayerHealth health = member.GetComponent<PlayerHealth>();
+            if (health == null)
+            {
+                Debug.LogWarning($"[RuntimeDebugTrainer] {member.name}에 PlayerHealth가 없어 전투 이탈시키지 못했습니다.", member);
+                continue;
+            }
+
+            health.Death();
+            killed++;
+        }
+
+        Debug.Log($"[RuntimeDebugTrainer] 전멸 게임오버 요청: {killed}명 전투 이탈 처리.", squadManager);
     }
 
     private void DrawEnemySpawnSection()
@@ -1232,21 +1613,96 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private void EnsureStyles()
     {
-        if (m_titleStyle == null)
+        // 창 크기를 바꾸면 글자와 위젯도 같이 커지고 작아져야 인스펙터처럼 보입니다.
+        // 기준 너비에서 얼마나 벗어났는지로 배율을 구하고, 읽을 수 없을 만큼 작아지지 않게 제한합니다.
+        float scale = Mathf.Clamp(m_windowRect.width / ReferenceWindowWidth, MinUiScale, MaxUiScale);
+
+        // 배율이 바뀌지 않았으면 스타일을 다시 만들지 않습니다. OnGUI는 프레임마다 여러 번 불립니다.
+        if (m_titleStyle != null && Mathf.Approximately(scale, m_appliedUiScale))
         {
-            m_titleStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 18,
-                fontStyle = FontStyle.Bold,
-            };
+            ApplyScaledSkin(scale);
+            return;
         }
 
-        if (m_headerStyle == null)
+        m_appliedUiScale = scale;
+
+        m_titleStyle = new GUIStyle(GUI.skin.label)
         {
-            m_headerStyle = new GUIStyle(GUI.skin.label)
+            fontSize = Mathf.RoundToInt(18f * scale),
+            fontStyle = FontStyle.Bold,
+        };
+
+        m_headerStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = Mathf.RoundToInt(GUI.skin.label.fontSize <= 0 ? 12f * scale : GUI.skin.label.fontSize * scale),
+            fontStyle = FontStyle.Bold,
+        };
+
+        ApplyScaledSkin(scale);
+    }
+
+    /// <summary>
+    /// 이번 창에 쓸 기본 위젯 크기를 배율에 맞게 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GUI.skin"/>은 전역이라 창을 그리는 동안만 바꾸고 <see cref="RestoreSkin"/>으로 되돌립니다.
+    /// 되돌리지 않으면 다른 IMGUI 창까지 이 배율을 물려받습니다.
+    ///
+    /// 글꼴 크기가 0인 스타일은 스킨 기본값을 쓰겠다는 뜻이라, 그런 경우에만 기준값을 곱해 넣습니다.
+    /// 0이 아닌 값을 그대로 곱하면 매 프레임 누적되어 글자가 계속 커집니다.
+    /// </remarks>
+    private void ApplyScaledSkin(float scale)
+    {
+        if (m_scaledSkin == null || !Mathf.Approximately(scale, m_scaledSkinScale))
+        {
+            m_scaledSkin = Object.Instantiate(GUI.skin);
+            m_scaledSkinScale = scale;
+
+            int baseSize = Mathf.RoundToInt(12f * scale);
+
+            foreach (GUIStyle style in m_scaledSkin.customStyles)
             {
-                fontStyle = FontStyle.Bold,
-            };
+                ScaleStyle(style, scale, baseSize);
+            }
+
+            ScaleStyle(m_scaledSkin.label, scale, baseSize);
+            ScaleStyle(m_scaledSkin.button, scale, baseSize);
+            ScaleStyle(m_scaledSkin.box, scale, baseSize);
+            ScaleStyle(m_scaledSkin.textField, scale, baseSize);
+            ScaleStyle(m_scaledSkin.toggle, scale, baseSize);
+            ScaleStyle(m_scaledSkin.window, scale, baseSize);
+
+            m_scaledSkin.horizontalSlider.fixedHeight = GUI.skin.horizontalSlider.fixedHeight * scale;
+            m_scaledSkin.horizontalSliderThumb.fixedWidth = GUI.skin.horizontalSliderThumb.fixedWidth * scale;
+            m_scaledSkin.horizontalSliderThumb.fixedHeight = GUI.skin.horizontalSliderThumb.fixedHeight * scale;
+        }
+
+        m_previousSkin = GUI.skin;
+        GUI.skin = m_scaledSkin;
+
+        static void ScaleStyle(GUIStyle style, float s, int baseSize)
+        {
+            if (style == null)
+            {
+                return;
+            }
+
+            style.fontSize = style.fontSize <= 0 ? baseSize : Mathf.RoundToInt(style.fontSize * s);
+
+            if (style.fixedHeight > 0f)
+            {
+                style.fixedHeight *= s;
+            }
+        }
+    }
+
+    /// <summary>창을 다 그린 뒤 전역 스킨을 되돌립니다.</summary>
+    private void RestoreSkin()
+    {
+        if (m_previousSkin != null)
+        {
+            GUI.skin = m_previousSkin;
+            m_previousSkin = null;
         }
     }
 }
