@@ -95,8 +95,24 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private Vector2 m_scroll;
 
+    /// <summary>역동기화 버튼을 누른 결과를 창에 남겨 두는 문자열입니다.</summary>
+    private string m_reverseSyncMessage;
+
+    /// <summary>반동·킥 엔벨로프 항목을 펼쳐 둘지 여부입니다. 항목이 많아 기본은 접어 둡니다.</summary>
+    private bool m_showRecoilEnvelope;
+
+    // 곡선 생성기 입력값입니다. 축마다 따로 두지 않고 하나를 공유하고,
+    // 어느 축에 넣을지는 누르는 버튼으로 고릅니다. 축별로 두면 슬라이더가 열다섯 줄이 됩니다.
+    private float m_envelopePeakRatio = 0.25f;
+    private float m_envelopePeakValue = 1.0f;
+    private float m_envelopeEasePower = 1.0f;
+
     private bool m_showWeaponHitscanLayers;
     private bool m_showAimTargetLayers;
+
+    /// <summary>전멸 게임오버 버튼이 확인 단계에 들어가 있는지 여부입니다.</summary>
+    /// <remarks>되돌릴 수 없는 조작이라 한 번 누르면 실행하지 않고 확인을 먼저 받습니다.</remarks>
+    private bool m_confirmForceGameOver;
 
     // IMGUI 런타임 창은 기본 리사이즈 핸들이 없으므로 우하단 그립으로 크기를 바꿉니다.
     private Rect m_windowRect = new Rect(10f, 10f, 500f, 720f);
@@ -345,6 +361,14 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// </remarks>
     private void UnlockControls()
     {
+        // 조준선 인스펙터가 아직 열려 있으면 게임플레이로 되돌리지 않습니다.
+        // 되돌리면 커서가 잠겨 그 창을 클릭할 수 없게 되고, 창이 떠 있는 채로 플레이어 입력이 살아납니다.
+        if (CrosshairDebugInspector.IsWindowOpen)
+        {
+            m_usesSceneInputModeController = false;
+            return;
+        }
+
         if (m_usesSceneInputModeController && TryRestoreSceneInputMode())
         {
             m_usesSceneInputModeController = false;
@@ -798,6 +822,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
             controller.SetMoveSpeed(SliderRow("이동 속도", controller.MoveSpeed, 0f, 15f));
             controller.SetSprintSpeed(SliderRow("질주 속도", controller.SprintSpeed, 0f, 20f));
             controller.SetJumpHeight(SliderRow("점프 높이", controller.JumpHeight, 0f, 5f));
+
+            DrawReverseSyncButton(controller, "이동/반동");
         }
         else
         {
@@ -893,6 +919,44 @@ public class RuntimeDebugTrainer : MonoBehaviour
                 2);
         weapon.SetSpreadDistribution(distribution);
         weapon.SetSpreadConcentration(SliderRow("중심 집중도", weapon.SpreadConcentration, 1f, 10f));
+
+        DrawReverseSyncButton(weapon, "이 무기");
+    }
+
+    /// <summary>
+    /// 지금 값을 밸런스 SO와 CSV로 되돌려 쓰는 버튼을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 에디터에서만 그립니다. SO와 CSV는 프로젝트 자산이라 빌드에서는 쓸 수 없어,
+    /// 버튼을 보여 주면 눌러도 아무 일이 없는 것처럼 보입니다.
+    ///
+    /// 플레이 중에 쓴 값은 Play Mode를 끝내면 사라지므로, 마음에 드는 값을 찾았으면
+    /// 끝내기 전에 눌러 정본으로 올려야 합니다.
+    /// </remarks>
+    private void DrawReverseSyncButton(Component target, string label)
+    {
+        if (target == null || !BalanceReverseSyncHook.IsAvailable)
+        {
+            return;
+        }
+
+        if (!BalanceReverseSyncHook.CanRun(target))
+        {
+            GUILayout.Label($"{label}에 밸런스 SO가 연결되어 있지 않아 갱신할 수 없습니다.");
+            return;
+        }
+
+        GUILayout.Space(3);
+        if (GUILayout.Button($"{label} 현재 값 → SO + CSV 갱신", GUILayout.Height(24)))
+        {
+            m_reverseSyncMessage = BalanceReverseSyncHook.Run(target);
+            Debug.Log($"[BalanceReverseSync] {m_reverseSyncMessage}", target);
+        }
+
+        if (!string.IsNullOrEmpty(m_reverseSyncMessage))
+        {
+            GUILayout.Label(m_reverseSyncMessage);
+        }
     }
 
     private void DrawCombatFeedbackSection(PlayerbleUnitData target)
@@ -1012,6 +1076,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         controller.SetUseYawOffsetCap(GUILayout.Toggle(controller.UseYawOffsetCap, " 요 반동 상한 사용"));
+
+        DrawRecoilEnvelopeSection(controller);
         if (controller.UseYawOffsetCap)
         {
             controller.SetRecoilMaxYaw(SliderRow("요 반동 상한", controller.RecoilMaxYaw, 0f, 30f));
@@ -1048,6 +1114,119 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         crosshairController.SetSpreadLerpSpeed(SliderRow("간격 보간 속도", crosshairController.SpreadLerpSpeed, 0f, 50f));
+    }
+
+    /// <summary>
+    /// 반동·킥 엔벨로프의 사용 여부와 지속시간, 그리고 곡선 생성기를 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// IMGUI에는 곡선 편집기가 없어 곡선 모양은 여기서 직접 못 만집니다.
+    /// 대신 피크 위치·피크 세기·완급을 숫자로 두고, 적용 버튼을 눌렀을 때만 3키 곡선을 다시 만듭니다.
+    /// 버튼을 눌러야만 바뀌게 한 이유는, 매 프레임 재생성하면 인스펙터에서 손으로 그린 곡선을
+    /// 조용히 덮어써 저작 결과가 사라지기 때문입니다.
+    ///
+    /// 지속시간과 세기는 곡선을 재생성하지 않고 시간축·진폭만 늘리고 줄이므로 실시간으로 계속 돌려볼 수 있습니다.
+    /// </remarks>
+    private void DrawRecoilEnvelopeSection(ThirdPersonController controller)
+    {
+        GUILayout.Space(4);
+        m_showRecoilEnvelope = GUILayout.Toggle(m_showRecoilEnvelope,
+            m_showRecoilEnvelope ? " ▼ 반동·킥 엔벨로프" : " ▶ 반동·킥 엔벨로프", m_headerStyle);
+
+        if (!m_showRecoilEnvelope)
+        {
+            return;
+        }
+
+        controller.SetUsePitchRecoilEnvelope(
+            GUILayout.Toggle(controller.UsePitchRecoilEnvelope, " 상하 반동 곡선 사용 (끄면 즉발+속도 회복)"));
+        if (controller.UsePitchRecoilEnvelope)
+        {
+            controller.SetPitchRecoilEnvelopeDuration(
+                SliderRow("상하 곡선 길이(초)", controller.PitchRecoilEnvelopeDuration, 0.02f, 2f));
+        }
+
+        controller.SetUseYawRecoilEnvelope(
+            GUILayout.Toggle(controller.UseYawRecoilEnvelope, " 좌우 반동 곡선 사용"));
+        if (controller.UseYawRecoilEnvelope)
+        {
+            controller.SetYawRecoilEnvelopeDuration(
+                SliderRow("좌우 곡선 길이(초)", controller.YawRecoilEnvelopeDuration, 0.02f, 2f));
+        }
+
+        AimController aimController = controller.GetComponent<AimController>();
+        if (aimController != null)
+        {
+            aimController.SetUseRollKickEnvelope(
+                GUILayout.Toggle(aimController.UseRollKickEnvelope, " 카메라 롤 곡선 사용"));
+            if (aimController.UseRollKickEnvelope)
+            {
+                aimController.SetRollKickEnvelopeDuration(
+                    SliderRow("롤 곡선 길이(초)", aimController.RollKickEnvelopeDuration, 0.02f, 2f));
+            }
+
+            aimController.SetUseFovPunchEnvelope(
+                GUILayout.Toggle(aimController.UseFovPunchEnvelope, " FOV 펀치 곡선 사용"));
+            if (aimController.UseFovPunchEnvelope)
+            {
+                aimController.SetHipfireFovPunchEnvelopeDuration(
+                    SliderRow("힙 펀치 길이(초)", aimController.HipfireFovPunchEnvelopeDuration, 0.02f, 2f));
+                aimController.SetAdsFovPunchEnvelopeDuration(
+                    SliderRow("ADS 펀치 길이(초)", aimController.AdsFovPunchEnvelopeDuration, 0.02f, 2f));
+            }
+
+            aimController.SetUseZoomEnvelope(
+                GUILayout.Toggle(aimController.UseZoomEnvelope, " ADS 확대·축소 곡선 사용 (끄면 속도 공용)"));
+            if (aimController.UseZoomEnvelope)
+            {
+                aimController.SetZoomInDuration(
+                    SliderRow("확대 시간(초)", aimController.ZoomInDuration, 0.01f, 1f));
+                aimController.SetZoomOutDuration(
+                    SliderRow("축소 시간(초)", aimController.ZoomOutDuration, 0.01f, 1f));
+            }
+        }
+
+        GUILayout.Space(4);
+        GUILayout.Label("곡선 생성기 (누른 축의 곡선을 다시 만듭니다)");
+        m_envelopePeakRatio = SliderRow("피크 위치(0~1)", m_envelopePeakRatio, 0.01f, 0.99f);
+        m_envelopePeakValue = SliderRow("피크 세기(1=목표)", m_envelopePeakValue, 0.1f, 2f);
+        m_envelopeEasePower = SliderRow("완급(1=선형)", m_envelopeEasePower, 0.2f, 4f);
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("상하"))
+        {
+            controller.SetPitchRecoilEnvelopeCurve(BuildEnvelopeCurveFromFields());
+        }
+
+        if (GUILayout.Button("좌우"))
+        {
+            controller.SetYawRecoilEnvelopeCurve(BuildEnvelopeCurveFromFields());
+        }
+
+        if (aimController != null)
+        {
+            if (GUILayout.Button("롤"))
+            {
+                aimController.SetRollKickEnvelopeCurve(BuildEnvelopeCurveFromFields());
+            }
+
+            if (GUILayout.Button("힙 펀치"))
+            {
+                aimController.SetHipfireFovPunchEnvelopeCurve(BuildEnvelopeCurveFromFields());
+            }
+
+            if (GUILayout.Button("ADS 펀치"))
+            {
+                aimController.SetAdsFovPunchEnvelopeCurve(BuildEnvelopeCurveFromFields());
+            }
+        }
+        GUILayout.EndHorizontal();
+    }
+
+    /// <summary>지금 생성기 값으로 엔벨로프 곡선을 만듭니다.</summary>
+    private AnimationCurve BuildEnvelopeCurveFromFields()
+    {
+        return ImpulseEnvelope.BuildCurve(m_envelopePeakRatio, m_envelopePeakValue, m_envelopeEasePower);
     }
 
     private KickSidePattern DrawKickSidePattern(string label, KickSidePattern current)
@@ -1131,6 +1310,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <remarks>
     /// 정산과 결과 UI를 확인하는 데 쓰는 지름길입니다. 판정만 건너뛰고 이후 절차는
     /// <see cref="EscapeSystem.ForceEscape"/>를 통해 실제 탈출과 같은 경로를 타므로 결과가 달라지지 않습니다.
+    /// 전멸 게임오버도 같은 원칙으로, 스쿼드원을 실제 전투 이탈시켜 정상 감지 경로를 타게 합니다.
     /// </remarks>
     private void DrawFieldControlSection()
     {
@@ -1138,12 +1318,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         EscapeSystem escapeSystem = FindFirstObjectByType<EscapeSystem>(FindObjectsInactive.Include);
         FieldSceneDataManager fieldData = FieldSceneDataManager.Instance;
-
-        if (escapeSystem == null)
-        {
-            GUILayout.Label("EscapeSystem을 찾을 수 없어 즉시 탈출을 쓸 수 없습니다.");
-            return;
-        }
 
         if (fieldData != null && fieldData.IsFinalized)
         {
@@ -1155,13 +1329,115 @@ public class RuntimeDebugTrainer : MonoBehaviour
             ? $"현재 처치 {fieldData.KillCount} / 임무 {(fieldData.MissionCompleted ? "달성" : "미달성")}"
             : "필드 데이터 매니저를 찾을 수 없습니다. 정산 없이 결과 UI만 열릴 수 있습니다.");
 
-        if (GUILayout.Button("즉시 탈출 (정산 후 결과 UI)", GUILayout.Height(26)))
+        if (escapeSystem == null)
+        {
+            GUILayout.Label("EscapeSystem을 찾을 수 없어 즉시 탈출을 쓸 수 없습니다.");
+        }
+        else if (GUILayout.Button("즉시 탈출 (정산 후 결과 UI)", GUILayout.Height(26)))
         {
             // 결과 UI가 입력을 가져가므로 트레이너를 먼저 닫습니다.
             // 열어 둔 채로 두면 트레이너와 결과 UI가 같은 커서를 두고 다툽니다.
             SetMenuOpen(false);
             escapeSystem.ForceEscape();
         }
+
+        DrawForceGameOverButton();
+    }
+
+    /// <summary>
+    /// 스쿼드 전원을 전투 이탈시켜 전멸 게임오버를 일으키는 디버그 버튼을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 게임오버 상태를 직접 세우지 않고 <see cref="PlayerHealth.Death"/>를 스쿼드원마다 호출합니다.
+    /// 그래야 전멸 감지(<c>SquadManager.OnSquadEliminated</c>)부터 화면 표시까지 실제와 같은 경로를 타고,
+    /// 정산을 건너뛰는지(<c>FinalizeField</c> 미호출)까지 함께 확인할 수 있습니다.
+    /// 되돌릴 수 없는 조작이라 확인 단계를 한 번 둡니다.
+    /// </remarks>
+    private void DrawForceGameOverButton()
+    {
+        SquadManager squadManager = SquadManager.Instance != null
+            ? SquadManager.Instance
+            : FindFirstObjectByType<SquadManager>();
+
+        if (squadManager == null || squadManager.SquadMembers == null)
+        {
+            GUILayout.Label("SquadManager를 찾을 수 없어 전멸 게임오버를 쓸 수 없습니다.");
+            return;
+        }
+
+        int aliveCount = 0;
+        for (int i = 0; i < squadManager.SquadMembers.Count; i++)
+        {
+            SquadMemberController member = squadManager.SquadMembers[i];
+            if (member != null && member.IsAlive)
+            {
+                aliveCount++;
+            }
+        }
+
+        if (aliveCount == 0)
+        {
+            GUILayout.Label("스쿼드 전원이 이미 전투 이탈했습니다.");
+            m_confirmForceGameOver = false;
+            return;
+        }
+
+        if (!m_confirmForceGameOver)
+        {
+            if (GUILayout.Button($"전멸 게임오버 (생존 {aliveCount}명 전투 이탈)", GUILayout.Height(26)))
+            {
+                m_confirmForceGameOver = true;
+            }
+
+            return;
+        }
+
+        GUILayout.Label($"생존 {aliveCount}명을 전투 이탈시킵니다. 되돌릴 수 없습니다.");
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("실행", GUILayout.Height(26)))
+        {
+            m_confirmForceGameOver = false;
+            // 게임오버 화면이 입력을 가져가므로 트레이너를 먼저 닫습니다.
+            SetMenuOpen(false);
+            ForceSquadElimination(squadManager);
+        }
+
+        if (GUILayout.Button("취소", GUILayout.Height(26)))
+        {
+            m_confirmForceGameOver = false;
+        }
+        GUILayout.EndHorizontal();
+    }
+
+    /// <summary>스쿼드원 전원을 실제 사망 경로로 전투 이탈시킵니다.</summary>
+    /// <param name="squadManager">대상 스쿼드 매니저입니다.</param>
+    private static void ForceSquadElimination(SquadManager squadManager)
+    {
+        // 순회 중 전멸 감지가 멤버 전환을 일으킬 수 있어 목록을 먼저 복사합니다.
+        List<SquadMemberController> members = new List<SquadMemberController>(squadManager.SquadMembers);
+
+        int killed = 0;
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController member = members[i];
+            if (member == null || !member.IsAlive)
+            {
+                continue;
+            }
+
+            PlayerHealth health = member.GetComponent<PlayerHealth>();
+            if (health == null)
+            {
+                Debug.LogWarning($"[RuntimeDebugTrainer] {member.name}에 PlayerHealth가 없어 전투 이탈시키지 못했습니다.", member);
+                continue;
+            }
+
+            health.Death();
+            killed++;
+        }
+
+        Debug.Log($"[RuntimeDebugTrainer] 전멸 게임오버 요청: {killed}명 전투 이탈 처리.", squadManager);
     }
 
     private void DrawEnemySpawnSection()
