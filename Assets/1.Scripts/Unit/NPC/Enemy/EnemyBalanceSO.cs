@@ -71,8 +71,8 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("소음 인지 게이지가 이 값에 닿으면 소음 위치를 추적하기 시작합니다. 낮으면 금방 알아챕니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_noiseAwarenessThreshold = 1f;
 
-    [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 기획 미확정 - 임시값입니다.")]
-    [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.35f;
+    [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 걷기 소음의 초당 증가량보다 크면 걸어서는 절대 들키지 않습니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.15f;
 
     [Tooltip("소음 위치로 이동할 때의 속도(m/s)입니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_noiseChaseSpeed = 2f;

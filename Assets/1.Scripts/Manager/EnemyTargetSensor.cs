@@ -99,8 +99,12 @@ public class EnemyTargetSensor : MonoBehaviour
     [Tooltip("소음 인지 게이지가 이 값에 닿으면 소음 위치를 추적하기 시작합니다. 낮으면 금방 알아챕니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_noiseAwarenessThreshold = 1f;
 
-    [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 기획 미확정 - 임시값입니다.")]
-    [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.35f;
+    [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 걷기 소음의 초당 증가량보다 크면 걸어서는 절대 들키지 않습니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.15f;
+
+    [Header("Noise Debug")]
+    [Tooltip("소음 인지 게이지를 Scene 뷰에 막대로 표시합니다. 게이지가 0보다 클 때만 그려집니다.")]
+    [SerializeField] private bool m_debugDrawNoiseGauge = true;
 
     [Header("Target Selection")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기입니다.")]
@@ -890,5 +894,63 @@ public class EnemyTargetSensor : MonoBehaviour
         Quaternion right = Quaternion.AngleAxis(m_sightAngle * 0.5f, Vector3.up);
         Gizmos.DrawRay(eye, left * transform.forward * m_sightRange);
         Gizmos.DrawRay(eye, right * transform.forward * m_sightRange);
+    }
+
+    /// <summary>
+    /// 소음 인지 게이지를 Scene 뷰에 막대와 숫자로 표시합니다.
+    /// </summary>
+    /// <remarks>
+    /// 게이지는 값이 눈에 보이지 않으면 조율할 수 없습니다. 증가와 감소가 동시에 일어나므로
+    /// 로그로 찍으면 흐름을 놓치고, 여러 개체를 한 번에 비교하려면 화면에 있어야 합니다.
+    ///
+    /// 선택 여부와 무관하게 그리지만 <b>게이지가 0보다 클 때만</b> 그립니다.
+    /// 항상 그리면 개체 수만큼 막대가 떠서 씬이 묻히고, 선택할 때만 그리면 지금 반응 중인
+    /// 개체를 먼저 찾아야 해서 관찰에 쓸 수 없습니다.
+    ///
+    /// Play 중에도 Scene 뷰에서 보입니다. Gizmos 토글이 켜져 있어야 합니다.
+    /// </remarks>
+    private void OnDrawGizmos()
+    {
+        if (!m_debugDrawNoiseGauge || m_noiseAwareness <= 0f)
+        {
+            return;
+        }
+
+        float fill = NoiseAwareness01;
+
+        // 만충이면 빨강, 차오르는 중이면 노랑입니다. 두 상태의 행동이 다르므로 색으로 구분합니다.
+        Color color = IsNoiseAwarenessFull ? Color.red : Color.Lerp(Color.white, Color.yellow, fill);
+
+        const float barWidth = 1.0f;
+        const float barHeight = 0.12f;
+        Vector3 center = transform.position + Vector3.up * 2.3f;
+
+        // 막대가 카메라를 향하도록 회전시킵니다. 월드 축에 고정하면 보는 각도에 따라 선으로 납작해집니다.
+        Camera camera = Camera.current;
+        Quaternion facing = camera != null
+            ? Quaternion.LookRotation(camera.transform.forward, Vector3.up)
+            : Quaternion.identity;
+
+        Matrix4x4 previous = Gizmos.matrix;
+        Gizmos.matrix = Matrix4x4.TRS(center, facing, Vector3.one);
+
+        Gizmos.color = new Color(0f, 0f, 0f, 0.5f);
+        Gizmos.DrawCube(Vector3.zero, new Vector3(barWidth, barHeight, 0.01f));
+
+        Gizmos.color = color;
+        float filled = barWidth * fill;
+        Gizmos.DrawCube(
+            new Vector3(-(barWidth - filled) * 0.5f, 0f, -0.01f),
+            new Vector3(filled, barHeight, 0.01f));
+
+        Gizmos.matrix = previous;
+
+#if UNITY_EDITOR
+        // 막대만으로는 임계치까지 얼마나 남았는지 읽기 어려워 실수치를 함께 적습니다.
+        UnityEditor.Handles.color = color;
+        UnityEditor.Handles.Label(
+            center + Vector3.up * 0.2f,
+            $"{m_noiseAwareness:F2} / {m_noiseAwarenessThreshold:F2}{(IsNoiseAwarenessFull ? " (FULL)" : string.Empty)}");
+#endif
     }
 }
