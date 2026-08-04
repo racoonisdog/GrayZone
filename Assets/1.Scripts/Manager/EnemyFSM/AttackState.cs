@@ -29,6 +29,8 @@ public class AttackState : EnemyStateBase
 
     public override void Enter()
     {
+        Controller.PlayAttackFeedback();
+
         m_startTime = Time.time;
         m_impactDone = false;
         m_impactTime = 0f;

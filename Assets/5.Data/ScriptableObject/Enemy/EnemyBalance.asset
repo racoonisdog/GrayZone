@@ -31,4 +31,3 @@ MonoBehaviour:
   m_attackLockDuration: 0.9
   m_attackDamage: 1
   m_attackRadius: 1
-  m_destroyDelay: 3

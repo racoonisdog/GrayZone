@@ -1,0 +1,39 @@
+﻿__Field,__Tooltip,Rifle1WeaponBalance
+__Type,,GunBalanceSO
+__Guid,,79421e9565ae4bfbae970dbcb5176c96
+__Path,,Assets/5.Data/ScriptableObject/Weapon/Rifle1WeaponBalance.asset
+m_weaponId,테이블과 향후 런타임 어댑터에서 사용할 고정 무기 ID입니다.,weapon.rifle.01
+m_weaponType,무기 분류입니다.,AssaultRifle
+m_weaponName,기획 시트와 Inspector에 표시할 무기 이름입니다.,Rifle 1
+m_maxBullet,한 탄창의 최대 장탄 수입니다.,30
+m_shootDelay,발사 후 다음 발사가 가능해질 때까지의 지연 시간(초)입니다.,0.12
+m_reloadTime,재장전에 필요한 시간(초)입니다.,1.5
+m_hitscanDamage,일반 히트스캔 명중 피해량입니다.,1
+m_allowHeadshot,이 무기가 약점 판정을 사용하는지 여부입니다. 끄면 약점 부위를 맞혀도 일반 피해로 처리합니다.,TRUE
+m_headshotDamageMultiplier,헤드샷 명중 시 기본 피해량에 곱하는 배율입니다. 약점 판정이 꺼져 있으면 사용하지 않습니다.,2
+m_hitscanRange,히트스캔 판정 최대 거리(m)입니다.,100
+m_hipfireMinSpread,비조준 사격의 최소 방사각(도)입니다.,0
+m_hipfireMaxSpread,비조준 연사 시 도달할 수 있는 최대 방사각(도)입니다. 최소 방사각보다 작으면 대입 시점에 되돌립니다.,3
+m_hipfireMinSpreadShotCount,비조준에서 최소 방사각을 유지하는 발수입니다.,3
+m_hipfireSpreadIncreasePerShot,비조준 발사마다 증가하는 방사각(도)입니다.,0.5
+m_hipfireSpreadRecoveryPerSecond,비조준 탄퍼짐의 초당 회복량(도/초)입니다.,8
+m_hipfireSpreadRecoveryDelay,비조준 사격 중지 후 탄퍼짐 회복을 시작하는 지연 시간(초)입니다.,0.3
+m_adsMinSpread,조준 사격의 최소 방사각(도)입니다.,0
+m_adsMaxSpread,조준 연사 시 도달할 수 있는 최대 방사각(도)입니다. 최소 방사각보다 작으면 대입 시점에 되돌립니다.,1
+m_adsMinSpreadShotCount,조준 상태에서 최소 방사각을 유지하는 발수입니다.,3
+m_adsSpreadIncreasePerShot,조준 발사마다 증가하는 방사각(도)입니다.,0.4
+m_adsSpreadRecoveryPerSecond,조준 탄퍼짐의 초당 회복량(도/초)입니다.,8
+m_adsSpreadRecoveryDelay,조준 사격 중지 후 탄퍼짐 회복을 시작하는 지연 시간(초)입니다.,0.3
+m_spreadDistribution,탄퍼짐 콘 내부에서 탄착을 분포시키는 방식입니다.,Gaussian
+m_spreadConcentration,Gaussian 분포의 중심 집중도입니다. 값이 클수록 중심에 모입니다.,3
+m_shotNoiseLevel,사격 1회의 기본 소음량입니다. 가청 여부가 아니라 소음 간 우선순위 비교에만 쓰입니다. 기획 미확정 - 임시값입니다.,1
+m_shotNoiseRange,사격 소음이 들리는 거리(m)입니다. 이 거리 안이면 들립니다. 변이체 시야(12m)보다 훨씬 커야 소음 유인 전술이 성립합니다. 기획 미확정 - 임시값입니다.,40
+m_recoilPitchKick,발사 1회당 세로 반동 각도(도)입니다.,0.6
+m_recoilYawKick,발사 1회당 좌우 반동 각도(도)의 최대 크기입니다.,0.2
+m_yawKickPattern,좌우 반동의 방향 패턴입니다.,Random
+m_recoilRoll,화면 연출용 카메라 롤 크기(도)입니다.,1
+m_rollKickPattern,카메라 롤의 방향 패턴입니다.,Random
+m_recoilFovPunch,발사 1회당 화면 연출용 FOV 펀치 크기(도)입니다.,1.5
+m_recoilFovPunchAds,조준(ADS) 중 발사 1회당 화면 연출용 FOV 펀치 크기(도)입니다.,1.5
+m_damageFalloff,거리에 따른 피해 배율 구간표입니다. 구간을 두지 않으면 거리와 무관하게 기본 피해가 들어갑니다.,"{""m_mode"":""FlatDamage"",""m_trackMinDistance"":5,""m_trackMaxDistance"":80,""m_steps"":[{""m_maxDistance"":30,""m_damageMultiplier"":1,""m_flatDamage"":3},{""m_maxDistance"":60,""m_damageMultiplier"":0.699999988079071,""m_flatDamage"":2},{""m_maxDistance"":100,""m_damageMultiplier"":0.40000000596046448,""m_flatDamage"":1}]}"
+m_stoppingPower,"명중 시 적 경직력 누적에 더하는 저지력입니다. 피해와 별개이며, 경직 전달/소비 구현 전까지 데이터 자리만 둡니다.",0

@@ -922,7 +922,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::StarterAssets.ThirdPersonController
   m_balanceSO: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
   m_moveSpeed: 2
-  m_sprintSpeed: 5.335
+  m_sprintSpeed: 6
   m_rotationSmoothTime: 0.12
   m_speedChangeRate: 10
   m_jumpHeight: 1.2
@@ -950,6 +950,76 @@ MonoBehaviour:
   m_recoilMaxYaw: 3
   m_pitchRecoveryRatio: 1
   m_yawRecoveryRatio: 1
+  m_usePitchRecoilEnvelope: 1
+  m_pitchRecoilEnvelopeDuration: 0.5
+  m_pitchRecoilEnvelopeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 10.416667
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.12
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -0.90909094
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  m_useYawRecoilEnvelope: 1
+  m_yawRecoilEnvelopeDuration: 0.45
+  m_yawRecoilEnvelopeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 10.416667
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.12
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -0.90909094
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   m_landingAudioClip: {fileID: 0}
   m_footstepAudioClips: []
   m_footstepAudioVolume: 0.5
@@ -1048,7 +1118,162 @@ MonoBehaviour:
   m_visualKickRecoveryMode: 0
   m_visualKickRecoverShots: 1
   m_visualKickMaxRoll: 3
-  m_visualKickMaxFovPunch: 0
+  m_visualKickMaxFovPunch: 1.5
+  m_useRollKickEnvelope: 1
+  m_rollKickEnvelopeDuration: 0.35
+  m_rollKickEnvelopeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 5.5555553
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.18
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -1.2195122
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  m_useFovPunchEnvelope: 1
+  m_hipfireFovPunchEnvelopeDuration: 0.25
+  m_hipfireFovPunchEnvelopeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 7.4074073
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.15
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -1.0588236
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  m_adsFovPunchEnvelopeDuration: 0.22
+  m_adsFovPunchEnvelopeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 7.4074073
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.15
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -1.0588236
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  m_useZoomEnvelope: 1
+  m_zoomInDuration: 0.18
+  m_zoomInCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 2.5
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  m_zoomOutDuration: 0.24
+  m_zoomOutCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 2.5
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   m_handRig: {fileID: 3580838561190631184}
   m_aimRig: {fileID: 5188019311049236787}
   m_shootingSound: {fileID: 0}
@@ -2136,7 +2361,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4693724506572384012, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
       propertyPath: m_hitscanLayerMask.m_Bits
-      value: 4294966783
+      value: 4294958591
       objectReference: {fileID: 0}
     - target: {fileID: 5108517961052224996, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
       propertyPath: m_Name

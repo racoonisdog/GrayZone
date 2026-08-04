@@ -94,6 +94,13 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("Gaussian 분포의 중심 집중도입니다. 값이 클수록 중심에 모입니다.")]
     [SerializeField] private float m_spreadConcentration = 3f;
 
+    [Header("Noise")]
+    [Tooltip("사격 1회의 기본 소음량입니다. 가청 여부가 아니라 소음 간 우선순위 비교에만 쓰입니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_shotNoiseLevel = 1f;
+
+    [Tooltip("사격 소음이 들리는 거리(m)입니다. 이 거리 안이면 들립니다. 변이체 시야(12m)보다 훨씬 커야 소음 유인 전술이 성립합니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_shotNoiseRange = 40f;
+
     [Header("Recoil")]
     [Tooltip("발사 1회당 세로 반동 각도(도)입니다.")]
     [SerializeField] private float m_recoilPitchKick = 0.6f;
@@ -112,6 +119,12 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
 
     [Tooltip("발사 1회당 화면 연출용 FOV 펀치 크기(도)입니다.")]
     [SerializeField] private float m_recoilFovPunch = 1f;
+
+    [Tooltip("조준(ADS) 중 발사 1회당 화면 연출용 FOV 펀치 크기(도)입니다.")]
+    [SerializeField] private float m_recoilFovPunchAds = 1f;
+
+    [Tooltip("거리에 따른 피해 배율 구간표입니다. 구간을 두지 않으면 거리와 무관하게 기본 피해가 들어갑니다.")]
+    [SerializeField] private DamageFalloffTable m_damageFalloff = new DamageFalloffTable();
 
     // Gun에 대응 필드가 아직 없어 바인딩되지 않습니다. 경직 소비를 구현하면 그때 연결됩니다.
     [Header("Impact")]

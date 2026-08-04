@@ -104,6 +104,31 @@ public sealed class PlayerCommonBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("누적될 수 있는 FOV 펀치 상한(도)입니다.")]
     [SerializeField] private float m_visualKickMaxFovPunch = 0f;
 
+    // ───────────── 반동·킥 엔벨로프 지속시간 ─────────────
+    // 곡선 자체와 사용 여부(bool)는 여기 두지 않습니다. 이 테이블은 수치만 담고,
+    // 스위치와 곡선 모양은 컴포넌트가 소유합니다. 기존 반동 토글들도 같은 규칙으로 빠져 있습니다.
+
+    [Tooltip("세로 반동 곡선 하나의 길이(초)입니다. 정규화 시간 0~1을 재는 기준입니다.")]
+    [SerializeField] private float m_pitchRecoilEnvelopeDuration = 0.35f;
+
+    [Tooltip("좌우 반동 곡선 하나의 길이(초)입니다.")]
+    [SerializeField] private float m_yawRecoilEnvelopeDuration = 0.35f;
+
+    [Tooltip("카메라 롤 킥 곡선 하나의 길이(초)입니다.")]
+    [SerializeField] private float m_rollKickEnvelopeDuration = 0.25f;
+
+    [Tooltip("힙파이어 FOV 펀치 곡선 하나의 길이(초)입니다.")]
+    [SerializeField] private float m_hipfireFovPunchEnvelopeDuration = 0.2f;
+
+    [Tooltip("ADS FOV 펀치 곡선 하나의 길이(초)입니다.")]
+    [SerializeField] private float m_adsFovPunchEnvelopeDuration = 0.2f;
+
+    [Tooltip("ADS 진입(확대)에 걸리는 시간(초)입니다.")]
+    [SerializeField] private float m_zoomInDuration = 0.15f;
+
+    [Tooltip("ADS 해제(축소)에 걸리는 시간(초)입니다.")]
+    [SerializeField] private float m_zoomOutDuration = 0.2f;
+
     // ───────────── PlayerHealth ─────────────
 
     [Tooltip("실제 HP 피해량을 부상 게이지로 변환할 때 곱하는 비율입니다. 기획 공식의 r 값입니다.")]

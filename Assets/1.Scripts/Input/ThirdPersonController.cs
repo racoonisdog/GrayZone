@@ -199,6 +199,42 @@ public class ThirdPersonController : MonoBehaviour
     [Clamp(Min = 0, Max = 1)]
     [SerializeField] private float m_yawRecoveryRatio = 1.0f;
 
+    [Tooltip("켜면 세로 반동의 상승과 회복을 곡선 하나로 처리합니다. 발마다 곡선 하나가 시작되고 살아 있는 곡선을 모두 더합니다. 끄면 기존 방식(목표값 누적 + 지연 후 회복)을 씁니다.")]
+    [SerializeField] private bool m_usePitchRecoilEnvelope = false;
+
+    [Tooltip("세로 반동 곡선 하나의 길이(초)입니다. 정규화 시간 0~1을 재는 기준이 됩니다. 연사 간격보다 길면 발끼리 겹쳐 누적됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_pitchRecoilEnvelopeDuration = 0.35f;
+
+    [Tooltip("세로 반동 곡선입니다. x는 정규화 시간(0~1), y는 반동 세기 배율입니다. y가 가장 큰 x가 피크 위치이고, y를 1보다 크게 두면 목표를 넘어섰다 돌아옵니다.")]
+    [SerializeField]
+    private AnimationCurve m_pitchRecoilEnvelopeCurve = ImpulseEnvelope.BuildCurve(0.25f, 1.0f, 1.0f);
+
+    [Tooltip("켜면 좌우 반동의 상승과 회복을 곡선 하나로 처리합니다. 상하와 따로 켤 수 있어 한쪽만 바꿔 비교할 수 있습니다.")]
+    [SerializeField] private bool m_useYawRecoilEnvelope = false;
+
+    [Tooltip("좌우 반동 곡선 하나의 길이(초)입니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_yawRecoilEnvelopeDuration = 0.35f;
+
+    [Tooltip("좌우 반동 곡선입니다. x는 정규화 시간(0~1), y는 반동 세기 배율입니다.")]
+    [SerializeField]
+    private AnimationCurve m_yawRecoilEnvelopeCurve = ImpulseEnvelope.BuildCurve(0.25f, 1.0f, 1.0f);
+
+    /// <summary>세로 반동 엔벨로프의 런타임 상태입니다.</summary>
+    private readonly ImpulseEnvelope m_pitchRecoilEnvelope = new ImpulseEnvelope();
+
+    /// <summary>좌우 반동 엔벨로프의 런타임 상태입니다.</summary>
+    private readonly ImpulseEnvelope m_yawRecoilEnvelope = new ImpulseEnvelope();
+
+    /// <summary>세로 반동에서 되잡기 입력으로 상쇄된 누적량입니다.</summary>
+    private float m_pitchRecoilAbsorb;
+
+    /// <summary>좌우 반동에서 되잡기 입력으로 상쇄된 누적량입니다.</summary>
+    private float m_yawRecoilAbsorb;
+
 
 
     /// <summary>애니메이션 이벤트에서 재생할 캐릭터 오디오 설정값입니다.</summary>
@@ -545,8 +581,14 @@ public class ThirdPersonController : MonoBehaviour
         //   헤드룸 = 현재 조준에서 상하 한계까지 남은 거리. 이렇게 하면 소비 pitch가 look 한계를 넘지 않는 선까지만
         //   오프셋이 쌓여 (a) 천장까지 자연스럽게 상승하고, (b) 화면 너머로 과누적돼 멈춘 뒤 회복이 지연되는 현상(dead-lag)을 방지한다.
         // 목표(target)에 즉시 누적한다. 실제 소비 오프셋은 CameraRotation에서 이 목표를 (즉시 or 보간으로) 추종한다.
+        // 엔벨로프를 켠 축은 목표값에 쌓지 않고 이번 발의 곡선 하나를 새로 시작합니다.
+        // 상한은 목표값이 아니라 매 프레임 합에 걸므로 여기서 클램프하지 않습니다.
         float pitchAdd = pitchDegrees * pitchR;
-        if (m_usePitchOffsetCap)
+        if (m_usePitchRecoilEnvelope)
+        {
+            m_pitchRecoilEnvelope.Add(pitchAdd);
+        }
+        else if (m_usePitchOffsetCap)
         {
             m_recoilPitchTarget = Mathf.Clamp(m_recoilPitchTarget + pitchAdd, -m_recoilMaxPitch, m_recoilMaxPitch);
         }
@@ -559,9 +601,16 @@ public class ThirdPersonController : MonoBehaviour
 
         // yaw는 조준 클램프가 없어(360 자유) 캡을 켜두는 게 기본. 끄면 무제한 누적.
         float yawAdd = yawDegrees * yawR;
-        m_recoilYawTarget = m_useYawOffsetCap
-            ? Mathf.Clamp(m_recoilYawTarget + yawAdd, -m_recoilMaxYaw, m_recoilMaxYaw)
-            : m_recoilYawTarget + yawAdd;
+        if (m_useYawRecoilEnvelope)
+        {
+            m_yawRecoilEnvelope.Add(yawAdd);
+        }
+        else
+        {
+            m_recoilYawTarget = m_useYawOffsetCap
+                ? Mathf.Clamp(m_recoilYawTarget + yawAdd, -m_recoilMaxYaw, m_recoilMaxYaw)
+                : m_recoilYawTarget + yawAdd;
+        }
 
         // 영구분(= 반동 × (1−r), 회복 안 하는 몫) → 실제 조준값에 박음(안 돌아옴). pitch는 위로(빼기 규약), yaw는 더함.
         // pitch 영구분은 CameraRotation의 상하 한계로 클램프되고, yaw는 무제한(좌우로 걸어감).
@@ -688,6 +737,72 @@ public class ThirdPersonController : MonoBehaviour
     /// <param name="value">0~1 범위로 보정됩니다.</param>
     public void SetYawRecoveryRatio(float value) => m_yawRecoveryRatio = Mathf.Clamp01(value);
 
+    /// <summary>세로 반동을 곡선 엔벨로프로 처리할지 여부입니다.</summary>
+    public bool UsePitchRecoilEnvelope => m_usePitchRecoilEnvelope;
+
+    /// <summary>세로 반동 곡선 하나의 길이(초)입니다.</summary>
+    public float PitchRecoilEnvelopeDuration => Mathf.Max(0.0f, m_pitchRecoilEnvelopeDuration);
+
+    /// <summary>세로 반동 곡선입니다.</summary>
+    public AnimationCurve PitchRecoilEnvelopeCurve => m_pitchRecoilEnvelopeCurve;
+
+    /// <summary>좌우 반동을 곡선 엔벨로프로 처리할지 여부입니다.</summary>
+    public bool UseYawRecoilEnvelope => m_useYawRecoilEnvelope;
+
+    /// <summary>좌우 반동 곡선 하나의 길이(초)입니다.</summary>
+    public float YawRecoilEnvelopeDuration => Mathf.Max(0.0f, m_yawRecoilEnvelopeDuration);
+
+    /// <summary>좌우 반동 곡선입니다.</summary>
+    public AnimationCurve YawRecoilEnvelopeCurve => m_yawRecoilEnvelopeCurve;
+
+    /// <summary>세로 반동 엔벨로프 사용 여부를 설정합니다.</summary>
+    /// <remarks>방식을 바꾸면 진행 중이던 상태가 다른 방식에 그대로 남지 않도록 함께 정리합니다.</remarks>
+    public void SetUsePitchRecoilEnvelope(bool value)
+    {
+        if (m_usePitchRecoilEnvelope == value)
+        {
+            return;
+        }
+
+        m_usePitchRecoilEnvelope = value;
+        m_pitchRecoilEnvelope.Clear();
+        m_pitchRecoilAbsorb = 0.0f;
+        m_recoilPitchTarget = 0.0f;
+    }
+
+    /// <summary>세로 반동 곡선 길이를 설정합니다.</summary>
+    public void SetPitchRecoilEnvelopeDuration(float value) => m_pitchRecoilEnvelopeDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>세로 반동 곡선을 교체합니다.</summary>
+    /// <remarks>넘어온 곡선을 복제해 보관합니다. 참조를 그대로 들면 밸런스 SO의 곡선과 같은 인스턴스를 공유합니다.</remarks>
+    public void SetPitchRecoilEnvelopeCurve(AnimationCurve value)
+    {
+        m_pitchRecoilEnvelopeCurve = value == null ? null : new AnimationCurve(value.keys);
+    }
+
+    /// <summary>좌우 반동 엔벨로프 사용 여부를 설정합니다.</summary>
+    public void SetUseYawRecoilEnvelope(bool value)
+    {
+        if (m_useYawRecoilEnvelope == value)
+        {
+            return;
+        }
+
+        m_useYawRecoilEnvelope = value;
+        m_yawRecoilEnvelope.Clear();
+        m_yawRecoilAbsorb = 0.0f;
+        m_recoilYawTarget = 0.0f;
+    }
+
+    /// <summary>좌우 반동 곡선 길이를 설정합니다.</summary>
+    public void SetYawRecoilEnvelopeDuration(float value) => m_yawRecoilEnvelopeDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>좌우 반동 곡선을 교체합니다.</summary>
+    public void SetYawRecoilEnvelopeCurve(AnimationCurve value)
+    {
+        m_yawRecoilEnvelopeCurve = value == null ? null : new AnimationCurve(value.keys);
+    }
+
     /// <summary>현재 회복 중인 논리 반동 오프셋을 즉시 제거합니다. 영구 반동분은 보존됩니다.</summary>
     public void ClearRecoilOffsets()
     {
@@ -696,6 +811,12 @@ public class ThirdPersonController : MonoBehaviour
         m_recoilPitchTarget = 0.0f;
         m_recoilYawTarget = 0.0f;
         m_lastRecoilTime = float.NegativeInfinity;
+
+        // 진행 중인 곡선과 상쇄분도 함께 버립니다. 남기면 초기화 뒤에도 반동이 이어져 보입니다.
+        m_pitchRecoilEnvelope.Clear();
+        m_yawRecoilEnvelope.Clear();
+        m_pitchRecoilAbsorb = 0.0f;
+        m_yawRecoilAbsorb = 0.0f;
     }
 
     /// <summary>
@@ -1055,6 +1176,175 @@ public class ThirdPersonController : MonoBehaviour
     /// <param name="sameSignOpposes">입력과 목표의 부호가 같을 때 "반동 반대"인지 여부입니다. pitch(view=target−offset)=true, yaw(view=target+offset)=false.</param>
     /// <returns>반동을 상쇄하고 남은, 실제로 조준을 움직일 입력량입니다.</returns>
     /// <remarks>플레이어가 반동을 되잡는 입력을 조준 이동이 아니라 반동 해소에 먼저 쓰게 해, 자동회복 시 시점이 과하게 쳐지는 오버 컴펜세이션을 막습니다. 반동과 같은 방향(의도적 재조준·트래킹)은 그대로 통과시킵니다.</remarks>
+    /// <summary>
+    /// 반동 오프셋을 이번 프레임 값으로 갱신합니다.
+    /// </summary>
+    /// <remarks>
+    /// 축마다 두 방식 중 하나로 처리합니다.
+    ///
+    /// 엔벨로프를 켠 축은 발 하나가 곡선 하나가 되고, 살아 있는 곡선을 모두 더한 값이 그대로 오프셋입니다.
+    /// 회복이 곡선 뒷부분에 들어 있어 별도의 회복 속도나 지연이 관여하지 않습니다.
+    ///
+    /// 끈 축은 기존 방식입니다. 목표값을 지연 후 0으로 되돌리고, 소비 오프셋이 그 목표를 즉시 또는 보간으로 추종합니다.
+    /// 두 방식을 축별로 섞을 수 있게 둔 이유는, 상하만 곡선으로 바꿔 보고 좌우는 그대로 두는 비교가 필요하기 때문입니다.
+    /// </remarks>
+    private void UpdateRecoilOffsets()
+    {
+        bool legacyPitch = !m_usePitchRecoilEnvelope;
+        bool legacyYaw = !m_useYawRecoilEnvelope;
+
+        // 기존 방식 축의 목표값 회복. 사격 중에는 유지·누적하고 지연이 지난 뒤에만 0으로 되돌립니다.
+        if ((legacyPitch || legacyYaw) && Time.time - m_lastRecoilTime > m_recoilRecoveryDelay)
+        {
+            float recoveryFactor = Mathf.Clamp01(Time.deltaTime * m_recoilRecoverySpeed);
+
+            if (legacyPitch)
+            {
+                m_recoilPitchTarget = Mathf.Lerp(m_recoilPitchTarget, 0.0f, recoveryFactor);
+            }
+
+            if (legacyYaw)
+            {
+                m_recoilYawTarget = Mathf.Lerp(m_recoilYawTarget, 0.0f, recoveryFactor);
+            }
+        }
+
+        // 온셋 보간: 소비 오프셋이 목표를 향해 지수 이징(앞쪽으로 쏠려 빠르게 붙었다 정착). 끄면 즉시 목표와 동일(기존 계단식).
+        float onsetFactor = Mathf.Clamp01(Time.deltaTime * Mathf.Max(0.0f, m_recoilOnsetSpeed));
+
+        if (m_usePitchRecoilEnvelope)
+        {
+            float sum = EvaluateEnvelopeOffset(
+                m_pitchRecoilEnvelope,
+                m_pitchRecoilEnvelopeDuration,
+                m_pitchRecoilEnvelopeCurve,
+                ref m_pitchRecoilAbsorb);
+
+            m_recoilPitchOffset = ClampPitchRecoilOffset(sum);
+        }
+        else if (m_recoilOnsetInterp)
+        {
+            m_recoilPitchOffset = Mathf.Lerp(m_recoilPitchOffset, m_recoilPitchTarget, onsetFactor);
+        }
+        else
+        {
+            m_recoilPitchOffset = m_recoilPitchTarget;
+        }
+
+        if (m_useYawRecoilEnvelope)
+        {
+            float sum = EvaluateEnvelopeOffset(
+                m_yawRecoilEnvelope,
+                m_yawRecoilEnvelopeDuration,
+                m_yawRecoilEnvelopeCurve,
+                ref m_yawRecoilAbsorb);
+
+            m_recoilYawOffset = m_useYawOffsetCap
+                ? Mathf.Clamp(sum, -m_recoilMaxYaw, m_recoilMaxYaw)
+                : sum;
+        }
+        else if (m_recoilOnsetInterp)
+        {
+            m_recoilYawOffset = Mathf.Lerp(m_recoilYawOffset, m_recoilYawTarget, onsetFactor);
+        }
+        else
+        {
+            m_recoilYawOffset = m_recoilYawTarget;
+        }
+    }
+
+    /// <summary>
+    /// 살아 있는 엔벨로프를 진행시키고 되잡기 상쇄분을 뺀 값을 돌려줍니다.
+    /// </summary>
+    /// <param name="envelope">진행시킬 엔벨로프 집합입니다.</param>
+    /// <param name="duration">엔벨로프 하나의 길이(초)입니다.</param>
+    /// <param name="curve">정규화 시간을 세기 배율로 바꾸는 곡선입니다.</param>
+    /// <param name="absorb">되잡기 입력으로 상쇄된 누적량입니다. 이 함수가 함께 정리합니다.</param>
+    /// <returns>이번 프레임에 적용할 반동 오프셋입니다.</returns>
+    /// <remarks>
+    /// 기존 방식은 되잡기 입력이 목표값을 직접 깎았지만, 엔벨로프에는 깎을 목표값이 없습니다.
+    /// 그래서 상쇄된 양을 따로 들고 있다가 합에서 뺍니다.
+    ///
+    /// 상쇄분이 합보다 커지면 부호가 뒤집혀 반동과 반대 방향으로 시점을 밀게 되므로 합에 맞춰 잘라 둡니다.
+    /// 자극이 모두 끝나면 상쇄분도 함께 버립니다. 남겨 두면 다음 발의 초반을 이유 없이 깎습니다.
+    /// </remarks>
+    private static float EvaluateEnvelopeOffset(
+        ImpulseEnvelope envelope,
+        float duration,
+        AnimationCurve curve,
+        ref float absorb)
+    {
+        float sum = envelope.Evaluate(duration, curve, Time.deltaTime);
+
+        if (envelope.ActiveCount == 0)
+        {
+            absorb = 0.0f;
+            return 0.0f;
+        }
+
+        bool absorbExceedsSum = Mathf.Abs(absorb) > Mathf.Abs(sum);
+        bool absorbFacesWrongWay = absorb != 0.0f && !Mathf.Approximately(Mathf.Sign(absorb), Mathf.Sign(sum));
+
+        if (absorbExceedsSum || absorbFacesWrongWay)
+        {
+            absorb = sum;
+        }
+
+        return sum - absorb;
+    }
+
+    /// <summary>
+    /// 세로 반동 오프셋을 상한 규칙에 맞게 제한합니다.
+    /// </summary>
+    /// <remarks>
+    /// 기존 방식은 <see cref="AddRecoil"/>에서 목표값을 쌓을 때 이 제한을 걸었습니다.
+    /// 엔벨로프는 쌓아 두는 목표값이 없어 합을 낼 때마다 같은 규칙을 적용해야 합니다.
+    /// </remarks>
+    private float ClampPitchRecoilOffset(float offset)
+    {
+        if (m_usePitchOffsetCap)
+        {
+            return Mathf.Clamp(offset, -m_recoilMaxPitch, m_recoilMaxPitch);
+        }
+
+        float offsetMin = m_cinemachineTargetPitch - m_topClamp;      // 아래쪽 여유(음수)
+        float offsetMax = m_cinemachineTargetPitch - m_bottomClamp;   // 위쪽 여유(반동은 주로 이쪽)
+        return Mathf.Clamp(offset, offsetMin, offsetMax);
+    }
+
+    /// <summary>
+    /// 엔벨로프 방식에서 되잡기 입력을 상쇄분으로 흡수합니다.
+    /// </summary>
+    /// <param name="lookDelta">이번 프레임의 조준 입력입니다.</param>
+    /// <param name="currentOffset">지금 적용 중인 반동 오프셋입니다.</param>
+    /// <param name="absorb">상쇄 누적량입니다. 흡수한 만큼 늘립니다.</param>
+    /// <param name="sameSignOpposes">입력과 오프셋의 부호가 같을 때 되잡기인지 여부입니다.</param>
+    /// <returns>반동을 상쇄하고 남은 조준 입력입니다.</returns>
+    private static float AbsorbEnvelopeRecoil(
+        float lookDelta,
+        float currentOffset,
+        ref float absorb,
+        bool sameSignOpposes)
+    {
+        if (lookDelta == 0.0f || currentOffset == 0.0f)
+        {
+            return lookDelta;
+        }
+
+        bool opposes = sameSignOpposes
+            ? Mathf.Approximately(Mathf.Sign(lookDelta), Mathf.Sign(currentOffset))
+            : !Mathf.Approximately(Mathf.Sign(lookDelta), Mathf.Sign(currentOffset));
+
+        if (!opposes)
+        {
+            return lookDelta;
+        }
+
+        float absorbed = Mathf.Min(Mathf.Abs(lookDelta), Mathf.Abs(currentOffset));
+        absorb += absorbed * Mathf.Sign(currentOffset);
+        return lookDelta - absorbed * Mathf.Sign(lookDelta);
+    }
+
     private static float AbsorbRecoil(float lookDelta, ref float recoilTarget, bool sameSignOpposes)
     {
         if (lookDelta == 0.0f || recoilTarget == 0.0f)
@@ -1092,8 +1382,14 @@ public class ThirdPersonController : MonoBehaviour
             {
                 // 반동 반대 방향 조준 입력은 조준을 움직이기 전에 반동 목표부터 상쇄한다(되잡기 흡수 → 오버 컴펜세이션 방지).
                 // pitch: view = target − offset → 반동과 "같은 부호" 입력이 반동 반대(아래로). yaw: view = target + offset → "반대 부호"가 반동 반대.
-                pitchDelta = AbsorbRecoil(pitchDelta, ref m_recoilPitchTarget, sameSignOpposes: true);
-                yawDelta = AbsorbRecoil(yawDelta, ref m_recoilYawTarget, sameSignOpposes: false);
+                // 엔벨로프 축은 깎을 목표값이 없어 상쇄분을 따로 누적합니다.
+                pitchDelta = m_usePitchRecoilEnvelope
+                    ? AbsorbEnvelopeRecoil(pitchDelta, m_recoilPitchOffset, ref m_pitchRecoilAbsorb, sameSignOpposes: true)
+                    : AbsorbRecoil(pitchDelta, ref m_recoilPitchTarget, sameSignOpposes: true);
+
+                yawDelta = m_useYawRecoilEnvelope
+                    ? AbsorbEnvelopeRecoil(yawDelta, m_recoilYawOffset, ref m_yawRecoilAbsorb, sameSignOpposes: false)
+                    : AbsorbRecoil(yawDelta, ref m_recoilYawTarget, sameSignOpposes: false);
             }
 
             m_cinemachineTargetYaw += yawDelta;
@@ -1103,29 +1399,7 @@ public class ThirdPersonController : MonoBehaviour
         m_cinemachineTargetYaw = ClampAngle(m_cinemachineTargetYaw, float.MinValue, float.MaxValue);
         m_cinemachineTargetPitch = ClampAngle(m_cinemachineTargetPitch, m_bottomClamp, m_topClamp);
 
-        // 사격 반동 오프셋 처리: 사격 중(마지막 발사 이후 지연 이내)에는 벌어진 오프셋을 유지·누적하고,
-        // 사격을 멈춰 지연이 지난 뒤에야 원래 조준(0)으로 부드럽게 복귀(자동 회복)시킵니다.
-        // 플레이어 입력값(m_cinemachineTarget*) 자체는 건드리지 않으므로 조준 입력이 회복에 먹히지 않습니다.
-        // 회복: 반동 목표를 지연 후 0으로 되돌립니다(자동 회복). 실제 소비 오프셋은 아래에서 목표를 추종합니다.
-        if (Time.time - m_lastRecoilTime > m_recoilRecoveryDelay)
-        {
-            float recoveryFactor = Mathf.Clamp01(Time.deltaTime * m_recoilRecoverySpeed);
-            m_recoilPitchTarget = Mathf.Lerp(m_recoilPitchTarget, 0.0f, recoveryFactor);
-            m_recoilYawTarget = Mathf.Lerp(m_recoilYawTarget, 0.0f, recoveryFactor);
-        }
-
-        // 온셋 보간: 소비 오프셋이 목표를 향해 지수 이징(앞쪽으로 쏠려 빠르게 붙었다 정착). 끄면 즉시 목표와 동일(기존 계단식).
-        if (m_recoilOnsetInterp)
-        {
-            float onsetFactor = Mathf.Clamp01(Time.deltaTime * Mathf.Max(0.0f, m_recoilOnsetSpeed));
-            m_recoilPitchOffset = Mathf.Lerp(m_recoilPitchOffset, m_recoilPitchTarget, onsetFactor);
-            m_recoilYawOffset = Mathf.Lerp(m_recoilYawOffset, m_recoilYawTarget, onsetFactor);
-        }
-        else
-        {
-            m_recoilPitchOffset = m_recoilPitchTarget;
-            m_recoilYawOffset = m_recoilYawTarget;
-        }
+        UpdateRecoilOffsets();
 
         if (m_cinemachineCameraTarget != null)
         {
@@ -1340,4 +1614,20 @@ public class ThirdPersonController : MonoBehaviour
             AudioSource.PlayClipAtPoint(m_landingAudioClip, transform.TransformPoint(m_controller.center), m_footstepAudioVolume);
         }
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 지금 인스펙터에 들어 있는 값을 이 컴포넌트가 물고 있는 밸런스 SO와 CSV로 되돌려 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이테스트로 잡은 값을 정본으로 승격시키는 용도입니다.
+    /// 이 작업을 하지 않으면 인스펙터에서 만진 값은 다음 실행의 Awake에서 SO 값에 덮여 사라집니다.
+    /// 에디터 전용입니다. SO와 CSV는 프로젝트 자산이라 빌드에서는 쓸 수 없습니다.
+    /// </remarks>
+    [ContextMenu("밸런스: 현재 인스펙터 → SO + CSV 갱신")]
+    private void ReverseSyncBalanceToAsset()
+    {
+        UnityEngine.Debug.Log($"[BalanceReverseSync] {name}: {BalanceReverseSyncHook.Run(this)}", this);
+    }
+#endif
 }

@@ -32,6 +32,8 @@ public class CombatState : EnemyStateBase
 
     public override void Enter()
     {
+        Controller.PlayAlertFeedback();
+
         // 교전에 들어가면 비전투 감지 보호를 해제합니다. 이제 AI 조작 캐릭터도 감지 대상입니다(§5.6).
         Controller.Sensor?.SetEngaged(true);
 
