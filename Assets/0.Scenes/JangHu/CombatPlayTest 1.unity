@@ -68594,7 +68594,8 @@ MonoBehaviour:
   m_trackingHoldDuration: 2
   m_noiseHearingMultiplier: 1
   m_noiseAwarenessThreshold: 1
-  m_noiseAwarenessDecayPerSecond: 0.35
+  m_noiseAwarenessDecayPerSecond: 0.15
+  m_debugDrawNoiseGauge: 1
   m_reevaluateInterval: 1
   m_switchPathDistanceDelta: 2
 --- !u!114 &1007016852
@@ -104399,7 +104400,8 @@ MonoBehaviour:
   m_trackingHoldDuration: 2
   m_noiseHearingMultiplier: 1
   m_noiseAwarenessThreshold: 1
-  m_noiseAwarenessDecayPerSecond: 0.35
+  m_noiseAwarenessDecayPerSecond: 0.15
+  m_debugDrawNoiseGauge: 1
   m_reevaluateInterval: 1
   m_switchPathDistanceDelta: 2
 --- !u!114 &1500710495
