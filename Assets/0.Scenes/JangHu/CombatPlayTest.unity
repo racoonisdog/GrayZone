@@ -10154,7 +10154,7 @@ MonoBehaviour:
   m_hitscanRange: 100
   m_hitscanLayerMask:
     serializedVersion: 2
-    m_Bits: 4294966783
+    m_Bits: 4294958079
   m_hipfireMinSpread: 0
   m_hipfireMaxSpread: 10
   m_hipfireCurrentSpread: 0
@@ -68282,7 +68282,6 @@ MonoBehaviour:
   attackDirectionLockTime: 0.25
   attackImpactTime: 0.45
   attackRecoveryDuration: 0.75
-  destroyDelay: 3
 --- !u!136 &1007016848
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -103611,7 +103610,6 @@ MonoBehaviour:
   attackDirectionLockTime: 0.25
   attackImpactTime: 0.45
   attackRecoveryDuration: 0.75
-  destroyDelay: 3
 --- !u!114 &1500710493
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -103987,7 +103985,7 @@ MonoBehaviour:
   m_hitscanRange: 100
   m_hitscanLayerMask:
     serializedVersion: 2
-    m_Bits: 4294966783
+    m_Bits: 4294958079
   m_hipfireMinSpread: 4
   m_hipfireMaxSpread: 10
   m_hipfireCurrentSpread: 4
@@ -138547,6 +138545,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1977313896}
   - component: {fileID: 910000000000010003}
+  - component: {fileID: 910000000000010004}
   m_Layer: 0
   m_Name: FieldManager
   m_TagString: Untagged
@@ -151261,6 +151260,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FieldManager
   m_squadManager: {fileID: 1051888686}
+  m_surfaceFeedbackSystem: {fileID: 910000000000010004}
+--- !u!114 &910000000000010004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1977313895}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f03db73e1dcc40cea4a1f97f95139775, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SurfaceFeedbackSystem
+  m_defaultProfile: {fileID: 0}
+  m_profiles: []
 --- !u!1 &919132148585225536
 GameObject:
   m_ObjectHideFlags: 0
