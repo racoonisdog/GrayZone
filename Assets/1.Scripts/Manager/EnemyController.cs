@@ -60,6 +60,19 @@ public class EnemyController : MonoBehaviour
     /// <summary>시야에서 벗어난 뒤에도 대상의 실시간 위치를 계속 아는 시간입니다.</summary>
     [SerializeField] private float loseSightDelay = 2f;
 
+    [Header("Noise")]
+    /// <summary>소음 위치로 이동할 때의 속도입니다.</summary>
+    [SerializeField] private float noiseChaseSpeed = 2f;
+
+    /// <summary>소음 위치에 도착했다고 볼 거리입니다.</summary>
+    [SerializeField] private float noiseArriveDistance = 1.5f;
+
+    /// <summary>소음 위치 도착 후 주변을 수색하는 전체 시간입니다.</summary>
+    [SerializeField] private float noiseSearchDuration = 8f;
+
+    /// <summary>소음 수색 중 배회할 반경입니다.</summary>
+    [SerializeField] private float noiseSearchRadius = 5f;
+
     [Header("Target")]
     /// <summary>현재 대상을 다시 고를지 판단하는 주기입니다. 이 주기가 곧 대상의 최소 유지 시간입니다.</summary>
     [SerializeField] private float targetReevaluateInterval = 1f;
@@ -84,10 +97,6 @@ public class EnemyController : MonoBehaviour
     /// <summary>판정 후 다음 행동까지의 후딜레이입니다. 이 값이 곧 공격 간격입니다.</summary>
     [SerializeField] private float attackRecoveryDuration = 0.75f;
 
-    [Header("Dead")]
-    /// <summary>사망 애니메이션 이후 Enemy 오브젝트를 제거하기까지 기다리는 시간입니다.</summary>
-    [SerializeField] private float destroyDelay = 3f;
-
     // =========================
     // 컴포넌트 참조
     // =========================
@@ -106,6 +115,9 @@ public class EnemyController : MonoBehaviour
     /// <summary>공격 가능 여부, 쿨다운, 실제 피해 적용을 담당하는 공격 모듈입니다.</summary>
     private EnemyAttack enemyAttack;
 
+    /// <summary>선택 사항인 물리 래그돌 전환 컴포넌트입니다.</summary>
+    private RagdollController ragdollController;
+
     /// <summary>행동·피격·사망 피드백의 출력 컴포넌트입니다.</summary>
     private EnemyFeedbackEmitter feedbackEmitter;
 
@@ -114,6 +126,15 @@ public class EnemyController : MonoBehaviour
     // =========================
     /// <summary>비전투 배회 상태입니다.</summary>
     public WanderState Wander { get; private set; }
+
+    /// <summary>비전투 소음 경계(두리번) 상태입니다.</summary>
+    public AlertState Alert { get; private set; }
+
+    /// <summary>비전투 소음 추적 상태입니다.</summary>
+    public NoiseChaseState NoiseChase { get; private set; }
+
+    /// <summary>비전투 소음 수색 상태입니다.</summary>
+    public NoiseSearchState NoiseSearch { get; private set; }
 
     /// <summary>교전 엄브렐라 상태입니다.</summary>
     public CombatState Combat { get; private set; }
@@ -145,6 +166,15 @@ public class EnemyController : MonoBehaviour
 
     /// <summary>공격 모듈입니다.</summary>
     public EnemyAttack Attack => enemyAttack;
+
+    /// <summary>
+    /// 물리 골격이 준비되어 있으면 현재 자세에서 래그돌로 전환합니다.
+    /// </summary>
+    /// <returns>래그돌을 활성화했으면 true이고, 구성이 없으면 false입니다.</returns>
+    public bool TryActivateRagdoll()
+    {
+        return ragdollController != null && ragdollController.TryActivateRagdoll();
+    }
 
     /// <summary>배회 상태 진입 피드백을 출력합니다.</summary>
     public void PlayIdleFeedback() => EnsureFeedbackEmitter()?.PlayIdle(m_feedback);
@@ -180,6 +210,18 @@ public class EnemyController : MonoBehaviour
     /// <summary>대상 방향 회전 보간 속도입니다.</summary>
     public float RotationSpeed => rotationSpeed;
 
+    /// <summary>소음 위치로 이동할 때의 속도입니다.</summary>
+    public float NoiseChaseSpeed => noiseChaseSpeed;
+
+    /// <summary>소음 위치에 도착했다고 볼 거리입니다.</summary>
+    public float NoiseArriveDistance => noiseArriveDistance;
+
+    /// <summary>소음 수색 전체 시간입니다.</summary>
+    public float NoiseSearchDuration => noiseSearchDuration;
+
+    /// <summary>소음 수색 중 배회할 반경입니다.</summary>
+    public float NoiseSearchRadius => noiseSearchRadius;
+
     /// <summary>각성 준비(경계) 시간입니다.</summary>
     public float AlertDuration => alertDuration;
 
@@ -206,9 +248,6 @@ public class EnemyController : MonoBehaviour
 
     /// <summary>판정 후 후딜레이이며 곧 공격 간격입니다.</summary>
     public float AttackRecoveryDuration => attackRecoveryDuration;
-
-    /// <summary>사망 후 제거까지 대기 시간입니다.</summary>
-    public float DestroyDelay => destroyDelay;
 
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
     public EnemyBalanceSO Balance => m_balanceSO;
@@ -254,6 +293,10 @@ public class EnemyController : MonoBehaviour
         rotationSpeed = balance.RotationSpeed;
         idleTypeMin = balance.IdleTypeMin;
         idleTypeMax = balance.IdleTypeMax;
+        noiseChaseSpeed = balance.NoiseChaseSpeed;
+        noiseArriveDistance = balance.NoiseArriveDistance;
+        noiseSearchDuration = balance.NoiseSearchDuration;
+        noiseSearchRadius = balance.NoiseSearchRadius;
         alertDuration = balance.AlertDuration;
         loseSightDelay = balance.LoseSightDelay;
         targetReevaluateInterval = balance.TargetReevaluateInterval;
@@ -263,8 +306,6 @@ public class EnemyController : MonoBehaviour
         attackRecoveryDuration = balance.AttackRecoveryDuration;
         hitStunDuration = balance.HitStunDuration;
         hitStunCooldown = balance.HitStunCooldown;
-        destroyDelay = balance.DestroyDelay;
-
         targetSensor?.ApplyBalance(balance);
         enemyAttack?.ApplyBalance(balance);
         enemyHealth?.SetMaxHP(balance.MaxHp);
@@ -369,6 +410,16 @@ public class EnemyController : MonoBehaviour
     /// <summary>애니메이터를 기본 상태로 되돌리는 트리거입니다.</summary>
     private static readonly int AnimReset = Animator.StringToHash("DoReset");
 
+    /// <summary>소음 경계(두리번) 중인지 여부입니다. 클립은 `WW_LookAround`를 씁니다.</summary>
+    /// <remarks>
+    /// 트리거가 아니라 bool입니다. 두리번은 지속 상태이고 나가는 길이 셋(추적/배회/교전)이라
+    /// 트리거로는 "지금 경계 중인가"를 되읽을 수 없습니다.
+    /// </remarks>
+    private static readonly int AnimIsAlert = Animator.StringToHash("IsAlert");
+
+    /// <summary>소음 인지 게이지의 진행도입니다. 두리번 강도 블렌드에 쓰는 선택 파라미터입니다.</summary>
+    private static readonly int AnimAlertLevel = Animator.StringToHash("AlertLevel");
+
     /// <summary>
     /// 애니메이터를 기본 상태로 되돌립니다.
     /// </summary>
@@ -431,6 +482,55 @@ public class EnemyController : MonoBehaviour
     public void SetInAttackRangeAnimation(bool inRange)
     {
         animator?.SetBool(AnimInAttackRange, inRange);
+    }
+
+    /// <summary>
+    /// 소음 경계(두리번) 상태 여부를 애니메이터에 전달합니다.
+    /// </summary>
+    /// <param name="alert">경계 중이면 true입니다.</param>
+    /// <remarks>
+    /// <b>파라미터가 없어도 동작해야 합니다.</b> 두리번 클립과 애니메이터 배선은 별도로 진행 중이며,
+    /// 없는 파라미터에 값을 넣으면 유니티가 매 호출마다 경고를 찍어 콘솔이 묻힙니다.
+    /// 배선이 끝나면 이 확인은 통과하므로 코드를 되돌릴 필요가 없습니다.
+    /// </remarks>
+    public void SetAlertAnimation(bool alert)
+    {
+        if (animator == null || !HasAnimatorParameter(AnimIsAlert))
+        {
+            return;
+        }
+
+        animator.SetBool(AnimIsAlert, alert);
+
+        // 두리번 강도 블렌드는 선택 사항입니다. 파라미터를 두지 않아도 경계 자체는 동작합니다.
+        if (HasAnimatorParameter(AnimAlertLevel))
+        {
+            animator.SetFloat(AnimAlertLevel, targetSensor != null ? targetSensor.NoiseAwareness01 : 0f);
+        }
+    }
+
+    /// <summary>지정한 파라미터가 현재 애니메이터에 선언되어 있는지 확인합니다.</summary>
+    /// <remarks>
+    /// 매 프레임 부르는 경로가 아니므로 순회 비용은 문제가 되지 않습니다.
+    /// 상태 진입·이탈에서만 호출합니다.
+    /// </remarks>
+    private bool HasAnimatorParameter(int nameHash)
+    {
+        if (animator == null)
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i].nameHash == nameHash)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>현재 상태를 빠져나가고 지정한 상태로 진입합니다.</summary>
@@ -560,6 +660,11 @@ public class EnemyController : MonoBehaviour
             enemyAttack = gameObject.AddComponent<EnemyAttack>();
         }
 
+        if (ragdollController == null)
+        {
+            ragdollController = GetComponent<RagdollController>();
+        }
+
         if (m_feedback != null)
         {
             EnsureFeedbackEmitter();
@@ -586,6 +691,9 @@ public class EnemyController : MonoBehaviour
     private void CreateStates()
     {
         Wander = new WanderState(this);
+        Alert = new AlertState(this);
+        NoiseChase = new NoiseChaseState(this);
+        NoiseSearch = new NoiseSearchState(this);
         Combat = new CombatState(this);
         Dead = new DeadState(this);
     }

@@ -18,7 +18,6 @@ public static class EnemyAnimatorWiring
 {
     private const string ControllerPath = "Assets/3.Resources/Animation/Enemy/Enemy.controller";
     private const string ClipFolder = "Assets/3.Resources/Animation/Enemy/";
-    private const string BalancePath = "Assets/5.Data/ScriptableObject/Enemy/EnemyBalance.asset";
 
     /// <summary>이동 방향 하나에 대응하는 클립과 블렌드 위치입니다.</summary>
     private readonly struct DirectionEntry
@@ -86,7 +85,7 @@ public static class EnemyAnimatorWiring
 
         WireDirectional(trees, "Walk", WalkDirections, log);
         WireDirectional(trees, "Run", RunDirections, log);
-        FixSpeedThresholds(trees, log);
+        EnemySpeedThresholdSync.Apply(controller, log);
         WireAttackSides(controller, log);
         FixAttackTransitions(controller, log);
 
@@ -406,68 +405,6 @@ public static class EnemyAnimatorWiring
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// 이동 속도 축의 임계값을 밸런스 SO의 실제 속도에 맞춥니다.
-    /// </summary>
-    /// <remarks>
-    /// 코드가 <c>MoveSpeed</c>에 넣는 값은 NavMeshAgent의 실제 속력(m/s)입니다.
-    /// 임계값이 그 범위 밖이면 블렌드 트리가 가장 가까운 쪽으로 붙여 버려, 아무리 달려도 대기 동작만 나옵니다.
-    /// 그래서 배회 속도와 추격 속도를 그대로 경계로 씁니다.
-    ///
-    /// 속도를 0~1로 정규화해 넘기는 방법도 있지만, 그러면 최대 속도 기준을 따로 정해야 합니다.
-    /// 플레이어와 변이체가 같은 밸런스 값을 쓰지 않으므로 각자 실측 속도를 쓰는 편이 단순합니다.
-    /// 대신 SO의 속도를 바꾸면 이 도구를 다시 돌려야 합니다.
-    /// </remarks>
-    private static void FixSpeedThresholds(Dictionary<string, BlendTree> trees, List<string> log)
-    {
-        BlendTree root = null;
-        foreach (KeyValuePair<string, BlendTree> pair in trees)
-        {
-            // 자식으로 Idle/Walk/Run 트리를 들고 있는 것이 속도 축 트리입니다.
-            foreach (ChildMotion child in pair.Value.children)
-            {
-                if (child.motion != null && child.motion.name == "Walk")
-                {
-                    root = pair.Value;
-                    break;
-                }
-            }
-
-            if (root != null)
-            {
-                break;
-            }
-        }
-
-        if (root == null)
-        {
-            log.Add("속도 축 블렌드 트리를 찾지 못했습니다.");
-            return;
-        }
-
-        EnemyBalanceSO balance = AssetDatabase.LoadAssetAtPath<EnemyBalanceSO>(BalancePath);
-        if (balance == null)
-        {
-            log.Add($"밸런스 SO를 찾지 못해 임계값을 바꾸지 않았습니다: {BalancePath}");
-            return;
-        }
-
-        root.blendParameter = "MoveSpeed";
-        root.useAutomaticThresholds = false;
-
-        ChildMotion[] children = root.children;
-        for (int i = 0; i < children.Length; i++)
-        {
-            string name = children[i].motion != null ? children[i].motion.name : string.Empty;
-            if (name == "Idle") children[i].threshold = 0f;
-            else if (name == "Walk") children[i].threshold = balance.WanderSpeed;
-            else if (name == "Run") children[i].threshold = balance.ChaseSpeed;
-        }
-
-        root.children = children;
-        log.Add($"속도 임계값을 Idle 0 / Walk {balance.WanderSpeed} / Run {balance.ChaseSpeed}로 맞췄습니다.");
     }
 
     /// <summary>지정한 이름과 형식의 파라미터가 있는지 확인하고, 없거나 형식이 다르면 맞춥니다.</summary>

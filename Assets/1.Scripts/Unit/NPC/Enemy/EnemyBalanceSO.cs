@@ -61,6 +61,31 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("시야에서 벗어난 뒤에도 대상의 실시간 위치를 계속 아는 시간(초)입니다. 끝나면 마지막 확인 위치만 남습니다.")]
     [SerializeField] private float m_loseSightDelay = 2f;
 
+    [Header("Noise")]
+    // 이전 이름은 m_noiseDetectionThreshold(감지 기준값 0.15)였습니다. 의미가 "기준"에서 "배수"로 뒤집혀
+    // [FormerlySerializedAs]를 붙이지 않았습니다. 붙이면 0.15가 배수로 들어와 도달 거리의 15%만 듣는
+    // 사실상 귀머거리가 되는데, 컴파일도 통과하고 에러도 없어 조용히 어긋납니다.
+    [Tooltip("소음의 도달 거리에 곱하는 청각 배수입니다. 1이면 도달 거리 그대로, 1보다 크면 더 멀리 듣습니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseHearingMultiplier = 1f;
+
+    [Tooltip("소음 인지 게이지가 이 값에 닿으면 소음 위치를 추적하기 시작합니다. 낮으면 금방 알아챕니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseAwarenessThreshold = 1f;
+
+    [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.35f;
+
+    [Tooltip("소음 위치로 이동할 때의 속도(m/s)입니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseChaseSpeed = 2f;
+
+    [Tooltip("소음 위치에 도착했다고 볼 거리(m)입니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseArriveDistance = 1.5f;
+
+    [Tooltip("소음 위치 도착 후 주변을 수색하는 전체 시간(초)입니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseSearchDuration = 8f;
+
+    [Tooltip("소음 수색 중 배회할 반경(m)입니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseSearchRadius = 5f;
+
     [Header("Target Selection")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기(초)입니다. 이 주기 자체가 대상의 최소 유지 시간이 됩니다.")]
     [SerializeField] private float m_targetReevaluateInterval = 1f;
@@ -96,10 +121,6 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
 
     [Tooltip("한 번의 공격으로 피해를 줄 수 있는 최대 캐릭터 수입니다.")]
     [SerializeField] private int m_attackMaxTargets = 1;
-
-    [Header("Death")]
-    [Tooltip("사망 상태 진입 후 적 오브젝트를 제거하기까지 기다리는 시간(초)입니다.")]
-    [SerializeField] private float m_destroyDelay = 3f;
 
     /// <summary>테이블과 런타임에서 사용하는 고정 적 ID입니다.</summary>
     public string EnemyId => string.IsNullOrWhiteSpace(m_enemyId) ? name : m_enemyId.Trim();
@@ -137,6 +158,28 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     /// <summary>대기 동작 혼합 비율의 최댓값입니다.</summary>
     /// <remarks>뒤집혀 적혀 있으면 둘을 바꿔 읽습니다. 뒤집힌 범위로는 값이 나오지 않기 때문입니다.</remarks>
     public float IdleTypeMax => Mathf.Max(m_idleTypeMin, m_idleTypeMax);
+
+    /// <summary>소음의 도달 거리에 곱하는 청각 배수입니다.</summary>
+    public float NoiseHearingMultiplier => Mathf.Max(0f, m_noiseHearingMultiplier);
+
+    /// <summary>소음 인지 게이지의 한계치입니다.</summary>
+    /// <remarks>0이면 소음을 듣는 즉시 알아채므로 최소값을 두지 않습니다.</remarks>
+    public float NoiseAwarenessThreshold => Mathf.Max(0f, m_noiseAwarenessThreshold);
+
+    /// <summary>소음 인지 게이지의 초당 감소량입니다.</summary>
+    public float NoiseAwarenessDecayPerSecond => Mathf.Max(0f, m_noiseAwarenessDecayPerSecond);
+
+    /// <summary>소음 위치로 이동할 때의 속도(m/s)입니다.</summary>
+    public float NoiseChaseSpeed => Mathf.Max(0f, m_noiseChaseSpeed);
+
+    /// <summary>소음 위치에 도착했다고 볼 거리(m)입니다.</summary>
+    public float NoiseArriveDistance => Mathf.Max(0.1f, m_noiseArriveDistance);
+
+    /// <summary>소음 수색 전체 시간(초)입니다.</summary>
+    public float NoiseSearchDuration => Mathf.Max(0f, m_noiseSearchDuration);
+
+    /// <summary>소음 수색 중 배회할 반경(m)입니다.</summary>
+    public float NoiseSearchRadius => Mathf.Max(0.1f, m_noiseSearchRadius);
 
     /// <summary>시야 감지 거리(m)입니다.</summary>
     public float SightRange => Mathf.Max(0f, m_sightRange);
@@ -176,8 +219,5 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
 
     /// <summary>한 번의 공격이 피해를 줄 수 있는 최대 캐릭터 수입니다.</summary>
     public int AttackMaxTargets => Mathf.Max(1, m_attackMaxTargets);
-
-    /// <summary>사망 후 오브젝트 제거 지연 시간(초)입니다.</summary>
-    public float DestroyDelay => Mathf.Max(0f, m_destroyDelay);
 
 }

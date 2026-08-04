@@ -2,20 +2,18 @@ using UnityEngine;
 using UnityEngine.AI;
 
 /// <summary>
-/// 비전투 배회 상태입니다. 앵커 지점 주변을 이동하며 각성 조건(현재는 시야 감지)을 확인합니다.
+/// 비전투 배회 상태입니다. 앵커 지점 주변을 이동하며 각성 조건(시야 감지·소음)을 확인합니다.
 /// </summary>
 /// <remarks>
-/// 슬라이스 2: 배회 이동 + 시야 감지 → 교전 전이. 앵커는 진입 시점의 위치로 잡으므로,
-/// 교전 이탈 후 재진입하면 이탈 지점 주변을 배회한다(설계 §6).
-/// TODO(후속): 휴면 배치 구분, 소음/근접/경고 각성, 각성 준비(AwakenState) 경유.
+/// 앵커는 진입 시점의 위치로 잡으므로, 교전이나 수색을 마치고 재진입하면 그 지점 주변을 배회합니다(§5.3.3).
+/// 배회 중인 개체는 이미 각성한 상태이므로 소음을 감지해도 각성 준비 시간을 적용하지 않고
+/// 바로 소음 추적으로 전환합니다(§5.3.3).
+/// TODO(후속): 휴면 배치 구분과 각성 준비(AwakenState) 경유.
 /// </remarks>
 public class WanderState : EnemyStateBase
 {
     /// <summary>배회 기준점입니다. 진입 시점 위치로 잡습니다.</summary>
     private Vector3 m_anchor;
-
-    /// <summary>다음 배회 목적지 갱신 가능 시각입니다.</summary>
-    private float m_nextRepathTime;
 
     /// <summary>배회 상태를 생성합니다.</summary>
     public WanderState(EnemyController controller) : base(controller) { }
@@ -24,7 +22,7 @@ public class WanderState : EnemyStateBase
     {
         Controller.PlayIdleFeedback();
 
-        // 배회 기준점 = 진입 시점 위치(최초 스폰 또는 교전 이탈 지점).
+        // 배회 기준점 = 진입 시점 위치(최초 스폰, 교전 이탈 지점 또는 수색 종료 지점).
         m_anchor = Controller.transform.position;
 
         NavMeshAgent agent = Controller.Agent;
@@ -34,7 +32,7 @@ public class WanderState : EnemyStateBase
             agent.isStopped = false;
         }
 
-        PickNewDestination();
+        PickWanderDestination(m_anchor, Controller.WanderRadius);
     }
 
     public override void Tick()
@@ -50,34 +48,26 @@ public class WanderState : EnemyStateBase
                 Controller.TransitionTo(Controller.Combat);
                 return;
             }
+
+            // 소음이 들리면 곧바로 추적하지 않고 먼저 경계(두리번)로 넘어갑니다.
+            // 인지 게이지가 한계에 닿아야 소음 위치로 이동합니다(기획 확정 2026-08-03).
+            // 직접 인식을 먼저 보는 것은 소음보다 확실한 정보이기 때문입니다.
+            //
+            // 게이지가 이미 만충이면 경계를 건너뛰고 바로 추적합니다.
+            // 가까운 총성처럼 한 번에 한계를 넘는 소음에서 두리번 한 프레임이 끼는 것을 막습니다.
+            if (sensor.IsNoiseAwarenessFull)
+            {
+                Controller.TransitionTo(Controller.NoiseChase);
+                return;
+            }
+
+            if (sensor.IsNoiseAlert)
+            {
+                Controller.TransitionTo(Controller.Alert);
+                return;
+            }
         }
 
-        NavMeshAgent agent = Controller.Agent;
-        if (agent == null || !agent.isOnNavMesh || agent.pathPending)
-        {
-            return;
-        }
-
-        // 목적지에 도달했거나 갱신 주기가 지나면 새 배회 목적지를 고른다.
-        bool arrived = agent.remainingDistance <= agent.stoppingDistance + 0.2f;
-        if (arrived || Time.time >= m_nextRepathTime)
-        {
-            PickNewDestination();
-        }
-    }
-
-    /// <summary>앵커 주변 NavMesh 위에서 새 배회 목적지를 골라 이동을 지시합니다.</summary>
-    private void PickNewDestination()
-    {
-        m_nextRepathTime = Time.time + Controller.WanderInterval;
-
-        Vector3 candidate = m_anchor + Random.insideUnitSphere * Controller.WanderRadius;
-        candidate.y = Controller.transform.position.y;
-
-        Vector3 destination = NavMesh.SamplePosition(candidate, out NavMeshHit hit, Controller.WanderRadius, NavMesh.AllAreas)
-            ? hit.position
-            : Controller.transform.position;
-
-        Controller.MoveTo(destination);
+        TickWanderMovement(m_anchor, Controller.WanderRadius);
     }
 }

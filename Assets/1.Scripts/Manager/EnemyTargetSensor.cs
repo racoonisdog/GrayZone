@@ -92,6 +92,16 @@ public class EnemyTargetSensor : MonoBehaviour
     [Tooltip("시야에서 벗어난 뒤에도 실시간 위치를 계속 아는 시간입니다.")]
     [SerializeField] private float m_trackingHoldDuration = 2f;
 
+    [Header("Noise")]
+    [Tooltip("소음의 도달 거리에 곱하는 청각 배수입니다. 1이면 도달 거리 그대로, 1보다 크면 더 멀리 듣습니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseHearingMultiplier = 1f;
+
+    [Tooltip("소음 인지 게이지가 이 값에 닿으면 소음 위치를 추적하기 시작합니다. 낮으면 금방 알아챕니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseAwarenessThreshold = 1f;
+
+    [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.35f;
+
     [Header("Target Selection")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기입니다.")]
     [SerializeField] private float m_reevaluateInterval = 1f;
@@ -119,6 +129,54 @@ public class EnemyTargetSensor : MonoBehaviour
 
     /// <summary>이 변이체가 교전 상태인지 여부입니다. 비전투 감지 보호 판단에 사용합니다.</summary>
     private bool m_isEngaged;
+
+    // =========================
+    // 받아들인 소음 (대상 정보와 분리)
+    // =========================
+    // 소음은 캐릭터를 유효 대상으로 만들지 않으므로 TargetInfo에 섞지 않습니다(§5.4.4).
+    // 우선순위를 발생 시점에만 평가하므로 "지금 추적 중인 소음" 하나만 들고 있습니다.
+
+    /// <summary>받아들인 소음이 있는지 여부입니다.</summary>
+    private bool m_hasNoise;
+
+    /// <summary>지금 추적 중인 소음의 소음원 식별값입니다.</summary>
+    private int m_noiseSourceId;
+
+    /// <summary>지금 추적 중인 소음의 위치입니다.</summary>
+    private Vector3 m_noisePosition;
+
+    /// <summary>지금 추적 중인 소음의 감지 강도입니다. 다른 소음원과의 비교에 씁니다.</summary>
+    private float m_noiseIntensity;
+
+    /// <summary>지금 추적 중인 소음의 발생 시점입니다. 강도가 같을 때의 비교에 씁니다.</summary>
+    private float m_noiseTime;
+
+    /// <summary>마지막 확인 이후 소음이 새로 갱신됐는지 여부입니다. 상태가 소비합니다.</summary>
+    private bool m_noiseUpdated;
+
+    /// <summary>
+    /// 소음 인지 게이지입니다. 소음을 들을 때마다 그 강도만큼 쌓이고 시간이 지나면 줄어듭니다.
+    /// </summary>
+    /// <remarks>
+    /// 들리는 즉시 추적하지 않고 이 값이 한계에 닿을 때까지 두리번거리게 만드는 장치입니다.
+    /// 큰 소리는 한 번에 한계를 넘고 작은 소리는 여러 번 필요하므로, 예외 코드 없이 수치로만
+    /// "총성은 즉시, 발소리는 반복해야 들킴"이 나옵니다.
+    /// 설계 근거: 기획 확정(2026-08-03). 공용 문서 §5.3.2의 각성 준비 시간을 누적 방식으로 일반화한 것입니다.
+    /// </remarks>
+    private float m_noiseAwareness;
+
+    /// <summary>
+    /// 인지 게이지가 한계에 닿았는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 게이지 값을 매번 한계치와 비교하지 않고 별도 플래그로 잠급니다.
+    /// 비교로 하면 도달 판정이 구조적으로 실패합니다. 게이지가 한계치에서 잘리는데 감소가 판정보다 먼저 돌아
+    /// 값이 항상 한계치보다 조금 낮아지기 때문입니다. 실측에서 만충인데도 추적으로 넘어가지 않아 발견했습니다.
+    ///
+    /// 의미상으로도 맞습니다. "다 쌓이면 알아챈다"는 한 번 일어나면 되돌지 않는 사건이므로
+    /// 매 프레임 다시 판정할 대상이 아닙니다.
+    /// </remarks>
+    private bool m_noiseAwarenessReached;
 
     /// <summary>실제로 사용할 시야 차단 레이어입니다. 지정이 없으면 기본값으로 채웁니다.</summary>
     private int m_resolvedObstacleMask;
@@ -166,6 +224,9 @@ public class EnemyTargetSensor : MonoBehaviour
         m_trackingHoldDuration = balance.LoseSightDelay;
         m_reevaluateInterval = balance.TargetReevaluateInterval;
         m_switchPathDistanceDelta = balance.TargetSwitchPathDistanceDelta;
+        m_noiseHearingMultiplier = balance.NoiseHearingMultiplier;
+        m_noiseAwarenessThreshold = balance.NoiseAwarenessThreshold;
+        m_noiseAwarenessDecayPerSecond = balance.NoiseAwarenessDecayPerSecond;
     }
 
     private void Awake()
@@ -179,6 +240,22 @@ public class EnemyTargetSensor : MonoBehaviour
         {
             m_squadManager = FindFirstObjectByType<SquadManager>();
         }
+    }
+
+    /// <summary>소음 수신 목록에 등록합니다.</summary>
+    /// <remarks>
+    /// 소음 발신마다 씬을 훑지 않으려면 듣는 쪽을 미리 등록해 두어야 합니다.
+    /// 사망 시 이 컴포넌트를 끄면 자동으로 빠지므로 시체가 소음을 듣지 않습니다.
+    /// </remarks>
+    private void OnEnable()
+    {
+        NoiseSystem.Register(this);
+    }
+
+    /// <summary>소음 수신 목록에서 빠집니다.</summary>
+    private void OnDisable()
+    {
+        NoiseSystem.Unregister(this);
     }
 
     /// <summary>
@@ -202,6 +279,10 @@ public class EnemyTargetSensor : MonoBehaviour
     public void UpdatePerception(bool force = false)
     {
         SyncSquadMembers();
+
+        // 게이지 감소는 시야 판정 주기와 무관하게 매 프레임 진행해야 합니다.
+        // 주기에 묶으면 감소가 뚝뚝 끊겨 "소리를 멈추면 서서히 잊는다"가 성립하지 않습니다.
+        DecayNoiseAwareness();
 
         if (!force && Time.time < m_nextPerceptionTime)
         {
@@ -392,15 +473,187 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <summary>
     /// 소음을 감지했을 때 추적할 위치를 받습니다.
     /// </summary>
-    /// <param name="worldPosition">소음이 발생한 위치입니다.</param>
-    /// <param name="intensity">거리 감쇠를 적용한 감지 강도입니다.</param>
+    /// <param name="noise">발생한 소음 이벤트입니다.</param>
     /// <remarks>
-    /// 슬라이스 2에서 구현합니다. 소음은 위치만 알려주며 캐릭터를 유효 대상으로 만들지 않습니다(§5.4.4).
-    /// 그래서 이 값은 대상 정보가 아니라 별도의 소음 추적 목적지로 보관해야 합니다.
+    /// 소음은 위치만 알려주며 캐릭터를 유효 대상으로 만들지 않습니다(§5.4.4).
+    /// 그래서 <see cref="TargetInfo"/>가 아니라 별도의 소음 추적 목적지로 보관합니다.
+    /// 대상 정보에 섞으면 소음만으로 공격 대상이 생겨 문서 규칙이 깨집니다.
+    ///
+    /// 우선순위는 이 순간에만 평가합니다. 매 프레임 모든 소음을 비교하지 않습니다(§5.4.4).
+    /// 그래서 "지금 추적 중인 소음" 하나만 들고 있으면 충분하며 이벤트 목록을 쌓지 않습니다.
+    ///
+    /// 판정 순서에 이유가 있습니다. 가청 -> 비전투 감지 보호 -> 교전 중 무시 -> 우선순위입니다.
+    /// 가청을 먼저 보는 것은 못 들은 소음에 다른 규칙을 적용할 필요가 없기 때문입니다.
+    ///
+    /// 강도는 가청 여부를 정하지 않고 우선순위 비교에만 씁니다. 도달 거리가 곧 들리는 거리입니다.
     /// </remarks>
-    public void NotifyNoise(Vector3 worldPosition, float intensity)
+    public void NotifyNoise(in NoiseEvent noise)
     {
-        // TODO(슬라이스 2): 소음 추적 목적지 보관과 우선순위 비교.
+        if (!noise.IsAudibleAt(transform.position, m_noiseHearingMultiplier))
+        {
+            return;
+        }
+
+        // 비전투 감지 보호: 교전에 들어가지 않았으면 AI 조작 캐릭터의 소음은 듣지 않습니다(§5.6).
+        // 발신 쪽에서 거르지 않는 이유는 같은 소음을 교전 중 개체는 듣고 비교전 개체는 무시해야 하기 때문입니다.
+        if (!m_isEngaged && noise.EmittedByAi)
+        {
+            return;
+        }
+
+        // 유효 대상을 쫓거나 공격 중이면 관련 없는 소음으로 교전을 중단하지 않습니다(§5.4.4).
+        // 교전 수색(유효 대상이 없는 교전 상태)은 아직 없으므로 그 분기는 두지 않았습니다.
+        if (m_isEngaged && HasAnyValidTarget)
+        {
+            return;
+        }
+
+        float intensity = noise.GetIntensityAt(transform.position);
+        if (!ShouldReplaceTrackedNoise(noise, intensity))
+        {
+            return;
+        }
+
+        m_hasNoise = true;
+        m_noiseSourceId = noise.SourceId;
+        m_noisePosition = noise.Position;
+        m_noiseIntensity = intensity;
+        m_noiseTime = noise.Time;
+        m_noiseUpdated = true;
+
+        // 인지 게이지는 감지 강도만큼 쌓입니다. 가까운 총성은 한 번에 한계를 넘고 발소리는 여러 번 필요합니다.
+        m_noiseAwareness = Mathf.Min(m_noiseAwareness + intensity, m_noiseAwarenessThreshold);
+
+        // 도달을 값 비교가 아니라 플래그로 잠급니다. 감소가 판정보다 먼저 돌기 때문입니다.
+        if (m_noiseAwareness >= m_noiseAwarenessThreshold)
+        {
+            m_noiseAwarenessReached = true;
+        }
+    }
+
+    /// <summary>
+    /// 소음 인지 게이지를 시간에 따라 줄입니다.
+    /// </summary>
+    /// <remarks>
+    /// 소음이 끊기면 게이지가 빠져 결국 경계를 풉니다. 이것이 "멈춰서 숨는다"를 실제 대응 수단으로 만듭니다.
+    /// 이미 한계에 닿아 추적으로 넘어간 뒤에는 <see cref="ClearNoiseAwareness"/>가 게이지를 비우므로
+    /// 여기서 별도 분기를 두지 않습니다.
+    /// </remarks>
+    private void DecayNoiseAwareness()
+    {
+        if (m_noiseAwareness <= 0f)
+        {
+            return;
+        }
+
+        m_noiseAwareness = Mathf.Max(0f, m_noiseAwareness - m_noiseAwarenessDecayPerSecond * Time.deltaTime);
+    }
+
+    /// <summary>소음 인지 게이지의 현재 값입니다.</summary>
+    public float NoiseAwareness => m_noiseAwareness;
+
+    /// <summary>소음 인지 게이지의 진행도입니다. 0이면 평온, 1이면 한계 도달입니다.</summary>
+    /// <remarks>두리번 강도를 애니메이터로 넘길 때 씁니다.</remarks>
+    public float NoiseAwareness01 =>
+        m_noiseAwarenessThreshold > 0f ? Mathf.Clamp01(m_noiseAwareness / m_noiseAwarenessThreshold) : 0f;
+
+    /// <summary>소음을 알아채 추적을 시작할 만큼 게이지가 찼는지 여부입니다.</summary>
+    public bool IsNoiseAwarenessFull => m_hasNoise && m_noiseAwarenessReached;
+
+    /// <summary>소음이 들려 경계 중이지만 아직 알아채지는 못한 상태인지 여부입니다.</summary>
+    /// <remarks>이 값이 true인 동안 두리번거립니다.</remarks>
+    public bool IsNoiseAlert => m_hasNoise && m_noiseAwareness > 0f && !IsNoiseAwarenessFull;
+
+    /// <summary>
+    /// 소음 인지 게이지를 비웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 소음 추적에 들어갈 때 부릅니다. 비우지 않으면 수색에 실패해 배회로 돌아온 순간 게이지가 아직 만충이라
+    /// 곧바로 다시 추적으로 튕겨 나가 무한히 반복합니다.
+    /// </remarks>
+    public void ClearNoiseAwareness()
+    {
+        m_noiseAwareness = 0f;
+        m_noiseAwarenessReached = false;
+    }
+
+    /// <summary>
+    /// 새 소음이 지금 추적 중인 소음을 대체해야 하는지 판단합니다.
+    /// </summary>
+    /// <remarks>
+    /// 공용 문서 §5.4.4의 세 규칙을 그대로 옮겼습니다.
+    /// 같은 소음원이면 최신 위치로 갱신하고, 다른 소음원은 더 강할 때만 교체하며, 같으면 더 최근 것을 택합니다.
+    ///
+    /// 같은 소음원을 강도와 무관하게 받아들이는 것이 중요합니다. 소리를 낸 캐릭터가 멀어지면 강도가 약해지는데,
+    /// 강도로만 비교하면 그 순간 목적지 갱신이 멈춰 변이체가 낡은 위치로 계속 갑니다.
+    /// </remarks>
+    private bool ShouldReplaceTrackedNoise(in NoiseEvent noise, float intensity)
+    {
+        if (!m_hasNoise)
+        {
+            return true;
+        }
+
+        if (noise.SourceId == m_noiseSourceId)
+        {
+            return true;
+        }
+
+        if (intensity > m_noiseIntensity)
+        {
+            return true;
+        }
+
+        return Mathf.Approximately(intensity, m_noiseIntensity) && noise.Time > m_noiseTime;
+    }
+
+    /// <summary>
+    /// 지금 추적할 소음 위치를 반환합니다.
+    /// </summary>
+    /// <param name="position">추적할 소음 위치입니다.</param>
+    /// <returns>받아들인 소음이 있으면 true입니다.</returns>
+    public bool TryGetNoisePosition(out Vector3 position)
+    {
+        position = m_noisePosition;
+        return m_hasNoise;
+    }
+
+    /// <summary>
+    /// 소음을 새로 받아들였는지 확인하고 그 표시를 내립니다.
+    /// </summary>
+    /// <returns>마지막 확인 이후 새 소음을 받아들였으면 true입니다.</returns>
+    /// <remarks>
+    /// 소음 추적 중 목적지를 다시 잡을지, 수색 중 다시 추적으로 돌아갈지 판단하는 데 씁니다(§5.4.5).
+    /// 상태가 이 표시를 소비하므로 같은 소음으로 두 번 반응하지 않습니다.
+    /// </remarks>
+    public bool ConsumeNoiseUpdated()
+    {
+        if (!m_noiseUpdated)
+        {
+            return false;
+        }
+
+        m_noiseUpdated = false;
+        return true;
+    }
+
+    /// <summary>
+    /// 받아들인 소음 기록을 지웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 소음 수색이 끝나 배회로 돌아갈 때 부릅니다. 지우지 않으면 배회 상태가 같은 소음을 다시 집어
+    /// 추적과 수색을 무한히 반복합니다.
+    /// </remarks>
+    public void ClearNoise()
+    {
+        m_hasNoise = false;
+        m_noiseSourceId = 0;
+        m_noisePosition = Vector3.zero;
+        m_noiseIntensity = 0f;
+        m_noiseTime = 0f;
+        m_noiseUpdated = false;
+        m_noiseAwareness = 0f;
+        m_noiseAwarenessReached = false;
     }
 
     /// <summary>
@@ -417,9 +670,15 @@ public class EnemyTargetSensor : MonoBehaviour
     }
 
     /// <summary>
-    /// 교전이 끝날 때 이 변이체가 알고 있던 내용을 모두 지웁니다.
+    /// 교전이 끝날 때 이 변이체가 알고 있던 대상 정보를 모두 지웁니다.
     /// </summary>
-    /// <remarks>공용 문서 §5.8.4의 교전 상태 종료 시 초기화 목록에 해당합니다.</remarks>
+    /// <remarks>
+    /// 공용 문서 §5.8.4의 교전 상태 종료 시 초기화 목록에 해당합니다.
+    ///
+    /// <b>소음 기록은 지우지 않습니다.</b> §5.8.4의 초기화 목록에 소음이 없고, 교전이 끝난 직후에도
+    /// 방금 들린 소리를 향해 갈 수 있어야 하기 때문입니다. 소음은 소음 수색이 끝날 때
+    /// <see cref="ClearNoise"/>로 따로 지웁니다.
+    /// </remarks>
     public void ClearAllInfo()
     {
         for (int i = 0; i < m_infos.Count; i++)

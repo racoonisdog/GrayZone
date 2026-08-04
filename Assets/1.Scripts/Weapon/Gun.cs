@@ -241,6 +241,17 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [Clamp(Min = 1)]
     [SerializeField] private float m_spreadConcentration = 3.0f;
 
+    [Header("Noise")]
+    [Tooltip("사격 1회의 기본 소음량입니다. 가청 여부가 아니라, 변이체가 여러 소음 중 어느 것을 추적할지 비교할 때만 쓰입니다. 기획 미확정 - 임시값입니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_shotNoiseLevel = 1.0f;
+
+    [Tooltip("사격 소음이 들리는 거리(m)입니다. 이 거리 안이면 들리고 밖이면 들리지 않습니다. 벽이나 엄폐물에 의한 감쇠는 적용하지 않습니다. 변이체 시야(12m)보다 훨씬 커야 소음 유인 전술이 성립합니다. 기획 미확정 - 임시값입니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_shotNoiseRange = 40.0f;
+
     [Foldout("Recoil Options")]
     [Header("Aim Recoil (탄착에 영향)")]
     [Tooltip("발사 1회당 세로(피치) 반동 각도(도)입니다. 양수면 조준이 위로 솟습니다(머즐 클라임). 실제 조준을 밀어 탄착에도 영향을 주며(LogicalAim), 사격을 멈추면 자동 회복됩니다.")]
@@ -271,6 +282,15 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_recoilFovPunch = 1.0f;
+
+    [Tooltip("조준(ADS) 중 발사 1회당 카메라 FOV 펀치(도)입니다. 조준 중에는 화면이 확대돼 같은 값도 더 크게 보이므로 힙파이어와 따로 둡니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_recoilFovPunchAds = 1.0f;
+
+    [Tooltip("거리에 따른 피해 배율 구간표입니다. 구간을 두지 않으면 거리와 무관하게 기본 피해가 들어갑니다.")]
+    [BalanceField]
+    [SerializeField] private DamageFalloffTable m_damageFalloff = new DamageFalloffTable();
 
 #if UNITY_EDITOR
     [Foldout("Debug")]
@@ -305,6 +325,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess
 
     /// <summary>이 무기를 소유한 유닛입니다. 피격자가 반격 대상을 알 수 있도록 피해와 함께 전달합니다.</summary>
     private GameObject m_ownerObject;
+
+    /// <summary>사격 소음을 발신할 캐릭터 쪽 컴포넌트입니다. 없으면 소음을 내지 않습니다.</summary>
+    private CharacterNoiseEmitter m_noiseEmitter;
 
     /// <summary>무기 사운드와 시각 피드백의 출력 컴포넌트입니다.</summary>
     private WeaponFeedbackEmitter m_feedbackEmitter;
@@ -408,6 +431,12 @@ public class Gun : MonoBehaviour, IBalancePostProcess
 
     /// <summary>발사 1회당 카메라 FOV 펀치(도)입니다. 시각 전용 juice이며 조준/탄착에는 영향이 없습니다.</summary>
     public float RecoilFovPunch => m_recoilFovPunch;
+
+    /// <summary>조준 중 발사 1회당 카메라 FOV 펀치(도)입니다.</summary>
+    public float RecoilFovPunchAds => m_recoilFovPunchAds;
+
+    /// <summary>거리에 따른 피해 배율 구간표입니다.</summary>
+    public DamageFalloffTable DamageFalloff => m_damageFalloff;
 
     /// <summary>좌우 반동(Yaw)의 좌우 방향 패턴입니다.</summary>
     public KickSidePattern YawKickPattern => m_yawKickPattern;
@@ -530,6 +559,13 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         m_ownerFaction = ownerHealth != null ? ownerHealth.Faction : Faction.Player;
         m_ownerObject = ownerHealth != null ? ownerHealth.gameObject : null;
 
+        // 소음은 총기가 아니라 총을 든 캐릭터가 내는 것으로 다룹니다.
+        // 같은 캐릭터의 사격과 발소리가 같은 소음원이어야 변이체의 추적 목적지가 그 캐릭터를 따라 갱신됩니다.
+        if (m_noiseEmitter == null)
+        {
+            m_noiseEmitter = GetComponentInParent<CharacterNoiseEmitter>();
+        }
+
         if (m_feedback != null)
         {
             EnsureFeedbackEmitter();
@@ -595,7 +631,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess
 
         // 대입이 값을 덮어쓰기 전에 프리팹 저작값을 확보해 둡니다.
         CaptureFallbackSpreadRanges();
-        return BindManager.Instance.Bind(m_balanceSO, this, this);
+        BalanceBindResult result = BindManager.Instance.Bind(m_balanceSO, this, this);
+
+        // 참조형 밸런스 값은 그대로 대입되어 SO와 같은 인스턴스를 공유합니다.
+        // 복제하지 않으면 런타임에 구간표를 고칠 때 프로젝트 자산인 SO가 함께 바뀝니다.
+        // 정렬도 여기서 한 번만 합니다. 사격 경로에 정렬 비용을 얹지 않기 위해서입니다.
+        m_damageFalloff = m_damageFalloff != null ? m_damageFalloff.Clone() : new DamageFalloffTable();
+
+        return result;
     }
 
     /// <summary>
@@ -778,6 +821,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         firedShot = BuildFiredShot(shotInfo, isAds);
         LayShoot(firedShot);
         PlaySuccessfulShotFeedback(firedShot.Origin, firedShot.EndPoint);
+        EmitShotNoise();
         UpdateBulletUI();
 
         Invoke(nameof(ResetShoot), m_shootDelay);
@@ -1106,10 +1150,18 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             return CombatDamage.HitFeedback.None;
         }
 
+        // 거리 감쇠는 무기가 소유합니다. 총이 쏜 거리는 총이 아는 정보이고,
+        // 공용 피해 경로(CombatDamage)에 거리 개념을 넣으면 근접 공격이 쓰지 않는 인자가 생깁니다.
+        int damage = ResolveDistanceAdjustedDamage(shotInfo.Hit.distance);
+        if (damage <= 0)
+        {
+            return CombatDamage.HitFeedback.None;
+        }
+
         CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
             shotInfo.Hit.collider,
             m_ownerFaction,
-            m_hitscanDamage,
+            damage,
             m_headshotDamageMultiplier,
             m_allowHeadshot,
             m_ownerObject);
@@ -1119,6 +1171,48 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         }
 
         return feedback;
+    }
+
+    /// <summary>
+    /// 거리 감쇠를 반영한 피해량을 돌려줍니다.
+    /// </summary>
+    /// <param name="distance">사격 지점에서 명중 지점까지의 거리(m)입니다.</param>
+    /// <returns>구간 배율을 곱해 반올림한 피해량입니다. 최소 1을 보장합니다.</returns>
+    /// <remarks>
+    /// 약점 배율은 여기서 곱하지 않습니다. <see cref="CombatDamage.ResolveHit"/>가 부위를 판정한 뒤 곱하며,
+    /// 거리 감쇠를 먼저 적용해 두면 원거리 약점 사격이 "감쇠된 피해의 배수"가 되어 의도와 맞습니다.
+    ///
+    /// 최소 1을 보장하는 것은 <see cref="CombatDamage.ResolveHit"/>와 같은 규약입니다.
+    /// 맞았는데 0이 들어가면 피격 표시만 뜨고 아무 일도 일어나지 않아 버그로 보입니다.
+    /// </remarks>
+    private int ResolveDistanceAdjustedDamage(float distance)
+    {
+        if (m_damageFalloff == null)
+        {
+            return m_hitscanDamage;
+        }
+
+        return m_damageFalloff.ResolveDamage(distance, m_hitscanDamage);
+    }
+
+    /// <summary>
+    /// 이번 사격의 소음을 변이체 쪽에 알립니다.
+    /// </summary>
+    /// <remarks>
+    /// 소음량과 도달 거리는 총기가 정하고, 발신 자체는 캐릭터가 합니다.
+    /// 소음기 같은 부착물이 값을 바꾸는 것은 총기 쪽 관심사이므로 수치를 여기 두었습니다.
+    ///
+    /// 실제 사격이 성립한 뒤에만 부릅니다. 탄약이 없거나 재장전 중이면 소리가 나지 않아야 합니다.
+    /// 소음이 실제 발사와 어긋나면 플레이어가 소리를 예측할 수 없어 잠입 판단이 불가능해집니다.
+    /// </remarks>
+    private void EmitShotNoise()
+    {
+        if (m_noiseEmitter == null)
+        {
+            return;
+        }
+
+        m_noiseEmitter.EmitGunshot(m_shotNoiseLevel, m_shotNoiseRange);
     }
 
     /// <summary>
@@ -1427,6 +1521,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// <param name="value">새 FOV 펀치 크기입니다.</param>
     public void SetRecoilFovPunch(float value) => m_recoilFovPunch = value;
 
+    /// <summary>조준 중 FOV 펀치 크기를 설정합니다.</summary>
+    public void SetRecoilFovPunchAds(float value) => m_recoilFovPunchAds = Mathf.Max(0.0f, value);
+
     /// <summary>좌우 반동 방향 패턴을 설정합니다.</summary>
     /// <param name="value">새 반동 방향 패턴입니다.</param>
     public void SetYawKickPattern(KickSidePattern value) => m_yawKickPattern = value;
@@ -1498,4 +1595,20 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         m_adsSpreadRecoveryDelay = Mathf.Max(0.0f, recoveryDelay);
         m_adsSpreadRecoveryPerSecond = Mathf.Max(0.0f, recoveryPerSecond);
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 지금 인스펙터에 들어 있는 값을 이 컴포넌트가 물고 있는 밸런스 SO와 CSV로 되돌려 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이테스트로 잡은 값을 정본으로 승격시키는 용도입니다.
+    /// 이 작업을 하지 않으면 인스펙터에서 만진 값은 다음 실행의 Awake에서 SO 값에 덮여 사라집니다.
+    /// 에디터 전용입니다. SO와 CSV는 프로젝트 자산이라 빌드에서는 쓸 수 없습니다.
+    /// </remarks>
+    [ContextMenu("밸런스: 현재 인스펙터 → SO + CSV 갱신")]
+    private void ReverseSyncBalanceToAsset()
+    {
+        UnityEngine.Debug.Log($"[BalanceReverseSync] {name}: {BalanceReverseSyncHook.Run(this)}", this);
+    }
+#endif
 }
