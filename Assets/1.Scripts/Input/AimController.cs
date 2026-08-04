@@ -142,6 +142,82 @@ public class AimController : MonoBehaviour
     [Clamp(Min = 0)]
     [SerializeField] private float m_visualKickMaxFovPunch = 5.0f;
 
+    [Tooltip("켜면 카메라 롤 킥의 상승과 회복을 곡선 하나로 처리합니다. 끄면 발사 순간 즉시 더하고 회복만 보간합니다.")]
+    [SerializeField] private bool m_useRollKickEnvelope = false;
+
+    [Tooltip("카메라 롤 킥 곡선 하나의 길이(초)입니다. 정규화 시간 0~1을 재는 기준입니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_rollKickEnvelopeDuration = 0.25f;
+
+    [Tooltip("카메라 롤 킥 곡선입니다. x는 정규화 시간(0~1), y는 세기 배율입니다. y가 가장 큰 x가 피크 위치입니다.")]
+    [SerializeField]
+    private AnimationCurve m_rollKickEnvelopeCurve = ImpulseEnvelope.BuildCurve(0.2f, 1.0f, 1.0f);
+
+    [Tooltip("켜면 FOV 펀치의 상승과 회복을 곡선으로 처리합니다. 힙파이어와 ADS를 따로 둡니다.")]
+    [SerializeField] private bool m_useFovPunchEnvelope = false;
+
+    [Tooltip("힙파이어 FOV 펀치 곡선 하나의 길이(초)입니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_hipfireFovPunchEnvelopeDuration = 0.2f;
+
+    [Tooltip("힙파이어 FOV 펀치 곡선입니다.")]
+    [SerializeField]
+    private AnimationCurve m_hipfireFovPunchEnvelopeCurve = ImpulseEnvelope.BuildCurve(0.2f, 1.0f, 1.0f);
+
+    [Tooltip("ADS FOV 펀치 곡선 하나의 길이(초)입니다. 조준 중에는 화면이 확대돼 같은 펀치도 더 크게 보이므로 따로 둡니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_adsFovPunchEnvelopeDuration = 0.2f;
+
+    [Tooltip("ADS FOV 펀치 곡선입니다.")]
+    [SerializeField]
+    private AnimationCurve m_adsFovPunchEnvelopeCurve = ImpulseEnvelope.BuildCurve(0.2f, 1.0f, 1.0f);
+
+    [Tooltip("켜면 ADS 확대·축소를 지속시간과 곡선으로 처리합니다. 끄면 기존처럼 FOV 전환 속도 하나로 양쪽을 함께 보간합니다.")]
+    [SerializeField] private bool m_useZoomEnvelope = false;
+
+    [Tooltip("ADS 진입(확대)에 걸리는 시간(초)입니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_zoomInDuration = 0.15f;
+
+    [Tooltip("ADS 진입 곡선입니다. x는 진행률(0~1), y는 목표 FOV까지의 비율입니다. 0에서 시작해 1로 끝나야 합니다.")]
+    [SerializeField]
+    private AnimationCurve m_zoomInCurve = AnimationCurve.EaseInOut(0.0f, 0.0f, 1.0f, 1.0f);
+
+    [Tooltip("ADS 해제(축소)에 걸리는 시간(초)입니다. 진입과 따로 둘 수 있어 빠르게 들어가고 느리게 나오는 식이 가능합니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_zoomOutDuration = 0.2f;
+
+    [Tooltip("ADS 해제 곡선입니다. x는 진행률(0~1), y는 목표 FOV까지의 비율입니다.")]
+    [SerializeField]
+    private AnimationCurve m_zoomOutCurve = AnimationCurve.EaseInOut(0.0f, 0.0f, 1.0f, 1.0f);
+
+    /// <summary>카메라 롤 킥 엔벨로프의 런타임 상태입니다.</summary>
+    private readonly ImpulseEnvelope m_rollKickEnvelope = new ImpulseEnvelope();
+
+    /// <summary>힙파이어에서 발생한 FOV 펀치 엔벨로프입니다.</summary>
+    /// <remarks>
+    /// ADS와 나눠 두는 이유는, 힙파이어에서 쏜 뒤 곧바로 조준하면 그 발의 곡선이
+    /// ADS 지속시간으로 갈아타 도중에 모양이 바뀌기 때문입니다.
+    /// </remarks>
+    private readonly ImpulseEnvelope m_hipfireFovPunchEnvelope = new ImpulseEnvelope();
+
+    /// <summary>ADS에서 발생한 FOV 펀치 엔벨로프입니다.</summary>
+    private readonly ImpulseEnvelope m_adsFovPunchEnvelope = new ImpulseEnvelope();
+
+    /// <summary>지금 진행 중인 FOV 전환의 시작 값입니다.</summary>
+    private float m_zoomFromFov;
+
+    /// <summary>지금 진행 중인 FOV 전환의 경과 시간(초)입니다.</summary>
+    private float m_zoomElapsed;
+
+    /// <summary>지난 프레임의 조준 상태입니다. 바뀐 프레임에 전환을 새로 시작하기 위한 것입니다.</summary>
+    private bool m_zoomWasAds;
+
 
     [Foldout("IK Options")]
     [Tooltip("손 위치 보정에 사용할 Rig입니다.")]
@@ -458,7 +534,139 @@ public class AimController : MonoBehaviour
         {
             m_visualKickRoll = 0.0f;
             m_visualKickFovPunch = 0.0f;
+            m_rollKickEnvelope.Clear();
+            m_hipfireFovPunchEnvelope.Clear();
+            m_adsFovPunchEnvelope.Clear();
         }
+    }
+
+    /// <summary>카메라 롤 킥을 곡선 엔벨로프로 처리할지 여부입니다.</summary>
+    public bool UseRollKickEnvelope => m_useRollKickEnvelope;
+
+    /// <summary>카메라 롤 킥 곡선 하나의 길이(초)입니다.</summary>
+    public float RollKickEnvelopeDuration => Mathf.Max(0.0f, m_rollKickEnvelopeDuration);
+
+    /// <summary>카메라 롤 킥 곡선입니다.</summary>
+    public AnimationCurve RollKickEnvelopeCurve => m_rollKickEnvelopeCurve;
+
+    /// <summary>FOV 펀치를 곡선 엔벨로프로 처리할지 여부입니다.</summary>
+    public bool UseFovPunchEnvelope => m_useFovPunchEnvelope;
+
+    /// <summary>힙파이어 FOV 펀치 곡선 하나의 길이(초)입니다.</summary>
+    public float HipfireFovPunchEnvelopeDuration => Mathf.Max(0.0f, m_hipfireFovPunchEnvelopeDuration);
+
+    /// <summary>힙파이어 FOV 펀치 곡선입니다.</summary>
+    public AnimationCurve HipfireFovPunchEnvelopeCurve => m_hipfireFovPunchEnvelopeCurve;
+
+    /// <summary>ADS FOV 펀치 곡선 하나의 길이(초)입니다.</summary>
+    public float AdsFovPunchEnvelopeDuration => Mathf.Max(0.0f, m_adsFovPunchEnvelopeDuration);
+
+    /// <summary>ADS FOV 펀치 곡선입니다.</summary>
+    public AnimationCurve AdsFovPunchEnvelopeCurve => m_adsFovPunchEnvelopeCurve;
+
+    /// <summary>ADS 확대·축소를 곡선으로 처리할지 여부입니다.</summary>
+    public bool UseZoomEnvelope => m_useZoomEnvelope;
+
+    /// <summary>ADS 진입(확대)에 걸리는 시간(초)입니다.</summary>
+    public float ZoomInDuration => Mathf.Max(0.0f, m_zoomInDuration);
+
+    /// <summary>ADS 진입 곡선입니다.</summary>
+    public AnimationCurve ZoomInCurve => m_zoomInCurve;
+
+    /// <summary>ADS 해제(축소)에 걸리는 시간(초)입니다.</summary>
+    public float ZoomOutDuration => Mathf.Max(0.0f, m_zoomOutDuration);
+
+    /// <summary>ADS 해제 곡선입니다.</summary>
+    public AnimationCurve ZoomOutCurve => m_zoomOutCurve;
+
+    /// <summary>카메라 롤 킥 엔벨로프 사용 여부를 설정합니다.</summary>
+    /// <remarks>방식을 바꿀 때 진행 중이던 값이 다른 방식에 남지 않도록 함께 정리합니다.</remarks>
+    public void SetUseRollKickEnvelope(bool value)
+    {
+        if (m_useRollKickEnvelope == value)
+        {
+            return;
+        }
+
+        m_useRollKickEnvelope = value;
+        m_rollKickEnvelope.Clear();
+        m_visualKickRoll = 0.0f;
+    }
+
+    /// <summary>카메라 롤 킥 곡선 길이를 설정합니다.</summary>
+    public void SetRollKickEnvelopeDuration(float value) => m_rollKickEnvelopeDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>카메라 롤 킥 곡선을 교체합니다.</summary>
+    /// <remarks>복제해서 보관합니다. 참조를 그대로 들면 밸런스 SO의 곡선과 같은 인스턴스를 공유합니다.</remarks>
+    public void SetRollKickEnvelopeCurve(AnimationCurve value)
+    {
+        m_rollKickEnvelopeCurve = value == null ? null : new AnimationCurve(value.keys);
+    }
+
+    /// <summary>FOV 펀치 엔벨로프 사용 여부를 설정합니다.</summary>
+    public void SetUseFovPunchEnvelope(bool value)
+    {
+        if (m_useFovPunchEnvelope == value)
+        {
+            return;
+        }
+
+        m_useFovPunchEnvelope = value;
+        m_hipfireFovPunchEnvelope.Clear();
+        m_adsFovPunchEnvelope.Clear();
+        m_visualKickFovPunch = 0.0f;
+    }
+
+    /// <summary>힙파이어 FOV 펀치 곡선 길이를 설정합니다.</summary>
+    public void SetHipfireFovPunchEnvelopeDuration(float value)
+        => m_hipfireFovPunchEnvelopeDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>힙파이어 FOV 펀치 곡선을 교체합니다.</summary>
+    public void SetHipfireFovPunchEnvelopeCurve(AnimationCurve value)
+    {
+        m_hipfireFovPunchEnvelopeCurve = value == null ? null : new AnimationCurve(value.keys);
+    }
+
+    /// <summary>ADS FOV 펀치 곡선 길이를 설정합니다.</summary>
+    public void SetAdsFovPunchEnvelopeDuration(float value)
+        => m_adsFovPunchEnvelopeDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>ADS FOV 펀치 곡선을 교체합니다.</summary>
+    public void SetAdsFovPunchEnvelopeCurve(AnimationCurve value)
+    {
+        m_adsFovPunchEnvelopeCurve = value == null ? null : new AnimationCurve(value.keys);
+    }
+
+    /// <summary>ADS 확대·축소 곡선 사용 여부를 설정합니다.</summary>
+    /// <remarks>방식을 바꾸면 진행률을 초기화해 지금 FOV에서 새 전환이 시작되게 합니다.</remarks>
+    public void SetUseZoomEnvelope(bool value)
+    {
+        if (m_useZoomEnvelope == value)
+        {
+            return;
+        }
+
+        m_useZoomEnvelope = value;
+        m_zoomFromFov = m_baseFov;
+        m_zoomElapsed = 0.0f;
+    }
+
+    /// <summary>ADS 진입 시간을 설정합니다.</summary>
+    public void SetZoomInDuration(float value) => m_zoomInDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>ADS 해제 시간을 설정합니다.</summary>
+    public void SetZoomOutDuration(float value) => m_zoomOutDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>ADS 진입 곡선을 교체합니다.</summary>
+    public void SetZoomInCurve(AnimationCurve value)
+    {
+        m_zoomInCurve = value == null ? null : new AnimationCurve(value.keys);
+    }
+
+    /// <summary>ADS 해제 곡선을 교체합니다.</summary>
+    public void SetZoomOutCurve(AnimationCurve value)
+    {
+        m_zoomOutCurve = value == null ? null : new AnimationCurve(value.keys);
     }
 
     /// <summary>시각 킥 회복 방식을 설정합니다.</summary>
@@ -886,25 +1094,108 @@ public class AimController : MonoBehaviour
         }
 
         float targetFov = m_isAds ? m_adsFov : m_hipfireFov;
-        m_baseFov = snap ? targetFov : Mathf.Lerp(m_baseFov, targetFov, Time.deltaTime * m_zoomLerpSpeed);
+        UpdateBaseFov(targetFov, snap);
 
         if (snap)
         {
             // 전투 자세 진입 등 스냅 시엔 시각 킥도 초기화(재진입 시 롤/펀치 잔상 방지).
             m_visualKickRoll = 0.0f;
             m_visualKickFovPunch = 0.0f;
+            m_rollKickEnvelope.Clear();
+            m_hipfireFovPunchEnvelope.Clear();
+            m_adsFovPunchEnvelope.Clear();
         }
         else
         {
             // 유지(hold) 없이 발당 순간 펀치 후 회복시켜 지속 틸트/멀미를 피합니다. 회복 속도는 모드에 따라 결정합니다.
             float recover = Mathf.Clamp01(Time.deltaTime * GetVisualKickRecoverySpeed());
-            m_visualKickRoll = Mathf.Lerp(m_visualKickRoll, 0.0f, recover);
-            m_visualKickFovPunch = Mathf.Lerp(m_visualKickFovPunch, 0.0f, recover);
+
+            if (!m_useRollKickEnvelope)
+            {
+                m_visualKickRoll = Mathf.Lerp(m_visualKickRoll, 0.0f, recover);
+            }
+
+            if (!m_useFovPunchEnvelope)
+            {
+                m_visualKickFovPunch = Mathf.Lerp(m_visualKickFovPunch, 0.0f, recover);
+            }
+        }
+
+        // 엔벨로프를 켠 축은 살아 있는 곡선의 합이 그대로 현재 값입니다. 상한은 합에 걸어 둡니다.
+        float roll = m_useRollKickEnvelope
+            ? Mathf.Clamp(
+                m_rollKickEnvelope.Evaluate(m_rollKickEnvelopeDuration, m_rollKickEnvelopeCurve, Time.deltaTime),
+                -m_visualKickMaxRoll,
+                m_visualKickMaxRoll)
+            : m_visualKickRoll;
+
+        float fovPunch = m_visualKickFovPunch;
+        if (m_useFovPunchEnvelope)
+        {
+            float hipfireSum = m_hipfireFovPunchEnvelope.Evaluate(
+                m_hipfireFovPunchEnvelopeDuration, m_hipfireFovPunchEnvelopeCurve, Time.deltaTime);
+            float adsSum = m_adsFovPunchEnvelope.Evaluate(
+                m_adsFovPunchEnvelopeDuration, m_adsFovPunchEnvelopeCurve, Time.deltaTime);
+
+            fovPunch = Mathf.Clamp(hipfireSum + adsSum, 0.0f, m_visualKickMaxFovPunch);
         }
 
         // 기준 FOV 위에 펀치를 얹고, 롤은 렌즈에만 반영(에임/탄 무영향).
-        m_aimCamera.Lens.FieldOfView = m_baseFov + m_visualKickFovPunch;
-        m_aimCamera.Lens.Dutch = m_visualKickRoll;
+        m_aimCamera.Lens.FieldOfView = m_baseFov + fovPunch;
+        m_aimCamera.Lens.Dutch = roll;
+    }
+
+    /// <summary>
+    /// 기준 FOV를 목표 값으로 옮깁니다.
+    /// </summary>
+    /// <param name="targetFov">이번 자세의 목표 FOV입니다.</param>
+    /// <param name="snap">즉시 맞출지 여부입니다.</param>
+    /// <remarks>
+    /// 엔벨로프를 끄면 기존처럼 속도 하나로 지수 보간합니다. 이 방식은 목표에 점근하기만 해서
+    /// 지속시간 개념이 없고, 확대와 축소가 같은 속도를 씁니다.
+    ///
+    /// 켜면 자세가 바뀐 프레임에 그때의 FOV를 시작점으로 기억하고 진행률을 0부터 셉니다.
+    /// 그래서 진입과 해제에 서로 다른 시간과 곡선을 줄 수 있고, 전환 도중에 자세를 되돌려도
+    /// 현재 FOV에서 새 전환이 시작돼 튀지 않습니다.
+    /// </remarks>
+    private void UpdateBaseFov(float targetFov, bool snap)
+    {
+        if (snap)
+        {
+            m_baseFov = targetFov;
+            m_zoomFromFov = targetFov;
+            m_zoomElapsed = 0.0f;
+            m_zoomWasAds = m_isAds;
+            return;
+        }
+
+        if (!m_useZoomEnvelope)
+        {
+            m_baseFov = Mathf.Lerp(m_baseFov, targetFov, Time.deltaTime * m_zoomLerpSpeed);
+            m_zoomWasAds = m_isAds;
+            return;
+        }
+
+        if (m_zoomWasAds != m_isAds)
+        {
+            m_zoomWasAds = m_isAds;
+            m_zoomFromFov = m_baseFov;
+            m_zoomElapsed = 0.0f;
+        }
+
+        float duration = m_isAds ? m_zoomInDuration : m_zoomOutDuration;
+        if (duration <= 0.0f)
+        {
+            m_baseFov = targetFov;
+            return;
+        }
+
+        m_zoomElapsed = Mathf.Min(m_zoomElapsed + Time.deltaTime, duration);
+        float progress = m_zoomElapsed / duration;
+        AnimationCurve curve = m_isAds ? m_zoomInCurve : m_zoomOutCurve;
+        float weight = curve != null && curve.length > 0 ? curve.Evaluate(progress) : progress;
+
+        m_baseFov = Mathf.LerpUnclamped(m_zoomFromFov, targetFov, weight);
     }
 
     /// <summary>
@@ -1499,8 +1790,35 @@ public class AimController : MonoBehaviour
         // (2) 시각 킥 — 롤·FOV 펀치 누적(조준/탄 무영향, 상한 클램프).
         if (m_enableVisualKick)
         {
-            m_visualKickRoll = Mathf.Clamp(m_visualKickRoll + rollSigned, -m_visualKickMaxRoll, m_visualKickMaxRoll);
-            m_visualKickFovPunch = Mathf.Clamp(m_visualKickFovPunch + m_weaponController.RecoilFovPunch, 0.0f, m_visualKickMaxFovPunch);
+            // 엔벨로프를 켠 축은 이번 발의 곡선 하나를 시작만 하고, 값은 매 프레임 합에서 나옵니다.
+            if (m_useRollKickEnvelope)
+            {
+                m_rollKickEnvelope.Add(rollSigned);
+            }
+            else
+            {
+                m_visualKickRoll = Mathf.Clamp(m_visualKickRoll + rollSigned, -m_visualKickMaxRoll, m_visualKickMaxRoll);
+            }
+
+            // 조준 중에는 화면이 확대돼 같은 펀치도 더 크게 보이므로 크기를 자세별로 나눠 씁니다.
+            float fovPunch = m_isAds ? m_weaponController.RecoilFovPunchAds : m_weaponController.RecoilFovPunch;
+
+            if (m_useFovPunchEnvelope)
+            {
+                // 쏜 시점의 자세에 해당하는 엔벨로프에 넣습니다. 쏜 뒤 자세를 바꿔도 그 발의 길이와 모양이 유지됩니다.
+                if (m_isAds)
+                {
+                    m_adsFovPunchEnvelope.Add(fovPunch);
+                }
+                else
+                {
+                    m_hipfireFovPunchEnvelope.Add(fovPunch);
+                }
+            }
+            else
+            {
+                m_visualKickFovPunch = Mathf.Clamp(m_visualKickFovPunch + fovPunch, 0.0f, m_visualKickMaxFovPunch);
+            }
         }
     }
 
@@ -1766,4 +2084,20 @@ public class AimController : MonoBehaviour
         m_weaponAudioSource.clip = sound;
         m_weaponAudioSource.Play();
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 지금 인스펙터에 들어 있는 값을 이 컴포넌트가 물고 있는 밸런스 SO와 CSV로 되돌려 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이테스트로 잡은 값을 정본으로 승격시키는 용도입니다.
+    /// 이 작업을 하지 않으면 인스펙터에서 만진 값은 다음 실행의 Awake에서 SO 값에 덮여 사라집니다.
+    /// 에디터 전용입니다. SO와 CSV는 프로젝트 자산이라 빌드에서는 쓸 수 없습니다.
+    /// </remarks>
+    [ContextMenu("밸런스: 현재 인스펙터 → SO + CSV 갱신")]
+    private void ReverseSyncBalanceToAsset()
+    {
+        UnityEngine.Debug.Log($"[BalanceReverseSync] {name}: {BalanceReverseSyncHook.Run(this)}", this);
+    }
+#endif
 }

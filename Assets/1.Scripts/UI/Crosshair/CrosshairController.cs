@@ -259,7 +259,7 @@ public class CrosshairController : MonoBehaviour
     [SerializeField] private bool m_swapCrosshairOnReload = true;
 
     [Tooltip("재장전 시 중앙에 표시할 탄약 아이콘 벡터 이미지(예: Reloading_Bullet.svg)입니다.")]
-    [SerializeField] private VectorImage m_reloadBulletImage;
+    [SerializeField] private Texture2D m_reloadBulletImage;
 
     [Tooltip("재장전 탄약 아이콘의 표시 크기(픽셀)입니다.")]
     [SerializeField] private float m_reloadBulletSizePixels = 50.0f;
@@ -579,17 +579,56 @@ public class CrosshairController : MonoBehaviour
         }
     }
 
+    /// <summary>조준선을 마지막으로 요청받은 표시 상태입니다.</summary>
+    private bool m_requestedVisible = true;
+
+    /// <summary>전체화면 UI 등이 조준선을 강제로 숨기고 있는지 여부입니다.</summary>
+    private bool m_isSuppressed;
+
     /// <summary>
     /// 조준선 표시 여부를 설정합니다.
     /// </summary>
     /// <param name="visible">표시하려면 <c>true</c>, 숨기려면 <c>false</c>입니다.</param>
+    /// <remarks>
+    /// 억제 중이면 요청만 기록하고 화면에는 반영하지 않습니다.
+    /// <see cref="AimController"/>가 매 프레임 조준 상태로 이 값을 다시 지정하므로,
+    /// 바깥에서 숨겨도 다음 프레임에 되살아나기 때문입니다.
+    /// </remarks>
     public void SetVisible(bool visible)
+    {
+        m_requestedVisible = visible;
+        ApplyRootVisibility();
+    }
+
+    /// <summary>
+    /// 조준선을 강제로 숨길지 여부를 설정합니다.
+    /// </summary>
+    /// <param name="suppressed">숨기려면 <c>true</c>입니다.</param>
+    /// <remarks>
+    /// 결과 화면처럼 화면을 덮는 UI가 떴을 때 인게임 표시를 내리는 용도입니다.
+    /// 억제를 풀면 마지막으로 요청받은 표시 상태로 돌아갑니다.
+    /// 표시 요청과 억제를 따로 들고 있어야, 억제 중에 들어온 요청이 유실되지 않습니다.
+    /// </remarks>
+    public void SetSuppressed(bool suppressed)
+    {
+        if (m_isSuppressed == suppressed)
+        {
+            return;
+        }
+
+        m_isSuppressed = suppressed;
+        ApplyRootVisibility();
+    }
+
+    /// <summary>표시 요청과 억제 상태를 합쳐 루트 요소에 반영합니다.</summary>
+    private void ApplyRootVisibility()
     {
         if (!CacheVisualElements())
         {
             return;
         }
 
+        bool visible = m_requestedVisible && !m_isSuppressed;
         m_rootElement.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
@@ -1457,7 +1496,7 @@ public class CrosshairController : MonoBehaviour
         }
 
         float size = m_reloadBulletSizePixels;
-        ApplyVectorImage(m_reloadBulletElement, m_reloadBulletImage, center - size * 0.5f, center - size * 0.5f, size);
+        ApplyTextureImage(m_reloadBulletElement, m_reloadBulletImage, center - size * 0.5f, center - size * 0.5f, size);
     }
 
     /// <summary>
@@ -1760,7 +1799,7 @@ public class CrosshairController : MonoBehaviour
     /// <summary>
     /// VisualElement에 벡터 이미지 배경을 절대 배치로 적용합니다(크기에 맞춰 축소, 배경색 투명).
     /// </summary>
-    private static void ApplyVectorImage(VisualElement element, VectorImage image, float left, float top, float size)
+    private static void ApplyTextureImage(VisualElement element, Texture2D image, float left, float top, float size)
     {
         size = Mathf.Max(0.0f, size);
 
