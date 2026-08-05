@@ -22,7 +22,6 @@ public class AimController : MonoBehaviour
     [SerializeField] private PlayerCommonBalanceSO m_balanceSO;
 
     private const int WeaponLayerIndex = 1;
-    private const float AimRotationLerpSpeed = 50.0f;
 
     // 이 시간(초) 이상 사격이 끊기면 좌우 킥 번갈이 패턴을 첫 발부터 다시 시작합니다.
     private const float KickPatternResetGap = 0.25f;
@@ -1072,9 +1071,9 @@ public class AimController : MonoBehaviour
     private void UpdateCombat()
     {
         // 지향점: 레이캐스트와 무관하게 항상 카메라 전방 먼 고정점. 캐릭터(몸통/상체 IK)가 일관되게 이 지점을 바라봅니다.
+        // 몸통 수평 회전은 ThirdPersonController가 시점 모드에 맞춰 처리하므로 여기서는 IK 지향점만 갱신합니다.
         Vector3 lookPoint = ResolveLookPoint();
         ApplyLookTarget(lookPoint);
-        RotateToLookPoint(lookPoint);
 
         // 조준점: 카메라 트레이스가 잡은 실제 사격 목표. 총알이 겨누는 지점입니다.
         Vector3 aimPoint = ResolveAimPoint(lookPoint);
@@ -1722,26 +1721,6 @@ public class AimController : MonoBehaviour
 
 
     /// <summary>
-    /// 지향점(먼 지점)을 향해 캐릭터 몸통의 수평 회전(yaw)을 보간합니다.
-    /// </summary>
-    /// <param name="lookPoint">이번 프레임의 지향점(먼 지점)입니다. 항상 멀리 있으므로 가까운 장애물에 급회전하지 않습니다.</param>
-    private void RotateToLookPoint(Vector3 lookPoint)
-    {
-        Vector3 aimDirection = lookPoint - transform.position;
-        aimDirection.y = 0.0f;
-
-        if (aimDirection.sqrMagnitude <= 0.0001f)
-        {
-            return;
-        }
-
-        transform.forward = Vector3.Lerp(
-            transform.forward,
-            aimDirection.normalized,
-            Time.deltaTime * AimRotationLerpSpeed);
-    }
-
-    /// <summary>
     /// 사격 입력 상태를 애니메이터와 무기 컨트롤러에 반영합니다.
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
@@ -1865,9 +1844,9 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
-    /// 조준 카메라, 조준 UI, 이동 컨트롤러의 조준 이동 상태를 설정합니다.
+    /// 조준 카메라, 조준 UI를 갱신하고 이동 컨트롤러에 전투 자세 여부를 통지합니다.
     /// </summary>
-    /// <param name="isAiming">조준 상태이면 true입니다.</param>
+    /// <param name="isAiming">전투 자세(조준/힙파이어)이면 true입니다.</param>
     private void SetAimState(bool isAiming)
     {
         bool showAimImage = isAiming || m_showAimImageAlways;
@@ -1894,7 +1873,7 @@ public class AimController : MonoBehaviour
 
         if (m_controller != null)
         {
-            m_controller.SetAimMove(isAiming);
+            m_controller.SetCombatStance(isAiming);
         }
     }
 

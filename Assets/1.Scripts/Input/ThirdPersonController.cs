@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using Unity.Cinemachine;
+using UnityEngine;
 using UnityEngine.Serialization;
 using VInspector;
 #if ENABLE_INPUT_SYSTEM
@@ -39,6 +40,33 @@ public class ThirdPersonController : MonoBehaviour
         public bool Grounded;
         public bool Jump;
         public bool FreeFall;
+    }
+
+    /// <summary>
+    /// 몸이 어느 방향을 기준으로 도는지를 나타내는 3인칭 시점 모드입니다.
+    /// </summary>
+    public enum CameraViewMode
+    {
+        /// <summary>몸이 이동 방향을 바라보는 자유 시점입니다.</summary>
+        FreeLook,
+
+        /// <summary>몸이 카메라 정면을 바라보는 백뷰입니다. 옆·뒤 입력은 게걸음/뒷걸음이 됩니다.</summary>
+        BackView,
+    }
+
+    /// <summary>
+    /// 시점 모드를 고르는 기준이 되는 플레이어 상태입니다.
+    /// </summary>
+    public enum ViewContext
+    {
+        /// <summary>조준/사격 중이거나 사격 직후 잔류 시간 안입니다.</summary>
+        Combat,
+
+        /// <summary>비전투 상태에서 이동 중이거나, 멈춘 지 얼마 되지 않았습니다.</summary>
+        NonCombatMove,
+
+        /// <summary>비전투 상태로 충분히 오래 멈춰 있습니다.</summary>
+        Idle,
     }
 
 
@@ -237,6 +265,32 @@ public class ThirdPersonController : MonoBehaviour
 
 
 
+    /// <summary>전투/비전투/Idle 상태별 시점 모드 설정값입니다.</summary>
+    /// <remarks>
+    /// 이 묶음은 아직 <c>[BalanceField]</c>를 붙이지 않았습니다. 밸런스 SO에 같은 이름 필드가 없으면
+    /// 바인드마다 경고가 남기 때문입니다. SO를 다시 생성할 때 함께 승격하면 됩니다.
+    /// </remarks>
+    [Foldout("View Options")]
+    [Tooltip("비전투 백뷰에서 사용할 Cinemachine 카메라입니다. 비어 있으면 비전투는 자유 시점으로 동작합니다.")]
+    [SerializeField] private CinemachineCamera m_nonCombatBackViewCamera;
+
+    [Tooltip("비전투 이동 중 백뷰를 사용할지 여부입니다.")]
+    [SerializeField] private bool m_nonCombatBackView = true;
+
+    [Tooltip("멈춰 있는 동안 백뷰를 사용할지 여부입니다. 꺼 두면 제자리에서 자유 시점으로 주변을 살필 수 있습니다.")]
+    [SerializeField] private bool m_idleBackView = false;
+
+    [Tooltip("이동 입력이 끊긴 뒤 Idle 시점으로 넘어가기까지의 대기 시간입니다. 단위는 초입니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_freeLookIdleDelay = 1.5f;
+
+    [Tooltip("전투 자세에서 몸이 카메라 정면을 따라가는 회전 보간 시간입니다. 작을수록 즉각적입니다.")]
+    [Range(0.0f, 0.3f)]
+    [Clamp(Min = 0, Max = 0.3)]
+    [SerializeField] private float m_combatRotationSmoothTime = 0.03f;
+
+
+
     /// <summary>애니메이션 이벤트에서 재생할 캐릭터 오디오 설정값입니다.</summary>
     [Foldout("Audio Options")]
     [FormerlySerializedAs("LandingAudioClip")]
@@ -356,8 +410,18 @@ public class ThirdPersonController : MonoBehaviour
     /// <summary>현재 캐릭터가 지면에 닿아 있는지 여부입니다.</summary>
     private bool m_grounded = true;
 
-    /// <summary>조준 이동 상태 여부입니다. true이면 이동 중 몸 회전을 제한합니다.</summary>
-    private bool m_isAimMove;
+    /// <summary>전투 자세(조준/사격/사격 잔류) 여부입니다. AimController가 통지합니다.</summary>
+    /// <remarks>전투 자세는 설정과 무관하게 백뷰로 고정되고, 전력질주가 잠깁니다.</remarks>
+    private bool m_isCombatStance;
+
+    /// <summary>이동 입력이 끊긴 뒤 경과한 시간입니다. Idle 시점 전환 판정에 사용합니다.</summary>
+    private float m_idleTimer;
+
+    /// <summary>이번 프레임에 적용 중인 시점 모드입니다.</summary>
+    private CameraViewMode m_viewMode = CameraViewMode.FreeLook;
+
+    /// <summary>이번 프레임에 판정된 시점 컨텍스트입니다.</summary>
+    private ViewContext m_viewContext = ViewContext.Idle;
 
     /// <summary>재장전 상태 여부입니다. true이면 전력질주 대신 기본 이동 속도를 사용합니다.</summary>
     private bool m_isReload;
@@ -407,8 +471,12 @@ public class ThirdPersonController : MonoBehaviour
     /// <summary>발걸음과 착지 효과음 재생 볼륨입니다.</summary>
     public float FootstepAudioVolume => m_footstepAudioVolume;
 
-    /// <summary>현재 조준 이동 상태인지 여부입니다.</summary>
-    public bool IsAimMove => m_isAimMove;
+    /// <summary>현재 전투 자세인지 여부입니다.</summary>
+    public bool IsCombatStance => m_isCombatStance;
+    /// <summary>현재 적용 중인 시점 모드입니다.</summary>
+    public CameraViewMode ViewMode => m_viewMode;
+    /// <summary>현재 판정된 시점 컨텍스트입니다.</summary>
+    public ViewContext CurrentViewContext => m_viewContext;
     /// <summary>현재 재장전 상태인지 여부입니다.</summary>
     public bool IsReload => m_isReload;
 
@@ -836,10 +904,22 @@ public class ThirdPersonController : MonoBehaviour
     public void SetFootstepAudioVolume(float value) => m_footstepAudioVolume = Mathf.Clamp01(value);
 
     /// <summary>
-    /// 조준 이동 상태를 설정합니다.
+    /// 전투 자세 여부를 설정합니다. AimController가 전투 자세 진입/이탈 시 호출합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
-    public void SetAimMove(bool value) => m_isAimMove = value;
+    /// <remarks>
+    /// 전투에 들어가면 Idle 타이머를 지웁니다. 남겨 두면 교전이 끝난 첫 프레임에
+    /// 이전에 서 있던 시간이 그대로 살아나 곧바로 자유 시점으로 풀립니다.
+    /// </remarks>
+    public void SetCombatStance(bool value)
+    {
+        m_isCombatStance = value;
+
+        if (value)
+        {
+            m_idleTimer = 0.0f;
+        }
+    }
     /// <summary>
     /// 재장전 상태를 설정합니다.
     /// </summary>
@@ -906,6 +986,9 @@ public class ThirdPersonController : MonoBehaviour
     {
         // 인계 상태가 없더라도 조작을 넘겨받은 것은 사실이므로 겹침 밀림 대비는 켭니다.
         m_switchSettleFrames = SwitchSettleFrameCount;
+
+        // 전환 직후 시점이 갑자기 자유 시점으로 풀리지 않도록 Idle 판정을 처음부터 다시 셉니다.
+        m_idleTimer = 0.0f;
 
         if (!state.HasState)
         {
@@ -1052,8 +1135,13 @@ public class ThirdPersonController : MonoBehaviour
 
         m_hasAnimator = TryGetComponent(out m_animator);
 
-        JumpAndGravity();
+        // 접지 판정을 점프/중력보다 먼저 합니다. 순서가 반대면 JumpAndGravity가 직전 프레임의 접지 결과를
+        // 읽어, 착지하는 프레임에 IsGrounded와 IsFreeFall이 한 프레임 동안 함께 켜집니다.
+        // 그 한 프레임 때문에 착지 직후 재점프가 도약 동작을 건너뛰고 낙하 상태로 새는 일이 있었습니다.
         GroundedCheck();
+        JumpAndGravity();
+        // 시점 판정을 이동보다 먼저 합니다. Move가 이번 프레임의 시점 모드로 몸을 돌리기 때문입니다.
+        UpdateViewMode();
         Move();
     }
 
@@ -1420,7 +1508,8 @@ public class ThirdPersonController : MonoBehaviour
     {
         float targetSpeed = m_input.sprint ? m_sprintSpeed : m_moveSpeed;
 
-        if (m_isAimMove || m_isReload)
+        // 속도 제약은 시점이 아니라 상태에 걸립니다. 비전투 백뷰에서는 전력질주가 그대로 살아 있습니다.
+        if (m_isCombatStance || m_isReload)
         {
             targetSpeed = m_moveSpeed;
         }
@@ -1477,15 +1566,12 @@ public class ThirdPersonController : MonoBehaviour
         {
             m_targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg +
                                m_mainCamera.transform.eulerAngles.y;
-            float rotation = Mathf.SmoothDampAngle(transform.eulerAngles.y, m_targetRotation, ref m_rotationVelocity,
-                m_rotationSmoothTime);
-
-            if (!m_isAimMove)
-            {
-                transform.rotation = Quaternion.Euler(0.0f, rotation, 0.0f);
-            }
         }
 
+        ApplyBodyRotation();
+
+        // 이동 방향은 시점 모드와 무관하게 항상 카메라 기준 입력 방향입니다.
+        // 백뷰에서 몸이 카메라를 보는 동안에도 이 값이 그대로 쓰이기 때문에 옆·뒤 입력이 게걸음/뒷걸음이 됩니다.
         Vector3 targetDirection = Quaternion.Euler(0.0f, m_targetRotation, 0.0f) * Vector3.forward;
 
         m_controller.Move(targetDirection.normalized * (m_speed * Time.deltaTime) +
@@ -1496,6 +1582,117 @@ public class ThirdPersonController : MonoBehaviour
             m_animator.SetFloat(m_animIDSpeed, m_animationBlend);
             m_animator.SetFloat(m_animIDMotionSpeed, inputMagnitude);
         }
+    }
+
+    /// <summary>
+    /// 전투 자세와 이동 입력, 정지 경과 시간으로 이번 프레임의 시점 컨텍스트와 시점 모드를 판정합니다.
+    /// </summary>
+    private void UpdateViewMode()
+    {
+        bool moving = m_input.move != Vector2.zero;
+
+        if (m_isCombatStance)
+        {
+            m_idleTimer = 0.0f;
+            m_viewContext = ViewContext.Combat;
+        }
+        else if (moving)
+        {
+            m_idleTimer = 0.0f;
+            m_viewContext = ViewContext.NonCombatMove;
+        }
+        else
+        {
+            m_idleTimer += Time.deltaTime;
+
+            // 멈춘 즉시 Idle로 넘기지 않는 이유는, 걷다 서다를 반복할 때 시점이 프레임 단위로 딸깍거리기 때문입니다.
+            m_viewContext = m_idleTimer >= m_freeLookIdleDelay
+                ? ViewContext.Idle
+                : ViewContext.NonCombatMove;
+        }
+
+        m_viewMode = ResolveViewMode(m_viewContext);
+        ApplyNonCombatRig();
+    }
+
+    /// <summary>
+    /// 시점 컨텍스트에 대응하는 시점 모드를 결정합니다.
+    /// </summary>
+    /// <param name="context">이번 프레임에 판정된 시점 컨텍스트입니다.</param>
+    /// <returns>적용할 시점 모드입니다.</returns>
+    private CameraViewMode ResolveViewMode(ViewContext context)
+    {
+        // 전투는 조준과 탄착이 화면 중앙을 기준으로 하므로 설정과 무관하게 백뷰 고정입니다.
+        if (context == ViewContext.Combat)
+        {
+            return CameraViewMode.BackView;
+        }
+
+        // 비전투 백뷰 리그가 아직 배선되지 않았으면 보여 줄 카메라가 없으므로 자유 시점으로 폴백합니다.
+        if (m_nonCombatBackViewCamera == null)
+        {
+            return CameraViewMode.FreeLook;
+        }
+
+        bool backView = context == ViewContext.Idle ? m_idleBackView : m_nonCombatBackView;
+
+        return backView ? CameraViewMode.BackView : CameraViewMode.FreeLook;
+    }
+
+    /// <summary>
+    /// 비전투 백뷰 리그의 활성 상태를 현재 시점 모드에 맞춥니다.
+    /// </summary>
+    /// <remarks>전투 리그는 AimController가 소유하므로 여기서는 건드리지 않습니다.</remarks>
+    private void ApplyNonCombatRig()
+    {
+        if (m_nonCombatBackViewCamera == null)
+        {
+            return;
+        }
+
+        bool active = m_viewContext != ViewContext.Combat && m_viewMode == CameraViewMode.BackView;
+
+        if (m_nonCombatBackViewCamera.gameObject.activeSelf != active)
+        {
+            m_nonCombatBackViewCamera.gameObject.SetActive(active);
+        }
+    }
+
+    /// <summary>
+    /// 현재 시점 모드에 맞는 목표 yaw로 몸을 회전시킵니다.
+    /// </summary>
+    /// <remarks>
+    /// 자유 시점은 이동 방향(카메라 기준 입력)을, 백뷰는 카메라 정면을 목표로 삼습니다.
+    /// 목표만 다르고 보간은 <see cref="Mathf.SmoothDampAngle"/> 하나로 통일했습니다.
+    /// 예전에는 백뷰만 <c>Vector3.Lerp(..., Time.deltaTime * 50f)</c>를 썼는데,
+    /// 그 형태는 프레임레이트에 따라 수렴 속도가 달라지고 모드가 바뀌는 프레임에 회전 속도가 튑니다.
+    ///
+    /// 감쇠 시간만 전투/비전투로 나눕니다. SmoothDamp는 회전 속도를 상태로 들고 있어서
+    /// 보간 도중 감쇠 시간이 바뀌어도 각도가 끊기지 않고 가속도만 달라집니다.
+    /// </remarks>
+    private void ApplyBodyRotation()
+    {
+        bool backView = m_viewMode == CameraViewMode.BackView;
+
+        // 자유 시점은 이동 입력이 있을 때만 몸을 돌립니다. 백뷰는 제자리에서도 카메라를 따라갑니다.
+        if (!backView && m_input.move == Vector2.zero)
+        {
+            return;
+        }
+
+        float goalRotation = backView && m_mainCamera != null
+            ? m_mainCamera.transform.eulerAngles.y
+            : m_targetRotation;
+
+        float smoothTime = m_isCombatStance ? m_combatRotationSmoothTime : m_rotationSmoothTime;
+
+        float rotation = Mathf.SmoothDampAngle(
+            transform.eulerAngles.y,
+            goalRotation,
+            ref m_rotationVelocity,
+            smoothTime);
+
+        transform.rotation = Quaternion.Euler(0.0f, rotation, 0.0f);
     }
 
     /// <summary>
