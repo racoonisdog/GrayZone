@@ -19,6 +19,7 @@ public sealed class RagdollController : MonoBehaviour
     private bool[] m_gameplayColliderStates = System.Array.Empty<bool>();
     private bool m_animatorWasEnabled;
     private bool m_isRagdollActive;
+    private bool m_gameplayCollidersDisabled;
 
     /// <summary>Joint로 연결된 래그돌 물리 골격이 준비됐는지 여부입니다.</summary>
     public bool IsConfigured => m_ragdollBodies.Length > 0 && m_ragdollColliders.Length > 0;
@@ -48,7 +49,7 @@ public sealed class RagdollController : MonoBehaviour
             return false;
         }
 
-        CaptureAndDisableGameplayColliders();
+        DisableGameplayColliders();
 
         m_animatorWasEnabled = m_animator != null && m_animator.enabled;
         if (m_animator != null)
@@ -198,21 +199,44 @@ public sealed class RagdollController : MonoBehaviour
         }
     }
 
-    private void CaptureAndDisableGameplayColliders()
+    /// <summary>
+    /// 래그돌 골격에 속하지 않은 게임플레이 콜라이더만 끄고, 되돌릴 수 있게 원래 상태를 기록합니다.
+    /// </summary>
+    /// <remarks>
+    /// 래그돌 전환보다 먼저 불러도 됩니다. 사망 애니메이션을 재생하는 동안에도 피격·이동 충돌은
+    /// 즉시 사라져 있어야 하기 때문입니다.
+    /// 두 번 불려도 처음 기록한 원래 상태를 덮어쓰지 않습니다. 덮어쓰면 이미 꺼진 값을 원래 상태로
+    /// 기억해 <see cref="DeactivateRagdoll"/>이 콜라이더를 되살리지 못합니다.
+    /// </remarks>
+    public void DisableGameplayColliders()
     {
+        if (m_gameplayCollidersDisabled)
+        {
+            return;
+        }
+
         for (int i = 0; i < m_gameplayColliders.Length; i++)
         {
             Collider collider = m_gameplayColliders[i];
             m_gameplayColliderStates[i] = collider.enabled;
             collider.enabled = false;
         }
+
+        m_gameplayCollidersDisabled = true;
     }
 
     private void RestoreGameplayColliders()
     {
+        if (!m_gameplayCollidersDisabled)
+        {
+            return;
+        }
+
         for (int i = 0; i < m_gameplayColliders.Length; i++)
         {
             m_gameplayColliders[i].enabled = m_gameplayColliderStates[i];
         }
+
+        m_gameplayCollidersDisabled = false;
     }
 }
