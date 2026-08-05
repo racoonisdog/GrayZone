@@ -436,10 +436,9 @@ public class EnemyController : MonoBehaviour
     private static readonly int AnimMoveSpeed = Animator.StringToHash("MoveSpeed");
     private static readonly int AnimInAttackRange = Animator.StringToHash("InAttackRange");
     private static readonly int AnimAttack = Animator.StringToHash("DoAttack");
-    private static readonly int AnimDead = Animator.StringToHash("DoDeath");
 
-    /// <summary>사망 스테이트의 이름 해시입니다. 사망 애니메이션 종료 판정에 씁니다.</summary>
-    private static readonly int AnimDeathState = Animator.StringToHash("Death");
+    // 사망 관련 애니메이터 파라미터는 두지 않습니다. 사망은 애니메이터를 끄고 래그돌이 이어받으므로
+    // 재생할 클립도, 종료를 기다릴 스테이트도 없습니다(DeadState 참고).
 
     /// <summary>공격 중인지 여부입니다. 공격 스테이트를 유지하는 조건입니다.</summary>
     private static readonly int AnimIsAttack = Animator.StringToHash("IsAttack");
@@ -527,60 +526,6 @@ public class EnemyController : MonoBehaviour
 
         animator.SetBool(AnimIsAttack, false);
         animator.SetInteger(AnimAttackCombo, 0);
-    }
-
-    /// <summary>사망 애니메이션을 재생합니다.</summary>
-    public void PlayDeathAnimation()
-    {
-        if (animator == null)
-        {
-            return;
-        }
-
-        animator.SetBool(AnimInAttackRange, false);
-        animator.SetTrigger(AnimDead);
-    }
-
-    /// <summary>사망 애니메이션이 끝까지 재생됐는지 여부입니다.</summary>
-    /// <returns>사망 스테이트가 끝났거나 애니메이터가 없으면 true입니다.</returns>
-    public bool IsDeathAnimationFinished()
-    {
-        return IsDeathAnimationPast(1.0f);
-    }
-
-    /// <summary>
-    /// 사망 애니메이션이 지정한 진행률을 지났는지 여부입니다.
-    /// </summary>
-    /// <param name="normalizedTime">확인할 진행률입니다. 0이 시작, 1이 클립 끝입니다.</param>
-    /// <returns>그 지점을 지났거나 애니메이터가 없으면 true입니다.</returns>
-    /// <remarks>
-    /// 클립 길이를 수치로 복제하지 않기 위해 애니메이터의 실제 진행도를 읽습니다.
-    /// 사망 클립을 교체하거나 변이체마다 다른 클립을 쓰더라도 이 판정은 그대로 맞습니다.
-    /// 전이 중에는 아직 사망 스테이트에 들어오지 않았으므로 지나지 않은 것으로 봅니다.
-    /// 사망 스테이트에는 나가는 전이가 없어 마지막 프레임에서 정지하므로, 진행도는 1을 넘긴 뒤 계속 증가합니다.
-    ///
-    /// 0을 넘기면 스테이트에 들어온 것만으로 통과합니다. 래그돌 전환 시점을 0으로 두면
-    /// 선 자세에서 물리가 이어받아 어색하므로, 그 판단은 호출자(설정 값)에 맡깁니다.
-    /// </remarks>
-    public bool IsDeathAnimationPast(float normalizedTime)
-    {
-        if (animator == null)
-        {
-            return true;
-        }
-
-        if (animator.IsInTransition(0))
-        {
-            return false;
-        }
-
-        AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
-        if (state.shortNameHash != AnimDeathState)
-        {
-            return false;
-        }
-
-        return state.normalizedTime >= normalizedTime;
     }
 
     /// <summary>공격 사거리 안에 있는지를 애니메이터에 전달합니다.</summary>

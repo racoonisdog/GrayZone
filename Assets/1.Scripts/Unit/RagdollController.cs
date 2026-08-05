@@ -12,6 +12,18 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class RagdollController : MonoBehaviour
 {
+    [Header("Ragdoll Handoff")]
+    [Tooltip("애니메이션이 만들던 뼈 속도를 래그돌에 넘길지 여부입니다. 끄면 전환 순간 정지 상태에서 무너져 달리다 죽어도 제자리에 쓰러집니다.")]
+    [SerializeField] private bool m_inheritAnimationVelocity = true;
+
+    [Tooltip("인계할 속도에 곱하는 배수입니다. 1이면 애니메이션이 만들던 속도 그대로이고, 낮추면 관성을 덜 싣습니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_inheritedVelocityScale = 1.0f;
+
+    [Tooltip("인계할 선속도의 상한(m/s)입니다. 순간이동에 가까운 애니메이션 프레임이 섞이면 속도가 튀므로 상한을 둡니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_maxInheritedSpeed = 10.0f;
+
     private Animator m_animator;
     private Rigidbody[] m_ragdollBodies = System.Array.Empty<Rigidbody>();
     private Collider[] m_ragdollColliders = System.Array.Empty<Collider>();
@@ -20,6 +32,18 @@ public sealed class RagdollController : MonoBehaviour
     private bool m_animatorWasEnabled;
     private bool m_isRagdollActive;
     private bool m_gameplayCollidersDisabled;
+
+    /// <summary>직전 프레임의 뼈 위치입니다. 속도 인계 계산에만 씁니다.</summary>
+    private Vector3[] m_previousBonePositions = System.Array.Empty<Vector3>();
+
+    /// <summary>직전 프레임의 뼈 회전입니다. 속도 인계 계산에만 씁니다.</summary>
+    private Quaternion[] m_previousBoneRotations = System.Array.Empty<Quaternion>();
+
+    /// <summary>직전 프레임 캐시가 채워져 있는지 여부입니다. 첫 프레임에는 계산할 델타가 없습니다.</summary>
+    private bool m_hasPreviousBonePose;
+
+    /// <summary>직전 캐시를 기록한 프레임의 간격(초)입니다. 속도 계산의 분모입니다.</summary>
+    private float m_previousBoneDeltaTime;
 
     /// <summary>Joint로 연결된 래그돌 물리 골격이 준비됐는지 여부입니다.</summary>
     public bool IsConfigured => m_ragdollBodies.Length > 0 && m_ragdollColliders.Length > 0;
@@ -34,9 +58,39 @@ public sealed class RagdollController : MonoBehaviour
     }
 
     /// <summary>
-    /// Animator를 멈추고, 사망 전 현재 자세에서 뼈대 물리 시뮬레이션을 시작합니다.
+    /// 애니메이션이 적용된 뒤의 뼈 자세를 기록해 둡니다.
+    /// </summary>
+    /// <remarks>
+    /// LateUpdate에서 읽는 이유는 이 시점의 뼈 자세가 이번 프레임 애니메이션의 결과이기 때문입니다.
+    /// Update에서 읽으면 아직 이전 프레임 자세가 남아 있어 델타가 한 프레임 밀립니다.
+    ///
+    /// 래그돌이 켜진 뒤에는 기록하지 않습니다. 그 뒤의 자세는 물리가 만드는 것이라 인계할 대상이 아닙니다.
+    /// 애니메이터가 컬링으로 멈추면 이 델타는 0이 되므로, 화면 밖에서 죽은 개체는 관성 없이 무너집니다.
+    /// 그것까지 맞추려면 프리팹의 Animator Culling Mode가 Always Animate여야 합니다.
+    /// </remarks>
+    private void LateUpdate()
+    {
+        if (m_isRagdollActive || !m_inheritAnimationVelocity)
+        {
+            return;
+        }
+
+        CacheBonePose();
+    }
+
+    /// <summary>
+    /// Animator를 멈추고, 사망 시점의 자세와 속도에서 뼈대 물리 시뮬레이션을 시작합니다.
     /// </summary>
     /// <returns>물리 골격이 준비되어 래그돌을 활성화했으면 true입니다.</returns>
+    /// <remarks>
+    /// <b>순서가 중요합니다.</b> <c>isKinematic</c>이 true인 동안에는 속도 대입이 무시되므로
+    /// (Unity 문서: kinematic 리지드바디의 velocity 설정은 효과가 없음), 반드시 동역학으로 바꾼 뒤에
+    /// 속도를 넣어야 합니다. 이전 구현은 속도를 먼저 넣고 나중에 <c>isKinematic</c>을 풀었는데,
+    /// 넣는 값이 0이라 결과가 같아 문제가 드러나지 않았습니다.
+    ///
+    /// 속도를 0으로 지우면 애니메이션이 만들던 관성이 전부 사라져 "멈췄다가 무너지는" 모양이 됩니다.
+    /// 달리던 개체가 제자리에 쓰러지는 것이 그 증상입니다.
+    /// </remarks>
     public bool TryActivateRagdoll()
     {
         if (m_isRagdollActive)
@@ -62,19 +116,113 @@ public sealed class RagdollController : MonoBehaviour
             m_ragdollColliders[i].enabled = true;
         }
 
+        // 애니메이터가 만든 마지막 자세를 물리 쪽에 반영한 뒤 시뮬레이션을 시작합니다.
         Physics.SyncTransforms();
 
         for (int i = 0; i < m_ragdollBodies.Length; i++)
         {
             Rigidbody body = m_ragdollBodies[i];
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
+
             body.isKinematic = false;
+            ApplyInheritedVelocity(body, i);
             body.WakeUp();
         }
 
         m_isRagdollActive = true;
         return true;
+    }
+
+    /// <summary>
+    /// 뼈 하나에 직전 프레임 애니메이션이 만들던 속도를 넣습니다.
+    /// </summary>
+    /// <param name="body">속도를 넣을 뼈 리지드바디입니다.</param>
+    /// <param name="index">뼈 배열에서의 순번입니다. 캐시 배열과 같은 순서입니다.</param>
+    /// <remarks>
+    /// 인계를 껐거나 직전 자세 캐시가 없으면 0으로 시작합니다.
+    /// 애니메이션 한 프레임에 뼈가 크게 튀는 경우가 있어 선속도에 상한을 둡니다. 상한이 없으면
+    /// 전환 순간 래그돌이 폭발적으로 날아갑니다.
+    /// </remarks>
+    private void ApplyInheritedVelocity(Rigidbody body, int index)
+    {
+        if (!m_inheritAnimationVelocity
+            || !m_hasPreviousBonePose
+            || m_previousBoneDeltaTime <= 0.0f
+            || index >= m_previousBonePositions.Length)
+        {
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            return;
+        }
+
+        Transform bone = body.transform;
+
+        Vector3 linear = (bone.position - m_previousBonePositions[index])
+            / m_previousBoneDeltaTime
+            * m_inheritedVelocityScale;
+
+        if (linear.magnitude > m_maxInheritedSpeed)
+        {
+            linear = linear.normalized * m_maxInheritedSpeed;
+        }
+
+        body.linearVelocity = linear;
+        body.angularVelocity = CalculateAngularVelocity(
+            m_previousBoneRotations[index],
+            bone.rotation,
+            m_previousBoneDeltaTime) * m_inheritedVelocityScale;
+    }
+
+    /// <summary>
+    /// 두 회전 사이의 각속도를 구합니다.
+    /// </summary>
+    /// <param name="previous">직전 프레임의 회전입니다.</param>
+    /// <param name="current">현재 회전입니다.</param>
+    /// <param name="deltaTime">두 회전 사이의 시간(초)입니다.</param>
+    /// <returns>축과 크기를 합친 각속도(라디안/초)입니다.</returns>
+    /// <remarks>
+    /// 회전 델타를 축·각으로 풀어 각속도로 바꿉니다. 180도를 넘는 각은 반대 방향의 짧은 회전으로
+    /// 해석해야 합니다. 그러지 않으면 한 프레임에 살짝 넘어간 회전이 거의 한 바퀴 도는 각속도로 잡힙니다.
+    /// </remarks>
+    private static Vector3 CalculateAngularVelocity(
+        Quaternion previous,
+        Quaternion current,
+        float deltaTime)
+    {
+        Quaternion delta = current * Quaternion.Inverse(previous);
+        delta.ToAngleAxis(out float angleDegrees, out Vector3 axis);
+
+        if (float.IsInfinity(axis.x) || float.IsNaN(axis.x) || axis.sqrMagnitude < Mathf.Epsilon)
+        {
+            return Vector3.zero;
+        }
+
+        if (angleDegrees > 180.0f)
+        {
+            angleDegrees -= 360.0f;
+        }
+
+        return axis.normalized * (angleDegrees * Mathf.Deg2Rad / deltaTime);
+    }
+
+    /// <summary>현재 뼈 자세를 다음 프레임의 델타 계산용으로 기록합니다.</summary>
+    private void CacheBonePose()
+    {
+        if (m_previousBonePositions.Length != m_ragdollBodies.Length)
+        {
+            m_previousBonePositions = new Vector3[m_ragdollBodies.Length];
+            m_previousBoneRotations = new Quaternion[m_ragdollBodies.Length];
+            m_hasPreviousBonePose = false;
+        }
+
+        for (int i = 0; i < m_ragdollBodies.Length; i++)
+        {
+            Transform bone = m_ragdollBodies[i].transform;
+            m_previousBonePositions[i] = bone.position;
+            m_previousBoneRotations[i] = bone.rotation;
+        }
+
+        m_previousBoneDeltaTime = Time.deltaTime;
+        m_hasPreviousBonePose = m_ragdollBodies.Length > 0;
     }
 
     /// <summary>
@@ -111,6 +259,10 @@ public sealed class RagdollController : MonoBehaviour
         }
 
         m_isRagdollActive = false;
+
+        // 물리가 만든 자세를 애니메이션 델타로 오해하지 않도록 캐시를 버립니다.
+        // 되살아난 직후 다시 죽으면 그 사이의 자세 변화가 속도로 잡혀 시체가 튑니다.
+        m_hasPreviousBonePose = false;
     }
 
     /// <summary>

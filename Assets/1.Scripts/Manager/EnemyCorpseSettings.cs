@@ -7,7 +7,7 @@ using UnityEngine;
 /// <remarks>
 /// 적 개체는 사망 상태 진입 시 자기 <see cref="EnemyType"/>에 해당하는 슬롯을 한 번 읽습니다.
 /// 이미 사망한 시체에는 이후 Inspector 변경이 소급 적용되지 않습니다.
-/// 사망 연출 순서는 사망 애니메이션 재생 → (지정 진행률에서 래그돌 전환) → 시체 유지 시간 → 삭제입니다.
+/// 사망 연출 순서는 사망 즉시 래그돌 전환 → 시체 유지 시간 → 삭제입니다. 사망 애니메이션은 쓰지 않습니다.
 ///
 /// 슬롯은 <see cref="EnemyType"/> 멤버와 1:1로 고정됩니다. 목록을 자유롭게 늘리는 구조가 아니라
 /// enum 멤버 수를 그대로 따라가므로, 같은 종류를 두 번 넣거나 종류를 빼먹는 상태 자체가 생기지 않습니다.
@@ -35,16 +35,12 @@ public sealed class EnemyCorpseSettings : MonoBehaviour
         [Tooltip("켜면 적 사망 후 시체 오브젝트를 지정한 시간이 지난 뒤 삭제합니다. 끄면 필드가 끝날 때까지 유지합니다.")]
         [SerializeField] private bool m_destroyCorpse = true;
 
-        [Tooltip("시체 오브젝트를 삭제하기까지 기다리는 시간(초)입니다. 래그돌 전환 시점부터 셉니다. 시체 삭제가 꺼져 있으면 사용하지 않습니다.")]
+        [Tooltip("시체 오브젝트를 삭제하기까지 기다리는 시간(초)입니다. 사망 시점부터 셉니다. 시체 삭제가 꺼져 있으면 사용하지 않습니다.")]
         [Min(0.0f)]
         [SerializeField] private float m_corpseLifetime = 3.0f;
 
-        [Tooltip("켜면 사망 애니메이션 진행 중 지정한 시점에 물리 골격이 준비된 적을 래그돌로 전환합니다. 끄거나 골격이 없으면 사망 애니메이션 마지막 자세로 남습니다.")]
+        [Tooltip("켜면 사망 즉시 물리 골격이 준비된 적을 래그돌로 전환합니다. 끄거나 골격이 없으면 마지막 자세 그대로 굳습니다.")]
         [SerializeField] private bool m_useRagdoll = true;
-
-        [Tooltip("사망 애니메이션의 어느 진행률에서 래그돌로 넘길지입니다. 1이면 클립이 끝난 뒤, 0.5면 절반 지점입니다. 래그돌이 애니메이터를 끄므로 그 시점의 자세에서 물리가 이어받습니다. 너무 이르면 선 자세에서 떨어져 어색합니다.")]
-        [Range(0.0f, 1.0f)]
-        [SerializeField] private float m_ragdollAtNormalizedTime = 1.0f;
 
         /// <summary>이 설정을 적용할 감염체 종류입니다.</summary>
         public EnemyType EnemyType => m_enemyType;
@@ -52,18 +48,11 @@ public sealed class EnemyCorpseSettings : MonoBehaviour
         /// <summary>적 시체 오브젝트를 시간 경과 후 삭제할지 여부입니다.</summary>
         public bool DestroyCorpse => m_destroyCorpse;
 
-        /// <summary>래그돌 전환 시점부터 시체 오브젝트를 삭제하기까지의 시간(초)입니다.</summary>
+        /// <summary>사망 시점부터 시체 오브젝트를 삭제하기까지의 시간(초)입니다.</summary>
         public float CorpseLifetime => Mathf.Max(0.0f, m_corpseLifetime);
 
-        /// <summary>사망 애니메이션 진행 중 래그돌로 전환할지 여부입니다.</summary>
+        /// <summary>사망 즉시 래그돌로 전환할지 여부입니다.</summary>
         public bool UseRagdoll => m_useRagdoll;
-
-        /// <summary>래그돌로 넘길 사망 애니메이션 진행률(0~1)입니다.</summary>
-        /// <remarks>
-        /// 시체 삭제 카운트는 이 시점부터 셉니다. 연출이 시작되는 지점이 곧 시체 단계의 시작이기 때문입니다.
-        /// 1이면 클립이 끝난 뒤 전환합니다.
-        /// </remarks>
-        public float RagdollAtNormalizedTime => Mathf.Clamp01(m_ragdollAtNormalizedTime);
 
         /// <summary>이 슬롯이 담당할 종류를 지정합니다. 동기화 코드만 사용합니다.</summary>
         internal void SetEnemyType(EnemyType value)
