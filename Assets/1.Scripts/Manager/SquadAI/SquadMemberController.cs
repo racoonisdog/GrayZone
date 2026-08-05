@@ -706,7 +706,7 @@ public class SquadMemberController : MonoBehaviour
 
         if (m_thirdPersonController != null)
         {
-            m_thirdPersonController.SetAimMove(inCombat);
+            m_thirdPersonController.SetCombatStance(inCombat);
             m_thirdPersonController.ApplyLocomotionCarryoverState(state.Locomotion);
         }
 

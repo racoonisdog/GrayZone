@@ -73,7 +73,9 @@ namespace GrayZone.EditorTools
                     {
                         enabled = tpc.enabled,
                         isReload = tpc.IsReload,
-                        isAimMove = tpc.IsAimMove,
+                        isCombatStance = tpc.IsCombatStance,
+                        viewContext = tpc.CurrentViewContext.ToString(),
+                        viewMode = tpc.ViewMode.ToString(),
                     },
                     weapon = wc == null ? null : new
                     {

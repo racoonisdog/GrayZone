@@ -444,7 +444,7 @@ public class PlayerManager : MonoBehaviour
 
         if (m_controller != null)
         {
-            m_controller.SetAimMove(isAiming);
+            m_controller.SetCombatStance(isAiming);
         }
     }
 
