@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using UnityCliConnector;
+using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UIImage = UnityEngine.UI.Image;
@@ -17,18 +18,19 @@ namespace GrayZone.EditorTools
     /// <remarks>
     /// 호출: <c>unity-cli --project . gz_dump --params '{"what":"sceneui"}'</c>
     /// what: <c>combat</c>(플레이어 장전/조준/무기 상태), <c>sceneui</c>(캔버스·UIDocument·Image·SpriteRenderer),
-    /// <c>go</c>(name 파라미터로 지정한 GameObject의 컴포넌트/활성/위치).
+    /// <c>go</c>(name 파라미터로 지정한 GameObject의 컴포넌트/활성/위치),
+    /// <c>anim</c>(Animator 레이어별 현재/다음 스테이트, 전이 진행도, 파라미터 값).
     /// </remarks>
     [UnityCliTool(Name = "gz_dump", Group = "GrayZone",
-        Description = "GrayZone 런타임/씬 상태를 한 번에 덤프합니다. what: combat | sceneui | go.")]
+        Description = "GrayZone 런타임/씬 상태를 한 번에 덤프합니다. what: combat | sceneui | go | revive | anim.")]
     public static class GZDebugDump
     {
         public class Parameters
         {
-            [ToolParameter("덤프 종류: combat | sceneui | go", Required = true)]
+            [ToolParameter("덤프 종류: combat | sceneui | go | revive | anim", Required = true)]
             public string What { get; set; }
 
-            [ToolParameter("what=go 일 때 조회할 GameObject 이름(부분 일치)")]
+            [ToolParameter("what=go 일 때 조회할 GameObject 이름(부분 일치). what=anim 에서는 대상 필터로 쓰입니다.")]
             public string Name { get; set; }
         }
 
@@ -43,8 +45,9 @@ namespace GrayZone.EditorTools
                 case "sceneui": return DumpSceneUI();
                 case "go": return DumpGameObject(p.Get("name", ""));
                 case "revive": return DumpRevive();
+                case "anim": return DumpAnimator(p.Get("name", ""));
                 default:
-                    return new ErrorResponse("what 파라미터가 필요합니다: combat | sceneui | go | revive");
+                    return new ErrorResponse("what 파라미터가 필요합니다: combat | sceneui | go | revive | anim");
             }
         }
 
@@ -224,6 +227,149 @@ namespace GrayZone.EditorTools
                 targetCount = targets.Count,
                 targets,
             });
+        }
+
+        // ── anim ─────────────────────────────────────────────────────────────
+        /// <summary>
+        /// Animator의 레이어별 현재/다음 스테이트와 전이 진행도, 파라미터 값을 덤프합니다.
+        /// </summary>
+        /// <param name="nameFilter">비면 스쿼드 멤버가 붙은 오브젝트만, 값이 있으면 이름 부분 일치로 고릅니다.</param>
+        /// <remarks>
+        /// 런타임 <c>AnimatorStateInfo</c>는 스테이트 해시만 주므로 이름을 알 수 없습니다.
+        /// 에디터 전용 코드이므로 <see cref="AnimatorController"/>에서 해시→이름 표를 만들어 이름까지 붙입니다.
+        /// <c>isInTransition</c>이 계속 true이고 다음 스테이트가 현재와 같으면 조건 없는 자기 전이가
+        /// 매 프레임 재시작되고 있다는 신호입니다.
+        /// </remarks>
+        private static object DumpAnimator(string nameFilter)
+        {
+            bool useFilter = !string.IsNullOrWhiteSpace(nameFilter);
+
+            var animators = Object.FindObjectsByType<Animator>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+                .Where(a => useFilter
+                    ? a.name.IndexOf(nameFilter, System.StringComparison.OrdinalIgnoreCase) >= 0
+                    : a.GetComponentInParent<SquadMemberController>() != null)
+                .Take(8)
+                .ToList();
+
+            var dumps = new List<object>();
+            foreach (var animator in animators)
+            {
+                var nameByHash = BuildStateNameMap(animator);
+
+                var layers = new List<object>();
+                for (int i = 0; i < animator.layerCount; i++)
+                {
+                    AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(i);
+                    bool inTransition = animator.IsInTransition(i);
+                    AnimatorStateInfo next = inTransition ? animator.GetNextAnimatorStateInfo(i) : default;
+
+                    layers.Add(new
+                    {
+                        layer = animator.GetLayerName(i),
+                        weight = animator.GetLayerWeight(i),
+                        currentState = StateLabel(current, nameByHash),
+                        currentNormalizedTime = current.normalizedTime,
+                        currentLength = current.length,
+                        isInTransition = inTransition,
+                        nextState = inTransition ? StateLabel(next, nameByHash) : null,
+                        nextNormalizedTime = inTransition ? (float?)next.normalizedTime : null,
+                        transitionProgress = inTransition
+                            ? (float?)animator.GetAnimatorTransitionInfo(i).normalizedTime
+                            : null,
+                        clips = animator.GetCurrentAnimatorClipInfo(i)
+                            .Select(c => (object)new { clip = c.clip != null ? c.clip.name : null, weight = c.weight })
+                            .ToArray(),
+                    });
+                }
+
+                var parameters = new List<object>();
+                foreach (var parameter in animator.parameters)
+                {
+                    object value = parameter.type switch
+                    {
+                        AnimatorControllerParameterType.Bool => animator.GetBool(parameter.nameHash),
+                        AnimatorControllerParameterType.Trigger => animator.GetBool(parameter.nameHash),
+                        AnimatorControllerParameterType.Int => animator.GetInteger(parameter.nameHash),
+                        AnimatorControllerParameterType.Float => animator.GetFloat(parameter.nameHash),
+                        _ => null,
+                    };
+
+                    parameters.Add(new { name = parameter.name, type = parameter.type.ToString(), value });
+                }
+
+                dumps.Add(new
+                {
+                    go = animator.name,
+                    path = Path(animator.transform),
+                    enabled = animator.enabled,
+                    controller = animator.runtimeAnimatorController != null
+                        ? animator.runtimeAnimatorController.name
+                        : null,
+                    applyRootMotion = animator.applyRootMotion,
+                    layers,
+                    parameters,
+                });
+            }
+
+            return new SuccessResponse(
+                $"anim: {dumps.Count} animator(s){(useFilter ? $" matching '{nameFilter}'" : " on squad members")}.",
+                dumps);
+        }
+
+        /// <summary>스테이트 해시를 사람이 읽을 이름으로 바꿉니다. 표에 없으면 해시를 그대로 씁니다.</summary>
+        private static string StateLabel(AnimatorStateInfo info, Dictionary<int, string> nameByHash)
+        {
+            return nameByHash.TryGetValue(info.shortNameHash, out string name)
+                ? name
+                : $"#{info.shortNameHash}";
+        }
+
+        /// <summary>
+        /// AnimatorController를 훑어 스테이트 해시→이름 표를 만듭니다.
+        /// </summary>
+        /// <remarks>하위 스테이트 머신도 재귀로 포함합니다. Override 컨트롤러면 원본 컨트롤러를 따라갑니다.</remarks>
+        private static Dictionary<int, string> BuildStateNameMap(Animator animator)
+        {
+            var map = new Dictionary<int, string>();
+
+            RuntimeAnimatorController runtime = animator.runtimeAnimatorController;
+            if (runtime is AnimatorOverrideController overrideController)
+            {
+                runtime = overrideController.runtimeAnimatorController;
+            }
+
+            if (runtime is not AnimatorController controller)
+            {
+                return map;
+            }
+
+            foreach (var layer in controller.layers)
+            {
+                CollectStateNames(layer.stateMachine, map);
+            }
+
+            return map;
+        }
+
+        private static void CollectStateNames(AnimatorStateMachine machine, Dictionary<int, string> map)
+        {
+            if (machine == null)
+            {
+                return;
+            }
+
+            foreach (var child in machine.states)
+            {
+                if (child.state != null)
+                {
+                    map[child.state.nameHash] = child.state.name;
+                }
+            }
+
+            foreach (var child in machine.stateMachines)
+            {
+                CollectStateNames(child.stateMachine, map);
+            }
         }
 
         // ── helpers ──────────────────────────────────────────────────────────

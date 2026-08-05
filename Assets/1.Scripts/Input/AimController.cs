@@ -30,6 +30,18 @@ public class AimController : MonoBehaviour
     private static readonly int AnimIDShoot = Animator.StringToHash("IsShoot");
     private static readonly int AnimIDReload = Animator.StringToHash("DoReload");
 
+    /// <summary>
+    /// 재장전 중인지 여부입니다. 애니메이터가 재장전 스테이트에 들어가고 나오는 조건입니다.
+    /// </summary>
+    /// <remarks>
+    /// 트리거만으로는 부족합니다. 애니메이터의 재장전 진입 조건이 <c>DoReload AND IsReload</c>이고
+    /// 이탈 조건이 <c>IfNot IsReload</c>이므로, 이 값을 세우지 않으면 재장전 스테이트에 아예 들어가지 못합니다.
+    ///
+    /// 들어가지 못하면 클립의 재장전 완료 이벤트도 오지 않고, 그 이벤트가 <see cref="Reload"/>를 통해
+    /// 재장전 상태를 내리는 <b>유일한 경로</b>여서 재장전이 영구히 끝나지 않습니다. 그러면 사격도 막힙니다.
+    /// </remarks>
+    private static readonly int AnimIDIsReload = Animator.StringToHash("IsReload");
+
     /// <summary>전투 시점 상태입니다. 조준선 디버그 캡처를 이 상태의 전환 시점에만 수행합니다.</summary>
     private enum CombatStance
     {
@@ -1023,6 +1035,9 @@ public class AimController : MonoBehaviour
         SetRigWeight(0.0f);
         m_animator.SetBool(AnimIDShoot, false);
         m_animator.SetLayerWeight(WeaponLayerIndex, 1.0f);
+
+        // 트리거와 bool을 함께 세웁니다. 애니메이터 진입 조건이 둘의 AND입니다.
+        m_animator.SetBool(AnimIDIsReload, true);
         m_animator.SetTrigger(AnimIDReload);
         m_controller.SetReload(true);
 
@@ -1904,6 +1919,12 @@ public class AimController : MonoBehaviour
     private void FinishReloadVisualState(bool completeWeaponReload)
     {
         m_controller.SetReload(false);
+
+        // 애니메이터가 재장전 스테이트에서 나오는 조건입니다. 내리지 않으면 자세가 남습니다.
+        if (m_animator != null)
+        {
+            m_animator.SetBool(AnimIDIsReload, false);
+        }
         m_inCombatStance = false;
         m_isAds = false;
         m_hipfireTimer = 0.0f;
