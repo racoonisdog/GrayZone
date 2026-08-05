@@ -17,6 +17,10 @@ using UnityEngine.Serialization;
 [RequireComponent(typeof(EnemyAttack))]
 public class EnemyController : MonoBehaviour
 {
+    [Header("Identity")]
+    [Tooltip("이 감염체의 종류입니다. 시체 처리처럼 종류별로 다른 설정을 고를 때의 키로 씁니다. 밸런스 수치와는 무관합니다.")]
+    [SerializeField] private EnemyType m_enemyType = EnemyType.Howler;
+
     [Header("Balance Data")]
     [Tooltip("선택 사항인 적 밸런스 데이터입니다. 지정하면 아래 레거시 기본값보다 우선 적용됩니다.")]
     [FormerlySerializedAs("m_balance")]
@@ -72,6 +76,16 @@ public class EnemyController : MonoBehaviour
 
     /// <summary>소음 수색 중 배회할 반경입니다.</summary>
     [SerializeField] private float noiseSearchRadius = 5f;
+
+    [Header("Howl")]
+    /// <summary>하울링이 전달되는 고정 반경입니다.</summary>
+    [SerializeField] private float howlRadius = 25f;
+
+    /// <summary>하울링 시작 후 전파가 확정되는 시점입니다.</summary>
+    [SerializeField] private float howlBroadcastTime = 1.2f;
+
+    /// <summary>하울링 행동 전체 길이입니다.</summary>
+    [SerializeField] private float howlDuration = 3f;
 
     [Header("Target")]
     /// <summary>현재 대상을 다시 고를지 판단하는 주기입니다. 이 주기가 곧 대상의 최소 유지 시간입니다.</summary>
@@ -176,6 +190,26 @@ public class EnemyController : MonoBehaviour
         return ragdollController != null && ragdollController.TryActivateRagdoll();
     }
 
+    /// <summary>
+    /// 래그돌 골격이 있으면 래그돌용 콜라이더는 남기고 게임플레이 콜라이더만 걷어냅니다.
+    /// </summary>
+    /// <returns>래그돌 컴포넌트가 처리했으면 true이고, 없으면 false입니다.</returns>
+    /// <remarks>
+    /// 사망 직후에는 아직 래그돌로 넘기지 않아도 피격·이동 충돌은 즉시 사라져야 합니다(§5.10.4).
+    /// 어느 콜라이더가 래그돌 소속인지는 <see cref="RagdollController"/>만 알고 있으므로 그쪽에 맡깁니다.
+    /// false가 돌아오면 호출자가 콜라이더를 통째로 끄면 됩니다.
+    /// </remarks>
+    public bool TryDisableGameplayColliders()
+    {
+        if (ragdollController == null)
+        {
+            return false;
+        }
+
+        ragdollController.DisableGameplayColliders();
+        return true;
+    }
+
     /// <summary>배회 상태 진입 피드백을 출력합니다.</summary>
     public void PlayIdleFeedback() => EnsureFeedbackEmitter()?.PlayIdle(m_feedback);
 
@@ -222,6 +256,15 @@ public class EnemyController : MonoBehaviour
     /// <summary>소음 수색 중 배회할 반경입니다.</summary>
     public float NoiseSearchRadius => noiseSearchRadius;
 
+    /// <summary>하울링이 전달되는 고정 반경입니다.</summary>
+    public float HowlRadius => howlRadius;
+
+    /// <summary>하울링 전파가 확정되는 시점입니다.</summary>
+    public float HowlBroadcastTime => howlBroadcastTime;
+
+    /// <summary>하울링 행동 전체 길이입니다. 전파 시점보다 짧아지지 않습니다.</summary>
+    public float HowlDuration => Mathf.Max(howlBroadcastTime, howlDuration);
+
     /// <summary>각성 준비(경계) 시간입니다.</summary>
     public float AlertDuration => alertDuration;
 
@@ -248,6 +291,9 @@ public class EnemyController : MonoBehaviour
 
     /// <summary>판정 후 후딜레이이며 곧 공격 간격입니다.</summary>
     public float AttackRecoveryDuration => attackRecoveryDuration;
+
+    /// <summary>이 감염체의 종류입니다. 종류별 설정을 고를 때의 키입니다.</summary>
+    public EnemyType EnemyType => m_enemyType;
 
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
     public EnemyBalanceSO Balance => m_balanceSO;
@@ -297,6 +343,9 @@ public class EnemyController : MonoBehaviour
         noiseArriveDistance = balance.NoiseArriveDistance;
         noiseSearchDuration = balance.NoiseSearchDuration;
         noiseSearchRadius = balance.NoiseSearchRadius;
+        howlRadius = balance.HowlRadius;
+        howlBroadcastTime = balance.HowlBroadcastTime;
+        howlDuration = balance.HowlDuration;
         alertDuration = balance.AlertDuration;
         loseSightDelay = balance.LoseSightDelay;
         targetReevaluateInterval = balance.TargetReevaluateInterval;
@@ -389,6 +438,9 @@ public class EnemyController : MonoBehaviour
     private static readonly int AnimAttack = Animator.StringToHash("DoAttack");
     private static readonly int AnimDead = Animator.StringToHash("DoDeath");
 
+    /// <summary>사망 스테이트의 이름 해시입니다. 사망 애니메이션 종료 판정에 씁니다.</summary>
+    private static readonly int AnimDeathState = Animator.StringToHash("Death");
+
     /// <summary>공격 중인지 여부입니다. 공격 스테이트를 유지하는 조건입니다.</summary>
     private static readonly int AnimIsAttack = Animator.StringToHash("IsAttack");
 
@@ -414,11 +466,23 @@ public class EnemyController : MonoBehaviour
     /// <remarks>
     /// 트리거가 아니라 bool입니다. 두리번은 지속 상태이고 나가는 길이 셋(추적/배회/교전)이라
     /// 트리거로는 "지금 경계 중인가"를 되읽을 수 없습니다.
+    ///
+    /// 이름을 `IsAlert`가 아니라 `IsLookAround`로 맞췄습니다. 애니메이터의 스테이트·클립·진입 트리거가
+    /// 모두 `LookAround` 어휘를 쓰므로, 코드만 다른 이름을 쓰면 파라미터가 조용히 어긋납니다.
     /// </remarks>
-    private static readonly int AnimIsAlert = Animator.StringToHash("IsAlert");
+    private static readonly int AnimIsAlert = Animator.StringToHash("IsLookAround");
+
+    /// <summary>두리번을 시작하는 트리거입니다.</summary>
+    private static readonly int AnimLookAround = Animator.StringToHash("DoLookAround");
 
     /// <summary>소음 인지 게이지의 진행도입니다. 두리번 강도 블렌드에 쓰는 선택 파라미터입니다.</summary>
     private static readonly int AnimAlertLevel = Animator.StringToHash("AlertLevel");
+
+    /// <summary>하울링을 시작하는 트리거입니다. 클립은 `WW_Howl`을 씁니다.</summary>
+    private static readonly int AnimHowl = Animator.StringToHash("DoHowl");
+
+    /// <summary>하울링 스테이트를 유지하는 조건입니다.</summary>
+    private static readonly int AnimIsHowl = Animator.StringToHash("IsHowl");
 
     /// <summary>
     /// 애니메이터를 기본 상태로 되돌립니다.
@@ -477,6 +541,48 @@ public class EnemyController : MonoBehaviour
         animator.SetTrigger(AnimDead);
     }
 
+    /// <summary>사망 애니메이션이 끝까지 재생됐는지 여부입니다.</summary>
+    /// <returns>사망 스테이트가 끝났거나 애니메이터가 없으면 true입니다.</returns>
+    public bool IsDeathAnimationFinished()
+    {
+        return IsDeathAnimationPast(1.0f);
+    }
+
+    /// <summary>
+    /// 사망 애니메이션이 지정한 진행률을 지났는지 여부입니다.
+    /// </summary>
+    /// <param name="normalizedTime">확인할 진행률입니다. 0이 시작, 1이 클립 끝입니다.</param>
+    /// <returns>그 지점을 지났거나 애니메이터가 없으면 true입니다.</returns>
+    /// <remarks>
+    /// 클립 길이를 수치로 복제하지 않기 위해 애니메이터의 실제 진행도를 읽습니다.
+    /// 사망 클립을 교체하거나 변이체마다 다른 클립을 쓰더라도 이 판정은 그대로 맞습니다.
+    /// 전이 중에는 아직 사망 스테이트에 들어오지 않았으므로 지나지 않은 것으로 봅니다.
+    /// 사망 스테이트에는 나가는 전이가 없어 마지막 프레임에서 정지하므로, 진행도는 1을 넘긴 뒤 계속 증가합니다.
+    ///
+    /// 0을 넘기면 스테이트에 들어온 것만으로 통과합니다. 래그돌 전환 시점을 0으로 두면
+    /// 선 자세에서 물리가 이어받아 어색하므로, 그 판단은 호출자(설정 값)에 맡깁니다.
+    /// </remarks>
+    public bool IsDeathAnimationPast(float normalizedTime)
+    {
+        if (animator == null)
+        {
+            return true;
+        }
+
+        if (animator.IsInTransition(0))
+        {
+            return false;
+        }
+
+        AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
+        if (state.shortNameHash != AnimDeathState)
+        {
+            return false;
+        }
+
+        return state.normalizedTime >= normalizedTime;
+    }
+
     /// <summary>공격 사거리 안에 있는지를 애니메이터에 전달합니다.</summary>
     /// <param name="inRange">사거리 안이면 true입니다.</param>
     public void SetInAttackRangeAnimation(bool inRange)
@@ -502,12 +608,93 @@ public class EnemyController : MonoBehaviour
 
         animator.SetBool(AnimIsAlert, alert);
 
+        // 진입은 트리거가 함께 있어야 성립합니다. 애니메이터 조건이 DoLookAround AND IsLookAround입니다.
+        // bool만 세우면 스테이트에 들어가지 못하고, 그러면 두리번 자세가 아예 나오지 않습니다.
+        if (alert && HasAnimatorParameter(AnimLookAround))
+        {
+            animator.SetTrigger(AnimLookAround);
+        }
+
         // 두리번 강도 블렌드는 선택 사항입니다. 파라미터를 두지 않아도 경계 자체는 동작합니다.
         if (HasAnimatorParameter(AnimAlertLevel))
         {
             animator.SetFloat(AnimAlertLevel, targetSensor != null ? targetSensor.NoiseAwareness01 : 0f);
         }
     }
+
+    /// <summary>
+    /// 하울링 애니메이션을 시작합니다.
+    /// </summary>
+    /// <remarks>
+    /// `DoHowl`과 `IsHowl`은 애니메이터에 이미 선언돼 있으나 지금까지 코드가 부르지 않았습니다.
+    /// 파라미터가 없어도 동작해야 하므로 존재를 확인합니다 - 전파 자체는 타이머로 진행되며
+    /// 애니메이션은 표현입니다.
+    /// </remarks>
+    public void PlayHowlAnimation()
+    {
+        if (animator == null)
+        {
+            return;
+        }
+
+        if (HasAnimatorParameter(AnimIsHowl))
+        {
+            animator.SetBool(AnimIsHowl, true);
+        }
+
+        if (HasAnimatorParameter(AnimHowl))
+        {
+            animator.SetTrigger(AnimHowl);
+        }
+    }
+
+    /// <summary>하울링 상태에서 빠져나왔음을 애니메이터에 알립니다.</summary>
+    public void EndHowlAnimation()
+    {
+        if (animator == null || !HasAnimatorParameter(AnimIsHowl))
+        {
+            return;
+        }
+
+        animator.SetBool(AnimIsHowl, false);
+    }
+
+    /// <summary>
+    /// 클립의 하울링 전파 이벤트를 상태로 넘깁니다.
+    /// </summary>
+    /// <remarks>
+    /// 애니메이션 이벤트가 이 이름으로 이 컴포넌트를 부릅니다. 문서 확정본의 이벤트 이름은
+    /// `HowlBroadcast`이며, 클립에 이벤트를 넣을 때 이 메서드를 가리키게 합니다.
+    /// 하울링 중이 아닐 때 들어오면 무시합니다.
+    /// </remarks>
+    public void HowlBroadcast()
+    {
+        if (m_current == Combat && Combat.CurrentSub == Combat.Howl)
+        {
+            Combat.Howl.NotifyAnimationBroadcast();
+        }
+    }
+
+    /// <summary>
+    /// 하울링 전파 결과를 진단용으로 남깁니다.
+    /// </summary>
+    /// <param name="appliedCount">실제로 하울링을 적용한 주변 변이체 수입니다.</param>
+    /// <param name="memberCount">위치를 제공한 스쿼드 캐릭터 수입니다.</param>
+    /// <remarks>
+    /// 하울링은 눈에 보이는 결과가 "주변 개체가 몰려온다"뿐이라 전파가 실제로 됐는지 판단하기 어렵습니다.
+    /// 반경 밖이어서 0인 것과 배선이 끊겨 0인 것을 구분하려면 숫자가 필요합니다.
+    /// </remarks>
+    public void NotifyHowlBroadcast(int appliedCount, int memberCount)
+    {
+        LastHowlAppliedCount = appliedCount;
+        LastHowlMemberCount = memberCount;
+    }
+
+    /// <summary>가장 최근 하울링이 적용된 주변 변이체 수입니다. 진단용입니다.</summary>
+    public int LastHowlAppliedCount { get; private set; } = -1;
+
+    /// <summary>가장 최근 하울링이 위치를 제공한 스쿼드 캐릭터 수입니다. 진단용입니다.</summary>
+    public int LastHowlMemberCount { get; private set; } = -1;
 
     /// <summary>지정한 파라미터가 현재 애니메이터에 선언되어 있는지 확인합니다.</summary>
     /// <remarks>

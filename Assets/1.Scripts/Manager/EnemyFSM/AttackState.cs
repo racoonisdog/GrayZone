@@ -27,6 +27,24 @@ public class AttackState : EnemyStateBase
     /// <summary>공격 상태를 생성합니다.</summary>
     public AttackState(EnemyController controller) : base(controller) { }
 
+    /// <summary>
+    /// 이번 공격이 하울링 전 공격인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 하울링 전 공격은 B-1 한 번으로 끝내고 B-2까지 연계하지 않으며, 끝나면 하울링으로 갑니다
+    /// (콘텐츠 §7.2). 그래서 보통의 공격과 종료 처리가 다릅니다.
+    /// </remarks>
+    private bool m_isPreHowlAttack;
+
+    /// <summary>
+    /// 다음 진입을 하울링 전 공격으로 표시합니다.
+    /// </summary>
+    /// <remarks><see cref="CombatState"/>가 하위 상태를 바꾸기 직전에 부릅니다.</remarks>
+    public void BeginAsPreHowlAttack()
+    {
+        m_isPreHowlAttack = true;
+    }
+
     public override void Enter()
     {
         Controller.PlayAttackFeedback();
@@ -131,6 +149,15 @@ public class AttackState : EnemyStateBase
     /// <remarks>아직 칠 수 있으면 다시 공격하고, 아니면 추격으로 돌아갑니다.</remarks>
     private void FinishSwing()
     {
+        // 하울링 전 공격은 B-1 한 번으로 끝내고 B-2까지 연계하지 않습니다(콘텐츠 §7.2).
+        // 대상을 다시 칠 수 있는지와 무관하게 하울링으로 넘어갑니다.
+        if (m_isPreHowlAttack)
+        {
+            m_isPreHowlAttack = false;
+            Controller.Combat.ContinueToHowlAfterPreAttack();
+            return;
+        }
+
         SquadMemberController target = Controller.Sensor != null ? Controller.Sensor.CurrentTarget : null;
         bool canAttackAgain = target != null && Controller.Attack != null && Controller.Attack.CanStartAttack(target);
 

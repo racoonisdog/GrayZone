@@ -86,6 +86,16 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("소음 수색 중 배회할 반경(m)입니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_noiseSearchRadius = 5f;
 
+    [Header("Howl")]
+    [Tooltip("하울링이 전달되는 고정 반경(m)입니다. 벽이나 엄폐물은 판정에 쓰지 않습니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_howlRadius = 25f;
+
+    [Tooltip("하울링 시작 후 실제로 전파가 확정되는 시점(초)입니다. 이 시점 전에 사망하면 전파가 취소됩니다. 클립 이벤트가 오면 그쪽이 우선합니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_howlBroadcastTime = 1.2f;
+
+    [Tooltip("하울링 행동 전체 길이(초)입니다. 끝나면 다음 행동을 고릅니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_howlDuration = 3f;
+
     [Header("Target Selection")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기(초)입니다. 이 주기 자체가 대상의 최소 유지 시간이 됩니다.")]
     [SerializeField] private float m_targetReevaluateInterval = 1f;
@@ -180,6 +190,15 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
 
     /// <summary>소음 수색 중 배회할 반경(m)입니다.</summary>
     public float NoiseSearchRadius => Mathf.Max(0.1f, m_noiseSearchRadius);
+
+    /// <summary>하울링이 전달되는 고정 반경(m)입니다.</summary>
+    public float HowlRadius => Mathf.Max(0f, m_howlRadius);
+
+    /// <summary>하울링 전파가 확정되는 시점(초)입니다.</summary>
+    public float HowlBroadcastTime => Mathf.Max(0f, m_howlBroadcastTime);
+
+    /// <summary>하울링 행동 전체 길이(초)입니다. 전파 시점보다 짧아지지 않습니다.</summary>
+    public float HowlDuration => Mathf.Max(HowlBroadcastTime, m_howlDuration);
 
     /// <summary>시야 감지 거리(m)입니다.</summary>
     public float SightRange => Mathf.Max(0f, m_sightRange);

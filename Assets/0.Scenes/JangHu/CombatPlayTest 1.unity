@@ -68501,6 +68501,9 @@ MonoBehaviour:
   noiseArriveDistance: 1.5
   noiseSearchDuration: 8
   noiseSearchRadius: 5
+  howlRadius: 25
+  howlBroadcastTime: 1.2
+  howlDuration: 3
   targetReevaluateInterval: 1
   targetSwitchPathDistanceDelta: 2
   hitStunDuration: 0.35
@@ -104348,6 +104351,9 @@ MonoBehaviour:
   noiseArriveDistance: 1.5
   noiseSearchDuration: 8
   noiseSearchRadius: 5
+  howlRadius: 25
+  howlBroadcastTime: 1.2
+  howlDuration: 3
   targetReevaluateInterval: 1
   targetSwitchPathDistanceDelta: 2
   hitStunDuration: 0.35
