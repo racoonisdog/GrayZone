@@ -11,4 +11,7 @@ public enum FacilityInteractionType
 
     /// <summary>생산 시설 UI를 열기.</summary>
     Manufactur,
+
+    /// <summary>출격 시설 UI를 열기.</summary>
+    Operations,
 }

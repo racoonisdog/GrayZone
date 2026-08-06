@@ -27,9 +27,9 @@ TagManager:
   - EnemyHitbox
   - PlayerHitbox
   - Corpse
-  - 
-  - 
-  - 
+  - Env_SmallProp
+  - Env_Detail
+  - Env_Interior
   - 
   - 
   - 

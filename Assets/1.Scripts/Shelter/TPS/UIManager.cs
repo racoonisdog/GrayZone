@@ -20,7 +20,10 @@ public enum ShelterUIType
     FacilityUpgrade,
 
     /// <summary>셸터 공용 인벤토리가 열려 있음</summary>
-    Inventory
+    Inventory,
+
+    /// <summary>출격 준비 UI가 열려 있음</summary>
+    Operations
 }
 
 /// <summary>
@@ -37,6 +40,9 @@ public class UIManager : MonoBehaviour
 
     [Header("Manufacturing UI")]
     [SerializeField] private ManufacturingUI m_manufacturingUI;
+
+    [Header("Operations UI")]
+    [SerializeField] private OperationUI m_operationUI;
 
     [Header("Facility Upgrade UI")]
     [SerializeField] private FacilityUpgradeUI m_facilityUpgradeUI;
@@ -101,6 +107,11 @@ public class UIManager : MonoBehaviour
                     CloseManufacturingUI();
                 }
                 return true;
+            case ShelterUIType.Operations:
+                OperationUI operationUI = CacheOperationUI();
+                if (operationUI == null || !operationUI.TryHandleEscape())
+                    CloseOperationUI();
+                return true;
             case ShelterUIType.FacilityUpgrade:
                 CloseFacilityUpgradeUI();
                 return true;
@@ -121,6 +132,10 @@ public class UIManager : MonoBehaviour
         if (manufacturingUI != null)
             manufacturingUI.Closed += HandleManufacturingUIClosed;
 
+        OperationUI operationUI = CacheOperationUI();
+        if (operationUI != null)
+            operationUI.Closed += HandleOperationUIClosed;
+
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed += HandleFacilityUpgradeUIClosed;
 
@@ -136,6 +151,9 @@ public class UIManager : MonoBehaviour
 
         if (m_manufacturingUI != null)
             m_manufacturingUI.Closed -= HandleManufacturingUIClosed;
+
+        if (m_operationUI != null)
+            m_operationUI.Closed -= HandleOperationUIClosed;
 
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed -= HandleFacilityUpgradeUIClosed;
@@ -222,6 +240,9 @@ public class UIManager : MonoBehaviour
             case FacilityInteractionType.Manufactur:
                 OpenManufacturingUI(interactionPoint);
                 return true;
+            case FacilityInteractionType.Operations:
+                OpenOperationUI(interactionPoint);
+                return true;
             default:
                 return false;
         }
@@ -299,6 +320,42 @@ public class UIManager : MonoBehaviour
     {
         if (m_manufacturingUI != null)
             m_manufacturingUI.Close();
+
+        SetActiveUI(ShelterUIType.None);
+    }
+
+    /// <summary>출격 시설 상호작용 지점에서 출격 준비 UI를 엽니다.</summary>
+    public void OpenOperationUI(FacilityInteractionPoint interactionPoint)
+    {
+        OperationUI operationUI = CacheOperationUI();
+        if (operationUI == null)
+        {
+            Debug.LogWarning("[UI] Operation UI is not assigned.", this);
+            return;
+        }
+
+        if (interactionPoint == null)
+            return;
+
+        if (!interactionPoint.TryGetFacility(out OperationCenter operationCenter))
+        {
+            Debug.LogWarning("[UI] OperationCenter is not found.", interactionPoint);
+            return;
+        }
+
+        SetInteractionUIActive(false);
+        operationUI.Open(operationCenter);
+        SetActiveUI(ShelterUIType.Operations);
+
+        if (m_logMessages)
+            Debug.Log($"[UI] Open Operation UI : {interactionPoint.name}", interactionPoint);
+    }
+
+    /// <summary>출격 준비 UI를 닫고 활성 UI 상태를 비웁니다.</summary>
+    public void CloseOperationUI()
+    {
+        if (m_operationUI != null)
+            m_operationUI.Close();
 
         SetActiveUI(ShelterUIType.None);
     }
@@ -386,6 +443,12 @@ public class UIManager : MonoBehaviour
             SetActiveUI(ShelterUIType.None);
     }
 
+    private void HandleOperationUIClosed()
+    {
+        if (m_activeUI == ShelterUIType.Operations)
+            SetActiveUI(ShelterUIType.None);
+    }
+
     private void HandleFacilityUpgradeUIClosed()
     {
         if (m_activeUI == ShelterUIType.FacilityUpgrade)
@@ -424,6 +487,8 @@ public class UIManager : MonoBehaviour
             CloseMedicalUI();
         else if (m_activeUI == ShelterUIType.Manufacturing)
             CloseManufacturingUI();
+        else if (m_activeUI == ShelterUIType.Operations)
+            CloseOperationUI();
         else if (m_activeUI == ShelterUIType.Inventory)
             CloseInventoryUI();
     }
@@ -449,6 +514,17 @@ public class UIManager : MonoBehaviour
         }
 
         return m_inventoryUI;
+    }
+
+    private OperationUI CacheOperationUI()
+    {
+        if (m_operationUI == null)
+        {
+            m_operationUI =
+                FindFirstObjectByType<OperationUI>(FindObjectsInactive.Include);
+        }
+
+        return m_operationUI;
     }
 
     private void SetInteractionUIActive(bool active)
