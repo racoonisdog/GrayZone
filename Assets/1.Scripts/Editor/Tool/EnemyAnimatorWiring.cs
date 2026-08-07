@@ -67,7 +67,7 @@ public static class EnemyAnimatorWiring
 
         EnsureParameter(controller, "IdleType", AnimatorControllerParameterType.Float, log);
         EnsureParameter(controller, "MoveX", AnimatorControllerParameterType.Float, log);
-        EnsureParameter(controller, "MoveY", AnimatorControllerParameterType.Float, log);
+        EnsureParameter(controller, "MoveZ", AnimatorControllerParameterType.Float, log);
 
         Dictionary<string, BlendTree> trees = CollectBlendTrees(controller);
 
@@ -464,7 +464,7 @@ public static class EnemyAnimatorWiring
 
         tree.blendType = BlendTreeType.FreeformDirectional2D;
         tree.blendParameter = "MoveX";
-        tree.blendParameterY = "MoveY";
+        tree.blendParameterY = "MoveZ";
 
         // 기존 자식을 비우고 다시 채웁니다. 같은 클립이 중복으로 쌓이는 것을 막습니다.
         tree.children = new ChildMotion[0];

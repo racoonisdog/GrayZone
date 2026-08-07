@@ -19,7 +19,12 @@ namespace GrayZone.EditorTools
     /// 호출: <c>unity-cli --project . gz_dump --params '{"what":"sceneui"}'</c>
     /// what: <c>combat</c>(플레이어 장전/조준/무기 상태), <c>sceneui</c>(캔버스·UIDocument·Image·SpriteRenderer),
     /// <c>go</c>(name 파라미터로 지정한 GameObject의 컴포넌트/활성/위치),
-    /// <c>anim</c>(Animator 레이어별 현재/다음 스테이트, 전이 진행도, 파라미터 값).
+    /// <c>anim</c>(Animator 레이어별 현재/다음 스테이트, 전이 진행도, 파라미터 값),
+    /// <c>ragdoll</c>(변이체 래그돌 전환 상태와 뼈 속도).
+    ///
+    /// <c>killenemy</c>는 조회가 아니라 <b>상태를 바꾸는 디버그 동작</b>입니다. 변이체 하나를 즉사시켜
+    /// 사망 연출을 검증합니다. 이름이 dump인 도구에 동작이 섞여 있으므로 호출 시 유의하십시오.
+    /// Play Mode에서 <c>exec</c>이 컴파일 지연으로 멈춰 검증 진입점이 필요해 여기에 두었습니다.
     /// </remarks>
     [UnityCliTool(Name = "gz_dump", Group = "GrayZone",
         Description = "GrayZone 런타임/씬 상태를 한 번에 덤프합니다. what: combat | sceneui | go | revive | anim.")]
@@ -46,8 +51,11 @@ namespace GrayZone.EditorTools
                 case "go": return DumpGameObject(p.Get("name", ""));
                 case "revive": return DumpRevive();
                 case "anim": return DumpAnimator(p.Get("name", ""));
+                case "ragdoll": return DumpRagdoll(p.Get("name", ""));
+                case "killenemy": return KillEnemy(p.Get("name", ""));
                 default:
-                    return new ErrorResponse("what 파라미터가 필요합니다: combat | sceneui | go | revive | anim");
+                    return new ErrorResponse(
+                        "what 파라미터가 필요합니다: combat | sceneui | go | revive | anim | ragdoll | killenemy");
             }
         }
 
@@ -60,7 +68,9 @@ namespace GrayZone.EditorTools
                 var tpc = m.GetComponent<ThirdPersonController>();
                 var aim = m.GetComponent<AimController>();
                 var wc = m.GetComponentInChildren<Gun>();
-                var inp = m.GetComponent<PlayerInputs>();
+                var inp = m.GetComponent<PlayerInputController>();
+                var ai = m.GetComponent<SquadAIController>();
+                var tg = ai != null ? ai.Targeting : null;
 
                 members.Add(new
                 {
@@ -101,10 +111,58 @@ namespace GrayZone.EditorTools
                         shoot = inp.Shoot,
                         reload = inp.Reload,
                     },
+                    // AI 개인 대상 판단(§9). 유예 중이면 겨누되 쏘지 않는 상태입니다.
+                    targeting = tg == null ? null : new
+                    {
+                        aiEnabled = ai.enabled,
+                        target = tg.CurrentTarget != null ? tg.CurrentTarget.name : null,
+                        holdingLost = tg.IsHoldingLostTarget,
+                        graceLeft = tg.GraceRemaining.ToString("F1"),
+                        canFire = tg.CanFireAtCurrentTarget,
+                        aiming = ai.TryGetCurrentAimPoint(out Vector3 aimPt),
+                        aimPoint = aimPt.ToString("F1"),
+                        aimAngleError = ai.AimAngleError.ToString("F1"),
+                        aimAligned = ai.IsAimAligned,
+                        bursting = ai.IsBursting,
+                        allowFiring = ai.AllowFiring,
+                    },
                 });
             }
 
-            return new SuccessResponse($"combat: {members.Count} member(s).", members);
+            // 스쿼드 공유 전투 상태(§4.2). 교전 중인 변이체가 하나라도 있으면 전투입니다.
+            var sm = SquadManager.Instance;
+            var engagement = sm != null ? sm.Engagement : null;
+            // 스쿼드 공용 적 정보(§8). 교전 적별로 지금 실시간 위치를 아는지와 마지막 확인 위치를 봅니다.
+            var intel = sm != null ? sm.EnemyIntel : null;
+            var intelRows = new List<object>();
+            if (intel != null)
+            {
+                foreach (var e in intel.All)
+                {
+                    intelRows.Add(new
+                    {
+                        enemy = e.Enemy != null ? e.Enemy.name : "(destroyed)",
+                        live = e.HasLivePosition,
+                        knownPos = e.KnownPosition.ToString("F1"),
+                        lastKnownAge = e.LastKnownTime > 0f ? (Time.time - e.LastKnownTime).ToString("F1") : "-",
+                        attackerHold = Mathf.Max(0f, e.AttackerHoldExpireTime - Time.time).ToString("F1"),
+                    });
+                }
+            }
+
+            var squad = new
+            {
+                inCombat = engagement != null ? (bool?)engagement.IsInCombat : null,
+                engagedEnemyCount = engagement != null ? (int?)engagement.EngagedEnemyCount : null,
+                playerSquadMemberIndex = sm != null ? (int?)sm.PlayerSquadMemberIndex : null,
+                intelTracked = intel != null ? (int?)intel.TrackedCount : null,
+                intelLive = intel != null ? (int?)intel.LiveCount : null,
+                intel = intelRows,
+            };
+
+            return new SuccessResponse(
+                $"combat: {members.Count} member(s), inCombat={squad.inCombat}, engaged={squad.engagedEnemyCount}.",
+                new { squad = squad, members = members });
         }
 
         // ── sceneui ──────────────────────────────────────────────────────────
@@ -218,7 +276,7 @@ namespace GrayZone.EditorTools
             return new SuccessResponse("revive diagnostic", new
             {
                 playerSquadMember = playerSquadMember != null ? playerSquadMember.name : "none",
-                interactPressed = playerSquadMember != null && playerSquadMember.GetComponent<PlayerInputs>() != null && playerSquadMember.GetComponent<PlayerInputs>().Interact,
+                interactPressed = playerSquadMember != null && playerSquadMember.GetComponent<PlayerInputController>() != null && playerSquadMember.GetComponent<PlayerInputController>().Interact,
                 holdProgress01 = ic != null ? ic.HoldProgress01 : -1f,
                 interactionRadius = ic != null ? GetPrivate<float>(ic, "m_radius") : -1f,
                 interactionMaxAngle = ic != null ? GetPrivate<float>(ic, "m_maxAngle") : -1f,
@@ -316,6 +374,114 @@ namespace GrayZone.EditorTools
             return new SuccessResponse(
                 $"anim: {dumps.Count} animator(s){(useFilter ? $" matching '{nameFilter}'" : " on squad members")}.",
                 dumps);
+        }
+
+        // ── ragdoll ──────────────────────────────────────────────────────────
+        /// <summary>
+        /// 변이체의 래그돌 전환 상태를 덤프합니다. 즉시 래그돌 사망 연출 검증용입니다.
+        /// </summary>
+        /// <param name="nameFilter">대상 GameObject 이름 필터입니다. 비우면 전부 봅니다.</param>
+        /// <remarks>
+        /// 확인 대상은 세 가지입니다. Animator가 꺼졌는지(래그돌이 주도권을 가졌는지),
+        /// 뼈가 동역학으로 전환됐는지(<c>isKinematic</c>), 그리고 속도 인계가 실제로 들어갔는지입니다.
+        /// 인계가 실패하면 전환 직후 속도가 모두 0으로 찍힙니다.
+        /// </remarks>
+        private static object DumpRagdoll(string nameFilter)
+        {
+            bool useFilter = !string.IsNullOrWhiteSpace(nameFilter);
+
+            var dumps = new List<object>();
+            foreach (var controller in Object.FindObjectsByType<EnemyController>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (useFilter && !controller.name.Contains(nameFilter))
+                {
+                    continue;
+                }
+
+                var ragdoll = controller.GetComponent<RagdollController>();
+                var animator = controller.GetComponentInChildren<Animator>(true);
+                var bodies = controller.GetComponentsInChildren<Rigidbody>(true);
+                bool visible = controller.GetComponentsInChildren<Renderer>(true).Any(r => r.isVisible);
+
+                int kinematic = 0;
+                float maxSpeed = 0.0f;
+                float maxAngular = 0.0f;
+                foreach (var body in bodies)
+                {
+                    if (body.isKinematic)
+                    {
+                        kinematic++;
+                        continue;
+                    }
+
+                    maxSpeed = Mathf.Max(maxSpeed, body.linearVelocity.magnitude);
+                    maxAngular = Mathf.Max(maxAngular, body.angularVelocity.magnitude);
+                }
+
+                dumps.Add(new
+                {
+                    go = controller.name,
+                    enemyType = controller.EnemyType.ToString(),
+                    hp = controller.CurrentHP,
+                    state = controller.Current != null ? controller.Current.GetType().Name : null,
+                    ragdollConfigured = ragdoll != null && ragdoll.IsConfigured,
+                    ragdollActive = ragdoll != null && ragdoll.IsRagdollActive,
+                    animatorEnabled = animator != null && animator.enabled,
+                    animatorCulling = animator != null ? animator.cullingMode.ToString() : null,
+                    rendererVisible = visible,
+                    boneCount = bodies.Length,
+                    kinematicBones = kinematic,
+                    maxBoneSpeed = maxSpeed,
+                    maxBoneAngularSpeed = maxAngular,
+                    measuredMaxBoneSpeed = ragdoll != null ? ragdoll.MeasuredMaxBoneSpeed : 0.0f,
+                    measuredMaxBoneAngularSpeed = ragdoll != null ? ragdoll.MeasuredMaxBoneAngularSpeed : 0.0f,
+                    rootY = controller.transform.position.y,
+                });
+            }
+
+            return new SuccessResponse($"ragdoll: {dumps.Count} enemy(s).", dumps);
+        }
+
+        // ── killenemy ────────────────────────────────────────────────────────
+        /// <summary>
+        /// 변이체 하나를 즉사시켜 사망 연출을 검증할 수 있게 합니다.
+        /// </summary>
+        /// <param name="nameFilter">대상 GameObject 이름 필터입니다. 비우면 첫 생존 개체를 씁니다.</param>
+        /// <remarks>
+        /// 정상 피해 경로(<c>TakeDamage</c>)를 그대로 타므로 사망 이벤트 체인이 실제와 같습니다.
+        /// Play Mode에서 <c>exec</c>이 컴파일 지연으로 멈추기 때문에 검증용 진입점을 여기에 둡니다.
+        /// </remarks>
+        private static object KillEnemy(string nameFilter)
+        {
+            bool useFilter = !string.IsNullOrWhiteSpace(nameFilter);
+
+            foreach (var controller in Object.FindObjectsByType<EnemyController>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (useFilter && !controller.name.Contains(nameFilter))
+                {
+                    continue;
+                }
+
+                var health = controller.Health;
+                if (health == null || controller.CurrentHP <= 0)
+                {
+                    continue;
+                }
+
+                health.TakeDamage(int.MaxValue);
+                return new SuccessResponse(
+                    $"killenemy: '{controller.name}' 처치 요청 완료.",
+                    new
+                    {
+                        go = controller.name,
+                        hp = controller.CurrentHP,
+                        state = controller.Current != null ? controller.Current.GetType().Name : null,
+                    });
+            }
+
+            return new ErrorResponse("처치할 생존 변이체를 찾지 못했습니다.");
         }
 
         /// <summary>스테이트 해시를 사람이 읽을 이름으로 바꿉니다. 표에 없으면 해시를 그대로 씁니다.</summary>

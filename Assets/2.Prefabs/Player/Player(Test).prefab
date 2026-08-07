@@ -572,6 +572,7 @@ GameObject:
   - component: {fileID: 5423831342631813153}
   - component: {fileID: 2541699958142911339}
   - component: {fileID: 6562217736186404616}
+  - component: {fileID: 576874220840398654}
   m_Layer: 8
   m_Name: Player(Test)
   m_TagString: Player
@@ -920,9 +921,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e7cafe5090ac2c74cb6396326817152d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StarterAssets.ThirdPersonController
-  m_balanceSO: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
+  m_balanceSO: {fileID: 0}
   m_moveSpeed: 2
   m_sprintSpeed: 6
+  m_sprintForwardAngle: 60
+  m_sprintReleaseMargin: 20
+  m_moveDirectionDamp: 0.1
+  m_crouchSpeed: 1.2
+  m_crouchHeight: 1.1
+  m_crouchTransitionDuration: 0.2
+  m_moveStateBlendDuration: 0.2
   m_rotationSmoothTime: 0.12
   m_speedChangeRate: 10
   m_jumpHeight: 1.2
@@ -1020,6 +1028,12 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+  m_nonCombatCamera: {fileID: 0}
+  m_nonCombatViewMode: 1
+  m_idleCamera: {fileID: 0}
+  m_idleViewMode: 0
+  m_freeLookIdleDelay: 1.5
+  m_backViewRotationSmoothTime: 0.03
   m_landingAudioClip: {fileID: 0}
   m_footstepAudioClips: []
   m_footstepAudioVolume: 0.5
@@ -1042,6 +1056,8 @@ MonoBehaviour:
   m_aim: 0
   m_shoot: 0
   m_reload: 0
+  m_crouch: 0
+  m_crouchToggle: 1
   m_interact: 0
   m_analogMovement: 0
   m_cursorLocked: 1
@@ -1097,7 +1113,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dba1d137c6b07d3478c373eba3a6816e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AimController
-  m_balanceSO: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
+  m_balanceSO: {fileID: 0}
   m_aimCamera: {fileID: 0}
   m_aimImage: {fileID: 0}
   m_showAimImageAlways: 1
@@ -1276,6 +1292,7 @@ MonoBehaviour:
     m_RotationOrder: 4
   m_handRig: {fileID: 3580838561190631184}
   m_aimRig: {fileID: 5188019311049236787}
+  m_stanceBlendDuration: 0.15
   m_shootingSound: {fileID: 0}
   m_reloadSounds: []
   m_drawHitscanDebugRay: 1
@@ -1306,7 +1323,7 @@ MonoBehaviour:
   m_currentHp: 0
   m_hpSlider: {fileID: 0}
   m_hpText: {fileID: 0}
-  m_balanceSO: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
+  m_balanceSO: {fileID: 0}
   m_currentInjuryGauge: 0
   m_currentInjuryState: 0
   m_maxInjuryGauge: 100
@@ -1394,6 +1411,22 @@ NavMeshAgent:
   m_BaseOffset: 0
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 4
+--- !u!114 &576874220840398654
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4000974284593887393}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 12a4bcce06815ce4483818d52e4c12bf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SOBinder
+  m_sharedBalance: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
+  m_sharedFeedback: {fileID: 0}
+  m_includeChildren: 1
+  m_logResult: 0
 --- !u!1 &4137907873827964049
 GameObject:
   m_ObjectHideFlags: 0

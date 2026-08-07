@@ -8,20 +8,30 @@ using VInspector;
 /// 플레이어의 조준 카메라, 조준 UI, 조준 방향 회전, IK 리그, 사격 및 재장전 입력을 제어하는 컴포넌트입니다.
 /// </summary>
 /// <remarks>
-/// 이 컴포넌트는 <see cref="PlayerInputs"/>, <see cref="ThirdPersonController"/>,
+/// 이 컴포넌트는 <see cref="PlayerInputController"/>, <see cref="ThirdPersonController"/>,
 /// <see cref="Animator"/>, <see cref="AudioSource"/>를 같은 GameObject의 필수 참조로 사용합니다.
 /// 필수 참조는 <c>Awake</c>에서 캐싱하고, 누락 시 컴포넌트를 비활성화하여 런타임 null 참조를 방지합니다.
 /// </remarks>
-[RequireComponent(typeof(PlayerInputs))]
+[RequireComponent(typeof(PlayerInputController))]
 [RequireComponent(typeof(ThirdPersonController))]
 [RequireComponent(typeof(Animator))]
 [RequireComponent(typeof(AudioSource))]
-public class AimController : MonoBehaviour
+public class AimController : MonoBehaviour, ISharedBalanceReceiver
 {
     [Tooltip("이 플레이어에 적용할 공용 밸런스 SO입니다. 비어 있으면 Inspector 값을 그대로 씁니다.")]
     [SerializeField] private PlayerCommonBalanceSO m_balanceSO;
 
     private const int WeaponLayerIndex = 1;
+
+    /// <summary>
+    /// 사격 반동을 더하는 Additive 레이어의 인덱스입니다.
+    /// </summary>
+    /// <remarks>
+    /// 반동을 무기(Action) 레이어와 나눈 이유는 두 요구가 정반대이기 때문입니다.
+    /// 재장전은 상체를 통째로 <b>교체</b>해야 하므로 Override여야 하고, 반동은 지금 자세(웅크림·보행)를
+    /// <b>보존한 채</b> 얹혀야 하므로 Additive여야 합니다. 한 레이어로 두면 한쪽을 맞출 때 다른 쪽이 깨집니다.
+    /// </remarks>
+    private const int RecoilLayerIndex = 2;
 
     // 이 시간(초) 이상 사격이 끊기면 좌우 킥 번갈이 패턴을 첫 발부터 다시 시작합니다.
     private const float KickPatternResetGap = 0.25f;
@@ -97,18 +107,20 @@ public class AimController : MonoBehaviour
     [SerializeField] private LayerMask m_targetLayer;
 
     [Foldout("Hitscan Aim Options")]
+    [Tooltip("총구와 조준점 사이가 막혔을 때 실제 탄착점에 표시할 마커입니다. 비어 있으면 표시하지 않습니다.")]
     [FormerlySerializedAs("m_hitscanObstructionMarker")]
     [SerializeField] private GameObject m_hitscanBlockMarker;
 
+    [Tooltip("차단 마커를 표면에서 띄울 거리(m)입니다. 0이면 표면과 겹쳐 z-파이팅이 생길 수 있습니다.")]
     [FormerlySerializedAs("m_hitscanObstructionMarkerOffset")]
     [BalanceField]
     [SerializeField] private float m_hitscanBlockMarkerOffset = 0.01f;
 
     [Foldout("Hipfire Options")]
-    [Tooltip("힙파이어(비조준 사격) 후 백뷰를 유지하다 자유 시점으로 복귀하기까지의 유지 시간(초)입니다.")]
+    [Tooltip("힙파이어 사격 후 전투 자세를 유지하는 시간(초)입니다. 0이면 사격을 멈추는 즉시 해제합니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
-    [SerializeField] private float m_hipfireHoldDuration = 2.0f;
+    [SerializeField] private float m_hipfireHoldDuration = 0.0f;
 
     [Foldout("Combat Zoom Options")]
     [Tooltip("ADS(조준) 시 백뷰 카메라 FOV입니다. 값이 작을수록 더 확대됩니다.")]
@@ -127,6 +139,10 @@ public class AimController : MonoBehaviour
     [SerializeField] private float m_zoomLerpSpeed = 10.0f;
 
     [Foldout("Recoil Visual Kick Options")]
+    [Tooltip("사격 중 캐릭터 상체에 얹을 반동 애니메이션의 세기입니다. 0이면 반동 동작이 없고 1이면 클립 그대로입니다. 조준·탄착에는 영향을 주지 않으며, 보이는 동작 크기만 바꿉니다.")]
+    [Clamp(Min = 0, Max = 1)]
+    [SerializeField] private float m_recoilAnimationWeight = 1.0f;
+
     [Tooltip("켜면 발사마다 실제 조준과 탄착에 영향을 주는 피치/요 반동을 적용합니다. 플레이테스트 트레이너에서 즉시 켜고 끌 수 있습니다.")]
     [SerializeField] private bool m_enableAimRecoil = true;
 
@@ -229,6 +245,49 @@ public class AimController : MonoBehaviour
     /// <summary>지난 프레임의 조준 상태입니다. 바뀐 프레임에 전환을 새로 시작하기 위한 것입니다.</summary>
     private bool m_zoomWasAds;
 
+    /// <summary>상체 조준(허리) 리그 weight의 목표값입니다.</summary>
+    private float m_rigWeightTarget;
+
+    /// <summary>지금 적용 중인 상체 조준(허리) 리그 weight입니다.</summary>
+    private float m_rigWeight;
+
+    /// <summary>손 IK 리그 weight의 목표값입니다.</summary>
+    /// <remarks>
+    /// 허리와 따로 두는 이유는 재장전 때 둘이 반대가 되기 때문입니다. 허리는 조준 방향을 계속 바라봐야 하고,
+    /// 손은 총을 겨눈 자리에서 풀려 탄창을 다뤄야 합니다.
+    /// </remarks>
+    private float m_handRigWeightTarget;
+
+    /// <summary>지금 적용 중인 손 IK 리그 weight입니다.</summary>
+    private float m_handRigWeight;
+
+    /// <summary>상체(무기) 레이어 weight의 목표값입니다.</summary>
+    private float m_weaponLayerTarget;
+
+    /// <summary>지금 적용 중인 상체(무기) 레이어 weight입니다.</summary>
+    private float m_weaponLayerWeight;
+
+    /// <summary>반동(Additive) 레이어 weight의 목표값입니다.</summary>
+    private float m_recoilLayerTarget;
+
+    /// <summary>지금 적용 중인 반동(Additive) 레이어 weight입니다.</summary>
+    private float m_recoilLayerWeight;
+
+    /// <summary>지난 프레임의 전력질주 입력입니다. 누름 시점을 잡기 위한 것입니다.</summary>
+    private bool m_sprintWasHeld;
+
+    /// <summary>지난 프레임의 조준/사격 입력입니다. 누름 시점을 잡기 위한 것입니다.</summary>
+    private bool m_combatWasHeld;
+
+    /// <summary>전력질주가 조준/사격보다 최근 입력이어서 우선하는 상태인지입니다.</summary>
+    private bool m_sprintOverridesCombat;
+
+    /// <summary>조준 트레이스 결과를 재사용하는 버퍼입니다. 전투 자세 동안 매 프레임 도는 경로라 할당을 피합니다.</summary>
+    private readonly RaycastHit[] m_aimTraceBuffer = new RaycastHit[AimTraceBufferSize];
+
+    /// <summary>조준 트레이스 버퍼 크기입니다.</summary>
+    private const int AimTraceBufferSize = 24;
+
 
     [Foldout("IK Options")]
     [Tooltip("손 위치 보정에 사용할 Rig입니다.")]
@@ -238,6 +297,10 @@ public class AimController : MonoBehaviour
     [Tooltip("조준 자세 보정에 사용할 Rig입니다.")]
     [FormerlySerializedAs("aimRig")]
     [SerializeField] private Rig m_aimRig;
+
+    [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_stanceBlendDuration = 0.15f;
 
     [Foldout("Audio Options")]
     [Tooltip("사격 사운드입니다. 실제 사격 사운드를 Gun가 처리한다면 비워둘 수 있습니다.")]
@@ -284,7 +347,7 @@ public class AimController : MonoBehaviour
     [Min(0.01f)]
     [SerializeField] private float m_impactMarkerSize = 0.16f;
 
-    private PlayerInputs m_input;
+    private PlayerInputController m_input;
     private ThirdPersonController m_controller;
     private Animator m_animator;
     private AudioSource m_weaponAudioSource;
@@ -355,12 +418,17 @@ public class AimController : MonoBehaviour
     public GameObject HitscanBlockMarker => m_hitscanBlockMarker;
 
 
+    /// <summary>사격 시 재생할 효과음입니다. 지정하지 않았으면 <c>null</c>입니다.</summary>
+    /// <remarks>무기별 사운드는 <see cref="WeaponFeedbackEmitter"/>가 담당하고, 이 값은 캐릭터 쪽 보조 배선입니다.</remarks>
     public AudioClip ShootingSound => m_shootingSound;
 
     /// <summary>재장전 사운드 클립 배열입니다.</summary>
     public AudioClip[] ReloadSounds => m_reloadSounds;
 
     /// <summary>실제 조준과 탄착에 영향을 주는 반동 적용 여부입니다.</summary>
+    /// <summary>사격 중 상체에 얹는 반동 애니메이션의 세기입니다. 조준·탄착과는 무관합니다.</summary>
+    public float RecoilAnimationWeight => m_recoilAnimationWeight;
+
     public bool AimRecoilEnabled => m_enableAimRecoil;
 
     /// <summary>카메라 롤과 FOV 펀치로 구성된 시각 킥 적용 여부입니다.</summary>
@@ -373,6 +441,10 @@ public class AimController : MonoBehaviour
     public float VisualKickRecoverShots => m_visualKickRecoverShots;
 
     /// <summary>누적 가능한 카메라 롤 상한(도)입니다.</summary>
+    /// <summary>상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간(초)입니다.</summary>
+    /// <remarks>재장전이 들고 날 때의 페이드 길이가 이 값입니다. 짧으면 툭 끊기고 길면 늘어집니다.</remarks>
+    public float StanceBlendDuration => m_stanceBlendDuration;
+
     public float VisualKickMaxRoll => m_visualKickMaxRoll;
 
     /// <summary>누적 가능한 FOV 펀치 상한(도)입니다.</summary>
@@ -533,6 +605,10 @@ public class AimController : MonoBehaviour
 
     /// <summary>실제 조준과 탄착에 영향을 주는 반동 적용 여부를 설정합니다.</summary>
     /// <param name="value">반동을 적용하려면 <c>true</c>입니다.</param>
+    /// <summary>반동 애니메이션 세기를 설정합니다. 0이면 반동 동작이 없고 1이면 클립 그대로입니다.</summary>
+    /// <param name="value">새로 적용할 세기입니다. 0~1로 잘립니다.</param>
+    public void SetRecoilAnimationWeight(float value) => m_recoilAnimationWeight = Mathf.Clamp01(value);
+
     public void SetAimRecoilEnabled(bool value) => m_enableAimRecoil = value;
 
     /// <summary>카메라 롤과 FOV 펀치 시각 킥 적용 여부를 설정합니다.</summary>
@@ -690,6 +766,10 @@ public class AimController : MonoBehaviour
 
     /// <summary>누적 가능한 카메라 롤 상한을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
+    /// <summary>상체 레이어·IK 리그 weight의 보간 시간을 설정합니다.</summary>
+    /// <param name="value">새로 적용할 시간(초)입니다. 음수는 0으로 잘립니다.</param>
+    public void SetStanceBlendDuration(float value) => m_stanceBlendDuration = Mathf.Max(0.0f, value);
+
     public void SetVisualKickMaxRoll(float value) => m_visualKickMaxRoll = value;
 
     /// <summary>누적 가능한 FOV 펀치 상한을 설정합니다.</summary>
@@ -722,12 +802,33 @@ public class AimController : MonoBehaviour
     /// </remarks>
     private BalanceBindResult BindConfiguredBalance()
     {
-        if (m_balanceSO == null)
+        return BindFrom(m_balanceSO);
+    }
+
+    /// <summary>개별 밸런스 SO를 직접 물고 있는지 여부입니다.</summary>
+    /// <remarks><c>true</c>면 <see cref="SOBinder"/>가 통합 SO 주입을 건너뜁니다.</remarks>
+    public bool HasOwnBalance => m_balanceSO != null;
+
+    /// <summary>엔티티 통합 밸런스 SO의 값을 적용합니다.</summary>
+    /// <param name="balance">통합 밸런스 SO입니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다.</returns>
+    /// <remarks>개별 SO 슬롯은 비운 채로 둡니다. 비어 있다는 것 자체가 "개별 지정 없음"을 뜻합니다.</remarks>
+    public BalanceBindResult BindSharedBalance(ScriptableObject balance)
+    {
+        return BindFrom(balance);
+    }
+
+    /// <summary>주어진 원본 SO에서 밸런스 값을 대입합니다.</summary>
+    /// <param name="balance">값을 읽어올 밸런스 SO입니다. 개별 SO일 수도, 엔티티 통합 SO일 수도 있습니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다. 원본이 없으면 기본값입니다.</returns>
+    private BalanceBindResult BindFrom(ScriptableObject balance)
+    {
+        if (balance == null)
         {
             return default;
         }
 
-        return BindManager.Instance.Bind(m_balanceSO, this, this);
+        return BindManager.Instance.Bind(balance, this, this);
     }
 
     private void Awake()
@@ -791,7 +892,9 @@ public class AimController : MonoBehaviour
             return;
         }
 
+        UpdateStanceArbitration();
         UpdateAimAndWeapon();
+        UpdateStanceWeights();
         UpdateCrosshairDebugOnStanceChange();
         UpdateReloadCrosshair();
     }
@@ -826,7 +929,7 @@ public class AimController : MonoBehaviour
     /// </summary>
     private void CacheRequiredReferences()
     {
-        m_input = GetComponent<PlayerInputs>();
+        m_input = GetComponent<PlayerInputController>();
         m_controller = GetComponent<ThirdPersonController>();
         m_animator = GetComponent<Animator>();
         m_weaponAudioSource = GetComponent<AudioSource>();
@@ -865,7 +968,7 @@ public class AimController : MonoBehaviour
 
         if (m_input == null)
         {
-            Debug.LogError("[AimController] PlayerInputs 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
+            Debug.LogError("[AimController] PlayerInputController 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
             isValid = false;
         }
 
@@ -932,6 +1035,44 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
+    /// 달리기와 조준·사격 중 어느 쪽이 더 최근 요청인지 판정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 설계 근거: 캐릭터 행동 시스템 §2 「같은 상태 축의 행동이 충돌하면 별도 예외가 없는 한 가장 최근의
+    /// 유효한 행동 요청을 우선한다」, §9 「달리기는 조준 또는 사격과 동시에 유지할 수 없다」.
+    ///
+    /// 눌린 순간을 기준으로 삼습니다. 누르고 있는 상태만 보면 둘 다 유지 중일 때 어느 쪽이 나중에
+    /// 들어왔는지 알 수 없어, 고정 우선순위로 돌아가 버립니다. 예전 코드가 조준을 늘 앞세워
+    /// 달리다 조준하면 조준이 되지만 조준한 채 달리기를 눌러도 아무 일이 없었습니다.
+    ///
+    /// 달리기를 놓으면 유지 중인 조준·사격이 곧바로 이어받습니다. 그러려면 놓는 순간 우선권을
+    /// 넘겨야 하고, 그래서 새 입력을 다시 요구하지 않습니다(§6).
+    /// </remarks>
+    private void UpdateStanceArbitration()
+    {
+        bool sprint = m_input.Sprint;
+        bool combat = m_input.Aim || m_input.Shoot;
+
+        if (sprint && !m_sprintWasHeld)
+        {
+            m_sprintOverridesCombat = true;
+        }
+
+        if (combat && !m_combatWasHeld)
+        {
+            m_sprintOverridesCombat = false;
+        }
+
+        if (!sprint)
+        {
+            m_sprintOverridesCombat = false;
+        }
+
+        m_sprintWasHeld = sprint;
+        m_combatWasHeld = combat;
+    }
+
+    /// <summary>
     /// 재장전 입력과 조준 입력을 순서대로 처리합니다.
     /// </summary>
     private void UpdateAimAndWeapon()
@@ -944,21 +1085,26 @@ public class AimController : MonoBehaviour
         if (m_controller.IsReload)
         {
             ExitCombatStance();
+
+            // 전투 자세를 나가면 UpdateCombat이 돌지 않아 조준점 갱신이 멈춥니다. 그 상태로 허리 리그만
+            // 켜두면 재장전 시작 순간의 지점을 계속 바라보며 굳습니다. 그래서 여기서 조준점만 따로 갱신합니다.
+            KeepAimingWhileReloading();
             return;
         }
 
-        // 조준(ADS): Aim 입력이 최우선. 백뷰 + (slice②)줌.
+        // 달리기와 조준·사격은 함께 유지할 수 없고(캐릭터 행동 시스템 §9), 충돌은 가장 최근의 유효한
+        // 요청이 이깁니다(§2). 어느 쪽이 최근인지는 UpdateStanceArbitration이 판정합니다.
+        if (m_input.Sprint && m_sprintOverridesCombat)
+        {
+            ExitCombatStance();
+            return;
+        }
+
+        // 조준(ADS): 백뷰 + 줌.
         if (m_input.Aim)
         {
             EnterCombatStance(true);
             UpdateCombat();
-            return;
-        }
-
-        // ADS가 아닌 힙파이어/잔류 상태는 전력질주에 양보합니다.
-        if (m_input.Sprint)
-        {
-            ExitCombatStance();
             return;
         }
 
@@ -987,6 +1133,62 @@ public class AimController : MonoBehaviour
         }
 
         ExitCombatStance();
+    }
+
+    /// <summary>
+    /// 재장전 중에도 허리가 조준 방향을 계속 따라가게 합니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="UpdateCombat"/>를 통째로 부르지 않는 이유는 그 안에 히트스캔 평가, 사격 처리, 크로스헤어,
+    /// 줌 갱신이 함께 들어 있기 때문입니다. 재장전 중에는 겨냥 방향만 있으면 되므로 지향점만 갱신합니다.
+    ///
+    /// <see cref="ExitCombatStance"/>가 리그 weight를 함께 0으로 내리므로, 그 뒤에 허리만 다시 올립니다.
+    /// 손은 0으로 남겨 탄창을 다루는 동작이 IK에 끌려가지 않게 합니다.
+    /// </remarks>
+    private void KeepAimingWhileReloading()
+    {
+        ApplyLookTarget(ResolveReloadLookPoint());
+        SetRigWeights(1.0f, 0.0f);
+    }
+
+    /// <summary>
+    /// 재장전 중 허리가 바라볼 지점입니다. 상하 각도만 카메라를 따르고 좌우는 몸 기준으로 고정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 재장전은 <see cref="ExitCombatStance"/>를 거치므로 몸이 더 이상 카메라 좌우를 따라 돌지 않습니다.
+    /// 그 상태에서 <see cref="ResolveLookPoint"/>(카메라 전방)를 그대로 쓰면 허리가 그 좌우 차이를 혼자
+    /// 비틀어 메꿔, 걸을 때 상체가 흔들려 보였습니다.
+    ///
+    /// 백뷰라 좌우 조준은 몸 회전이 이미 담당합니다. 여기서 필요한 것은 위아래로 꺾이는 것뿐이라
+    /// 카메라 방향에서 상하 성분만 가져오고 좌우는 몸 정면으로 대체합니다.
+    /// </remarks>
+    private Vector3 ResolveReloadLookPoint()
+    {
+        float lookDistance = m_lookDistance;
+        if (m_weaponController != null)
+        {
+            lookDistance = Mathf.Max(lookDistance, m_weaponController.HitscanRange);
+        }
+
+        Vector3 aimForward = GetAimForward();
+
+        Vector3 bodyForward = transform.forward;
+        bodyForward.y = 0.0f;
+
+        if (bodyForward.sqrMagnitude < 0.0001f)
+        {
+            return m_mainCamera.transform.position + aimForward * lookDistance;
+        }
+
+        bodyForward.Normalize();
+
+        // 카메라 방향의 상하 성분(y)만 남기고, 수평 성분의 크기는 그대로 둔 채 방향만 몸 정면으로 바꿉니다.
+        float vertical = Mathf.Clamp(aimForward.y, -1.0f, 1.0f);
+        float horizontal = Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - vertical * vertical));
+
+        Vector3 direction = bodyForward * horizontal + Vector3.up * vertical;
+
+        return m_mainCamera.transform.position + direction * lookDistance;
     }
 
     /// <summary>
@@ -1031,9 +1233,13 @@ public class AimController : MonoBehaviour
         m_hipfireTimer = 0.0f;
         SetAimState(false);
         HideHitscanBlockMarker();
-        SetRigWeight(0.0f);
+
+        // 허리는 계속 조준 방향을 바라보고, 손만 풀어 탄창을 다루게 합니다.
+        // 둘을 함께 0으로 내리면 재장전 내내 상체가 정면으로 굳어 조준하던 방향을 잃습니다.
+        SetRigWeights(1.0f, 0.0f);
+
         m_animator.SetBool(AnimIDShoot, false);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 1.0f);
+        SetWeaponLayerWeight(1.0f);
 
         // 트리거와 bool을 함께 세웁니다. 애니메이터 진입 조건이 둘의 AND입니다.
         m_animator.SetBool(AnimIDIsReload, true);
@@ -1058,7 +1264,10 @@ public class AimController : MonoBehaviour
         {
             // 새 교전 진입이므로 좌우 킥 번갈이 패턴을 첫 발부터 시작합니다.
             m_kickShotIndex = 0;
-            ApplyCombatStanceState(true, false, 1.0f);
+
+            // 조준만으로는 상체 레이어를 올리지 않습니다. 자세별 조준 포즈는 Base Layer가 이미 갖고 있고,
+            // 여기서 서 있는 조준 클립을 덮어씌우면 웅크림 조준이 서 있는 자세로 바뀝니다.
+            ApplyCombatStanceState(true, false, 0.0f);
             // 자유 카메라에서 백뷰로 막 진입한 프레임은 목표 FOV로 즉시 스냅(줌 점프 방지).
             ApplyCombatZoom(true);
             UpdateCrosshair(true);
@@ -1391,12 +1600,44 @@ public class AimController : MonoBehaviour
             mask = baseMask & ~(1 << gameObject.layer);
         }
 
-        if (Physics.Raycast(cameraTransform.position, GetAimForward(), out RaycastHit hit, aimDistance, mask, QueryTriggerInteraction.UseGlobal))
+        // 아군의 몸은 조준점으로 잡지 않습니다. 팀원이 앞을 지나가는 순간 조준점이 그 등판으로 당겨지면
+        // 화면 중앙의 적을 겨누고 있는데도 조준 거리와 차단 표시가 함께 어긋납니다.
+        if (TryTraceAim(cameraTransform.position, GetAimForward(), aimDistance, mask, out RaycastHit hit))
         {
             return hit.point;
         }
 
         return lookPoint;
+    }
+
+    /// <summary>
+    /// 조준 트레이스를 수행합니다. 무기 설정이 아군 통과이면 아군의 몸을 건너뜁니다.
+    /// </summary>
+    /// <param name="origin">추적 시작 위치입니다.</param>
+    /// <param name="direction">추적 방향입니다.</param>
+    /// <param name="distance">추적 거리입니다.</param>
+    /// <param name="mask">사용할 레이어 마스크입니다.</param>
+    /// <param name="hit">가장 먼저 막은 대상입니다.</param>
+    /// <returns>무언가에 막혔으면 true입니다.</returns>
+    /// <remarks>
+    /// 판정 기준을 무기(<see cref="Gun.AllyBulletPassThrough"/>)에서 가져오는 이유는, 조준점과 실제 탄착이
+    /// 같은 규칙을 써야 하기 때문입니다. 한쪽만 아군을 통과하면 조준선과 탄착이 갈립니다.
+    ///
+    /// 이 트레이스는 사격이 없어도 전투 자세 동안 매 프레임 돕니다. 그래서 할당이 없는
+    /// <see cref="Physics.RaycastNonAlloc"/>와 재사용 버퍼를 씁니다. 가장 가까운 유효 대상을 고르는 규칙은
+    /// <see cref="Gun.TryResolveNearestBlocking"/>가 무기 쪽과 공유합니다.
+    /// </remarks>
+    private bool TryTraceAim(Vector3 origin, Vector3 direction, float distance, int mask, out RaycastHit hit)
+    {
+        // 무기가 없으면 아군 통과 규칙도 없지만, 시체(래그돌) 무시는 무기와 무관하게 적용해야 하므로
+        // 단발 Raycast로 돌아가지 않고 같은 경로를 씁니다.
+        bool passAllies = m_weaponController != null && m_weaponController.AllyBulletPassThrough;
+        Faction faction = m_weaponController != null ? m_weaponController.OwnerFaction : Faction.Player;
+
+        int count = Physics.RaycastNonAlloc(
+            origin, direction, m_aimTraceBuffer, distance, mask, QueryTriggerInteraction.UseGlobal);
+
+        return Gun.TryResolveNearestBlocking(m_aimTraceBuffer, count, faction, passAllies, out hit);
     }
 
     /// <summary>
@@ -1726,6 +1967,9 @@ public class AimController : MonoBehaviour
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
     private void UpdateShootState(Gun.HitscanShotInfo shotInfo)
     {
+        // 상체 레이어를 사격·재장전에만 올립니다. 조준 포즈는 Base Layer 몫이라 여기서 관여하지 않습니다.
+        RefreshWeaponLayerWeight();
+
         if (m_input.Shoot)
         {
             m_animator.SetBool(AnimIDShoot, true);
@@ -1910,7 +2154,7 @@ public class AimController : MonoBehaviour
         SetAimState(false);
         HideHitscanBlockMarker();
         SetRigWeight(0.0f);
-        m_animator.SetLayerWeight(WeaponLayerIndex, 0.0f);
+        SetWeaponLayerWeight(0.0f);
         m_animator.SetBool(AnimIDShoot, false);
 
         if (completeWeaponReload && m_weaponController != null)
@@ -1959,7 +2203,8 @@ public class AimController : MonoBehaviour
         // 힙파이어 carryover면 잔류 타이머를 부여해, 전환 직후 사격을 멈춰도 백뷰가 곧장 풀리지 않습니다.
         m_hipfireTimer = inCombat && !isAiming ? m_hipfireHoldDuration : 0.0f;
 
-        ApplyCombatStanceState(inCombat, isShooting, inCombat ? 1.0f : 0.0f);
+        // 상체 레이어는 사격 중일 때만 올립니다. 조준 자세 자체는 Base Layer가 자세별로 갖고 있습니다.
+        ApplyCombatStanceState(inCombat, isShooting, inCombat && isShooting ? 1.0f : 0.0f);
 
         if (inCombat)
         {
@@ -1994,6 +2239,28 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
+    /// 전투 애니메이터 파라미터를 기본값으로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SquadMemberController.ResetAnimatorToBase"/>가 부르는 탈출구의 전투 담당 몫입니다.
+    /// <see cref="ReleaseCombatVisuals"/>가 조준·리그·무기 레이어와 <c>IsShoot</c>까지 내리므로 여기서는
+    /// 재장전 쪽만 더 정리합니다. <c>DoReload</c>는 트리거라 소비되지 않은 채 남아 있으면 리셋 직후
+    /// 재장전 모션이 한 번 튀어나오므로 함께 지웁니다.
+    /// </remarks>
+    public void ResetCombatAnimation()
+    {
+        ReleaseCombatVisuals();
+
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_animator.SetBool(AnimIDIsReload, false);
+        m_animator.ResetTrigger(AnimIDReload);
+    }
+
+    /// <summary>
     /// 조준을 강제로 해제합니다.
     /// </summary>
     /// <param name="keepReloadAnimation">true이면 재장전 상체 애니메이션을 위해 무기 레이어 weight를 유지합니다.</param>
@@ -2005,12 +2272,18 @@ public class AimController : MonoBehaviour
         SetAimState(false);
         HideHitscanBlockMarker();
         SetRigWeight(0.0f);
+        SetWeaponLayerWeight(keepReloadAnimation ? 1.0f : 0.0f);
+
+        // 사격이 끝난 경로이므로 반동은 항상 내립니다. 남으면 다운·사망 모션 위에 반동이 더해집니다.
+        m_recoilLayerTarget = 0.0f;
 
         if (m_animator != null)
         {
-            m_animator.SetLayerWeight(WeaponLayerIndex, keepReloadAnimation ? 1.0f : 0.0f);
             m_animator.SetBool(AnimIDShoot, false);
         }
+
+        // 다운·사망 경로라 보간하지 않습니다. 상체 레이어나 IK가 조금이라도 남으면 전신 모션이 깨집니다.
+        SnapStanceWeights();
     }
 
     /// <summary>
@@ -2024,10 +2297,13 @@ public class AimController : MonoBehaviour
         m_inCombatStance = active;
         SetAimState(active);
         SetRigWeight(active ? 1.0f : 0.0f);
+        SetWeaponLayerWeight(weaponLayerWeight);
+
+        // 반동은 사격을 이어받을 때만 남깁니다. 전투 자세를 나가면 반드시 0입니다.
+        m_recoilLayerTarget = active && keepShooting ? m_recoilAnimationWeight : 0.0f;
 
         if (m_animator != null)
         {
-            m_animator.SetLayerWeight(WeaponLayerIndex, weaponLayerWeight);
             m_animator.SetBool(AnimIDShoot, active && keepShooting);
         }
 
@@ -2038,19 +2314,188 @@ public class AimController : MonoBehaviour
     }
 
     /// <summary>
-    /// 조준 및 손 IK 리그의 weight를 설정합니다.
+    /// 조준 및 손 IK 리그 weight의 목표값을 설정합니다.
     /// </summary>
-    /// <param name="weight">적용할 리그 weight입니다. 0이면 비활성, 1이면 활성입니다.</param>
+    /// <param name="weight">목표 리그 weight입니다. 0이면 비활성, 1이면 활성입니다.</param>
+    /// <remarks>
+    /// 즉시 대입하지 않는 이유는 조준을 넣고 뺄 때 상체 자세가 한 프레임에 갈아타 툭 끊기기 때문입니다.
+    /// 실제 적용은 <see cref="UpdateStanceWeights"/>가 매 프레임 목표를 향해 옮기며 합니다.
+    /// </remarks>
     private void SetRigWeight(float weight)
+    {
+        m_rigWeightTarget = weight;
+        m_handRigWeightTarget = weight;
+    }
+
+    /// <summary>
+    /// 허리 조준 리그와 손 IK 리그의 목표 weight를 따로 설정합니다.
+    /// </summary>
+    /// <param name="aimWeight">허리(상체 조준) 리그 목표 weight입니다.</param>
+    /// <param name="handWeight">손 IK 리그 목표 weight입니다.</param>
+    /// <remarks>
+    /// 재장전처럼 둘이 반대가 되는 구간에만 씁니다. 그 외에는 <see cref="SetRigWeight"/>로 함께 움직입니다.
+    /// </remarks>
+    private void SetRigWeights(float aimWeight, float handWeight)
+    {
+        m_rigWeightTarget = aimWeight;
+        m_handRigWeightTarget = handWeight;
+    }
+
+    /// <summary>
+    /// 상체(무기) 레이어 weight의 목표값을 설정합니다.
+    /// </summary>
+    /// <param name="weight">목표 레이어 weight입니다.</param>
+    private void SetWeaponLayerWeight(float weight)
+    {
+        m_weaponLayerTarget = weight;
+    }
+
+    /// <summary>
+    /// 현재 사격·재장전 여부만 보고 상체 레이어 weight 목표를 다시 계산합니다.
+    /// </summary>
+    /// <remarks>
+    /// <b>조준은 여기에 포함하지 않습니다.</b> 자세별 조준 포즈(서기/웅크림 × 방향 × 정지/이동)는
+    /// Base Layer의 <c>Aim Rifle *</c> 트리가 이미 전부 갖고 있습니다. 조준만으로 상체 레이어를 올리면
+    /// 그 위에 서 있는 조준 클립 하나를 덮어씌우게 되어, 웅크린 채 조준해도 서 있는 자세로 보였습니다.
+    ///
+    /// 상체 레이어가 유일하게 보태는 것은 Base Layer에 없는 사격 반동과 재장전 동작입니다.
+    /// 그래서 그 둘일 때만 올립니다.
+    ///
+    /// 사격 반동은 <see cref="RecoilLayerIndex"/>의 Additive 레이어가 담당합니다. 그쪽은 지금 자세 위에
+    /// 차이만 더하므로 웅크림이나 보행이 유지됩니다. 그래서 여기(Override)는 재장전만 봅니다.
+    /// </remarks>
+    private void RefreshWeaponLayerWeight()
+    {
+        bool shooting = m_inCombatStance && m_input != null && m_input.Shoot;
+        bool reloading = m_weaponController != null && m_weaponController.IsReloading;
+
+        // Override 레이어: 상체를 통째로 교체해야 하는 재장전에만 씁니다.
+        SetWeaponLayerWeight(reloading ? 1.0f : 0.0f);
+
+        // Additive 레이어: 사격 중에만 반동을 얹습니다.
+        // 재장전 중에는 상체가 이미 교체되어 있으므로 반동을 더하지 않습니다.
+        m_recoilLayerTarget = shooting && !reloading ? m_recoilAnimationWeight : 0.0f;
+    }
+
+    /// <summary>
+    /// IK 리그와 상체 레이어 weight를 목표값을 향해 옮기고 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 두 값을 따로 두는 이유는 재장전 중에 서로 반대가 되기 때문입니다. 그때 상체 레이어는 1이어야
+    /// 재장전 동작이 보이고, IK 리그는 0이어야 손이 조준 위치에 붙지 않고 탄창을 다룹니다.
+    /// </remarks>
+    private void UpdateStanceWeights()
+    {
+        float step = m_stanceBlendDuration <= 0.0f
+            ? 1.0f
+            : Time.deltaTime / m_stanceBlendDuration;
+
+        m_rigWeight = Mathf.MoveTowards(m_rigWeight, m_rigWeightTarget, step);
+        m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, m_handRigWeightTarget, step);
+        m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, m_weaponLayerTarget, step);
+
+        // 반동은 자세 전환보다 빨라야 첫 발이 밋밋하지 않습니다. 그래서 자세 블렌드 시간을 쓰지 않고 즉시 올립니다.
+        m_recoilLayerWeight = m_recoilLayerTarget;
+
+        ApplyStanceWeights();
+    }
+
+    /// <summary>
+    /// 목표값을 기다리지 않고 지금 즉시 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 다운과 사망에 씁니다. 그 모션은 전신을 쓰므로 상체 레이어나 IK가 조금이라도 남아 있으면 자세가 깨집니다.
+    /// </remarks>
+    private void SnapStanceWeights()
+    {
+        m_rigWeight = m_rigWeightTarget;
+        m_handRigWeight = m_handRigWeightTarget;
+        m_weaponLayerWeight = m_weaponLayerTarget;
+        m_recoilLayerWeight = m_recoilLayerTarget;
+
+        ApplyStanceWeights();
+    }
+
+    /// <summary>
+    /// AI 조작 캐릭터의 전투 자세를 적용합니다. 컴포넌트가 꺼져 있어도 외부에서 부를 수 있습니다.
+    /// </summary>
+    /// <param name="inCombat">전투 자세(조준)를 잡을지 여부입니다.</param>
+    /// <param name="shooting">지금 사격 중인지 여부입니다. 반동 레이어와 사격 애니메이션에 씁니다.</param>
+    /// <remarks>
+    /// <b>이 컴포넌트를 AI에서 켜지 않는 이유</b>: <see cref="Update"/> 경로는 <c>m_input</c>(사람 입력)에
+    /// 의존하고 조준 카메라·크로스헤어·FOV를 함께 건드립니다. AI 멤버에서 그대로 돌리면 플레이어의
+    /// 화면과 카메라를 빼앗습니다. 그래서 컴포넌트는 꺼 둔 채 이 진입점만 매 프레임 부르게 했습니다.
+    /// <para>
+    /// <b><see cref="SetAimState"/>를 부르지 않습니다.</b> 그 함수가 조준 카메라·조준 이미지·크로스헤어를
+    /// 켜는데, 그것들은 플레이어 한 명의 화면에 속한 자원입니다. 여기서는 몸에 붙은 것(상체 조준 리그,
+    /// 손 IK, 무기 레이어, 반동 레이어)만 다룹니다.
+    /// </para>
+    /// <para>
+    /// 컴포넌트가 꺼져 있어 <see cref="Update"/>의 보간이 돌지 않으므로 여기서 직접 보간합니다.
+    /// 매 프레임 부르지 않으면 자세가 중간값에서 멈춥니다.
+    /// </para>
+    /// <para>
+    /// Animator의 <c>IsAim</c>은 여기서 건드리지 않습니다. 그 파라미터는
+    /// <see cref="ThirdPersonController"/>가 소유하며, AI 멤버에서는 그 컴포넌트도 꺼져 있으므로
+    /// <see cref="SquadAIController"/>가 다른 이동 파라미터와 함께 직접 채웁니다.
+    /// </para>
+    /// </remarks>
+    public void ApplyAiCombatStance(bool inCombat, bool shooting)
+    {
+        if (m_animator == null)
+        {
+            m_animator = GetComponent<Animator>();
+        }
+
+        m_inCombatStance = inCombat;
+
+        // <b>상체 조준 리그(m_aimRig)는 건드리지 않습니다(실측으로 발견).</b>
+        // 그 리그의 MultiAimConstraint source가 씬에 하나뿐인 LookTarget 오브젝트이고 세 멤버가 그것을
+        // 공유합니다. 그래서 두 방향 모두 오염됩니다.
+        //  - 그냥 weight만 올리면: 타겟이 플레이어 조준점에 있으므로 봇 상체가 플레이어 마우스를 따라 꺾입니다.
+        //  - AI가 타겟을 옮기면: 같은 오브젝트라 플레이어 상체까지 같이 꺾입니다.
+        // 멤버마다 자기 LookTarget을 갖도록 프리팹과 리그를 고쳐야 풀립니다. 그 전까지는 조준 포즈를
+        // Base Layer의 IsAim 트리로만 냅니다(카메라와 무관).
+        //
+        // 손 IK는 무기 그립을 따라가는 per-character 타겟이라 안전하므로 함께 올립니다.
+        SetRigWeights(0.0f, inCombat ? 1.0f : 0.0f);
+
+        // 상체 레이어는 조준만으로 올리지 않습니다. Base Layer의 조준 트리가 이미 자세를 갖고 있어
+        // 여기서 덮으면 웅크린 채 조준해도 서 있는 자세로 보입니다(기존 주석의 판단을 그대로 따릅니다).
+        SetWeaponLayerWeight(shooting ? 1.0f : 0.0f);
+
+        m_recoilLayerTarget = inCombat && shooting ? m_recoilAnimationWeight : 0.0f;
+
+        if (m_animator != null)
+        {
+            m_animator.SetBool(AnimIDShoot, inCombat && shooting);
+        }
+
+        UpdateStanceWeights();
+    }
+
+    /// <summary>지금 값을 리그와 애니메이터 레이어에 반영합니다.</summary>
+    private void ApplyStanceWeights()
     {
         if (m_aimRig != null)
         {
-            m_aimRig.weight = weight;
+            m_aimRig.weight = m_rigWeight;
         }
 
         if (m_handRig != null)
         {
-            m_handRig.weight = weight;
+            m_handRig.weight = m_handRigWeight;
+        }
+
+        if (m_animator != null)
+        {
+            m_animator.SetLayerWeight(WeaponLayerIndex, m_weaponLayerWeight);
+
+            // 레이어가 없는 애니메이터(다른 캐릭터 컨트롤러)에서도 안전하도록 개수를 확인합니다.
+            if (m_animator.layerCount > RecoilLayerIndex)
+            {
+                m_animator.SetLayerWeight(RecoilLayerIndex, m_recoilLayerWeight);
+            }
         }
     }
 

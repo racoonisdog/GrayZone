@@ -30,6 +30,7 @@ public class SquadMemberController : MonoBehaviour
         public bool Sprint;
         public bool Aim;
         public bool Shoot;
+        public bool Crouch;
         public bool AnalogMovement;
         public ThirdPersonController.LocomotionCarryoverState Locomotion;
     }
@@ -80,7 +81,8 @@ public class SquadMemberController : MonoBehaviour
     [Tooltip("입력 값을 보관하는 플레이어 입력 컴포넌트입니다.")]
     [FormerlySerializedAs("starterAssetsInputs")]
     [FormerlySerializedAs("m_starterAssetsInputs")]
-    [SerializeField] private PlayerInputs m_playerInputs;
+    [FormerlySerializedAs("m_playerInputs")]
+    [SerializeField] private PlayerInputController m_playerInputController;
 
     [Tooltip("직접 조작 시 사용하는 3인칭 컨트롤러입니다.")]
     [FormerlySerializedAs("thirdPersonController")]
@@ -98,9 +100,10 @@ public class SquadMemberController : MonoBehaviour
     [FormerlySerializedAs("animator")]
     [SerializeField] private Animator m_animator;
 
-    [Tooltip("AI 추종 이동을 담당하는 컴포넌트입니다.")]
+    [Tooltip("AI 조작 시 행동을 판단하는 컴포넌트입니다.")]
     [FormerlySerializedAs("followerAI")]
-    [SerializeField] private SquadFollowerAI m_followerAI;
+    [FormerlySerializedAs("m_followerAI")]
+    [SerializeField] private SquadAIController m_squadAIController;
 
     [Tooltip("직접 조작 시 사용하는 PlayerInput 컴포넌트입니다.")]
     [FormerlySerializedAs("playerInput")]
@@ -162,7 +165,8 @@ public class SquadMemberController : MonoBehaviour
     private static readonly int StandingHash = Animator.StringToHash("IsStanding");
     private static readonly int RootHash = Animator.StringToHash("IsRoot");
     private static readonly int DownStateHash = Animator.StringToHash("Base Layer.Down");
-    private static readonly int GroundedLocomotionStateHash = Animator.StringToHash("Base Layer.Idle Walk Run Blend");
+    // 지상 이동 상태 경로는 ThirdPersonController가 정본으로 들고 있습니다.
+    // 여기서 문자열을 한 벌 더 두면 애니메이터 이름이 바뀔 때 한쪽만 고치고 지나가게 됩니다.
 
     /// <summary>
     /// Inspector에서 컴포넌트가 추가되거나 Reset될 때 현재 GameObject 기준으로 참조를 자동 탐색합니다.
@@ -199,6 +203,7 @@ public class SquadMemberController : MonoBehaviour
         m_playerHealth.OnDeath += HandleHealthDeath;
         m_playerHealth.OnRevive += HandleHealthRevive;
         m_playerHealth.OnDebugInstantRevive += HandleDebugInstantRevive;
+        m_playerHealth.OnDamaged += HandleHealthDamaged;
     }
 
     private void OnDisable()
@@ -212,6 +217,53 @@ public class SquadMemberController : MonoBehaviour
         m_playerHealth.OnDeath -= HandleHealthDeath;
         m_playerHealth.OnRevive -= HandleHealthRevive;
         m_playerHealth.OnDebugInstantRevive -= HandleDebugInstantRevive;
+        m_playerHealth.OnDamaged -= HandleHealthDamaged;
+    }
+
+    /// <summary>
+    /// 피격 시 공격자를 스쿼드 공용 적 정보에 즉시 반영합니다(공용 문서 §8.4).
+    /// </summary>
+    /// <param name="damage">실제로 적용된 피해량입니다.</param>
+    /// <param name="attacker">피해를 준 주체입니다. 없으면 <c>null</c>입니다.</param>
+    /// <remarks>
+    /// 시야와 무관하게 성립합니다. 뒤에서 맞아도 누가 때렸는지는 알기 때문입니다.
+    /// 조작 주체를 가리지 않고 알립니다. 문서가 플레이어 피격도 "공격자 위치만 공유"하라고 규정하며,
+    /// 여기서 구분하지 않는 것은 <b>위치 공유</b>와 <b>피해 위협도</b>가 다른 축이기 때문입니다.
+    /// 피해 위협도(§4.3)는 AI 슬롯이 따로 들고 갈 값이라 이 경로에서 만들지 않습니다.
+    /// </remarks>
+    private void HandleHealthDamaged(int damage, GameObject attacker)
+    {
+        if (attacker == null)
+        {
+            return;
+        }
+
+        SquadManager manager = SquadManager.Instance;
+        if (manager == null)
+        {
+            return;
+        }
+
+        // 공격자 오브젝트가 히트박스나 무기일 수 있으므로 부모까지 거슬러 찾습니다.
+        EnemyController enemy = attacker.GetComponentInParent<EnemyController>();
+        if (enemy == null)
+        {
+            return;
+        }
+
+        manager.NotifySquadDamagedBy(enemy);
+
+        // 개인 피해 위협도는 AI로 조작되는 동안 받은 피해에만 쌓습니다(§4.3, §8.4).
+        // 플레이어 조작 중 받은 피해는 위치만 공유하고 AI 슬롯의 위협도를 만들지 않습니다.
+        if (m_isPlayerSquadMember)
+        {
+            return;
+        }
+
+        if (m_squadAIController != null)
+        {
+            m_squadAIController.NotifyDamagedBy(enemy, damage);
+        }
     }
 
     /// <summary>
@@ -267,9 +319,9 @@ public class SquadMemberController : MonoBehaviour
     /// </summary>
     private void AutoFindReferences()
     {
-        if (m_playerInputs == null)
+        if (m_playerInputController == null)
         {
-            m_playerInputs = GetComponent<PlayerInputs>();
+            m_playerInputController = GetComponent<PlayerInputController>();
         }
 
         if (m_thirdPersonController == null)
@@ -322,9 +374,9 @@ public class SquadMemberController : MonoBehaviour
             m_ragdollController = GetComponent<RagdollController>();
         }
 
-        if (m_followerAI == null)
+        if (m_squadAIController == null)
         {
-            m_followerAI = GetComponent<SquadFollowerAI>();
+            m_squadAIController = GetComponent<SquadAIController>();
         }
 
         if (m_cameraTarget == null)
@@ -609,8 +661,61 @@ public class SquadMemberController : MonoBehaviour
         m_animator.SetBool(InteractionHash, false);
         m_animator.SetBool(ReviveHash, false);
         m_animator.SetBool(RootHash, false);
-        m_animator.Play(GroundedLocomotionStateHash, 0, 0.0f);
+        ThirdPersonController.PlayGroundedLocomotionState(m_animator, this);
         m_animator.Update(0.0f);
+    }
+
+    /// <summary>
+    /// 이 유닛의 애니메이터를 가장 기본 형태(지상 정지 이동)로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// 어떤 상태에 걸려 빠져나오지 못할 때 쓰는 탈출구입니다. 인게임 호출부는 없고, 디버그와 복구 용도로
+    /// 배선만 갖춰 둡니다. 변이체 쪽 <see cref="EnemyController.ResetAnimation"/>과 같은 역할입니다.
+    ///
+    /// 파라미터를 소유자별로 나눠 정리하는 이유는 쓰기 주체가 나뉘어 있기 때문입니다. 이동은
+    /// <see cref="ThirdPersonController"/>, 전투는 <see cref="AimController"/>, 다운·상호작용은 이 컴포넌트가
+    /// 씁니다. 한 곳에서 전부 쓰면 다음 프레임에 원래 소유자가 자기 값으로 되돌려 리셋이 한 프레임만 보입니다.
+    ///
+    /// 여기서 지우는 것은 애니메이터 표시 상태뿐이고 생존·다운 같은 게임 상태는 건드리지 않습니다.
+    /// 그래서 실제로 다운·사망 중이라면 <see cref="UpdateDownDeathAnimator"/>가 다시 값을 올립니다.
+    /// 그 경우까지 되돌리려면 게임 상태 쪽을 먼저 정리해야 합니다.
+    /// </remarks>
+    public void ResetAnimatorToBase()
+    {
+        // 전투 비주얼(리그 weight, 무기 레이어)은 애니메이터 파라미터가 아니라서 먼저 내려야
+        // 지상 이동 상태를 재생해도 상체가 조준 자세로 남지 않습니다.
+        if (m_aimController != null)
+        {
+            m_aimController.ResetCombatAnimation();
+        }
+
+        if (m_animator != null)
+        {
+            m_animator.SetBool(DownHash, false);
+            m_animator.SetBool(DeathHash, false);
+            m_animator.SetBool(StandingHash, false);
+            m_animator.SetBool(InteractionHash, false);
+            m_animator.SetBool(ReviveHash, false);
+            m_animator.SetBool(RootHash, false);
+            m_animator.ResetTrigger(DoDeathHash);
+        }
+
+        // 이동 파라미터 정리와 DoReset 발동, 지상 이동 상태 재생까지 이쪽이 맡습니다.
+        if (m_thirdPersonController != null)
+        {
+            m_thirdPersonController.ResetAnimation();
+        }
+        else
+        {
+            ThirdPersonController.PlayGroundedLocomotionState(m_animator, this);
+        }
+
+        // 위 값들이 이번 프레임 안에 반영되도록 한 번 평가합니다. 이것이 없으면 다음 Update까지
+        // 옛 상태가 한 프레임 더 보입니다.
+        if (m_animator != null)
+        {
+            m_animator.Update(0.0f);
+        }
     }
 
     /// <summary>
@@ -653,7 +758,7 @@ public class SquadMemberController : MonoBehaviour
     /// <returns>새 조작 멤버에 적용할 입력 상태입니다.</returns>
     public SwitchCarryoverState CaptureSwitchCarryoverState()
     {
-        if (m_playerInputs == null)
+        if (m_playerInputController == null)
         {
             return default;
         }
@@ -661,12 +766,13 @@ public class SquadMemberController : MonoBehaviour
         SwitchCarryoverState state = new()
         {
             HasInput = true,
-            Move = m_playerInputs.Move,
-            Jump = m_playerInputs.Jump,
-            Sprint = m_playerInputs.Sprint,
-            Aim = m_playerInputs.Aim,
-            Shoot = m_playerInputs.Shoot,
-            AnalogMovement = m_playerInputs.AnalogMovement,
+            Move = m_playerInputController.Move,
+            Jump = m_playerInputController.Jump,
+            Sprint = m_playerInputController.Sprint,
+            Aim = m_playerInputController.Aim,
+            Shoot = m_playerInputController.Shoot,
+            Crouch = m_playerInputController.Crouch,
+            AnalogMovement = m_playerInputController.AnalogMovement,
         };
 
         if (m_thirdPersonController != null)
@@ -694,14 +800,15 @@ public class SquadMemberController : MonoBehaviour
         // 전투 자세(백뷰)는 조준이거나 유지 가능한 사격(힙파이어) 중이면 유지합니다.
         bool inCombat = state.Aim || keepShoot;
 
-        if (m_playerInputs != null)
+        if (m_playerInputController != null)
         {
-            m_playerInputs.MoveInput(state.Move);
-            m_playerInputs.JumpInput(state.Jump);
-            m_playerInputs.SprintInput(state.Sprint);
-            m_playerInputs.AimInput(state.Aim);
-            m_playerInputs.ShootInput(keepShoot);
-            m_playerInputs.SetAnalogMovement(state.AnalogMovement);
+            m_playerInputController.MoveInput(state.Move);
+            m_playerInputController.JumpInput(state.Jump);
+            m_playerInputController.SprintInput(state.Sprint);
+            m_playerInputController.AimInput(state.Aim);
+            m_playerInputController.ShootInput(keepShoot);
+            m_playerInputController.CrouchInput(state.Crouch);
+            m_playerInputController.SetAnalogMovement(state.AnalogMovement);
         }
 
         if (m_thirdPersonController != null)
@@ -720,21 +827,21 @@ public class SquadMemberController : MonoBehaviour
     /// 현재 AI 추종 상태를 전환 유지용으로 캡처합니다.
     /// </summary>
     /// <returns>AI 추종 상태입니다.</returns>
-    public SquadFollowerAI.FollowCarryoverState CaptureFollowCarryoverState()
+    public SquadAIController.FollowCarryoverState CaptureFollowCarryoverState()
     {
-        if (m_followerAI == null)
+        if (m_squadAIController == null)
         {
             return default;
         }
 
-        return m_followerAI.CaptureFollowCarryoverState();
+        return m_squadAIController.CaptureFollowCarryoverState();
     }
 
     /// <summary>
     /// 전환 직전 캡처한 AI 추종 상태를 현재 멤버에 적용합니다.
     /// </summary>
     /// <param name="state">적용할 AI 추종 상태입니다.</param>
-    public void ApplyFollowCarryoverState(SquadFollowerAI.FollowCarryoverState state)
+    public void ApplyFollowCarryoverState(SquadAIController.FollowCarryoverState state)
     {
         Vector3 groundReferencePosition = state.HasState ? state.Position : transform.position;
         SnapToNavMeshGround(groundReferencePosition);
@@ -744,12 +851,12 @@ public class SquadMemberController : MonoBehaviour
             m_thirdPersonController.ClearAirborneCarryoverState();
         }
 
-        if (m_followerAI == null)
+        if (m_squadAIController == null)
         {
             return;
         }
 
-        m_followerAI.ApplyFollowCarryoverState(state);
+        m_squadAIController.ApplyFollowCarryoverState(state);
     }
 
     /// <summary>
@@ -838,10 +945,10 @@ public class SquadMemberController : MonoBehaviour
     /// </summary>
     public void ClearDeadControlState()
     {
-        if (m_playerInputs != null)
+        if (m_playerInputController != null)
         {
-            m_playerInputs.ResetInputState();
-            m_playerInputs.enabled = false;
+            m_playerInputController.ResetInputState();
+            m_playerInputController.enabled = false;
         }
 
         if (m_playerInput != null)
@@ -883,21 +990,21 @@ public class SquadMemberController : MonoBehaviour
             m_aimController.ForceStopAim();
         }
 
-        if (m_playerInputs != null)
+        if (m_playerInputController != null)
         {
             if (allowPlayerInput)
             {
                 if (!allowDirectControl)
                 {
-                    m_playerInputs.ResetNonInteractionInputState();
+                    m_playerInputController.ResetNonInteractionInputState();
                 }
             }
             else
             {
-                m_playerInputs.ResetInputState();
+                m_playerInputController.ResetInputState();
             }
 
-            m_playerInputs.enabled = allowPlayerInput;
+            m_playerInputController.enabled = allowPlayerInput;
         }
 
         if (m_characterController != null)
@@ -941,9 +1048,9 @@ public class SquadMemberController : MonoBehaviour
             }
         }
 
-        if (m_followerAI != null)
+        if (m_squadAIController != null)
         {
-            m_followerAI.enabled = allowAiSquadMember;
+            m_squadAIController.enabled = allowAiSquadMember;
         }
 
         ApplyPlayerInputState(allowPlayerInput);
@@ -976,41 +1083,41 @@ public class SquadMemberController : MonoBehaviour
         bool allowDirectControl = allowPlayerInput && !m_isInteractionLocked;
         bool allowAiSquadMember = m_isAlive && !m_isDown && !m_isPlayerSquadMember;
 
-        SetBehaviourEnabled(m_playerInputs, allowPlayerInput);
+        SetBehaviourEnabled(m_playerInputController, allowPlayerInput);
         SetColliderEnabled(m_characterController, allowDirectControl);
         SetColliderEnabled(m_aiCollisionCollider, allowAiSquadMember);
         SetBehaviourEnabled(m_navMeshAgent, allowAiSquadMember);
         SetBehaviourEnabled(m_thirdPersonController, allowDirectControl);
         SetBehaviourEnabled(m_aimController, allowDirectControl);
         SetBehaviourEnabled(m_weaponController, true);
-        SetBehaviourEnabled(m_followerAI, allowAiSquadMember);
+        SetBehaviourEnabled(m_squadAIController, allowAiSquadMember);
         SetBehaviourEnabled(m_playerInput, allowPlayerInput);
     }
 
     private void RecordRoleSetupComponentUndo(string actionName)
     {
-        RecordUndo(m_playerInputs, actionName);
+        RecordUndo(m_playerInputController, actionName);
         RecordUndo(m_characterController, actionName);
         RecordUndo(m_aiCollisionCollider, actionName);
         RecordUndo(m_navMeshAgent, actionName);
         RecordUndo(m_thirdPersonController, actionName);
         RecordUndo(m_aimController, actionName);
         RecordUndo(m_weaponController, actionName);
-        RecordUndo(m_followerAI, actionName);
+        RecordUndo(m_squadAIController, actionName);
         RecordUndo(m_playerInput, actionName);
     }
 
     private void MarkRoleSetupComponentsDirty()
     {
         MarkDirty(this);
-        MarkDirty(m_playerInputs);
+        MarkDirty(m_playerInputController);
         MarkDirty(m_characterController);
         MarkDirty(m_aiCollisionCollider);
         MarkDirty(m_navMeshAgent);
         MarkDirty(m_thirdPersonController);
         MarkDirty(m_aimController);
         MarkDirty(m_weaponController);
-        MarkDirty(m_followerAI);
+        MarkDirty(m_squadAIController);
         MarkDirty(m_playerInput);
     }
 
@@ -1056,9 +1163,9 @@ public class SquadMemberController : MonoBehaviour
 
     private void SuppressNonInteractionInputs()
     {
-        if (m_playerInputs != null)
+        if (m_playerInputController != null)
         {
-            m_playerInputs.ResetNonInteractionInputState();
+            m_playerInputController.ResetNonInteractionInputState();
         }
 
         if (m_aimController != null)
