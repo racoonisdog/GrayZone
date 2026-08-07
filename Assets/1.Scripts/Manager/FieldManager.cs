@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 필드 씬의 생명주기와 게임플레이 입력 모드 전환을 조율하는 씬 루트 컨트롤러입니다.
@@ -9,9 +10,6 @@ using UnityEngine;
 /// 이 클래스는 결과 오버레이 진입 같은 씬 상태를 결정하고, 이후 활성 플레이어와 UI에 필요한 전환을 지시합니다.
 /// 현재는 플레이어 입력·결과 UI 진입까지 연결되어 있으며, 결과 오버레이 동안의 시간 정지와 저장 완료 게이트는 후속 구현 대상입니다.
 /// </remarks>
-[RequireComponent(typeof(SurfaceFeedbackSystem))]
-[RequireComponent(typeof(FieldAudioSystem))]
-[RequireComponent(typeof(EnemyCorpseSettings))]
 public class FieldManager : MonoBehaviour, IInputModeController
 {
     private static FieldManager s_instance;
@@ -19,14 +17,17 @@ public class FieldManager : MonoBehaviour, IInputModeController
     [Tooltip("현재 직접 조작 중인 스쿼드 멤버를 제공하는 필드 스쿼드 매니저입니다. 비어 있으면 Awake에서 한 번 탐색합니다.")]
     [SerializeField] private SquadManager m_squadManager;
 
-    [Tooltip("필드 공용 표면 피격 규칙과 Feedback 목록을 보관하는 같은 GameObject의 컴포넌트입니다.")]
-    [SerializeField] private SurfaceFeedbackSystem m_surfaceFeedbackSystem;
+    [Tooltip("일회성 시각 피드백(탄흔·혈흔·임팩트)을 내보내는 자식 오브젝트의 매니저입니다.")]
+    [FormerlySerializedAs("m_surfaceFeedbackSystem")]
+    [SerializeField] private EffectManager m_effectManager;
 
-    [Tooltip("필드 위치형 one-shot 사운드의 AudioSource 풀과 동시 발음 정책을 보관하는 같은 GameObject의 컴포넌트입니다.")]
-    [SerializeField] private FieldAudioSystem m_audioFeedbackSystem;
+    [Tooltip("필드 위치형 one-shot 사운드의 AudioSource 풀과 동시 발음 정책을 보관하는 자식 오브젝트의 매니저입니다.")]
+    [FormerlySerializedAs("m_audioFeedbackSystem")]
+    [SerializeField] private AudioManager m_audioManager;
 
-    [Tooltip("필드의 모든 적 진영 유닛에 공통 적용할 시체 삭제와 래그돌 설정입니다.")]
-    [SerializeField] private EnemyCorpseSettings m_enemyCorpseSettings;
+    [Tooltip("적 진영 전반의 공용 설정과 제어를 소유하는 자식 오브젝트의 매니저입니다. 현재는 시체 삭제와 래그돌 설정을 담당합니다.")]
+    [FormerlySerializedAs("m_enemyCorpseSettings")]
+    [SerializeField] private EnemyManager m_enemyManager;
 
     [Tooltip("스쿼드 전멸 시 표시할 게임오버 화면입니다. 비어 있으면 비활성 오브젝트까지 포함해 자동 탐색합니다.")]
     [SerializeField] private GameOverUIController m_gameOverUI;
@@ -37,7 +38,7 @@ public class FieldManager : MonoBehaviour, IInputModeController
     private InputMode m_currentInputMode = InputMode.Gameplay;
     private FieldSceneDataManager m_subscribedFieldSceneDataManager;
     private SquadMemberController m_cachedPlayerSquadMember;
-    private PlayerInputs m_cachedPlayerInputs;
+    private PlayerInputController m_cachedPlayerInputController;
     private ThirdPersonController m_cachedThirdPersonController;
     private AimController m_cachedAimController;
 
@@ -45,18 +46,20 @@ public class FieldManager : MonoBehaviour, IInputModeController
     /// <remarks>씬에 속하므로 씬 전환과 함께 사라집니다. 필드 밖에서는 존재하지 않는 것이 정상입니다.</remarks>
     public static FieldManager Instance => s_instance;
 
-    /// <summary>현재 필드 씬의 표면 피드백 할당 데이터를 보관하는 컴포넌트입니다.</summary>
-    public SurfaceFeedbackSystem SurfaceFeedback => m_surfaceFeedbackSystem != null
-        ? m_surfaceFeedbackSystem
-        : GetComponent<SurfaceFeedbackSystem>();
+    /// <summary>탄흔·혈흔·임팩트 같은 일회성 시각 피드백을 내보내는 매니저입니다.</summary>
+    public EffectManager EffectManager => m_effectManager != null
+        ? m_effectManager
+        : m_effectManager = GetComponentInChildren<EffectManager>(true);
 
-    /// <summary>피격·사망·표면 충돌처럼 월드 위치에 남는 필드 one-shot 사운드 출력 시스템입니다.</summary>
-    public FieldAudioSystem AudioFeedback => m_audioFeedbackSystem != null
-        ? m_audioFeedbackSystem
-        : GetComponent<FieldAudioSystem>();
+    /// <summary>피격·사망·표면 충돌처럼 월드 위치에 남는 필드 one-shot 사운드 출력 매니저입니다.</summary>
+    public AudioManager AudioManager => m_audioManager != null
+        ? m_audioManager
+        : m_audioManager = GetComponentInChildren<AudioManager>(true);
 
-    /// <summary>현재 필드의 모든 적 진영 유닛이 사망 시 조회할 시체 처리 설정입니다.</summary>
-    public EnemyCorpseSettings EnemyCorpseSettings => m_enemyCorpseSettings;
+    /// <summary>적 진영 전반의 공용 설정과 제어를 소유하는 매니저입니다.</summary>
+    public EnemyManager EnemyManager => m_enemyManager != null
+        ? m_enemyManager
+        : m_enemyManager = GetComponentInChildren<EnemyManager>(true);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStaticState()
@@ -66,24 +69,65 @@ public class FieldManager : MonoBehaviour, IInputModeController
 
     private void Reset()
     {
-        m_surfaceFeedbackSystem = GetComponent<SurfaceFeedbackSystem>();
-        m_audioFeedbackSystem = GetComponent<FieldAudioSystem>();
+        CacheChildManagers();
     }
 
 #if UNITY_EDITOR
     private void OnValidate()
     {
-        if (m_surfaceFeedbackSystem == null)
-        {
-            m_surfaceFeedbackSystem = GetComponent<SurfaceFeedbackSystem>();
-        }
-
-        if (m_audioFeedbackSystem == null)
-        {
-            m_audioFeedbackSystem = GetComponent<FieldAudioSystem>();
-        }
+        CacheChildManagers();
     }
 #endif
+
+    /// <summary>
+    /// 자식 오브젝트에 있는 매니저 참조를 채웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 비활성 오브젝트까지 훑습니다. 매니저를 잠시 꺼 두고 테스트하는 경우에도 참조가 끊기지 않아야 합니다.
+    ///
+    /// 없으면 만들지 않고 비워 둡니다. 예전에는 <c>AddComponent</c>로 보강했지만, 자식 오브젝트 구조에서는
+    /// 그렇게 붙인 것이 씬에 저장되지 않아 실행할 때마다 기본값으로 되살아납니다. 그러면 인스펙터에서
+    /// 조정한 예산이 조용히 무시되므로, 없으면 없는 대로 두고 <see cref="WarnMissingManagers"/>가 알립니다.
+    /// </remarks>
+    private void CacheChildManagers()
+    {
+        if (m_effectManager == null)
+        {
+            m_effectManager = GetComponentInChildren<EffectManager>(true);
+        }
+
+        if (m_audioManager == null)
+        {
+            m_audioManager = GetComponentInChildren<AudioManager>(true);
+        }
+
+        if (m_enemyManager == null)
+        {
+            m_enemyManager = GetComponentInChildren<EnemyManager>(true);
+        }
+    }
+
+    /// <summary>빠진 자식 매니저를 한 번에 알립니다.</summary>
+    /// <remarks>
+    /// 이것들이 없으면 탄흔·사운드·시체 처리가 조용히 멈춥니다. 원인을 찾기 어려운 침묵이라 시작할 때 짚어 둡니다.
+    /// </remarks>
+    private void WarnMissingManagers()
+    {
+        if (m_effectManager == null)
+        {
+            Debug.LogWarning("[FieldManager] EffectManager 자식 오브젝트를 찾지 못했습니다. 탄흔과 임팩트 이펙트가 나오지 않습니다.", this);
+        }
+
+        if (m_audioManager == null)
+        {
+            Debug.LogWarning("[FieldManager] AudioManager 자식 오브젝트를 찾지 못했습니다. 필드 위치형 사운드가 나오지 않습니다.", this);
+        }
+
+        if (m_enemyManager == null)
+        {
+            Debug.LogWarning("[FieldManager] EnemyManager 자식 오브젝트를 찾지 못했습니다. 시체 처리 설정이 적용되지 않습니다.", this);
+        }
+    }
 
     private void Awake()
     {
@@ -96,26 +140,8 @@ public class FieldManager : MonoBehaviour, IInputModeController
 
         s_instance = this;
 
-        if (m_surfaceFeedbackSystem == null)
-        {
-            m_surfaceFeedbackSystem = GetComponent<SurfaceFeedbackSystem>();
-        }
-
-        if (m_audioFeedbackSystem == null)
-        {
-            m_audioFeedbackSystem = GetComponent<FieldAudioSystem>();
-        }
-
-        // 기존 씬/프리팹이 새 컴포넌트를 아직 저장하지 않았어도 런타임 피드백이 끊기지 않게 보강합니다.
-        if (m_audioFeedbackSystem == null)
-        {
-            m_audioFeedbackSystem = gameObject.AddComponent<FieldAudioSystem>();
-        }
-
-        if (m_enemyCorpseSettings == null)
-        {
-            m_enemyCorpseSettings = GetComponent<EnemyCorpseSettings>();
-        }
+        CacheChildManagers();
+        WarnMissingManagers();
 
         if (m_squadManager == null)
         {
@@ -241,11 +267,11 @@ public class FieldManager : MonoBehaviour, IInputModeController
                 case InputMode.UI:
                     m_cachedAimController.ForceStopAim();
                     m_cachedThirdPersonController.SetLockCameraPosition(true);
-                    m_cachedPlayerInputs.SetPlayerCursorMode(true);
+                    m_cachedPlayerInputController.SetPlayerCursorMode(true);
                     break;
 
                 case InputMode.Gameplay:
-                    m_cachedPlayerInputs.SetPlayerCursorMode(false);
+                    m_cachedPlayerInputController.SetPlayerCursorMode(false);
                     m_cachedThirdPersonController.SetLockCameraPosition(false);
                     break;
 
@@ -280,17 +306,17 @@ public class FieldManager : MonoBehaviour, IInputModeController
         }
 
         if (m_cachedPlayerSquadMember != currentPlayer
-            || m_cachedPlayerInputs == null
+            || m_cachedPlayerInputController == null
             || m_cachedThirdPersonController == null
             || m_cachedAimController == null)
         {
             m_cachedPlayerSquadMember = currentPlayer;
-            m_cachedPlayerInputs = currentPlayer.GetComponent<PlayerInputs>();
+            m_cachedPlayerInputController = currentPlayer.GetComponent<PlayerInputController>();
             m_cachedThirdPersonController = currentPlayer.GetComponent<ThirdPersonController>();
             m_cachedAimController = currentPlayer.GetComponent<AimController>();
         }
 
-        return m_cachedPlayerInputs != null
+        return m_cachedPlayerInputController != null
                && m_cachedThirdPersonController != null
                && m_cachedAimController != null;
     }
