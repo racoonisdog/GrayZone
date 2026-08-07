@@ -10,12 +10,12 @@ using VInspector;
 /// 가장 적합한 대상을 하나 고릅니다. 이 컴포넌트는 <b>상호작용 배선만</b> 담당하며, 실제 동작(부활·시설 사용 등)은
 /// 각 <see cref="IInteractable"/> 구현체가 자기 도메인 로직으로 수행합니다.
 /// <para>
-/// 조작 멤버 판별은 같은 GameObject의 <see cref="PlayerInputs"/> 활성 여부로 합니다(비조작 멤버는 PlayerInputs가 꺼져 있어
+/// 조작 멤버 판별은 같은 GameObject의 <see cref="PlayerInputController"/> 활성 여부로 합니다(비조작 멤버는 PlayerInputController가 꺼져 있어
 /// 탐지/실행을 건너뜁니다). 탐지 방식을 정밀 조준까지 확장하려면 카메라 레이캐스트 결과를 우선하고 근접 탐지를 폴백으로 두는
 /// 하이브리드로 넓힐 수 있습니다.
 /// </para>
 /// </remarks>
-[RequireComponent(typeof(PlayerInputs))]
+[RequireComponent(typeof(PlayerInputController))]
 public class InteractionController : MonoBehaviour
 {
     [Foldout("Detection")]
@@ -46,7 +46,7 @@ public class InteractionController : MonoBehaviour
 
     private const int MaxHits = 16;
 
-    private PlayerInputs m_input;
+    private PlayerInputController m_input;
     private Camera m_camera;
     private readonly Collider[] m_hits = new Collider[MaxHits];
 
@@ -71,7 +71,7 @@ public class InteractionController : MonoBehaviour
 
     private void Awake()
     {
-        m_input = GetComponent<PlayerInputs>();
+        m_input = GetComponent<PlayerInputController>();
         m_camera = Camera.main;
     }
 
