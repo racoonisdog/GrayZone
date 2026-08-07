@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 현재 필드의 적 진영 유닛에 적용할 시체 처리 설정을 감염체 종류별로 보관합니다.
@@ -20,7 +21,7 @@ using UnityEngine;
 /// 이 컴포넌트는 <see cref="FieldManager"/>와 같은 GameObject에 배치합니다.
 /// </remarks>
 [DisallowMultipleComponent]
-public sealed class EnemyCorpseSettings : MonoBehaviour
+public sealed class EnemyManager : MonoBehaviour
 {
     /// <summary>
     /// 감염체 한 종류에 적용할 시체 처리 설정입니다.
@@ -42,6 +43,11 @@ public sealed class EnemyCorpseSettings : MonoBehaviour
         [Tooltip("켜면 사망 즉시 물리 골격이 준비된 적을 래그돌로 전환합니다. 끄거나 골격이 없으면 마지막 자세 그대로 굳습니다.")]
         [SerializeField] private bool m_useRagdoll = true;
 
+        [Tooltip("이 종류가 사망할 때 시체가 받는 기본 충격량(N·s)입니다. 유효 질량 60kg 기준이라 240이면 약 4m/s로 날아갑니다. 무기 넉백이 이보다 크면 그쪽을 씁니다. 0이면 시체가 밀리지 않고 제자리에서 무너집니다.")]
+        [Min(0.0f)]
+        [FormerlySerializedAs("m_minKnockbackImpulse")]
+        [SerializeField] private float m_deathKnockbackImpulse = 240.0f;
+
         /// <summary>이 설정을 적용할 감염체 종류입니다.</summary>
         public EnemyType EnemyType => m_enemyType;
 
@@ -53,6 +59,14 @@ public sealed class EnemyCorpseSettings : MonoBehaviour
 
         /// <summary>사망 즉시 래그돌로 전환할지 여부입니다.</summary>
         public bool UseRagdoll => m_useRagdoll;
+
+        /// <summary>사망 시 시체가 받는 기본 충격량(N·s)입니다.</summary>
+        /// <remarks>
+        /// 무기가 정한 넉백과 비교해 큰 쪽을 씁니다. 기획 문서에 넉백 개념이 없어 무기 값은 0으로 두고,
+        /// 실제 사망 연출 세기는 종류마다 이 값으로 조절합니다. 무기 넉백이 도입되면 그 값이 이 기본값을
+        /// 넘어설 때만 우선합니다.
+        /// </remarks>
+        public float DeathKnockbackImpulse => Mathf.Max(0.0f, m_deathKnockbackImpulse);
 
         /// <summary>이 슬롯이 담당할 종류를 지정합니다. 동기화 코드만 사용합니다.</summary>
         internal void SetEnemyType(EnemyType value)

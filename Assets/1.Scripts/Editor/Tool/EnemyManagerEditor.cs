@@ -2,7 +2,7 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// <see cref="EnemyCorpseSettings"/>의 종류별 슬롯을 고정 목록으로 그립니다.
+/// <see cref="EnemyManager"/>의 종류별 슬롯을 고정 목록으로 그립니다.
 /// </summary>
 /// <remarks>
 /// 기본 배열 UI를 그대로 쓰면 슬롯을 추가·삭제할 수 있고, 그러면 같은 종류가 둘이거나 종류가 빠진
@@ -12,8 +12,8 @@ using UnityEngine;
 /// 슬롯 배열 자체의 동기화는 이 에디터가 아니라 컴포넌트의 OnValidate가 담당합니다. 에디터는 표시만
 /// 맡습니다. 여기서 배열을 고치면 Inspector를 열지 않은 오브젝트는 동기화되지 않기 때문입니다.
 /// </remarks>
-[CustomEditor(typeof(EnemyCorpseSettings))]
-public sealed class EnemyCorpseSettingsEditor : Editor
+[CustomEditor(typeof(EnemyManager))]
+public sealed class EnemyManagerEditor : Editor
 {
     /// <summary>슬롯이 담당하는 종류를 담은 필드 이름입니다. 이 필드는 그리지 않습니다.</summary>
     private const string EnemyTypeFieldName = "m_enemyType";
