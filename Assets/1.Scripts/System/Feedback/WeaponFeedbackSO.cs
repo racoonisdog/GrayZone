@@ -42,6 +42,14 @@ public sealed class WeaponFeedbackSO : ScriptableObject, IFeedbackData
     [Min(0.0f)]
     [SerializeField] private float m_tracerEffectLifetime = 0.15f;
 
+    [Tooltip("탄이 지형에 멈춘 위치에서 재생할 이 무기 전용 탄착 이펙트 프리팹입니다.")]
+    [FeedbackReference(FeedbackReferenceKind.VisualEffect, "총기 전용 탄착 이펙트 프리팹")]
+    [SerializeField] private GameObject m_impactEffectPrefab;
+
+    [Tooltip("생성한 총기 전용 탄착 이펙트를 개인 풀로 회수하기까지의 시간(초)입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_impactEffectLifetime = 1.0f;
+
     [Tooltip("탄피 배출 소켓에서 생성할 탄피 프리팹입니다. 반복 생성 시 풀링 대상으로 사용합니다.")]
     [FeedbackReference(FeedbackReferenceKind.Shell, "탄피 프리팹")]
     [SerializeField] private GameObject m_shellPrefab;
@@ -70,6 +78,12 @@ public sealed class WeaponFeedbackSO : ScriptableObject, IFeedbackData
 
     /// <summary>레이 또는 트레이서 이펙트의 런타임 수명(초)입니다.</summary>
     public float TracerEffectLifetime => m_tracerEffectLifetime;
+
+    /// <summary>이 무기 전용 탄착 이펙트 프리팹입니다.</summary>
+    public GameObject ImpactEffectPrefab => m_impactEffectPrefab;
+
+    /// <summary>총기 전용 탄착 이펙트를 개인 풀로 회수하기까지의 시간(초)입니다.</summary>
+    public float ImpactEffectLifetime => m_impactEffectLifetime;
 
     /// <summary>배출할 탄피 프리팹입니다.</summary>
     public GameObject ShellPrefab => m_shellPrefab;

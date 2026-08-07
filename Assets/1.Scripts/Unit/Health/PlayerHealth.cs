@@ -3,15 +3,38 @@ using UnityEngine;
 using UnityEngine.Serialization;
 using VInspector;
 
+/// <summary>부상 게이지에서 환산한 캐릭터의 부상 심각도 단계입니다.</summary>
+/// <remarks>
+/// 환산 규칙은 <see cref="CharacterInjuryStateRule"/>이 소유하며 Field와 Shelter가 같은 규칙을 씁니다.
+/// 단계는 표시와 셸터 치료 판정에 쓰이고, 전투 피해 계산에는 직접 관여하지 않습니다.
+/// </remarks>
 public enum CharacterInjuryState
 {
+    /// <summary>부상이 없거나 무시할 수준입니다.</summary>
     Normal,
+
+    /// <summary>경상입니다.</summary>
     Minor,
+
+    /// <summary>중상입니다.</summary>
     Serious,
+
+    /// <summary>치명상입니다.</summary>
     Critical
 }
 
-public class PlayerHealth : HealthSystemBase, IBalancePostProcess
+/// <summary>
+/// 플레이어블 캐릭터의 체력·부상·다운·부활 상태를 소유하는 체력 컴포넌트입니다.
+/// </summary>
+/// <remarks>
+/// HP가 0이 되면 사망이 아니라 <b>다운</b>으로 갑니다. 사망은 별도 조건에서만 발생합니다.
+/// <para>
+/// 수치의 첫 초기화는 밸런스 SO가 담당하고(<see cref="ISharedBalanceReceiver"/>),
+/// 필드 사이의 관계 정리는 <see cref="IBalancePostProcess.OnBalanceApplied"/>에서 한 번에 수행합니다.
+/// 그 정리를 <c>OnValidate</c>에만 두면 빌드에서 돌지 않아 시트에서 들어온 잘못된 값을 막지 못합니다.
+/// </para>
+/// </remarks>
+public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanceReceiver
 {
     /// <summary>
     /// 이 컴포넌트를 쓰는 유닛은 진영이 정해져 있으므로 레이어 추론을 쓰지 않습니다.
@@ -132,20 +155,29 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
     /// <summary>현재 부상 게이지를 최대 부상 게이지 기준 0~1 범위로 환산한 값입니다.</summary>
     public float InjuryGaugeNormalized => Mathf.Clamp01(m_currentInjuryGauge / MaxInjuryGauge);
 
+    /// <summary>현재 다운(빈사) 상태인지 여부입니다.</summary>
     public bool IsDowned => m_isDowned;
 
+    /// <summary>다운 타이머가 멈춰 있는지 여부입니다.</summary>
+    /// <remarks>구조 상호작용이 진행되는 동안 멈춥니다. 멈춘 사이에는 남은 시간이 줄지 않습니다.</remarks>
     public bool IsDownTimerPaused => m_downTimerPaused;
 
+    /// <summary>다운 상태를 버틸 수 있는 전체 시간(초)입니다.</summary>
     public float DownDuration => m_downDuration;
 
+    /// <summary>다운 상태가 끝나기까지 남은 시간(초)입니다. 음수로 내려가지 않습니다.</summary>
     public float DownTimeRemaining => Mathf.Max(0.0f, m_downTimeRemaining);
 
+    /// <summary>남은 다운 시간을 0~1 범위로 환산한 값입니다.</summary>
+    /// <remarks>HUD 게이지 표시용입니다. 전체 시간이 0 이하이면 나눌 수 없으므로 0을 돌려줍니다.</remarks>
     public float DownTimeNormalized => m_downDuration > 0.0f
         ? Mathf.Clamp01(m_downTimeRemaining / m_downDuration)
         : 0.0f;
 
+    /// <summary>이번 출격에서 이미 부활한 횟수입니다.</summary>
     public int ReviveCount => m_reviveCount;
 
+    /// <summary>부활할 수 있는 최대 횟수입니다. 이 횟수를 넘기면 다시 살아날 수 없습니다.</summary>
     public int MaxReviveCount => m_maxReviveCount;
 
     /// <summary>부상 게이지가 변경될 때 발생합니다. 인자는 현재 부상 게이지와 정규화된 게이지 값입니다.</summary>
@@ -167,8 +199,10 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
     /// </remarks>
     public event Action OnDebugInstantRevive;
 
+    /// <summary>다운 타이머가 바뀔 때 (남은 시간, 전체 시간) 순서로 알립니다.</summary>
     public event Action<float, float> OnDownTimerChanged;
 
+    /// <summary>부활 횟수가 바뀔 때 (사용한 횟수, 최대 횟수) 순서로 알립니다.</summary>
     public event Action<int, int> OnReviveCountChanged;
 
 #if UNITY_EDITOR
@@ -240,14 +274,40 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
     /// </remarks>
     private BalanceBindResult BindConfiguredBalance()
     {
-        if (m_balanceSO == null)
+        return BindFrom(m_balanceSO);
+    }
+
+    /// <summary>개별 밸런스 SO를 직접 물고 있는지 여부입니다.</summary>
+    /// <remarks><c>true</c>면 <see cref="SOBinder"/>가 통합 SO 주입을 건너뜁니다.</remarks>
+    public bool HasOwnBalance => m_balanceSO != null;
+
+    /// <summary>엔티티 통합 밸런스 SO의 값을 적용합니다.</summary>
+    /// <param name="balance">통합 밸런스 SO입니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다.</returns>
+    /// <remarks>
+    /// 개별 SO 슬롯은 비운 채로 둡니다. 비어 있다는 것 자체가 "개별 지정 없음"을 뜻합니다.
+    /// 어느 경로로 들어오든 기반 클래스의 Start가 값을 쓰기 전에 끝나야 하므로, 호출은 Awake 단계에서 이루어집니다.
+    /// </remarks>
+    public BalanceBindResult BindSharedBalance(ScriptableObject balance)
+    {
+        return BindFrom(balance);
+    }
+
+    /// <summary>주어진 원본 SO에서 밸런스 값을 대입합니다.</summary>
+    /// <param name="balance">값을 읽어올 밸런스 SO입니다. 개별 SO일 수도, 엔티티 통합 SO일 수도 있습니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다. 원본이 없으면 기본값입니다.</returns>
+    private BalanceBindResult BindFrom(ScriptableObject balance)
+    {
+        if (balance == null)
         {
             return default;
         }
 
-        return BindManager.Instance.Bind(m_balanceSO, this, this);
+        return BindManager.Instance.Bind(balance, this, this);
     }
 
+    /// <summary>체력과 다운·부활 상태를 출격 시작 시점으로 되돌립니다.</summary>
+    /// <remarks>기반 클래스의 체력 초기화에 더해 이 컴포넌트가 소유한 다운·부활·부상 상태까지 함께 리셋합니다.</remarks>
     public override void InitializeHealth()
     {
         base.InitializeHealth();
@@ -298,6 +358,11 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
         AddInjuryGaugeFromDamage(actualDamage);
     }
 
+    /// <summary>피해를 적용하고 그 결과 다운으로 넘어갔는지 판단합니다.</summary>
+    /// <param name="damage">적용할 피해량입니다.</param>
+    /// <param name="attacker">피해를 준 주체입니다. 없으면 <c>null</c>입니다.</param>
+    /// <returns>피해가 실제로 들어갔으면 <c>true</c>입니다.</returns>
+    /// <remarks>HP가 0이 되어도 사망이 아니라 다운으로 갑니다. 사망은 별도 조건에서만 처리합니다.</remarks>
     public override bool TakeDamage(int damage, GameObject attacker = null)
     {
         // 무한 체력 디버그는 런타임 트레이너가 활성화된 Editor/Development Build에서만 효과가 있습니다.
@@ -316,6 +381,9 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
     /// 플레이어 다운은 사망 플래그를 세우지 않는 HP 0 상태이므로,
     /// 기본 <see cref="HealthSystemBase.Revive"/> 대신 이 경로를 사용합니다.
     /// </remarks>
+    /// <summary>지정한 체력으로 다운 상태에서 일으켜 세웁니다.</summary>
+    /// <param name="amount">부활 후 회복시킬 체력입니다.</param>
+    /// <returns>부활에 성공했으면 <c>true</c>입니다. 사망했거나 다운 상태가 아니면 <c>false</c>입니다.</returns>
     public bool ReviveFromDown(int amount)
     {
         if (m_isDead || m_currentHp > 0 || !m_isDowned)
@@ -344,11 +412,17 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
         return ReviveToHp(amount);
     }
 
+    /// <summary>부활 횟수에 따라 정해진 체력으로 다운 상태에서 일으켜 세웁니다.</summary>
+    /// <returns>부활에 성공했으면 <c>true</c>입니다.</returns>
+    /// <remarks>회복량은 <see cref="CalculateNextReviveHp"/>가 정합니다. 구조 상호작용이 쓰는 기본 경로입니다.</remarks>
     public bool ReviveFromDown()
     {
         return ReviveFromDown(CalculateNextReviveHp());
     }
 
+    /// <summary>다운 타이머를 멈추거나 다시 흐르게 합니다.</summary>
+    /// <param name="value">멈추려면 <c>true</c>입니다.</param>
+    /// <remarks>구조 상호작용이 진행되는 동안 멈춥니다. 다운 상태가 아니거나 사망했으면 항상 해제됩니다.</remarks>
     public void SetDownTimerPaused(bool value)
     {
         if (!m_isDowned || m_isDead)
@@ -360,12 +434,17 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
         m_downTimerPaused = value;
     }
 
+    /// <summary>다음 부활에서 회복될 체력을 미리 계산합니다.</summary>
+    /// <returns>부활 횟수에 따른 회복 체력입니다. 최소 1이며 최대 체력을 넘지 않습니다.</returns>
+    /// <remarks>구조 UI가 "살리면 얼마나 회복되는지"를 미리 보여줄 때 씁니다. 상태를 바꾸지 않습니다.</remarks>
     public int CalculateNextReviveHp()
     {
         int percent = GetReviveHpPercent(m_reviveCount + 1);
         return Mathf.Clamp(Mathf.CeilToInt(m_maxHp * (percent / 100.0f)), 1, m_maxHp);
     }
 
+    /// <summary>캐릭터를 사망 처리합니다.</summary>
+    /// <remarks>다운과 달리 되돌릴 수 없습니다. 중복 호출과 처리 중 재진입을 막습니다.</remarks>
     public override void Death()
     {
         if (m_isDead || m_isDeathProcessing)
@@ -580,6 +659,8 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
 
     [Foldout("Debug")]
     [Button("즉시 기절시키기")]
+    /// <summary>즉시 다운 상태로 만듭니다. 개발 모드에서만 동작합니다.</summary>
+    /// <remarks>런타임 트레이너 버튼용입니다. <see cref="GameDevMode.DebugFeaturesEnabled"/>가 꺼져 있으면 아무 일도 하지 않습니다.</remarks>
     public void Debug_InstantDown()
     {
         if (!GameDevMode.DebugFeaturesEnabled)
@@ -604,6 +685,8 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
 
     [Foldout("Debug")]
     [Button("즉시 전투 이탈")]
+    /// <summary>즉시 전투 불능(사망) 상태로 만듭니다. 개발 모드에서만 동작합니다.</summary>
+    /// <remarks>런타임 트레이너 버튼용입니다.</remarks>
     public void Debug_InstantCombatOut()
     {
         if (!GameDevMode.DebugFeaturesEnabled)
@@ -617,6 +700,8 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess
 
     [Foldout("Debug")]
     [Button("즉시 살리기")]
+    /// <summary>구조 상호작용을 건너뛰고 즉시 부활시킵니다. 개발 모드에서만 동작합니다.</summary>
+    /// <remarks>기립 애니메이션을 거치지 않으므로 <see cref="OnDebugInstantRevive"/>로 구독자에게 자세 정리를 알립니다.</remarks>
     public void Debug_InstantRevive()
     {
         if (!GameDevMode.DebugFeaturesEnabled)

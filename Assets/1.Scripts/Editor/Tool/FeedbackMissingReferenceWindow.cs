@@ -22,13 +22,25 @@ public sealed class FeedbackMissingReferenceWindow : EditorWindow
         Surface
     }
 
+    /// <summary>검사에서 발견한 누락 한 건입니다.</summary>
     private sealed class MissingIssue
     {
+        /// <summary>무기·감염체·표면 중 어느 계열의 누락인지입니다.</summary>
         public FeedbackCategory category;
+
+        /// <summary>누락을 소유한 컴포넌트나 에셋의 표시 이름입니다.</summary>
         public string ownerLabel;
+
+        /// <summary>비어 있는 항목의 표시 이름입니다.</summary>
         public string fieldLabel;
+
+        /// <summary>어느 프리팹·씬·에셋에서 발견했는지 알려 주는 경로입니다.</summary>
         public string contextPath;
+
+        /// <summary>누락을 소유한 컴포넌트입니다. 결과 행의 소유자 버튼이 이것을 선택합니다.</summary>
         public Object ownerTarget;
+
+        /// <summary>참조가 비어 있는 피드백 에셋입니다. 에셋 자체를 못 찾았으면 <c>null</c>입니다.</summary>
         public Object profileTarget;
     }
 
@@ -308,11 +320,11 @@ public sealed class FeedbackMissingReferenceWindow : EditorWindow
             }
         }
 
-        foreach (SurfaceFeedbackSystem system in Resources.FindObjectsOfTypeAll<SurfaceFeedbackSystem>())
+        foreach (EffectManager system in Resources.FindObjectsOfTypeAll<EffectManager>())
         {
             if (IsLoadedSceneObject(system))
             {
-                AuditSurfaceSystem(system, GetSceneContext(system));
+                AuditEffectManager(system, GetSceneContext(system));
             }
         }
     }
@@ -334,19 +346,40 @@ public sealed class FeedbackMissingReferenceWindow : EditorWindow
             AuditFieldManager(fieldManager, path);
         }
 
-        foreach (SurfaceFeedbackSystem system in root.GetComponentsInChildren<SurfaceFeedbackSystem>(true))
+        foreach (EffectManager system in root.GetComponentsInChildren<EffectManager>(true))
         {
-            AuditSurfaceSystem(system, path);
+            AuditEffectManager(system, path);
         }
     }
 
+    /// <summary>무기의 피드백 배선을 검사합니다.</summary>
+    /// <param name="gun">검사할 무기입니다.</param>
+    /// <param name="context">결과에 표시할 위치 설명입니다.</param>
+    /// <remarks>
+    /// 피드백 리소스의 소유자는 <see cref="WeaponFeedbackEmitter"/>입니다.
+    /// SO는 이미터의 개별 슬롯이나 엔티티 <see cref="SOBinder"/>의 통합 슬롯 중 한쪽에서 옵니다.
+    /// </remarks>
     private void AuditGun(Gun gun, string context)
     {
         m_weaponOwnerCount++;
-        WeaponFeedbackSO feedback = gun.Feedback;
+
+        WeaponFeedbackEmitter emitter = gun.FeedbackEmitter;
+        if (emitter == null)
+        {
+            AddIssue(FeedbackCategory.Weapon, gun, null, "WeaponFeedbackEmitter 컴포넌트 없음", context);
+            return;
+        }
+
+        WeaponFeedbackSO feedback = emitter.FeedbackSO;
         if (feedback == null)
         {
-            AddIssue(FeedbackCategory.Weapon, gun, null, "Weapon Feedback 미할당", context);
+            SOBinder binder = gun.GetComponentInParent<SOBinder>(true);
+            feedback = binder != null ? binder.SharedFeedback as WeaponFeedbackSO : null;
+        }
+
+        if (feedback == null)
+        {
+            AddIssue(FeedbackCategory.Weapon, emitter, null, "Weapon Feedback SO 미할당 (개별·통합 둘 다 비어 있음)", context);
             return;
         }
 
@@ -368,12 +401,12 @@ public sealed class FeedbackMissingReferenceWindow : EditorWindow
 
     private void AuditFieldManager(FieldManager fieldManager, string context)
     {
-        if (fieldManager.SurfaceFeedback == null)
+        if (fieldManager.EffectManager == null)
         {
             AddIssue(FeedbackCategory.Surface, fieldManager, null, "Surface Feedback System 컴포넌트 없음", context);
         }
 
-        FieldAudioSystem fieldAudio = fieldManager.AudioFeedback;
+        AudioManager fieldAudio = fieldManager.AudioManager;
         if (fieldAudio == null)
         {
             AddIssue(FeedbackCategory.Surface, fieldManager, null, "Field Audio System 컴포넌트 없음", context);
@@ -384,32 +417,32 @@ public sealed class FeedbackMissingReferenceWindow : EditorWindow
         }
     }
 
-    private void AuditSurfaceSystem(SurfaceFeedbackSystem system, string context)
+    private void AuditEffectManager(EffectManager system, string context)
     {
         m_surfaceOwnerCount++;
 
-        if (system.DefaultFeedback == null)
+        if (system.DefaultSurfaceFeedback == null)
         {
             AddIssue(FeedbackCategory.Surface, system, null, "기본 표면 Feedback 미할당", context);
         }
         else
         {
-            AuditSurfaceFeedback(system.DefaultFeedback);
+            AuditSurfaceFeedback(system.DefaultSurfaceFeedback);
         }
 
-        if (system.Feedbacks == null || system.Feedbacks.Count == 0)
+        if (system.SurfaceFeedbacks == null || system.SurfaceFeedbacks.Count == 0)
         {
             AddIssue(FeedbackCategory.Surface, system, null, "표면별 Feedback 목록 비어 있음", context);
             return;
         }
 
-        int nullCount = CountNullEntries(system.Feedbacks);
+        int nullCount = CountNullEntries(system.SurfaceFeedbacks);
         if (nullCount > 0)
         {
             AddIssue(FeedbackCategory.Surface, system, null, $"표면별 Feedback 목록에 빈 항목 {nullCount}개", context);
         }
 
-        foreach (SurfaceFeedbackSO feedback in system.Feedbacks)
+        foreach (SurfaceFeedbackSO feedback in system.SurfaceFeedbacks)
         {
             if (feedback != null)
             {

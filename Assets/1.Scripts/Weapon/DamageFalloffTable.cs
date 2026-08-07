@@ -36,6 +36,11 @@ public struct DamageFalloffStep
     [Tooltip("고정 피해 모드에서 쓰는 값입니다. 기본 피해와 무관하게 이 값이 그대로 들어갑니다.")]
     [SerializeField] private int m_flatDamage;
 
+    /// <summary>구간 하나의 끝 거리와 두 모드의 값을 함께 지정합니다.</summary>
+    /// <param name="maxDistance">이 구간이 끝나는 거리(m)입니다.</param>
+    /// <param name="damageMultiplier">배율 모드에서 사용할 값입니다.</param>
+    /// <param name="flatDamage">고정 피해 모드에서 사용할 값입니다.</param>
+    /// <remarks>모드는 표가 소유하므로 구간은 두 값을 모두 들고 있다가 해당하는 쪽만 쓰입니다.</remarks>
     public DamageFalloffStep(float maxDistance, float damageMultiplier, int flatDamage)
     {
         m_maxDistance = maxDistance;
@@ -81,6 +86,7 @@ public sealed class DamageFalloffTable
     [Tooltip("트랙 오른쪽 끝에 해당하는 거리(m)입니다. 0 이하로 두면 무기 사거리를 그대로 씁니다.")]
     [SerializeField] private float m_trackMaxDistance = 0.0f;
 
+    [Tooltip("거리 구간 목록입니다. 끝 거리 순으로 정렬되며, 마지막 구간을 넘어선 거리는 마지막 값을 그대로 씁니다.")]
     [SerializeField] private List<DamageFalloffStep> m_steps = new List<DamageFalloffStep>();
 
     /// <summary>구간 값을 해석하는 방식입니다.</summary>
