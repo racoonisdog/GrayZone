@@ -1,4 +1,8 @@
-using UnityEngine;
+﻿using UnityEngine;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 /// <summary>
 /// 레이어별로 카메라 컬링 거리를 개별 지정합니다.
@@ -84,4 +88,33 @@ public sealed class LayerCullDistanceSetter : MonoBehaviour
         m_camera.layerCullDistances = distances;
         m_camera.layerCullSpherical = m_useSphericalCulling;
     }
+
+#if UNITY_EDITOR
+    private void OnDrawGizmosSelected()
+    {
+        if (m_layerDistances == null)
+            return;
+
+        Vector3 center = transform.position;
+
+        for (int i = 0; i < m_layerDistances.Length; i++)
+        {
+            LayerDistance setting = m_layerDistances[i];
+
+            if (setting.Distance <= 0f)
+                continue;
+
+            Color color = Color.HSVToRGB(i * 0.25f, 0.8f, 1f);
+            color.a = 0.65f;
+
+            Gizmos.color = color;
+            Gizmos.DrawWireSphere(center, setting.Distance);
+
+            Handles.color = color;
+            Handles.Label(
+                center + transform.forward * setting.Distance,
+                $"{setting.LayerName}: {setting.Distance:0.#} m");
+        }
+    }
+#endif
 }

@@ -21,6 +21,10 @@ MonoBehaviour:
     amount: 0
   - resourceId: 
     amount: 0
+  - resourceId: 
+    amount: 0
+  - resourceId: 
+    amount: 0
   startingCharacterDefinitions:
   - {fileID: 11400000, guid: 2500c3745cea5654a838c007ba8ebfeb, type: 2}
   - {fileID: 11400000, guid: 6ebffd95315760a44ae6b35e6f84bf68, type: 2}

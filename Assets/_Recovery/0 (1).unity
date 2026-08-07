@@ -123464,7 +123464,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LayerCullDistanceSetter
   m_layerDistances:
   - LayerName: Env_SmallProp
-    Distance: 30
+    Distance: 40
   - LayerName: Env_Detail
     Distance: 60
   - LayerName: Env_Interior

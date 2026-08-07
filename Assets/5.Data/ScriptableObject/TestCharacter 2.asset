@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayableCharacterDefinition
   definitionId: TestNpc03
   runtimeId: 
-  characterId: 0
+  characterId: 3
   displayName: 
   npcType: 2
   reliability: 0
