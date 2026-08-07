@@ -11,9 +11,10 @@ using UnityEngine;
 /// <b>전파는 시작과 동시에 일어나지 않습니다.</b> 정해진 시점에 전파되며, 그 전에 사망하면 취소됩니다(§5.5.3).
 /// 이 지연이 "나린이 전파 전에 경직을 넣어 저지한다"(콘텐츠 §7.5)가 성립하는 근거이므로 없애면 안 됩니다.
 ///
-/// 시도 기록은 성공·취소와 무관하게 소모됩니다(§5.5.1). 그래서 취소된 개체도 같은 교전에서 다시 시도하지 않습니다.
-///
-/// 경직으로 인한 취소는 경직 시스템이 아직 없어 구현하지 않았습니다. 사망 취소만 있습니다.
+/// <b>기회 소모는 전파 시점에 확정됩니다.</b> 전파 전에 경직으로 끊기면 주변에 아무것도 전달되지 않았으므로
+/// "하려고 했다"로 보고 다시 설 수 있게 둡니다. 다만 무한 재시도는 경직으로 저지하는 플레이를 무의미하게 만들어,
+/// 정해진 횟수를 넘긴 취소에서 기회가 닫힙니다(<see cref="CombatState.NotifyHowlCanceled"/>).
+/// 기획 결정(2026-08-07)이며 공용 문서 §5.5.1의 "전파 전 취소도 재시도하지 않는다"와 어긋나 문서 갱신이 필요합니다.
 /// 설계 근거: 공용 `적 시스템` v0.2 §5.5, `변이체 잡몹 1 콘텐츠` §7.
 /// </remarks>
 public class HowlState : EnemyStateBase
@@ -27,6 +28,11 @@ public class HowlState : EnemyStateBase
     /// <summary>하울링 상태를 생성합니다.</summary>
     public HowlState(EnemyController controller) : base(controller) { }
 
+    /// <summary>하울링 연출을 시작하고 전파 시점과 행동 종료 시점을 잡습니다.</summary>
+    /// <remarks>
+    /// <b>진입만으로는 기회를 소모하지 않습니다.</b> 전파 시점 전에 끊기면 주변에 아무것도 전달되지 않았으므로
+    /// "하려고 했다"로 보고 다시 설 수 있게 둡니다. 소모는 전파가 실제로 일어날 때 확정됩니다.
+    /// </remarks>
     public override void Enter()
     {
         m_startTime = Time.time;
@@ -35,13 +41,14 @@ public class HowlState : EnemyStateBase
         // 양발을 지지하고 이동을 멈춥니다(콘텐츠 §7.3).
         Controller.StopMoving();
 
-        // 시도 기록을 진입 시점에 소모합니다. 전파에 성공했는지와 무관하게 1회만 시도하므로(§5.5.1),
-        // 전파 시점까지 미루면 그 전에 취소된 개체가 다시 시도할 수 있게 됩니다.
-        Controller.Combat.MarkHowlAttempted();
-
         Controller.PlayHowlAnimation();
     }
 
+    /// <summary>전파 시점에 주변 변이체를 합류시키고, 행동이 끝나면 다음 행동을 고릅니다.</summary>
+    /// <remarks>
+    /// 전파는 시작과 동시에 일어나지 않습니다. 이 지연이 "전파 전에 경직을 넣어 저지한다"가 성립하는 근거이므로
+    /// 없애면 안 됩니다. 전파 전에 사망하면 취소됩니다.
+    /// </remarks>
     public override void Tick()
     {
         float elapsed = Time.time - m_startTime;
@@ -57,6 +64,7 @@ public class HowlState : EnemyStateBase
         }
     }
 
+    /// <summary>하울링 연출과 전파 대기 상태를 정리합니다.</summary>
     public override void Exit()
     {
         Controller.EndHowlAnimation();
@@ -79,10 +87,21 @@ public class HowlState : EnemyStateBase
         DoBroadcast();
     }
 
+    /// <summary>이번 하울링이 전파 시점을 지났는지 여부입니다.</summary>
+    /// <remarks>
+    /// 경직으로 끊겼을 때 기회를 소모할지 판단하는 기준입니다. 전파 전이면 "하려고 했다"로 보고 다시 설 수
+    /// 있게 두고, 전파 뒤면 이미 목적을 달성했으므로 남은 연출만 끊긴 것으로 봅니다(§5.5.3).
+    /// </remarks>
+    public bool IsBroadcastDone => m_broadcastDone;
+
     /// <summary>주변 변이체에게 스쿼드 실시간 위치를 전파합니다.</summary>
     private void DoBroadcast()
     {
         m_broadcastDone = true;
+
+        // 전파가 실제로 일어난 이 시점에 기회를 소모합니다. 진입 시점에 소모하면 전파 전에 끊긴 개체가
+        // 아무것도 전달하지 못하고도 기회를 잃습니다.
+        Controller.Combat.MarkHowlBroadcast();
 
         EnemyTargetSensor sensor = Controller.Sensor;
         if (sensor == null)

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using VInspector;
 
 /// <summary>
 /// 변이체가 스쿼드 캐릭터에 대해 무엇을 알고 있는지를 소유하고, 그중 현재 대상을 선정하는 Module입니다.
@@ -117,16 +118,24 @@ public class EnemyTargetSensor : MonoBehaviour
     [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 걷기 소음의 초당 증가량보다 크면 걸어서는 절대 들키지 않습니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.15f;
 
-    [Header("Noise Debug")]
-    [Tooltip("소음 인지 게이지를 Scene 뷰에 막대로 표시합니다. 게이지가 0보다 클 때만 그려집니다.")]
-    [SerializeField] private bool m_debugDrawNoiseGauge = true;
-
     [Header("Target Selection")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기입니다.")]
     [SerializeField] private float m_reevaluateInterval = 1f;
 
     [Tooltip("새 후보가 현재 대상보다 이만큼 더 가까워야 대상을 바꿉니다.")]
     [SerializeField] private float m_switchPathDistanceDelta = 2f;
+
+    // Debug 구역은 직렬화 필드의 맨 끝에 둡니다. Foldout은 다음 Foldout이나 EndFoldout이 나올 때까지 이어지므로,
+    // 중간에 두면 뒤따르는 필드가 전부 Debug 구역으로 딸려 들어갑니다.
+    // 영역이 여럿이면 폴드아웃 안에서 Header로 나눕니다.
+    [Foldout("Debug")]
+    [Header("Sight")]
+    [Tooltip("이 개체를 선택했을 때 시야 반경과 시야각 경계를 Scene 뷰에 표시합니다.")]
+    [SerializeField] private bool m_debugDrawSight = true;
+
+    [Header("Noise")]
+    [Tooltip("소음 인지 게이지를 Scene 뷰에 막대로 표시합니다. 게이지가 0보다 클 때만 그려집니다.")]
+    [SerializeField] private bool m_debugDrawNoiseGauge = true;
 
     /// <summary>스쿼드 캐릭터별 기록입니다. 인원수만큼만 만들고 재사용합니다.</summary>
     private readonly List<TargetInfo> m_infos = new List<TargetInfo>();
@@ -288,10 +297,20 @@ public class EnemyTargetSensor : MonoBehaviour
     }
 
     /// <summary>소음·하울링 수신 목록에서 빠집니다.</summary>
+    /// <remarks>
+    /// 스쿼드 전투 상태에서도 함께 빠집니다. 사망·파괴로 <see cref="SetEngaged"/>(false)를 거치지 않고
+    /// 사라지는 경로가 있으면 교전 카운트가 남아 비전투로 복귀하지 못하기 때문입니다.
+    /// </remarks>
     private void OnDisable()
     {
         NoiseSystem.Unregister(this);
         HowlSystem.Unregister(this);
+
+        if (m_isEngaged)
+        {
+            m_isEngaged = false;
+            SyncSquadEngagement(false);
+        }
     }
 
     /// <summary>
@@ -302,10 +321,43 @@ public class EnemyTargetSensor : MonoBehaviour
     /// 비교전 상태에서는 AI가 조작하는 캐릭터를 시야로 먼저 감지하지 않습니다(§5.6).
     /// 플레이어의 의도와 무관한 동료의 움직임 때문에 새 변이체가 끌려오는 것을 막기 위한 규칙입니다.
     /// 교전이 끝나면 보호를 다시 적용해야 하므로 상태 종료 시 false로 되돌립니다.
+    /// <para>
+    /// 여기서 스쿼드 전투 상태에도 이 개체를 등록·해제합니다(공용 문서 `스쿼드 AI 시스템` §4.2).
+    /// 진입·이탈 지점이 이 한 쌍뿐이라 다른 곳에 손대지 않아도 짝이 맞습니다.
+    /// 반대 방향(스쿼드 전투 상태 -> 이 개체의 감지 판정)으로는 절대 연결하지 않습니다. §5.6이 금지합니다.
+    /// </para>
     /// </remarks>
     public void SetEngaged(bool engaged)
     {
+        if (m_isEngaged == engaged)
+        {
+            return;
+        }
+
         m_isEngaged = engaged;
+        SyncSquadEngagement(engaged);
+    }
+
+    /// <summary>
+    /// 이 개체의 교전 여부를 스쿼드 전투 상태에 반영합니다.
+    /// </summary>
+    /// <param name="engaged">교전 중이면 true입니다.</param>
+    private void SyncSquadEngagement(bool engaged)
+    {
+        SquadEngagement engagement = m_squadManager != null ? m_squadManager.Engagement : null;
+        if (engagement == null)
+        {
+            return;
+        }
+
+        if (engaged)
+        {
+            engagement.RegisterEngagedEnemy(this);
+        }
+        else
+        {
+            engagement.UnregisterEngagedEnemy(this);
+        }
     }
 
     /// <summary>
@@ -505,6 +557,37 @@ public class EnemyTargetSensor : MonoBehaviour
         info.Source = InfoSource.DirectAttacker;
 
         m_currentTarget = attacker;
+    }
+
+    /// <summary>
+    /// 실시간 위치를 알고 있는 대상의 추적 만료 시각을 지정한 시간만큼 미룹니다.
+    /// </summary>
+    /// <param name="seconds">미룰 시간(초)입니다. 0 이하면 아무것도 하지 않습니다.</param>
+    /// <remarks>
+    /// 경직처럼 <b>행동이 잠긴 동안 만료 시계를 세우기 위한</b> 것입니다. 잠금 시간이 추적 유지 시간보다 길면,
+    /// 잠긴 사이에 대상이 조용히 만료되어 풀리는 순간 "아무도 없다"가 됩니다. 등 뒤에서 맞아 대상을 볼 수 없는
+    /// 각도라면 감지로도 갱신되지 않으므로, 맞고 쓰러졌다 일어난 개체가 공격자를 잊는 결과가 됩니다.
+    ///
+    /// 시작 시점에 한 번 미루는 것으로 잠금 구간만큼 시계를 세운 것과 같아집니다. 매 프레임 상태를 들고 다닐
+    /// 필요가 없어 잠금이 비정상 종료되어도 남는 것이 없습니다.
+    ///
+    /// 마지막 확인 위치(<c>LastKnownPosition</c>)는 시간으로 만료하지 않으므로 건드리지 않습니다.
+    /// </remarks>
+    public void ExtendTrackingHold(float seconds)
+    {
+        if (seconds <= 0.0f)
+        {
+            return;
+        }
+
+        for (int i = 0; i < m_infos.Count; i++)
+        {
+            TargetInfo info = m_infos[i];
+            if (info.HasLivePosition)
+            {
+                info.TrackingExpireTime += seconds;
+            }
+        }
     }
 
     /// <summary>
@@ -1051,6 +1134,11 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <summary>선택된 변이체의 시야 범위를 Scene 뷰에서 확인하기 위한 Gizmo입니다.</summary>
     private void OnDrawGizmosSelected()
     {
+        if (!m_debugDrawSight)
+        {
+            return;
+        }
+
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, m_sightRange);
 

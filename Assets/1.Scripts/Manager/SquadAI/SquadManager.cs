@@ -19,14 +19,52 @@ public class SquadManager : MonoBehaviour
     private static SquadManager s_instance;
 
     /// <summary>현재 씬의 인스턴스입니다. 스쿼드가 없는 씬이면 <c>null</c>입니다.</summary>
-    /// <remarks>씬에 속하므로 씬 전환과 함께 사라집니다. 셸터처럼 스쿼드가 없는 씬에서는 없는 것이 정상입니다.</remarks>
-    public static SquadManager Instance => s_instance;
+    /// <remarks>
+    /// 씬에 속하므로 씬 전환과 함께 사라집니다. 셸터처럼 스쿼드가 없는 씬에서는 없는 것이 정상입니다.
+    /// <para>
+    /// <b>캐시가 비었으면 한 번 더 찾습니다(실측으로 발견).</b> Play Mode 중에 스크립트를 다시 컴파일하면
+    /// 도메인 리로드로 static이 초기화되는데, 씬 오브젝트는 그대로 살아 있어 <c>Awake</c>가 다시 돌지 않습니다.
+    /// 그러면 이 캐시가 영영 <c>null</c>로 남아 스쿼드에 의존하는 모든 기능이 조용히 멈춥니다.
+    /// 재탐색은 캐시가 빈 경우에만 하므로 평소 비용은 없습니다.
+    /// </para>
+    /// </remarks>
+    public static SquadManager Instance
+    {
+        get
+        {
+            if (s_instance == null && Application.isPlaying)
+            {
+                s_instance = FindFirstObjectByType<SquadManager>();
+            }
+
+            return s_instance;
+        }
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStaticState()
     {
         s_instance = null;
     }
+
+    private readonly SquadEngagement m_engagement = new SquadEngagement();
+
+    /// <summary>스쿼드가 공유하는 전투/비전투 상태입니다.</summary>
+    /// <remarks>
+    /// 변이체가 <see cref="EnemyTargetSensor.SetEngaged"/>로 교전에 들고 날 때 갱신됩니다.
+    /// 컴포넌트가 아니라 이 매니저가 소유하는 일반 객체이므로 씬 배선이 필요 없습니다.
+    /// 자세한 규칙과 방향 제약은 <see cref="SquadEngagement"/>를 보십시오.
+    /// </remarks>
+    public SquadEngagement Engagement => m_engagement;
+
+    private readonly SquadEnemyIntel m_enemyIntel = new SquadEnemyIntel();
+
+    /// <summary>스쿼드가 공유하는 교전 적 위치 정보입니다.</summary>
+    /// <remarks>
+    /// 공용 문서 §8이 정본입니다. 플레이어 확인(§8.2)은 이 매니저가 카메라로 판정하고,
+    /// AI 확인(§8.3)은 각 <see cref="SquadAIController"/>가 자기 시야로 판정해 보고합니다.
+    /// </remarks>
+    public SquadEnemyIntel EnemyIntel => m_enemyIntel;
 
     [Foldout("Squad Options")]
     [Tooltip("관리할 스쿼드 멤버 목록입니다.")]
@@ -50,9 +88,6 @@ public class SquadManager : MonoBehaviour
 
     [Tooltip("전환 입력을 다시 받기까지 기다리는 시간(초)입니다. 연타로 전환이 겹쳐 쌓이는 것을 막습니다. 사망 자동 전환에는 적용하지 않습니다.")]
     [SerializeField] private float m_switchInputCooldown = 0.1f;
-
-    [Tooltip("멤버 전환 직후 각 멤버의 제어 주체, 위치, NavMeshAgent, Animator 상태를 콘솔에 출력합니다.")]
-    [SerializeField] private bool m_logSwitchDebug = true;
 
     [Foldout("Camera Options")]
     [Tooltip("현재 멤버를 따라가는 기본 카메라입니다.")]
@@ -80,8 +115,33 @@ public class SquadManager : MonoBehaviour
     [FormerlySerializedAs("member3Key")]
     [SerializeField] private Key m_member3Key = Key.Digit3;
 
+    [Foldout("Enemy Intel Options")]
+    [Tooltip("교전 적을 지금 보고 있는지 다시 판정하는 주기입니다. 짧을수록 반응이 빠르지만 시야 판정 비용이 늘어납니다.")]
+    [SerializeField] private float m_enemyIntelInterval = 0.2f;
+
+    [Tooltip("시야를 가로막는 고정 환경 장애물 레이어입니다. 다른 캐릭터나 적은 여기 포함하지 않습니다.")]
+    [SerializeField] private LayerMask m_intelObstacleLayer;
+
+    [Tooltip("적을 겨눌 때 발밑에서 얼마나 위를 보는지입니다. 변이체 쪽 시야 판정과 같은 방식으로 가슴 높이를 겨눕니다.")]
+    [SerializeField] private float m_intelTargetHeight = 1.0f;
+
+    [Tooltip("피격으로 확인한 공격자 위치를 실시간으로 유지하는 시간입니다. 뒤에서 맞아도 잠시 위치를 공유합니다.")]
+    [SerializeField] private float m_attackerIntelHoldDuration = 3.0f;
+
+    // Debug 구역은 직렬화 필드의 맨 끝에 둡니다. Foldout은 다음 Foldout이나 EndFoldout이 나올 때까지 이어지므로,
+    // 중간에 두면 뒤따르는 필드가 전부 Debug 구역으로 딸려 들어갑니다.
+    [Foldout("Debug")]
+    [Tooltip("멤버 전환 직후 각 멤버의 제어 주체, 위치, NavMeshAgent, Animator 상태를 콘솔에 출력합니다.")]
+    [SerializeField] private bool m_logSwitchDebug = true;
+
     /// <summary>전환 입력을 다시 받을 수 있는 시각입니다.</summary>
     private float m_nextSwitchInputTime;
+
+    /// <summary>다음 적 정보 갱신 시각입니다.</summary>
+    private float m_nextEnemyIntelTime;
+
+    /// <summary>해석이 끝난 시야 차단 레이어 마스크 캐시입니다.</summary>
+    private int m_resolvedIntelObstacleMask;
 
     private bool m_hasInitialized;
     private bool m_squadEliminationNotified;
@@ -238,6 +298,135 @@ public class SquadManager : MonoBehaviour
         }
 
         HandleSwitchInput();
+        UpdateEnemyIntel();
+    }
+
+    /// <summary>
+    /// 교전 적을 지금 누가 보고 있는지 판정해 공유 정보를 갱신합니다(§8).
+    /// </summary>
+    /// <remarks>
+    /// 매 프레임이 아니라 주기로 돕니다. 판정마다 적 수만큼 Raycast가 나가므로 주기를 없애면
+    /// 교전 규모에 비례해 비용이 커집니다. 확인 자체에는 누적 시간이 없으므로(§8.2) 주기가
+    /// 곧 반응 지연이며, 그 값은 밸런스 영역입니다.
+    /// </remarks>
+    private void UpdateEnemyIntel()
+    {
+        if (!m_engagement.IsInCombat && m_enemyIntel.TrackedCount == 0)
+        {
+            return;
+        }
+
+        if (Time.time < m_nextEnemyIntelTime)
+        {
+            return;
+        }
+
+        m_nextEnemyIntelTime = Time.time + Mathf.Max(0.02f, m_enemyIntelInterval);
+
+        m_enemyIntel.Refresh(m_engagement, IsEnemyConfirmedBySquad);
+    }
+
+    /// <summary>
+    /// 스쿼드원 중 누구라도 이 적을 직접 확인하고 있는지 판정합니다.
+    /// </summary>
+    /// <param name="enemy">확인할 적입니다.</param>
+    /// <returns>한 명이라도 확인하고 있으면 true입니다.</returns>
+    /// <remarks>
+    /// 플레이어는 카메라 기준(§8.2), AI는 자기 캐릭터 시야 기준(§8.3)으로 서로 다르게 판정합니다.
+    /// 한 명만 확인하면 스쿼드 전체가 공유하므로 첫 성공에서 바로 끊습니다.
+    /// </remarks>
+    private bool IsEnemyConfirmedBySquad(EnemyController enemy)
+    {
+        if (enemy == null)
+        {
+            return false;
+        }
+
+        Vector3 targetPoint = enemy.transform.position + Vector3.up * m_intelTargetHeight;
+
+        if (IsVisibleToPlayerCamera(targetPoint))
+        {
+            return true;
+        }
+
+        for (int i = 0; i < m_squadMembers.Count; i++)
+        {
+            SquadMemberController member = m_squadMembers[i];
+            if (member == null || member.IsPlayerSquadMember || !member.IsAlive || member.IsDown)
+            {
+                continue;
+            }
+
+            SquadAIController ai = member.GetComponent<SquadAIController>();
+            if (ai != null && ai.enabled && ai.CanSeePoint(targetPoint, ResolveIntelObstacleMask()))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 게임플레이 카메라가 이 지점을 보고 있는지 판정합니다(§8.2).
+    /// </summary>
+    /// <param name="point">확인할 지점입니다.</param>
+    /// <returns>화면 안에 있고 장애물에 가리지 않으면 true입니다.</returns>
+    /// <remarks>
+    /// 캐릭터 시야가 아니라 <b>카메라</b>가 기준입니다. 플레이어는 화면으로 보기 때문이며,
+    /// 문서가 "캐릭터가 아닌 카메라가 확인한 결과를 반영한다"고 명시합니다.
+    /// 차폐 검사의 시작점도 카메라입니다. 화면에 보이는데 캐릭터 눈높이에서 가렸다고 판정하면
+    /// 플레이어가 본 것을 동료가 모르는 상황이 생깁니다.
+    /// </remarks>
+    private bool IsVisibleToPlayerCamera(Vector3 point)
+    {
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            return false;
+        }
+
+        Vector3 viewport = cam.WorldToViewportPoint(point);
+        if (viewport.z <= 0.0f || viewport.x < 0.0f || viewport.x > 1.0f || viewport.y < 0.0f || viewport.y > 1.0f)
+        {
+            return false;
+        }
+
+        Vector3 origin = cam.transform.position;
+        Vector3 delta = point - origin;
+        float distance = delta.magnitude;
+        if (distance <= 0.0001f)
+        {
+            return true;
+        }
+
+        return !Physics.Raycast(origin, delta / distance, distance, ResolveIntelObstacleMask(), QueryTriggerInteraction.Ignore);
+    }
+
+    /// <summary>시야·사격선 차폐 판정에 쓸 레이어 마스크입니다.</summary>
+    /// <remarks>AI가 사격선을 판정할 때도 같은 마스크를 써야 판정이 어긋나지 않습니다.</remarks>
+    public int IntelObstacleMask => ResolveIntelObstacleMask();
+
+    /// <summary>시야 차폐 판정에 쓸 레이어 마스크를 구합니다.</summary>
+    /// <remarks>비어 있으면 변이체 쪽과 같은 기본 장애물 레이어로 대체합니다.</remarks>
+    private int ResolveIntelObstacleMask()
+    {
+        if (m_resolvedIntelObstacleMask == 0)
+        {
+            m_resolvedIntelObstacleMask = EnemyLayers.ResolveObstacleMask(m_intelObstacleLayer, this, "적 정보 공유 시야 차단");
+        }
+
+        return m_resolvedIntelObstacleMask;
+    }
+
+    /// <summary>
+    /// 스쿼드원이 적에게 피격됐음을 알려 공격자 위치를 즉시 공유합니다(§8.4).
+    /// </summary>
+    /// <param name="attacker">피해를 입힌 적입니다.</param>
+    /// <remarks>시야와 무관하게 성립합니다. 뒤에서 맞아도 누가 때렸는지는 알기 때문입니다.</remarks>
+    public void NotifySquadDamagedBy(EnemyController attacker)
+    {
+        m_enemyIntel.NotifyDamagedBy(attacker, m_attackerIntelHoldDuration);
     }
 
     /// <summary>
@@ -478,7 +667,7 @@ public class SquadManager : MonoBehaviour
         SquadMemberController.SwitchCarryoverState switchState = carrySwitchState
             ? previousMember.CaptureSwitchCarryoverState()
             : default;
-        SquadFollowerAI.FollowCarryoverState followState = carrySwitchState
+        SquadAIController.FollowCarryoverState followState = carrySwitchState
             ? nextMember.CaptureFollowCarryoverState()
             : default;
 

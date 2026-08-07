@@ -125,6 +125,14 @@ namespace StarterAssets
         public bool isAimMove = false;
         public bool isReload = false;
 
+        // Debug 구역은 직렬화 필드의 맨 끝에 둡니다. Header는 다음 Header가 나올 때까지 이어지므로,
+        // 중간에 두면 뒤따르는 필드가 전부 Debug 구역으로 딸려 들어갑니다.
+        // 이 파일은 Starter Assets 원본 스타일이라 public 필드가 프로퍼티 뒤에도 흩어져 있어,
+        // 클래스 앞부분이 아니라 마지막 public 필드 뒤가 실제 끝입니다.
+        [Header("Debug")]
+        [Tooltip("이 캐릭터를 선택했을 때 접지 판정 구를 Scene 뷰에 표시합니다. 접지 중이면 초록, 아니면 빨강입니다.")]
+        public bool DebugDrawGroundCheck = true;
+
         private void Awake()
         {
             // get a reference to our main camera
@@ -368,6 +376,11 @@ namespace StarterAssets
 
         private void OnDrawGizmosSelected()
         {
+            if (!DebugDrawGroundCheck)
+            {
+                return;
+            }
+
             Color transparentGreen = new Color(0.0f, 1.0f, 0.0f, 0.35f);
             Color transparentRed = new Color(1.0f, 0.0f, 0.0f, 0.35f);
 

@@ -18,6 +18,8 @@ public class WanderState : EnemyStateBase
     /// <summary>배회 상태를 생성합니다.</summary>
     public WanderState(EnemyController controller) : base(controller) { }
 
+    /// <summary>진입 위치를 배회 기준점으로 잡고 대기 피드백을 재생합니다.</summary>
+    /// <remarks>기준점을 여기서 잡으므로 교전이나 수색을 마치고 돌아오면 그 지점 주변을 배회합니다.</remarks>
     public override void Enter()
     {
         Controller.PlayIdleFeedback();
@@ -35,6 +37,24 @@ public class WanderState : EnemyStateBase
         PickWanderDestination(m_anchor, Controller.WanderRadius);
     }
 
+    /// <summary>경직이 풀린 뒤 배회 속도로 이동을 다시 켭니다.</summary>
+    /// <remarks>
+    /// <see cref="Enter"/>를 다시 부르지 않는 이유는 그러면 배회 기준점이 현재 위치로 다시 잡혀,
+    /// 경직을 당할 때마다 배회 범위가 밀려나기 때문입니다. 기준점은 그대로 두고 속도만 되살립니다.
+    /// </remarks>
+    public override void ResumeMovement()
+    {
+        NavMeshAgent agent = Controller.Agent;
+        if (agent != null && agent.isOnNavMesh)
+        {
+            agent.speed = Controller.WanderSpeed;
+        }
+
+        base.ResumeMovement();
+    }
+
+    /// <summary>기준점 주변을 배회하면서 각성 조건을 확인하고 해당하는 상태로 전이합니다.</summary>
+    /// <remarks>배회 중인 개체는 이미 각성해 있으므로 소음을 들으면 준비 시간 없이 바로 소음 추적으로 넘어갑니다.</remarks>
     public override void Tick()
     {
         // 캐릭터를 직접 인식하면 교전으로 전이한다. (각성 준비 경유는 후속 슬라이스.)

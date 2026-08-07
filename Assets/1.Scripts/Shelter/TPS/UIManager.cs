@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using VInspector;
 
 /// <summary>
 /// 셸터에서 현재 열려 있는 차단형 UI 종류
@@ -44,7 +45,8 @@ public class UIManager : MonoBehaviour
     [Header("Inventory UI")]
     [SerializeField] private ShelterInventoryUI m_inventoryUI;
 
-    [Header("Debug")]
+    [Foldout("Debug")]
+    [Tooltip("켜면 UI 상태 전환과 상호작용 프롬프트 변화를 콘솔에 남깁니다.")]
     [SerializeField] private bool m_logMessages = true;
 
     private GameObject m_currentInteractionTarget;

@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using VInspector;
@@ -10,8 +11,10 @@ using VInspector;
 /// 실제 탄환, 탄피, 탄창 오브젝트 생성은 <c>PoolManager</c>를 통해 수행합니다.
 /// 사격 입력 자체는 외부 컨트롤러에서 판단하고, 이 컴포넌트는 <see cref="TryShoot"/> 호출을 통해 사격 가능 여부와 발사 처리를 담당합니다.
 /// </remarks>
-public class Gun : MonoBehaviour, IBalancePostProcess
+public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 {
+    /// <summary>탄약 수가 바뀔 때 (현재 탄약, 최대 탄창) 순서로 알립니다.</summary>
+    /// <remarks>UI 갱신용입니다. 사격·재장전·밸런스 재적용 모두 이 이벤트를 거칩니다.</remarks>
     public event System.Action<int, int> OnBulletChanged;
 
     [Foldout("Balance Data")]
@@ -19,10 +22,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [FormerlySerializedAs("m_balance")]
     [SerializeField] private GunBalanceSO m_balanceSO;
 
-    [Foldout("Feedback Data")]
-    [Tooltip("이 무기 타입이 사용할 사운드, 머즐, 트레이서, 탄피 피드백 데이터입니다.")]
-    [FormerlySerializedAs("m_feedbackProfile")]
-    [SerializeField] private WeaponFeedbackSO m_feedback;
+    // 피드백 SO 슬롯은 WeaponFeedbackEmitter가 소유합니다.
+    // 재생을 담당하는 쪽이 재생할 리소스를 가져야 같은 타입의 리소스 여러 개를 필드 이름으로 구분할 수 있습니다.
 
     /// <summary>
     /// 조준 중 계산된 총구 기준 히트스캔 사격 정보를 담습니다.
@@ -32,14 +33,31 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// </remarks>
     public struct HitscanShotInfo
     {
+        /// <summary>이 정보가 계산되어 사용할 수 있는 상태인지 여부입니다.</summary>
         public bool IsValid;
+
+        /// <summary>사거리 안에서 무언가를 맞혔는지 여부입니다.</summary>
         public bool HasHit;
+
+        /// <summary>총구와 조준점 사이가 막혀 조준점까지 탄이 가지 못하는 상태인지 여부입니다.</summary>
         public bool IsObstructed;
+
+        /// <summary>탄이 출발하는 총구 위치입니다.</summary>
         public Vector3 Origin;
+
+        /// <summary>총구에서 나가는 실제 발사 방향입니다.</summary>
         public Vector3 Direction;
+
+        /// <summary>카메라 기준으로 플레이어가 겨눈 지점입니다. 총구 기준 탄착점과 다를 수 있습니다.</summary>
         public Vector3 AimPoint;
+
+        /// <summary>탄이 실제로 도달한 지점입니다. 아무것도 맞히지 않으면 사거리 끝입니다.</summary>
         public Vector3 EndPoint;
+
+        /// <summary>맞힌 대상의 레이캐스트 결과입니다. <see cref="HasHit"/>가 <c>true</c>일 때만 의미가 있습니다.</summary>
         public RaycastHit Hit;
+
+        /// <summary>이 정보를 계산한 프레임 번호입니다. 같은 프레임에서 다시 계산하지 않기 위한 기준입니다.</summary>
         public int FrameCount;
     }
 
@@ -135,6 +153,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [SerializeField] private ParticleSystem m_muzzleFlashParticle;
 
     [Foldout("Hitscan Options")]
+    [Tooltip("명중 한 발이 주는 기본 피해량입니다. 약점 배율과 거리 감쇠는 여기에 곱해집니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private int m_hitscanDamage = 1;
@@ -148,11 +167,26 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [Clamp(Min = 0)]
     [SerializeField] private float m_headshotDamageMultiplier = 2.0f;
 
+    [Tooltip("탄이 도달하는 최대 사거리(m)입니다. 이 거리를 넘어가면 아무것도 맞히지 않습니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_hitscanRange = 100.0f;
 
+    [Tooltip("명중 시 대상을 밀어내는 넉백 충격량(N·s)입니다. 사망한 대상은 래그돌이 이 힘을 받습니다. 0이면 피격 대상이 정한 최소치만 적용됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_knockbackImpulse = 0.0f;
+
+    [Tooltip("명중 시 적의 경직력 누적에 더하는 저지력입니다. 피해·넉백과는 별개이며, 적의 경직 한계치에 닿으면 경직이 발동합니다. 경직이 없는 대상에게는 무시됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_stoppingPower = 0.0f;
+
+    [Tooltip("사격 판정이 걸릴 레이어입니다. 기본값은 전부이며, 여기서 제외한 레이어는 탄이 그대로 통과합니다.")]
     [SerializeField] private LayerMask m_hitscanLayerMask = ~0;
+
+    [Tooltip("탄이 아군 유닛의 몸을 통과할지 여부입니다. 끄면 앞을 막고 선 팀원이 탄을 막습니다.")]
+    [SerializeField] private bool m_allyBulletPassThrough = true;
 
     [Foldout("Spread Options")]
     [Header("Hipfire")]
@@ -167,6 +201,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireMaxSpread = 10.0f;
 
+    [Tooltip("현재 적용 중인 힙파이어 방사각(도)입니다. 런타임 관찰용이며 직접 편집하는 값이 아닙니다.")]
     [ReadOnly][SerializeField] private float m_hipfireCurrentSpread;
 
     [Tooltip("힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
@@ -209,6 +244,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [Clamp(Min = 0)]
     [SerializeField] private float m_adsMaxSpread = 6.0f;
 
+    [Tooltip("현재 적용 중인 ADS 방사각(도)입니다. 런타임 관찰용이며 직접 편집하는 값이 아닙니다.")]
     [ReadOnly][SerializeField] private float m_adsCurrentSpread;
 
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
@@ -292,11 +328,26 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     [BalanceField]
     [SerializeField] private DamageFalloffTable m_damageFalloff = new DamageFalloffTable();
 
+    [Tooltip("한 발이 유닛을 몇 번 꿰뚫는지와 꿰뚫을 때마다의 피해 감쇠 구간표입니다. 기본값은 관통 없음입니다. 벽과 지형은 관통하지 않습니다.")]
+    [BalanceField]
+    [SerializeField] private PenetrationTable m_penetration = new PenetrationTable();
+
 #if UNITY_EDITOR
     [Foldout("Debug")]
     [Tooltip("Editor-only SpreadDebug console log. Calls are stripped from Player builds.")]
     [SerializeField] private bool m_debugLogSpread = false;
 #endif
+
+    [Foldout("Debug")]
+    [Tooltip("이 무기를 선택했을 때 총구 전방에 거리별 피해 감쇠 구간을 Scene 뷰에 표시합니다. 구간 경계마다 고리를 그리고 구간별로 색이 달라집니다.")]
+    [SerializeField] private bool m_debugDrawDamageFalloff = false;
+
+    [Tooltip("감쇠 구간 경계에 그리는 고리의 반지름(m)입니다. 표시 크기일 뿐 판정과는 무관합니다.")]
+    [Clamp(Min = 0.01f)]
+    [SerializeField] private float m_debugFalloffRingRadius = 0.35f;
+
+    [Tooltip("이 무기를 선택했을 때 사격 소음의 도달 반경을 Scene 뷰에 원으로 표시합니다. 이 원 안의 변이체가 총성을 듣습니다.")]
+    [SerializeField] private bool m_debugDrawShotNoiseRange = false;
 
     // 무한 장탄수는 플레이테스트 트레이너에서도 쓰기 위해 빌드에도 컴파일하고,
     // 실제 효과는 런타임 트레이너가 활성화된 Editor/Development Build에서만 동작합니다.
@@ -314,6 +365,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// <summary>무한 장탄수가 실제로 적용되는 상태인지 여부입니다. 개발 모드에서 플래그가 켜졌을 때만 <c>true</c>입니다.</summary>
     private bool IsInfiniteMagazineDebugActive => m_debugInfiniteMagazine && GameDevMode.DebugFeaturesEnabled;
 
+    /// <summary>총구 기준 탄착점이 조준점과 같다고 볼 허용 오차(m)입니다.</summary>
+    /// <remarks>
+    /// 총구와 카메라의 위치가 다르므로 두 지점은 완전히 일치하지 않습니다.
+    /// 이 오차 안이면 "겨눈 곳에 맞는다"고 보고 조준 보조 표시를 바꾸지 않습니다.
+    /// </remarks>
     public const float HitscanAimTolerance = 0.05f;
 
     private bool m_canShoot = true;
@@ -322,6 +378,35 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     private float m_nextDryFireTime;
     private bool m_hasRequiredReferences;
     private Faction m_ownerFaction = Faction.Player;
+
+    /// <summary>사격 트레이스 결과를 재사용하는 버퍼입니다.</summary>
+    /// <remarks>
+    /// 아군 통과 판정은 경로 위의 충돌을 여러 개 봐야 하는데, 매번 배열을 새로 만들면 자동 사격 중에
+    /// 발사 간격마다 쓰레기가 쌓입니다. 무기마다 하나씩 들고 재사용합니다.
+    ///
+    /// 크기는 "한 사격선 위에 겹칠 수 있는 콜라이더 수"를 넉넉히 잡은 값입니다. 팀원 3인의 히트박스가
+    /// 여러 개씩 겹쳐도 남도록 두었고, 넘치면 <see cref="TryResolveNearestBlocking"/>이 경고를 남깁니다.
+    /// </remarks>
+    private readonly RaycastHit[] m_traceBuffer = new RaycastHit[TraceBufferSize];
+
+    /// <summary>사격 트레이스 버퍼 크기입니다.</summary>
+    private const int TraceBufferSize = 24;
+
+    /// <summary>탄을 막는 충돌만 거리 오름차순으로 모아 두는 목록입니다. 재사용합니다.</summary>
+    private readonly List<RaycastHit> m_blockingHits = new List<RaycastHit>(TraceBufferSize);
+
+    /// <summary>이번 사격이 피해를 줄 대상을 가까운 순서대로 담은 목록입니다. 재사용합니다.</summary>
+    private readonly List<RaycastHit> m_shotPath = new List<RaycastHit>(TraceBufferSize);
+
+    /// <summary>탄이 최종적으로 박힌 지형 충돌입니다. 지형에서 멈추지 않았으면 유효하지 않습니다.</summary>
+    /// <remarks>
+    /// 표면 피드백(탄흔)은 첫 충돌이 아니라 여기에 남겨야 합니다. 관통이 켜지면 첫 충돌은 꿰뚫고 지나간
+    /// 적이고, 탄이 실제로 멈추는 곳은 그 뒤의 벽입니다.
+    /// </remarks>
+    private RaycastHit m_surfaceImpact;
+
+    /// <summary>이번 사격이 지형에서 멈췄는지 여부입니다.</summary>
+    private bool m_hasSurfaceImpact;
 
     /// <summary>이 무기를 소유한 유닛입니다. 피격자가 반격 대상을 알 수 있도록 피해와 함께 전달합니다.</summary>
     private GameObject m_ownerObject;
@@ -352,8 +437,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// <summary>현재 이 무기에 지정된 순수 수치형 밸런스 SO입니다.</summary>
     public GunBalanceSO Balance => m_balanceSO;
 
-    /// <summary>현재 이 무기 타입에 지정된 피드백 데이터입니다.</summary>
-    public WeaponFeedbackSO Feedback => m_feedback;
+    /// <summary>이 무기의 표현 피드백을 담당하는 컴포넌트입니다. 붙어 있지 않으면 <c>null</c>입니다.</summary>
+    public WeaponFeedbackEmitter FeedbackEmitter => ResolveFeedbackEmitter();
 
     /// <summary>최대 탄약 수입니다.</summary>
     public int MaxBullet => m_maxBullet;
@@ -420,6 +505,12 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// <summary>히트스캔 레이캐스트가 충돌 검사할 레이어 마스크입니다.</summary>
     public LayerMask HitscanLayerMask => m_hitscanLayerMask;
 
+    /// <summary>탄이 아군 유닛의 몸을 통과하는지 여부입니다.</summary>
+    public bool AllyBulletPassThrough => m_allyBulletPassThrough;
+
+    /// <summary>이 무기를 든 유닛의 진영입니다.</summary>
+    public Faction OwnerFaction => m_ownerFaction;
+
     /// <summary>발사 1회당 세로(피치) 반동 각도(도)입니다. 실제 조준을 밀어 탄착에도 영향을 줍니다.</summary>
     public float RecoilPitchKick => m_recoilPitchKick;
 
@@ -456,6 +547,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             : GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
     }
 
+    /// <summary>현재 사격 자세의 방사각 최소·최대값을 함께 반환합니다.</summary>
+    /// <param name="isAds">ADS면 <c>true</c>, 힙파이어면 <c>false</c>입니다.</param>
+    /// <param name="minSpread">해당 자세의 최소 방사각(도)입니다.</param>
+    /// <param name="maxSpread">해당 자세의 최대 방사각(도)입니다. 최소값보다 작아지지 않습니다.</param>
+    /// <remarks>크로스헤어가 벌어짐 폭을 그릴 때 두 값이 함께 필요해 한 번에 돌려줍니다.</remarks>
     public void GetSpreadRange(bool isAds, out float minSpread, out float maxSpread)
     {
         minSpread = Mathf.Max(0.0f, isAds ? m_adsMinSpread : m_hipfireMinSpread);
@@ -566,10 +662,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             m_noiseEmitter = GetComponentInParent<CharacterNoiseEmitter>();
         }
 
-        if (m_feedback != null)
-        {
-            EnsureFeedbackEmitter();
-        }
+        ResolveFeedbackEmitter();
     }
 
     /// <summary>
@@ -596,9 +689,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             Debug.LogWarning("[Gun] ClipPos가 할당되지 않았습니다. 탄창 드롭은 생략됩니다.", this);
         }
 
-        if (m_audioSource == null && m_feedback == null)
+        if (m_audioSource == null && ResolveFeedbackEmitter() == null)
         {
-            Debug.LogWarning("[Gun] AudioSource가 없습니다. 무기 효과음은 재생되지 않습니다.", this);
+            Debug.LogWarning("[Gun] AudioSource도 WeaponFeedbackEmitter도 없습니다. 무기 효과음은 재생되지 않습니다.", this);
         }
         /*
         if (PoolManager.instance == null)
@@ -619,24 +712,57 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         return BindConfiguredBalance();
     }
 
+    /// <summary>개별 밸런스 SO를 직접 물고 있는지 여부입니다.</summary>
+    /// <remarks><c>true</c>면 <see cref="SOBinder"/>가 통합 SO 주입을 건너뜁니다.</remarks>
+    public bool HasOwnBalance => m_balanceSO != null;
+
+    /// <summary>
+    /// 엔티티 통합 밸런스 SO의 값을 적용합니다.
+    /// </summary>
+    /// <param name="balance">통합 밸런스 SO입니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다.</returns>
+    /// <remarks>
+    /// 개별 SO 슬롯은 비운 채로 둡니다. 통합 SO는 <see cref="GunBalanceSO"/> 타입이 아니라 담을 수 없고,
+    /// 슬롯이 비어 있다는 것 자체가 "개별 지정 없음"을 뜻하기 때문입니다.
+    /// </remarks>
+    public BalanceBindResult BindSharedBalance(ScriptableObject balance)
+    {
+        return BindFrom(balance);
+    }
+
     /// <summary>
     /// 지정된 SO가 있을 때 공용 BindManager를 통해 같은 ID의 필드 값을 적용합니다.
     /// </summary>
     private BalanceBindResult BindConfiguredBalance()
     {
-        if (m_balanceSO == null)
+        return BindFrom(m_balanceSO);
+    }
+
+    /// <summary>
+    /// 주어진 원본 SO에서 밸런스 값을 대입하고 무기 고유의 후처리를 수행합니다.
+    /// </summary>
+    /// <param name="balance">값을 읽어올 밸런스 SO입니다. 개별 SO일 수도, 엔티티 통합 SO일 수도 있습니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다. 원본이 없으면 기본값입니다.</returns>
+    /// <remarks>
+    /// 개별 경로와 통합 경로가 같은 본문을 쓰게 해서, 어느 쪽으로 들어와도 방사각 기준값 갈무리와
+    /// 표 복제가 빠지지 않게 합니다.
+    /// </remarks>
+    private BalanceBindResult BindFrom(ScriptableObject balance)
+    {
+        if (balance == null)
         {
             return default;
         }
 
         // 대입이 값을 덮어쓰기 전에 프리팹 저작값을 확보해 둡니다.
         CaptureFallbackSpreadRanges();
-        BalanceBindResult result = BindManager.Instance.Bind(m_balanceSO, this, this);
+        BalanceBindResult result = BindManager.Instance.Bind(balance, this, this);
 
         // 참조형 밸런스 값은 그대로 대입되어 SO와 같은 인스턴스를 공유합니다.
         // 복제하지 않으면 런타임에 구간표를 고칠 때 프로젝트 자산인 SO가 함께 바뀝니다.
         // 정렬도 여기서 한 번만 합니다. 사격 경로에 정렬 비용을 얹지 않기 위해서입니다.
         m_damageFalloff = m_damageFalloff != null ? m_damageFalloff.Clone() : new DamageFalloffTable();
+        m_penetration = m_penetration != null ? m_penetration.Clone() : new PenetrationTable();
 
         return result;
     }
@@ -852,16 +978,192 @@ public class Gun : MonoBehaviour, IBalancePostProcess
             EndPoint = aimShot.Origin + direction * m_hitscanRange,
         };
 
-        // 피격 히트박스는 물리로 밀치지 않도록 trigger로 두므로, 전역 설정과 무관하게 trigger를 맞히도록 못 박습니다.
-        // UseGlobal로 두면 Physics.queriesHitTriggers를 끄는 순간 사격이 통째로 먹히지 않습니다.
-        if (Physics.Raycast(aimShot.Origin, direction, out RaycastHit hit, m_hitscanRange, m_hitscanLayerMask, QueryTriggerInteraction.Collide))
-        {
-            fired.HasHit = true;
-            fired.Hit = hit;
-            fired.EndPoint = hit.point;
-        }
+        ResolveShotPath(aimShot.Origin, direction, m_hitscanRange, ref fired);
 
         return fired;
+    }
+
+    /// <summary>
+    /// 사격 경로를 훑어 피해를 줄 대상 목록과 탄이 멈추는 지점을 정합니다.
+    /// </summary>
+    /// <param name="origin">추적 시작 위치입니다.</param>
+    /// <param name="direction">추적 방향입니다.</param>
+    /// <param name="distance">추적 거리입니다.</param>
+    /// <param name="fired">결과를 채울 사격 정보입니다.</param>
+    /// <remarks>
+    /// 결과는 <see cref="m_shotPath"/>에 남습니다. 같은 프레임의 <see cref="ApplyHitscanDamage"/>가 이어서
+    /// 소비합니다. 사격 한 번의 흐름(BuildFiredShot -> LayShoot -> ApplyHitscanDamage) 안에서만 유효합니다.
+    ///
+    /// 관통은 <b>유닛만</b> 뚫습니다. 지형을 만나면 그 자리에서 멈춥니다. 아군과 시체는
+    /// <see cref="CombatDamage.BlocksShot"/>이 이미 걸러 내므로 관통 횟수를 쓰지 않습니다.
+    /// 팀원을 지나갔다고 관통 횟수가 닳으면, 같은 조준이 팀 배치에 따라 다른 결과를 냅니다.
+    /// </remarks>
+    private void ResolveShotPath(Vector3 origin, Vector3 direction, float distance, ref HitscanShotInfo fired)
+    {
+        m_shotPath.Clear();
+        m_hasSurfaceImpact = false;
+
+        int count = Physics.RaycastNonAlloc(
+            origin, direction, m_traceBuffer, distance, m_hitscanLayerMask, QueryTriggerInteraction.Collide);
+
+        CollectBlockingHits(m_traceBuffer, count, m_ownerFaction, m_allyBulletPassThrough, m_blockingHits);
+
+        int penetrationsUsed = 0;
+
+        for (int i = 0; i < m_blockingHits.Count; i++)
+        {
+            RaycastHit current = m_blockingHits[i];
+
+            if (!fired.HasHit)
+            {
+                fired.HasHit = true;
+                fired.Hit = current;
+            }
+
+            fired.EndPoint = current.point;
+
+            bool isUnit = current.collider.GetComponentInParent<IDamageable>() != null;
+
+            if (!isUnit)
+            {
+                // 지형입니다. 여기서 멈추고, 탄흔은 이 자리에 남습니다.
+                m_surfaceImpact = current;
+                m_hasSurfaceImpact = true;
+                return;
+            }
+
+            m_shotPath.Add(current);
+
+            if (!m_penetration.CanPenetrate(penetrationsUsed))
+            {
+                return;
+            }
+
+            penetrationsUsed++;
+        }
+    }
+
+    /// <summary>
+    /// 트레이스 결과에서 탄을 막는 것만 골라 거리 오름차순으로 담습니다.
+    /// </summary>
+    /// <param name="buffer">트레이스 결과 버퍼입니다.</param>
+    /// <param name="count">버퍼에 채워진 개수입니다.</param>
+    /// <param name="attacker">사격자의 진영입니다.</param>
+    /// <param name="allyPassThrough">아군의 몸을 통과시킬지 여부입니다.</param>
+    /// <param name="result">결과를 담을 목록입니다. 호출 시 비웁니다.</param>
+    /// <remarks>
+    /// 관통은 "가장 가까운 하나"가 아니라 순서 전체가 필요하므로 여기서는 정렬합니다.
+    /// 비교자는 정적으로 캐싱해 호출마다 델리게이트를 만들지 않습니다.
+    ///
+    /// 버퍼가 가득 차면 유니티는 나머지를 조용히 버립니다. 그러면 뒤쪽 대상이 통째로 사라지므로 경고를 남깁니다.
+    /// </remarks>
+    internal static void CollectBlockingHits(
+        RaycastHit[] buffer, int count, Faction attacker, bool allyPassThrough, List<RaycastHit> result)
+    {
+        result.Clear();
+
+        if (count >= buffer.Length)
+        {
+            Debug.LogWarning(
+                $"[Gun] 사격 트레이스 버퍼({buffer.Length})가 가득 찼습니다. 더 먼 충돌은 버려졌을 수 있습니다.");
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            if (CombatDamage.BlocksShot(buffer[i].collider, attacker, allyPassThrough))
+            {
+                result.Add(buffer[i]);
+            }
+        }
+
+        result.Sort(DistanceComparison);
+    }
+
+    /// <summary>거리 오름차순 비교자입니다. 호출마다 델리게이트를 만들지 않도록 캐싱합니다.</summary>
+    private static readonly System.Comparison<RaycastHit> DistanceComparison =
+        static (a, b) => a.distance.CompareTo(b.distance);
+
+    /// <summary>
+    /// 사격 경로를 추적합니다. 설정에 따라 아군의 몸은 통과합니다.
+    /// </summary>
+    /// <param name="origin">추적 시작 위치입니다.</param>
+    /// <param name="direction">추적 방향입니다.</param>
+    /// <param name="distance">추적 거리입니다.</param>
+    /// <param name="hit">가장 먼저 막은 대상입니다.</param>
+    /// <returns>무언가에 막혔으면 true입니다.</returns>
+    /// <remarks>
+    /// 피격 히트박스는 물리로 밀치지 않도록 trigger로 두므로, 전역 설정과 무관하게 trigger를 맞히도록 못 박습니다.
+    /// <c>UseGlobal</c>로 두면 <see cref="Physics.queriesHitTriggers"/>를 끄는 순간 사격이 통째로 먹히지 않습니다.
+    ///
+    /// 아군 통과가 켜져 있으면 경로 위의 대상을 모두 받아 아군 몸을 건너뜁니다. 단발
+    /// <see cref="Physics.Raycast"/>는 가장 앞의 것만 주므로, 팀원이 앞을 막으면 그 뒤의 적을 볼 방법이 없습니다.
+    ///
+    /// <see cref="Physics.RaycastNonAlloc"/>를 쓰는 이유는 호출마다 배열을 새로 만들지 않기 위해서입니다.
+    /// 자동 사격은 발사 간격마다 이 경로를 지나므로 <see cref="Physics.RaycastAll"/>이면 그때마다 쓰레기가 쌓입니다.
+    ///
+    /// 결과 순서는 두 API 모두 정의되어 있지 않습니다(유니티 문서: "the order of the results is undefined").
+    /// 그래서 가장 가까운 유효 대상을 직접 골라야 합니다. 정렬하지 않으면 팀원 뒤의 적이나 벽 너머를 먼저 집어
+    /// 관통 판정이 통째로 어긋납니다.
+    ///
+    /// 정렬 대신 한 번 훑으며 최솟값을 고릅니다. 필요한 것은 "막는 것 중 가장 가까운 하나"뿐이라 전체 순서는
+    /// 필요 없고, 정렬은 O(n log n)에 비교자 호출까지 붙습니다. 대상 수가 적어 차이는 작지만 굳이 낼 비용이 아닙니다.
+    ///
+    /// 아군 판정은 <see cref="CombatDamage.IsFriendlyBody"/>가 담당합니다. 피해 판정과 같은 기준을 써야
+    /// 피해는 안 들어가는데 탄만 막히는 어긋남이 생기지 않습니다.
+    /// </remarks>
+    private bool TryTraceShot(Vector3 origin, Vector3 direction, float distance, out RaycastHit hit)
+    {
+        int count = Physics.RaycastNonAlloc(
+            origin, direction, m_traceBuffer, distance, m_hitscanLayerMask, QueryTriggerInteraction.Collide);
+
+        return TryResolveNearestBlocking(
+            m_traceBuffer, count, m_ownerFaction, m_allyBulletPassThrough, out hit);
+    }
+
+    /// <summary>
+    /// 트레이스 결과에서 탄을 막는 가장 가까운 대상을 고릅니다.
+    /// </summary>
+    /// <param name="buffer">트레이스 결과 버퍼입니다.</param>
+    /// <param name="count">버퍼에 채워진 개수입니다.</param>
+    /// <param name="attacker">사격자의 진영입니다.</param>
+    /// <param name="hit">가장 가까운 막는 대상입니다.</param>
+    /// <returns>막는 대상을 찾았으면 true입니다.</returns>
+    /// <remarks>
+    /// 버퍼가 가득 차면 유니티는 나머지를 조용히 버립니다. 그래서 앞을 가린 아군이 버퍼를 다 채우면
+    /// 뒤의 적을 못 보는 일이 생길 수 있어, 가득 찬 경우를 경고로 남깁니다.
+    /// </remarks>
+    internal static bool TryResolveNearestBlocking(
+        RaycastHit[] buffer, int count, Faction attacker, bool allyPassThrough, out RaycastHit hit)
+    {
+        hit = default;
+
+        if (count >= buffer.Length)
+        {
+            Debug.LogWarning(
+                $"[Gun] 사격 트레이스 버퍼({buffer.Length})가 가득 찼습니다. 더 먼 충돌은 버려졌을 수 있습니다.");
+        }
+
+        float nearest = float.PositiveInfinity;
+        bool found = false;
+
+        for (int i = 0; i < count; i++)
+        {
+            if (buffer[i].distance >= nearest)
+            {
+                continue;
+            }
+
+            if (!CombatDamage.BlocksShot(buffer[i].collider, attacker, allyPassThrough))
+            {
+                continue;
+            }
+
+            nearest = buffer[i].distance;
+            hit = buffer[i];
+            found = true;
+        }
+
+        return found;
     }
 
     /// <summary>
@@ -1088,16 +1390,17 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         if (shotInfo.HasHit)
         {
             DrawShotDebugRay(shotInfo, Color.red);
-            CombatDamage.HitFeedback feedback = ApplyHitscanDamage(shotInfo);
-            if (feedback.Applied)
+
+            // 피격 피드백은 대상마다 ApplyHitscanDamage 안에서 냅니다. 관통이면 꿰뚫린 적도 각자 피가 튀어야 합니다.
+            ApplyHitscanDamage(shotInfo);
+
+            // 탄흔은 탄이 실제로 멈춘 지형에 남깁니다. 첫 충돌을 쓰면 적을 꿰뚫고 벽에 박혀도 벽이 깨끗합니다.
+            if (m_hasSurfaceImpact)
             {
-                EnemyController enemy = shotInfo.Hit.collider.GetComponentInParent<EnemyController>();
-                enemy?.PlayHitFeedback(shotInfo.Hit.point, shotInfo.Hit.normal, shotInfo.Hit.collider.transform);
+                ResolveFeedbackEmitter()?.PlayImpact(m_surfaceImpact);
+                FieldManager.Instance?.EffectManager?.PlaySurfaceResponse(m_surfaceImpact);
             }
-            else if (!shotInfo.Hit.collider.TryGetComponent(out Hitbox _))
-            {
-                FieldManager.Instance?.SurfaceFeedback?.PlayImpact(shotInfo.Hit);
-            }
+
             return;
         }
 
@@ -1142,35 +1445,113 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// 히트스캔 충돌 대상이 적대 진영이면 공용 피해 경로로 피해를 전달합니다.
     /// </summary>
     /// <param name="shotInfo">사격으로 발생한 히트스캔 충돌 정보입니다.</param>
-    /// <remarks>대상 구체 타입을 모른 채 <see cref="CombatDamage"/>가 진영·부위 판정 후 적용하고, 피격 확정 시 <see cref="OnHitFeedback"/>를 발생시킵니다.</remarks>
+    /// <remarks>
+    /// 대상 구체 타입을 모른 채 <see cref="CombatDamage"/>가 진영·부위 판정 후 적용하고,
+    /// 피격 확정 시 <see cref="OnHitFeedback"/>를 발생시킵니다.
+    ///
+    /// 관통이 켜져 있으면 <see cref="ResolveShotPath"/>가 남긴 대상 목록을 가까운 순서대로 훑습니다.
+    /// 돌려주는 값은 <b>첫 대상</b>의 결과입니다. 조준선 피드백과 처치 표시가 "내가 겨눈 것"을 기준으로
+    /// 움직여야 하기 때문입니다. 뒤쪽 대상의 피격 피드백은 <see cref="OnHitFeedback"/>로 각각 나갑니다.
+    /// </remarks>
     private CombatDamage.HitFeedback ApplyHitscanDamage(HitscanShotInfo shotInfo)
     {
-        if (m_hitscanDamage <= 0 || shotInfo.Hit.collider == null)
+        if (m_hitscanDamage <= 0 || m_shotPath.Count == 0)
         {
             return CombatDamage.HitFeedback.None;
         }
 
-        // 거리 감쇠는 무기가 소유합니다. 총이 쏜 거리는 총이 아는 정보이고,
-        // 공용 피해 경로(CombatDamage)에 거리 개념을 넣으면 근접 공격이 쓰지 않는 인자가 생깁니다.
-        int damage = ResolveDistanceAdjustedDamage(shotInfo.Hit.distance);
-        if (damage <= 0)
+        CombatDamage.HitFeedback first = CombatDamage.HitFeedback.None;
+
+        for (int i = 0; i < m_shotPath.Count; i++)
         {
-            return CombatDamage.HitFeedback.None;
+            RaycastHit target = m_shotPath[i];
+
+            // 거리 감쇠는 무기가 소유합니다. 총이 쏜 거리는 총이 아는 정보이고,
+            // 공용 피해 경로(CombatDamage)에 거리 개념을 넣으면 근접 공격이 쓰지 않는 인자가 생깁니다.
+            int damage = ResolveDistanceAdjustedDamage(target.distance);
+
+            // 관통 감쇠는 거리 감쇠 위에 얹습니다. 두 감쇠는 서로 다른 이유로 걸리므로 함께 적용됩니다.
+            damage = m_penetration.ResolveDamage(i, damage);
+
+            if (damage <= 0)
+            {
+                continue;
+            }
+
+            // 저지력은 거리·관통 감쇠를 받지 않습니다. 감쇠는 "얼마나 아픈가"의 규칙이고
+            // 경직은 "얼마나 휘청이는가"라서, 관통한 두 번째 대상도 같은 충격을 받는 편이 맞습니다.
+            CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
+                target.collider,
+                m_ownerFaction,
+                damage,
+                m_headshotDamageMultiplier,
+                m_allowHeadshot,
+                m_ownerObject,
+                m_stoppingPower);
+
+            if (feedback.Applied)
+            {
+                OnHitFeedback?.Invoke(feedback);
+                ApplyHitscanKnockback(target, shotInfo);
+
+                EnemyController enemy = target.collider.GetComponentInParent<EnemyController>();
+                enemy?.PlayHitFeedback(target.point, target.normal, target.collider.transform);
+            }
+
+            if (i == 0)
+            {
+                first = feedback;
+            }
         }
 
-        CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
-            shotInfo.Hit.collider,
-            m_ownerFaction,
-            damage,
-            m_headshotDamageMultiplier,
-            m_allowHeadshot,
-            m_ownerObject);
-        if (feedback.Applied)
+        return first;
+    }
+
+    /// <summary>
+    /// 명중한 대상에 넉백 충격량을 전달합니다.
+    /// </summary>
+    /// <param name="shotInfo">이번 사격의 히트스캔 충돌 정보입니다.</param>
+    /// <remarks>
+    /// <b>피해 적용 뒤에 부릅니다.</b> 사망 처리가 같은 프레임에 동기로 끝나므로, 죽은 대상이면 이 시점에
+    /// 래그돌이 이미 켜져 있어 물리 충격을 받을 수 있습니다. 살아 있으면 대상이 이동 변위로 처리합니다.
+    /// 어느 쪽인지는 <see cref="IKnockbackReceiver"/> 구현이 자기 상태를 보고 정하므로 총기는 몰라도 됩니다.
+    ///
+    /// 방향은 <b>사격 지점에서 피격 지점으로 향하는 벡터</b>입니다. 히트스캔에서는 탄환 진행 방향과 거의
+    /// 같으면서 계산이 단순하고, 근접 공격이 같은 규칙을 쓸 때도 그대로 성립합니다. 표면 법선을 쓰면
+    /// 벽 각도에 따라 옆이나 뒤로 튀어 "맞아서 밀렸다"는 인상이 깨집니다.
+    ///
+    /// 공용 피해 경로(<see cref="CombatDamage"/>)를 거치지 않고 여기서 직접 처리합니다. 방향과 부위를
+    /// 실어 보내려면 <c>TakeDamage</c>와 사망 이벤트 시그니처를 열어야 하고, 그러면 플레이어와 스쿼드까지
+    /// 영향을 받습니다. 넉백은 쏜 쪽이 아는 정보로 끝낼 수 있으므로 호출부에 둡니다.
+    /// </remarks>
+    /// <param name="hit">넉백을 받을 충돌입니다. 관통이면 대상마다 따로 부릅니다.</param>
+    /// <param name="shotInfo">이번 사격의 발사 지점과 방향을 읽습니다.</param>
+    private void ApplyHitscanKnockback(in RaycastHit hit, in HitscanShotInfo shotInfo)
+    {
+        Collider hitCollider = hit.collider;
+        if (hitCollider == null)
         {
-            OnHitFeedback?.Invoke(feedback);
+            return;
         }
 
-        return feedback;
+        IKnockbackReceiver receiver = hitCollider.GetComponentInParent<IKnockbackReceiver>();
+        if (receiver == null)
+        {
+            return;
+        }
+
+        Vector3 direction = hit.point - shotInfo.Origin;
+        if (direction.sqrMagnitude <= Mathf.Epsilon)
+        {
+            // 사격 지점과 피격 지점이 겹치는 밀착 사격입니다. 조준 방향을 그대로 씁니다.
+            direction = shotInfo.Direction;
+        }
+
+        receiver.ApplyKnockback(
+            direction,
+            hit.point,
+            m_knockbackImpulse,
+            hit.rigidbody);
     }
 
     /// <summary>
@@ -1193,6 +1574,95 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         }
 
         return m_damageFalloff.ResolveDamage(distance, m_hitscanDamage);
+    }
+
+    /// <summary>
+    /// 선택했을 때 총구 전방에 거리별 피해 감쇠 구간을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 인스펙터의 감쇠 트랙(<c>DamageFalloffTableDrawer</c>)은 구간 값을 편집하기에는 좋지만 2D UI라서
+    /// "이 총을 든 채로 저 적까지가 몇 번째 구간인지"를 알 수 없습니다. 실제 교전 거리는 레벨이 정하므로
+    /// 씬 안에서 봐야 판단이 됩니다.
+    ///
+    /// 구간 경계마다 고리를 그리고 구간 사이는 선으로 잇습니다. 구간이 멀수록 색을 어둡게 해서
+    /// 피해가 줄어드는 방향을 색으로도 읽을 수 있게 했습니다.
+    ///
+    /// 총구가 없으면 이 컴포넌트의 위치와 정면을 씁니다. 프리팹 상태처럼 총구 참조가 아직 비어 있어도
+    /// 대략의 거리감은 볼 수 있어야 하기 때문입니다.
+    /// </remarks>
+    private void OnDrawGizmosSelected()
+    {
+        if (m_debugDrawShotNoiseRange)
+        {
+            // 총성은 벽을 통과합니다. 이 원 안이면 듣는 쪽의 청각 배수에 따라 인지 게이지가 찹니다.
+            Gizmos.color = new Color(1.0f, 0.3f, 0.55f, 0.7f);
+            Gizmos.DrawWireSphere(transform.position, m_shotNoiseRange);
+        }
+
+        if (!m_debugDrawDamageFalloff || m_damageFalloff == null || m_damageFalloff.IsEmpty)
+        {
+            return;
+        }
+
+        Transform origin = m_firePos != null ? m_firePos : transform;
+        Vector3 start = origin.position;
+        Vector3 forward = origin.forward;
+
+        float previousDistance = 0.0f;
+        int stepCount = m_damageFalloff.Steps.Count;
+
+        for (int i = 0; i < stepCount; i++)
+        {
+            DamageFalloffStep step = m_damageFalloff.Steps[i];
+
+            // 사거리 밖은 애초에 명중 판정이 성립하지 않으므로 그 너머는 그리지 않습니다.
+            float distance = Mathf.Min(step.MaxDistance, m_hitscanRange);
+
+            // 뒤 구간이 사거리 안쪽으로 잘렸다면 남은 구간도 볼 것이 없습니다.
+            if (distance <= previousDistance)
+            {
+                break;
+            }
+
+            // 먼 구간일수록 어둡게. 피해가 줄어드는 방향을 색으로도 읽히게 합니다.
+            float brightness = Mathf.Lerp(1.0f, 0.35f, stepCount > 1 ? (float)i / (stepCount - 1) : 0.0f);
+            Gizmos.color = new Color(brightness, brightness * 0.85f, 0.2f, 0.9f);
+
+            Gizmos.DrawLine(start + forward * previousDistance, start + forward * distance);
+            DrawFalloffRing(start + forward * distance, forward, m_debugFalloffRingRadius);
+
+            previousDistance = distance;
+        }
+    }
+
+    /// <summary>감쇠 구간 경계를 표시하는 고리를 그립니다.</summary>
+    /// <param name="center">고리의 중심입니다.</param>
+    /// <param name="normal">고리가 향할 축입니다. 사격 방향을 넘깁니다.</param>
+    /// <param name="radius">고리의 반지름(m)입니다.</param>
+    /// <remarks>
+    /// <c>Gizmos</c>에는 원을 그리는 기능이 없어 선분으로 근사합니다. 같은 이유로 <see cref="AimController"/>도
+    /// 디버그 구를 선분으로 그립니다. <c>Handles</c>는 Editor 전용 어셈블리라 런타임 스크립트에서 쓸 수 없습니다.
+    /// </remarks>
+    private static void DrawFalloffRing(Vector3 center, Vector3 normal, float radius)
+    {
+        const int Segments = 16;
+
+        if (normal.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        Quaternion rotation = Quaternion.LookRotation(normal);
+        Vector3 previous = center + rotation * new Vector3(radius, 0.0f, 0.0f);
+
+        for (int i = 1; i <= Segments; i++)
+        {
+            float angle = i / (float)Segments * Mathf.PI * 2.0f;
+            Vector3 point = center + rotation * new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, 0.0f);
+
+            Gizmos.DrawLine(previous, point);
+            previous = point;
+        }
     }
 
     /// <summary>
@@ -1325,9 +1795,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// </summary>
     private void PlayReloadSound()
     {
-        if (m_feedback != null)
+        if (TryUseFeedbackEmitter(out WeaponFeedbackEmitter emitter))
         {
-            EnsureFeedbackEmitter()?.PlayReload(m_feedback);
+            emitter.PlayReload();
             return;
         }
 
@@ -1345,9 +1815,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess
     /// <remarks>효과음 클립이 비어 있으면 아무 소리도 내지 않습니다. 사운드 배선 전이라도 호출 틀은 유지됩니다.</remarks>
     public void PlayEmptyReloadSound()
     {
-        if (m_feedback != null)
+        if (TryUseFeedbackEmitter(out WeaponFeedbackEmitter emitter))
         {
-            EnsureFeedbackEmitter()?.PlayDryFire(m_feedback);
+            emitter.PlayDryFire();
             return;
         }
 
@@ -1371,14 +1841,13 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         PlayEmptyReloadSound();
     }
 
-    /// <summary>Feedback SO가 있으면 새 피드백 출력을 사용하고, 없으면 기존 개별 배선 경로를 유지합니다.</summary>
+    /// <summary>피드백 이미터가 리소스를 가지고 있으면 그쪽으로 출력하고, 없으면 기존 개별 배선 경로를 유지합니다.</summary>
     private void PlaySuccessfulShotFeedback(Vector3 tracerStart, Vector3 tracerEnd)
     {
-        if (m_feedback != null)
+        if (TryUseFeedbackEmitter(out WeaponFeedbackEmitter emitter))
         {
             Transform muzzleSocket = m_muzzleFlashPos != null ? m_muzzleFlashPos : m_firePos;
-            EnsureFeedbackEmitter()?.PlayShot(
-                m_feedback,
+            emitter.PlayShot(
                 muzzleSocket,
                 m_shellPos,
                 tracerStart,
@@ -1391,15 +1860,31 @@ public class Gun : MonoBehaviour, IBalancePostProcess
         PlayShootSound();
     }
 
-    /// <summary>Feedback emitter를 같은 총기 오브젝트에서 찾고, 없으면 런타임에 보강합니다.</summary>
-    private WeaponFeedbackEmitter EnsureFeedbackEmitter()
+    /// <summary>같은 총기 오브젝트에 붙은 Feedback emitter를 찾습니다.</summary>
+    /// <returns>붙어 있지 않으면 <c>null</c>입니다.</returns>
+    /// <remarks>
+    /// 예전에는 없으면 런타임에 <c>AddComponent</c>로 보강했지만 지금은 하지 않습니다.
+    /// 이미터가 피드백 SO를 주입받아야 하는데, 런타임에 생기는 컴포넌트에는 <see cref="SOBinder"/>가 주입할 시점이 없습니다.
+    /// 빈 이미터를 붙여 봐야 재생할 리소스도 없으므로, 없으면 예전 개별 배선 경로로 넘어가는 편이 정직합니다.
+    /// </remarks>
+    private WeaponFeedbackEmitter ResolveFeedbackEmitter()
     {
-        if (m_feedbackEmitter == null && !TryGetComponent(out m_feedbackEmitter))
+        if (m_feedbackEmitter == null)
         {
-            m_feedbackEmitter = gameObject.AddComponent<WeaponFeedbackEmitter>();
+            TryGetComponent(out m_feedbackEmitter);
         }
 
         return m_feedbackEmitter;
+    }
+
+    /// <summary>새 피드백 경로를 쓸 수 있는지 확인합니다.</summary>
+    /// <param name="emitter">사용할 이미터입니다. 쓸 수 없으면 <c>null</c>입니다.</param>
+    /// <returns>이미터가 있고 재생할 리소스를 가지고 있으면 <c>true</c>입니다.</returns>
+    /// <remarks>리소스가 하나도 없으면 소리 없이 넘어가는 대신 예전 개별 배선 경로를 씁니다.</remarks>
+    private bool TryUseFeedbackEmitter(out WeaponFeedbackEmitter emitter)
+    {
+        emitter = ResolveFeedbackEmitter();
+        return emitter != null && emitter.HasFeedback;
     }
 
     /// <summary>

@@ -38,6 +38,10 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
     [Tooltip("Health component for this downed member. Auto-filled from the same GameObject when empty.")]
     [SerializeField] private PlayerHealth m_playerHealth;
 
+    [Foldout("Debug")]
+    [Tooltip("이 다운 아군을 선택했을 때 부활 감지 반경을 Scene 뷰에 원으로 표시합니다. InteractionController의 탐지 콘과는 별개 값입니다.")]
+    [SerializeField] private bool m_debugDrawDetectionRadius = false;
+
     private GameObject m_activeInteractor;
     private SquadMemberController m_activeInteractorMember;
     private ThirdPersonController m_activeInteractorThirdPerson;
@@ -383,5 +387,29 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         m_activeInteractorThirdPerson = null;
         m_holdActive = false;
         m_holdProgress01 = completed ? 1.0f : 0.0f;
+    }
+
+    /// <summary>
+    /// 선택했을 때 부활 감지 반경을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 이 반경은 <see cref="InteractionController"/>의 탐지 콘과 <b>별개 값</b>입니다. 살리려면 두 조건을
+    /// 모두 만족해야 하는데, 하나는 살리는 쪽이 하나는 쓰러진 쪽이 들고 있어 어느 쪽이 모자란지 알기 어렵습니다.
+    /// 두 기즈모를 같이 켜면 겹치는 영역이 실제로 부활 가능한 자리입니다.
+    ///
+    /// 중심은 로컬 오프셋(<c>m_detectionTriggerCenter</c>)을 적용합니다. 쓰러진 몸의 높이에 맞춰 둔 값이라
+    /// 발밑을 기준으로 그리면 실제 트리거와 어긋나 보입니다.
+    /// </remarks>
+    private void OnDrawGizmosSelected()
+    {
+        if (!m_debugDrawDetectionRadius)
+        {
+            return;
+        }
+
+        Gizmos.color = new Color(0.4f, 0.9f, 1.0f, 0.8f);
+        Gizmos.DrawWireSphere(
+            transform.TransformPoint(m_detectionTriggerCenter),
+            Mathf.Max(0.05f, m_detectionTriggerRadius));
     }
 }

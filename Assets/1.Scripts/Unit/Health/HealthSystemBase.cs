@@ -360,8 +360,14 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
         OnDeath?.Invoke();
     }
 
+    /// <summary>디버그 플래그가 켜져 있을 때만 로그를 남깁니다.</summary>
+    /// <remarks>
+    /// <c>Conditional</c>이라 비-Editor 빌드에서는 호출 자체가 사라집니다. 문자열 보간 인자도 함께 제거되므로
+    /// 로그를 꺼 둔 상태에서 문자열 조립 비용이 남지 않습니다.
+    /// 파생 클래스(경직 등)가 같은 플래그로 자기 진단을 남길 수 있도록 protected입니다.
+    /// </remarks>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    private void LogHealthDebug(string message)
+    protected void LogHealthDebug(string message)
     {
 #if UNITY_EDITOR
         if (DebugLogHealthEnabled)

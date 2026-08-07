@@ -10,15 +10,15 @@ using UnityEngine.InputSystem;
 /// Starter Assets 기반의 3인칭 캐릭터 이동, 회전, 점프, 중력, 애니메이션 파라미터를 제어하는 컴포넌트입니다.
 /// </summary>
 /// <remarks>
-/// 이 컨트롤러는 <see cref="CharacterController"/>와 <see cref="PlayerInputs"/>를 필수 참조로 사용합니다.
+/// 이 컨트롤러는 <see cref="CharacterController"/>와 <see cref="PlayerInputController"/>를 필수 참조로 사용합니다.
 /// 필수 참조는 <c>Awake</c>에서 캐싱하고, 누락 시 컴포넌트를 비활성화하여 런타임 null 참조를 방지합니다.
 /// </remarks>
 [RequireComponent(typeof(CharacterController))]
-[RequireComponent(typeof(PlayerInputs))]
+[RequireComponent(typeof(PlayerInputController))]
 #if ENABLE_INPUT_SYSTEM
 [RequireComponent(typeof(PlayerInput))]
 #endif
-public class ThirdPersonController : MonoBehaviour
+public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 {
     [Tooltip("이 플레이어에 적용할 공용 밸런스 SO입니다. 비어 있으면 Inspector 값을 그대로 씁니다.")]
     [SerializeField] private PlayerCommonBalanceSO m_balanceSO;
@@ -28,17 +28,40 @@ public class ThirdPersonController : MonoBehaviour
     /// </summary>
     public struct LocomotionCarryoverState
     {
+        /// <summary>이어받을 상태가 실제로 담겨 있는지 여부입니다. <c>false</c>면 나머지 값을 쓰지 않습니다.</summary>
         public bool HasState;
+
+        /// <summary>이어받을 현재 이동 속도(m/s)입니다.</summary>
         public float Speed;
+
+        /// <summary>이어받을 이동 애니메이션 블렌드 값입니다.</summary>
         public float AnimationBlend;
+
+        /// <summary>이어받을 애니메이션 재생 배속입니다.</summary>
         public float MotionSpeed;
+
+        /// <summary>이어받을 목표 회전각(도)입니다.</summary>
         public float TargetRotation;
+
+        /// <summary>이어받을 회전 보간 속도입니다. 전환 직후 회전이 튀지 않게 합니다.</summary>
         public float RotationVelocity;
+
+        /// <summary>이어받을 수직 속도(m/s)입니다. 공중 전환에서 낙하가 초기화되지 않게 합니다.</summary>
         public float VerticalVelocity;
+
+        /// <summary>이어받을 점프 재시도 대기 잔여 시간(초)입니다.</summary>
         public float JumpTimeoutDelta;
+
+        /// <summary>이어받을 낙하 판정 대기 잔여 시간(초)입니다.</summary>
         public float FallTimeoutDelta;
+
+        /// <summary>전환 시점의 접지 여부입니다.</summary>
         public bool Grounded;
+
+        /// <summary>전환 시점의 점프 진행 여부입니다.</summary>
         public bool Jump;
+
+        /// <summary>전환 시점의 자유 낙하 여부입니다.</summary>
         public bool FreeFall;
     }
 
@@ -83,6 +106,48 @@ public class ThirdPersonController : MonoBehaviour
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_sprintSpeed = 5.335f;
+
+    [Tooltip("전력질주를 시작할 수 있는 전방 부채꼴의 반각입니다. 이 각을 벗어난 방향으로는 걷기 속도만 납니다.")]
+    [Range(0.0f, 180.0f)]
+    [Clamp(Min = 0, Max = 180)]
+    [SerializeField] private float m_sprintForwardAngle = 60.0f;
+
+    [Tooltip("이미 전력질주 중일 때 이 각도만큼 더 허용합니다. 부채꼴 경계에서 달리기와 걷기가 번갈아 켜지는 것을 막습니다.")]
+    [Range(0.0f, 90.0f)]
+    [Clamp(Min = 0, Max = 90)]
+    [SerializeField] private float m_sprintReleaseMargin = 20.0f;
+
+    [Tooltip("이동 방향(MoveX/MoveZ)을 애니메이터에 넣을 때의 감쇠 시간입니다. 방향이 급히 바뀔 때 발걸음이 튀는 것을 막습니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_moveDirectionDamp = 0.1f;
+
+    [Tooltip("이동 방향이 이 각도(도) 이상 꺾이면 방향 조정이 아니라 방향 교체로 보고 아래의 빠른 전환 시간을 씁니다. 100이면 좌우 반전이나 급선회가 여기에 해당합니다.")]
+    [Range(0.0f, 180.0f)]
+    [SerializeField] private float m_moveDirectionSnapAngle = 100.0f;
+
+    [Tooltip("방향 교체로 판정됐을 때 180도를 도는 데 걸리는 시간(초)입니다. 짧을수록 좌우 전환이 즉각적이지만 너무 짧으면 툭 끊겨 보이고, 길면 중간 방향 모션이 눈에 띕니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_moveDirectionFlipDuration = 0.06f;
+
+    [Tooltip("정지와 이동 사이를 오가는 데 걸리는 시간(초)입니다. 방향 블렌드 트리의 중심(정지 클립)과 방향 클립 사이를 얼마나 천천히 넘나들지 정합니다. 짧으면 걷기 시작과 멈춤이 뚝 끊겨 보입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_moveStartStopDuration = 0.18f;
+
+    [Tooltip("웅크린 상태의 이동 속도입니다. 단위는 m/s입니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_crouchSpeed = 1.2f;
+
+    [Tooltip("웅크린 상태의 CharacterController 높이입니다. 서기 높이보다 크면 서기 높이로 잘립니다.")]
+    [Clamp(Min = 0.1)]
+    [SerializeField] private float m_crouchHeight = 1.1f;
+
+    [Tooltip("서기와 웅크리기 사이 높이 전환에 걸리는 시간입니다. 0이면 즉시 바뀝니다. 단위는 초입니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_crouchTransitionDuration = 0.2f;
+
+    [Tooltip("MoveState 한 단계(웅크림↔걷기, 걷기↔달리기) 전환에 걸리는 시간입니다. 웅크림 높이 전환 시간과 맞추면 자세와 콜라이더가 같이 움직입니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_moveStateBlendDuration = 0.2f;
 
     [Tooltip("캐릭터가 이동 방향을 바라보도록 회전하는 데 걸리는 보간 시간입니다.")]
     [Range(0.0f, 0.3f)]
@@ -265,45 +330,58 @@ public class ThirdPersonController : MonoBehaviour
 
 
 
-    /// <summary>전투/비전투/Idle 상태별 시점 모드 설정값입니다.</summary>
+    /// <summary>비전투 상태의 카메라와 시점 모드 설정값입니다.</summary>
     /// <remarks>
+    /// 전투는 조준과 탄착이 화면 중앙을 기준으로 하므로 선택 대상이 아닙니다. 코드에서 백뷰로 고정하고,
+    /// 전투 카메라는 <see cref="AimController"/>가 소유합니다. 그래서 여기 노출되는 것은 비전투 두 상태뿐입니다.
+    ///
     /// 이 묶음은 아직 <c>[BalanceField]</c>를 붙이지 않았습니다. 밸런스 SO에 같은 이름 필드가 없으면
     /// 바인드마다 경고가 남기 때문입니다. SO를 다시 생성할 때 함께 승격하면 됩니다.
     /// </remarks>
     [Foldout("View Options")]
-    [Tooltip("비전투 백뷰에서 사용할 Cinemachine 카메라입니다. 비어 있으면 비전투는 자유 시점으로 동작합니다.")]
-    [SerializeField] private CinemachineCamera m_nonCombatBackViewCamera;
+    [Tooltip("비전투 이동 중 사용할 Cinemachine 카메라입니다. 비어 있으면 상시 활성 카메라를 그대로 씁니다.")]
+    [SerializeField] private CinemachineCamera m_nonCombatCamera;
 
-    [Tooltip("비전투 이동 중 백뷰를 사용할지 여부입니다.")]
-    [SerializeField] private bool m_nonCombatBackView = true;
+    [Tooltip("비전투 이동 중 시점 모드입니다. BackView이면 몸이 카메라 정면을 따라가고 옆·뒤 입력이 게걸음/뒷걸음이 됩니다.")]
+    [SerializeField] private CameraViewMode m_nonCombatViewMode = CameraViewMode.BackView;
 
-    [Tooltip("멈춰 있는 동안 백뷰를 사용할지 여부입니다. 꺼 두면 제자리에서 자유 시점으로 주변을 살필 수 있습니다.")]
-    [SerializeField] private bool m_idleBackView = false;
+    [Tooltip("멈춰 있는 동안 사용할 Cinemachine 카메라입니다. 비어 있으면 상시 활성 카메라를 그대로 씁니다.")]
+    [SerializeField] private CinemachineCamera m_idleCamera;
+
+    [Tooltip("멈춰 있는 동안의 시점 모드입니다. FreeLook이면 제자리에서 주변을 살필 수 있습니다.")]
+    [SerializeField] private CameraViewMode m_idleViewMode = CameraViewMode.FreeLook;
 
     [Tooltip("이동 입력이 끊긴 뒤 Idle 시점으로 넘어가기까지의 대기 시간입니다. 단위는 초입니다.")]
     [Clamp(Min = 0)]
     [SerializeField] private float m_freeLookIdleDelay = 1.5f;
 
-    [Tooltip("전투 자세에서 몸이 카메라 정면을 따라가는 회전 보간 시간입니다. 작을수록 즉각적입니다.")]
+    [Tooltip("백뷰에서 몸이 카메라 정면을 따라가는 회전 보간 시간입니다. 0이면 즉시 따라붙습니다. 전투와 비전투 백뷰가 이 값을 함께 씁니다.")]
     [Range(0.0f, 0.3f)]
     [Clamp(Min = 0, Max = 0.3)]
-    [SerializeField] private float m_combatRotationSmoothTime = 0.03f;
+    [SerializeField] private float m_backViewRotationSmoothTime = 0.03f;
 
 
 
     /// <summary>애니메이션 이벤트에서 재생할 캐릭터 오디오 설정값입니다.</summary>
     [Foldout("Audio Options")]
+    [Tooltip("착지 애니메이션 이벤트에서 재생할 효과음입니다.")]
     [FormerlySerializedAs("LandingAudioClip")]
     [SerializeField] private AudioClip m_landingAudioClip;
 
+    [Tooltip("걸음 애니메이션 이벤트에서 후보 중 하나를 골라 재생할 발소리 목록입니다.")]
     [FormerlySerializedAs("FootstepAudioClips")]
     [SerializeField] private AudioClip[] m_footstepAudioClips;
 
+    [Tooltip("발소리와 착지음의 재생 음량입니다.")]
     [Range(0, 1)]
     [FormerlySerializedAs("FootstepAudioVolume")]
     [BalanceField]
     [Clamp(Min = 0, Max = 1)]
     [SerializeField] private float m_footstepAudioVolume = 0.5f;
+
+    [Foldout("Debug")]
+    [Tooltip("이 캐릭터를 선택했을 때 접지 판정 구를 Scene 뷰에 표시합니다. 접지 중이면 초록, 아니면 빨강입니다.")]
+    [SerializeField] private bool m_debugDrawGroundCheck = true;
 
     /// <summary>카메라 회전 보간에 사용하는 현재 yaw 값입니다.</summary>
     private float m_cinemachineTargetYaw;
@@ -379,8 +457,74 @@ public class ThirdPersonController : MonoBehaviour
     /// <summary>Animator MotionSpeed 파라미터 해시입니다.</summary>
     private int m_animIDMotionSpeed;
 
+    /// <summary>Animator MoveX 파라미터 해시입니다. 8방향 이동 블렌드의 좌우 축입니다.</summary>
+    private int m_animIDMoveX;
+
+    /// <summary>Animator MoveZ 파라미터 해시입니다. 8방향 이동 블렌드의 앞뒤 축입니다.</summary>
+    private int m_animIDMoveZ;
+
+    /// <summary>Animator LookX 파라미터 해시입니다. 카메라와 몸의 좌우 각도 차입니다.</summary>
+    private int m_animIDLookX;
+
+    /// <summary>Animator LookY 파라미터 해시입니다. 카메라의 상하 각도입니다.</summary>
+    private int m_animIDLookY;
+
+    /// <summary>Animator IsCrouch 파라미터 해시입니다.</summary>
+    private int m_animIDCrouch;
+
+    /// <summary>Animator IsMove 파라미터 해시입니다. 정지 상태와 이동 상태를 가릅니다.</summary>
+    private int m_animIDIsMove;
+
+    /// <summary>Animator MoveState 파라미터 해시입니다. 웅크림/걷기/달리기 단계 축입니다.</summary>
+    private int m_animIDMoveState;
+
+    /// <summary>Animator IsAim 파라미터 해시입니다. 전투 자세 여부와 같습니다.</summary>
+    private int m_animIDAim;
+
+    /// <summary>이동 방향을 유효한 방향으로 볼 최소 수평 속력입니다.</summary>
+    private const float MoveDirectionThreshold = 0.01f;
+
+    /// <summary>
+    /// 애니메이터에 넣는 몸 기준 이동 방향입니다. 이동 중에는 크기가 1로 유지됩니다.
+    /// </summary>
+    /// <remarks>
+    /// 축별로 따로 감쇠하지 않는 이유는 방향을 반대로 바꿀 때 값이 반드시 원점을 지나기 때문입니다.
+    /// 방향 블렌드 트리는 원점에 정지 클립을 두고 있어서, 좌에서 우로 바꾸는 것만으로 그 사이에
+    /// 정지 자세가 한 번 끼어듭니다. 실제로 "걷다-멈칫-걷다"로 보였습니다.
+    ///
+    /// 그래서 이동 중에는 크기를 1로 붙들고 <b>각도만</b> 돌립니다. 그러면 좌에서 우로 갈 때 앞이나 뒤를
+    /// 거쳐 원 위를 돌아가므로 정지 자세를 지나지 않습니다. 멈출 때만 크기를 0으로 줄여 원점(정지)으로 갑니다.
+    /// </remarks>
+    private Vector2 m_moveDirectionSmoothed;
+
+    /// <summary>LookX를 -1~1로 정규화할 때 기준으로 쓰는 최대 좌우 각도(도)입니다.</summary>
+    /// <remarks>자유 시점에서는 몸이 카메라 정반대를 볼 수 있으므로 180도를 씁니다.</remarks>
+    private const float MaxLookYaw = 180.0f;
+
+    /// <summary>MoveState 축의 웅크림 단계 값입니다.</summary>
+    private const float MoveStateCrouch = 0.0f;
+
+    /// <summary>MoveState 축의 걷기 단계 값입니다.</summary>
+    private const float MoveStateWalk = 1.0f;
+
+    /// <summary>MoveState 축의 달리기 단계 값입니다.</summary>
+    private const float MoveStateRun = 2.0f;
+
+    /// <summary>현재 애니메이터에 넣고 있는 MoveState 값입니다. 목표 단계를 향해 보간합니다.</summary>
+    private float m_moveState = MoveStateWalk;
+
+    /// <summary>이번 프레임에 전력질주 방향 조건을 통과했는지입니다. 프레임당 한 번 판정해 캐싱합니다.</summary>
+    private bool m_canSprintForward;
+
     /// <summary>공중 상태를 강제로 끊을 때 되돌아갈 기본 지상 이동 상태입니다.</summary>
-    private static readonly int GroundedLocomotionStateHash = Animator.StringToHash("Base Layer.Idle Walk Run Blend");
+    /// <remarks>
+    /// <c>Move</c> 서브 스테이트 머신 안의 상태이므로 경로에 머신 이름이 들어갑니다.
+    /// 조준 분기는 진입 후 <c>IsAim</c> 전이가 알아서 처리하므로 비조준 쪽을 목표로 삼습니다.
+    /// </remarks>
+    private const string GroundedLocomotionStatePath = "Base Layer.Move.Default Move Blend";
+
+    /// <summary>공중 상태를 강제로 끊을 때 되돌아갈 기본 지상 이동 상태의 해시입니다.</summary>
+    private static readonly int GroundedLocomotionStateHash = Animator.StringToHash(GroundedLocomotionStatePath);
 
 #if ENABLE_INPUT_SYSTEM
     /// <summary>현재 입력 장치 판별에 사용하는 PlayerInput 컴포넌트입니다.</summary>
@@ -393,7 +537,7 @@ public class ThirdPersonController : MonoBehaviour
     private CharacterController m_controller;
 
     /// <summary>Starter Assets 입력 상태를 보관하는 입력 컴포넌트입니다.</summary>
-    private PlayerInputs m_input;
+    private PlayerInputController m_input;
 
     /// <summary>MainCamera 태그로 찾은 기준 카메라 오브젝트입니다.</summary>
     private GameObject m_mainCamera;
@@ -423,6 +567,21 @@ public class ThirdPersonController : MonoBehaviour
     /// <summary>이번 프레임에 판정된 시점 컨텍스트입니다.</summary>
     private ViewContext m_viewContext = ViewContext.Idle;
 
+    /// <summary>서기 상태의 CharacterController 높이입니다. 첫 프레임에 한 번 기억합니다.</summary>
+    private float m_standingHeight;
+
+    /// <summary>서기 상태의 CharacterController 중심입니다.</summary>
+    private Vector3 m_standingCenter;
+
+    /// <summary>서기 상태의 카메라 타겟 로컬 Y입니다.</summary>
+    private float m_standingCameraTargetY;
+
+    /// <summary>웅크림 진행도입니다. 0이면 서기, 1이면 완전히 웅크린 상태입니다.</summary>
+    private float m_crouchBlend;
+
+    /// <summary>서기/웅크림 기준값을 기억했는지 여부입니다.</summary>
+    private bool m_hasCrouchBaseline;
+
     /// <summary>재장전 상태 여부입니다. true이면 전력질주 대신 기본 이동 속도를 사용합니다.</summary>
     private bool m_isReload;
 
@@ -430,9 +589,26 @@ public class ThirdPersonController : MonoBehaviour
     public float MoveSpeed => m_moveSpeed;
     /// <summary>전력질주 이동 속도입니다.</summary>
     public float SprintSpeed => m_sprintSpeed;
+    /// <summary>웅크린 상태의 이동 속도입니다.</summary>
+    public float CrouchSpeed => m_crouchSpeed;
     /// <summary>이동 방향을 바라보는 회전 보간 시간입니다.</summary>
     public float RotationSmoothTime => m_rotationSmoothTime;
     /// <summary>가속과 감속 반응 속도입니다.</summary>
+    /// <summary>이동 방향을 애니메이터에 넣을 때의 감쇠 시간(초)입니다.</summary>
+    public float MoveDirectionDamp => m_moveDirectionDamp;
+
+    /// <summary>방향 교체로 판정할 각도(도)입니다.</summary>
+    public float MoveDirectionSnapAngle => m_moveDirectionSnapAngle;
+
+    /// <summary>방향 교체 시 180도를 도는 데 걸리는 시간(초)입니다.</summary>
+    public float MoveDirectionFlipDuration => m_moveDirectionFlipDuration;
+
+    /// <summary>정지와 이동 사이를 오가는 데 걸리는 시간(초)입니다.</summary>
+    public float MoveStartStopDuration => m_moveStartStopDuration;
+
+    /// <summary>웅크림·걷기·달리기 단계 사이를 오가는 데 걸리는 시간(초)입니다.</summary>
+    public float MoveStateBlendDuration => m_moveStateBlendDuration;
+
     public float SpeedChangeRate => m_speedChangeRate;
 
     /// <summary>점프 높이입니다.</summary>
@@ -504,6 +680,11 @@ public class ThirdPersonController : MonoBehaviour
     /// <param name="value">새로 적용할 값입니다.</param>
     public void SetSprintSpeed(float value) => m_sprintSpeed = value;
     /// <summary>
+    /// 웅크림 이동 속도를 설정합니다. 음수는 0으로 보정합니다.
+    /// </summary>
+    /// <param name="value">새로 적용할 값입니다.</param>
+    public void SetCrouchSpeed(float value) => m_crouchSpeed = Mathf.Max(0.0f, value);
+    /// <summary>
     /// 회전 보간 시간을 설정합니다. 0에서 0.3 사이로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
@@ -512,6 +693,26 @@ public class ThirdPersonController : MonoBehaviour
     /// 가속과 감속 반응 속도를 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
+    /// <summary>이동 방향 감쇠 시간을 설정합니다.</summary>
+    /// <param name="value">새로 적용할 시간(초)입니다.</param>
+    public void SetMoveDirectionDamp(float value) => m_moveDirectionDamp = Mathf.Max(0.0f, value);
+
+    /// <summary>방향 교체로 판정할 각도를 설정합니다.</summary>
+    /// <param name="value">새로 적용할 각도(도)입니다. 0~180으로 잘립니다.</param>
+    public void SetMoveDirectionSnapAngle(float value) => m_moveDirectionSnapAngle = Mathf.Clamp(value, 0.0f, 180.0f);
+
+    /// <summary>방향 교체 시의 회전 시간을 설정합니다.</summary>
+    /// <param name="value">새로 적용할 시간(초)입니다.</param>
+    public void SetMoveDirectionFlipDuration(float value) => m_moveDirectionFlipDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>정지와 이동 사이의 블렌드 시간을 설정합니다.</summary>
+    /// <param name="value">새로 적용할 시간(초)입니다.</param>
+    public void SetMoveStartStopDuration(float value) => m_moveStartStopDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>웅크림·걷기·달리기 단계 사이의 블렌드 시간을 설정합니다.</summary>
+    /// <param name="value">새로 적용할 시간(초)입니다.</param>
+    public void SetMoveStateBlendDuration(float value) => m_moveStateBlendDuration = Mathf.Max(0.0f, value);
+
     public void SetSpeedChangeRate(float value) => m_speedChangeRate = value;
 
     /// <summary>
@@ -1058,9 +1259,38 @@ public class ThirdPersonController : MonoBehaviour
             m_animator.SetBool(m_animIDGrounded, true);
             m_animator.SetBool(m_animIDJump, false);
             m_animator.SetBool(m_animIDFreeFall, false);
-            m_animator.Play(GroundedLocomotionStateHash, 0, 0.0f);
+            PlayGroundedLocomotionState(m_animator, this);
             m_animator.Update(0.0f);
         }
+    }
+
+    /// <summary>
+    /// 지상 이동 상태를 강제로 재생합니다. 상태가 없으면 경고를 남깁니다.
+    /// </summary>
+    /// <param name="animator">대상 Animator입니다.</param>
+    /// <param name="context">경고 로그에 붙일 컨텍스트 오브젝트입니다.</param>
+    /// <remarks>
+    /// <see cref="Animator.Play(int, int, float)"/>는 없는 상태 해시를 받아도 예외도 로그도 없이 아무 일도 하지 않습니다.
+    /// 애니메이터에서 상태 이름이나 서브 스테이트 머신 경로가 바뀌면 공중 강제 종료와 기립 복귀가 조용히 멈추므로
+    /// 여기서 한 번 확인해 눈에 보이게 만듭니다.
+    /// </remarks>
+    public static void PlayGroundedLocomotionState(Animator animator, Object context)
+    {
+        if (animator == null)
+        {
+            return;
+        }
+
+        if (!animator.HasState(0, GroundedLocomotionStateHash))
+        {
+            Debug.LogWarning(
+                $"[ThirdPersonController] 애니메이터에 '{GroundedLocomotionStatePath}' 상태가 없습니다. " +
+                "지상 이동 강제 복귀를 건너뜁니다.",
+                context);
+            return;
+        }
+
+        animator.Play(GroundedLocomotionStateHash, 0, 0.0f);
     }
 
     /// <summary>
@@ -1076,12 +1306,33 @@ public class ThirdPersonController : MonoBehaviour
     /// </remarks>
     private BalanceBindResult BindConfiguredBalance()
     {
-        if (m_balanceSO == null)
+        return BindFrom(m_balanceSO);
+    }
+
+    /// <summary>개별 밸런스 SO를 직접 물고 있는지 여부입니다.</summary>
+    /// <remarks><c>true</c>면 <see cref="SOBinder"/>가 통합 SO 주입을 건너뜁니다.</remarks>
+    public bool HasOwnBalance => m_balanceSO != null;
+
+    /// <summary>엔티티 통합 밸런스 SO의 값을 적용합니다.</summary>
+    /// <param name="balance">통합 밸런스 SO입니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다.</returns>
+    /// <remarks>개별 SO 슬롯은 비운 채로 둡니다. 비어 있다는 것 자체가 "개별 지정 없음"을 뜻합니다.</remarks>
+    public BalanceBindResult BindSharedBalance(ScriptableObject balance)
+    {
+        return BindFrom(balance);
+    }
+
+    /// <summary>주어진 원본 SO에서 밸런스 값을 대입합니다.</summary>
+    /// <param name="balance">값을 읽어올 밸런스 SO입니다. 개별 SO일 수도, 엔티티 통합 SO일 수도 있습니다.</param>
+    /// <returns>이번 바인딩의 집계 결과입니다. 원본이 없으면 기본값입니다.</returns>
+    private BalanceBindResult BindFrom(ScriptableObject balance)
+    {
+        if (balance == null)
         {
             return default;
         }
 
-        return BindManager.Instance.Bind(m_balanceSO, this, this);
+        return BindManager.Instance.Bind(balance, this, this);
     }
 
     private void Awake()
@@ -1118,9 +1369,35 @@ public class ThirdPersonController : MonoBehaviour
         }
 
         AssignAnimationIDs();
+        CacheCrouchBaseline();
 
         m_jumpTimeoutDelta = m_jumpTimeout;
         m_fallTimeoutDelta = m_fallTimeout;
+    }
+
+    /// <summary>
+    /// 서기 상태의 캡슐 높이와 중심, 카메라 타겟 높이를 기억합니다.
+    /// </summary>
+    /// <remarks>
+    /// 웅크림은 이 기준값에서 깎아 내려가는 방식입니다. 기준을 매 프레임 다시 읽으면
+    /// 웅크린 높이가 다음 프레임의 서기 높이가 되어 캡슐이 계속 줄어듭니다.
+    /// </remarks>
+    private void CacheCrouchBaseline()
+    {
+        if (m_hasCrouchBaseline || m_controller == null)
+        {
+            return;
+        }
+
+        m_standingHeight = m_controller.height;
+        m_standingCenter = m_controller.center;
+
+        if (m_cinemachineCameraTarget != null)
+        {
+            m_standingCameraTargetY = m_cinemachineCameraTarget.transform.localPosition.y;
+        }
+
+        m_hasCrouchBaseline = true;
     }
 
     /// <summary>
@@ -1140,9 +1417,107 @@ public class ThirdPersonController : MonoBehaviour
         // 그 한 프레임 때문에 착지 직후 재점프가 도약 동작을 건너뛰고 낙하 상태로 새는 일이 있었습니다.
         GroundedCheck();
         JumpAndGravity();
+        // 캡슐 높이를 이동보다 먼저 맞춥니다. 이동 뒤에 바꾸면 이번 프레임 충돌 판정과 높이가 한 프레임 어긋납니다.
+        UpdateCrouch();
         // 시점 판정을 이동보다 먼저 합니다. Move가 이번 프레임의 시점 모드로 몸을 돌리기 때문입니다.
         UpdateViewMode();
         Move();
+    }
+
+    /// <summary>
+    /// 웅크림 입력과 천장 여유에 따라 캡슐 높이와 카메라 타겟 높이를 갱신합니다.
+    /// </summary>
+    private void UpdateCrouch()
+    {
+        CacheCrouchBaseline();
+
+        if (!m_hasCrouchBaseline)
+        {
+            return;
+        }
+
+        // 앉은 상태에서 달리기 입력이 들어오면 일어나 달리기를 시작합니다(캐릭터 행동 시스템 §6).
+        // 토글이라 입력을 직접 내려 줘야 합니다. 여기서 풀지 않으면 웅크림이 전력질주를 계속 삼킵니다.
+        if (m_input.Crouch && m_input.sprint)
+        {
+            m_input.CrouchInput(false);
+        }
+
+        bool wantsCrouch = m_input.Crouch;
+
+        // 천장에 막혀 있으면 일어서지 않습니다. 막힌 자리에서 캡슐을 키우면 CharacterController가
+        // 겹침을 풀려고 캐릭터를 밀어내기 때문에 지형을 뚫고 튀어 나갑니다.
+        if (!wantsCrouch && m_crouchBlend > 0.0f && IsStandBlocked())
+        {
+            wantsCrouch = true;
+        }
+
+        float target = wantsCrouch ? 1.0f : 0.0f;
+
+        m_crouchBlend = m_crouchTransitionDuration <= 0.0f
+            ? target
+            : Mathf.MoveTowards(m_crouchBlend, target, Time.deltaTime / m_crouchTransitionDuration);
+
+        ApplyCrouchBlend();
+    }
+
+    /// <summary>
+    /// 현재 웅크림 진행도를 캡슐 높이와 중심, 카메라 타겟 높이에 적용합니다.
+    /// </summary>
+    private void ApplyCrouchBlend()
+    {
+        float crouchHeight = Mathf.Min(m_crouchHeight, m_standingHeight);
+        float height = Mathf.Lerp(m_standingHeight, crouchHeight, m_crouchBlend);
+        float drop = m_standingHeight - height;
+
+        m_controller.height = height;
+
+        // 발이 제자리에 남도록 줄어든 만큼의 절반을 중심에서 내립니다.
+        // 중심을 그대로 두면 캡슐이 위아래로 같이 줄어들어 발이 땅에서 떠 버립니다.
+        Vector3 center = m_standingCenter;
+        center.y = m_standingCenter.y - drop * 0.5f;
+        m_controller.center = center;
+
+        if (m_cinemachineCameraTarget != null)
+        {
+            Vector3 local = m_cinemachineCameraTarget.transform.localPosition;
+            local.y = m_standingCameraTargetY - drop;
+            m_cinemachineCameraTarget.transform.localPosition = local;
+        }
+    }
+
+    /// <summary>
+    /// 지금 자리에서 서기 높이로 되돌릴 여유가 없는지 확인합니다.
+    /// </summary>
+    /// <returns>머리 위가 막혀 있으면 true입니다.</returns>
+    /// <remarks>
+    /// 지형 판정에 <see cref="m_groundLayers"/>를 그대로 씁니다. 천장도 같은 레벨 지오메트리라서인데,
+    /// 두 마스크가 갈라져야 하는 상황이 오면 천장 전용 마스크를 따로 빼는 것이 맞습니다.
+    /// </remarks>
+    private bool IsStandBlocked()
+    {
+        float radius = m_controller.radius;
+        float currentTopY = transform.position.y + m_controller.center.y + m_controller.height * 0.5f - radius;
+        float standingTopY = transform.position.y + m_standingCenter.y + m_standingHeight * 0.5f - radius;
+        float distance = standingTopY - currentTopY;
+
+        if (distance <= 0.0f)
+        {
+            return false;
+        }
+
+        Vector3 origin = new Vector3(transform.position.x, currentTopY, transform.position.z)
+                         + new Vector3(m_controller.center.x, 0.0f, m_controller.center.z);
+
+        // 반지름을 살짝 줄입니다. 캡슐과 같은 크기로 쏘면 옆 벽에 붙어 있을 때 늘 막힌 것으로 나옵니다.
+        return Physics.SphereCast(
+            origin,
+            radius * 0.95f,
+            Vector3.up,
+            out _,
+            distance,
+            m_groundLayers,
+            QueryTriggerInteraction.Ignore);
     }
 
     /// <summary>
@@ -1170,7 +1545,7 @@ public class ThirdPersonController : MonoBehaviour
 
         m_hasAnimator = TryGetComponent(out m_animator);
         m_controller = GetComponent<CharacterController>();
-        m_input = GetComponent<PlayerInputs>();
+        m_input = GetComponent<PlayerInputController>();
 #if ENABLE_INPUT_SYSTEM
         m_playerInput = GetComponent<PlayerInput>();
 #else
@@ -1200,7 +1575,7 @@ public class ThirdPersonController : MonoBehaviour
 
         if (m_input == null)
         {
-            Debug.LogError("[ThirdPersonController] PlayerInputs 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
+            Debug.LogError("[ThirdPersonController] PlayerInputController 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
             isValid = false;
         }
 #if ENABLE_INPUT_SYSTEM
@@ -1225,19 +1600,71 @@ public class ThirdPersonController : MonoBehaviour
         m_animIDFreeFall = Animator.StringToHash("IsFreeFall");
         m_animIDMotionSpeed = Animator.StringToHash("MotionSpeed");
         m_animIDReset = Animator.StringToHash("DoReset");
+        m_animIDMoveX = Animator.StringToHash("MoveX");
+        m_animIDMoveZ = Animator.StringToHash("MoveZ");
+        m_animIDLookX = Animator.StringToHash("LookX");
+        m_animIDLookY = Animator.StringToHash("LookY");
+        m_animIDCrouch = Animator.StringToHash("IsCrouch");
+        m_animIDAim = Animator.StringToHash("IsAim");
+        m_animIDIsMove = Animator.StringToHash("IsMove");
+        m_animIDMoveState = Animator.StringToHash("MoveState");
     }
 
     /// <summary>
-    /// 애니메이터를 기본 상태로 되돌립니다.
+    /// 이 컴포넌트가 소유한 이동 애니메이터 파라미터를 기본값으로 되돌리고 <c>DoReset</c>을 발동합니다.
     /// </summary>
     /// <remarks>
-    /// 어떤 상태에 걸려 빠져나오지 못할 때 쓰는 탈출구입니다.
-    /// 변이체 쪽에서 같은 방식을 쓰고 있어 플레이어에도 같은 이름으로 둡니다.
-    /// 지금은 부르는 곳이 없습니다.
+    /// 어떤 상태에 걸려 빠져나오지 못할 때 쓰는 탈출구입니다. 변이체 쪽에서 같은 방식을 쓰고 있어
+    /// 플레이어에도 같은 이름으로 둡니다. 인게임 호출부는 없고, 디버그와 복구 용도로 남겨 둡니다.
+    ///
+    /// 여기서는 이동 계열만 건드립니다. 다운·상호작용·전투 파라미터는 각 소유 시스템이 정리해야 하므로,
+    /// 유닛 전체를 기본형으로 되돌리려면 <see cref="SquadMemberController.ResetAnimatorToBase"/>를 부릅니다.
+    /// 그쪽이 이 함수를 포함해 소유자별 정리를 모아서 실행합니다.
+    ///
+    /// 트리거만으로 끝내지 않고 지상 이동 상태를 직접 재생하는 이유는, 애니메이터에서 <c>DoReset</c>
+    /// 전이가 빠지면 탈출구가 조용히 무력해지기 때문입니다. 전이가 있으면 결과가 같고, 없으면 이쪽이 받칩니다.
     /// </remarks>
     public void ResetAnimation()
     {
-        m_animator?.SetTrigger(m_animIDReset);
+        AssignAnimationIDs();
+
+        if (m_animator == null)
+        {
+            m_hasAnimator = TryGetComponent(out m_animator);
+        }
+        else
+        {
+            m_hasAnimator = true;
+        }
+
+        if (!m_hasAnimator)
+        {
+            return;
+        }
+
+        m_speed = 0.0f;
+        m_animationBlend = 0.0f;
+
+        // 보간 중간값이 남아 있으면 다음 프레임에 그 값에서 이어져 리셋이 한 프레임만 보입니다.
+        m_moveState = MoveStateWalk;
+
+        m_animator.SetFloat(m_animIDSpeed, 0.0f);
+        m_animator.SetFloat(m_animIDMotionSpeed, 1.0f);
+        m_animator.SetFloat(m_animIDMoveX, 0.0f);
+        m_animator.SetFloat(m_animIDMoveZ, 0.0f);
+        m_animator.SetFloat(m_animIDMoveState, MoveStateWalk);
+        m_animator.SetFloat(m_animIDLookX, 0.0f);
+        m_animator.SetFloat(m_animIDLookY, 0.0f);
+
+        m_animator.SetBool(m_animIDGrounded, true);
+        m_animator.SetBool(m_animIDJump, false);
+        m_animator.SetBool(m_animIDFreeFall, false);
+        m_animator.SetBool(m_animIDAim, false);
+        m_animator.SetBool(m_animIDCrouch, false);
+        m_animator.SetBool(m_animIDIsMove, false);
+
+        m_animator.SetTrigger(m_animIDReset);
+        PlayGroundedLocomotionState(m_animator, this);
     }
 
     /// <summary>
@@ -1506,12 +1933,32 @@ public class ThirdPersonController : MonoBehaviour
     /// </summary>
     private void Move()
     {
-        float targetSpeed = m_input.sprint ? m_sprintSpeed : m_moveSpeed;
+        Vector3 inputDirection = new Vector3(m_input.move.x, 0.0f, m_input.move.y).normalized;
+
+        // 목표 회전각을 속도보다 먼저 구합니다. 전력질주 판정이 이 값과 몸 방향의 차이를 보기 때문입니다.
+        if (m_input.move != Vector2.zero)
+        {
+            m_targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg +
+                               m_mainCamera.transform.eulerAngles.y;
+        }
+
+        // 전력질주 방향 판정은 프레임당 한 번만 합니다. 이 판정이 히스테리시스 상태를 들고 있어
+        // 여러 번 부르면 같은 프레임 안에서 경계가 두 번 움직입니다.
+        m_canSprintForward = EvaluateSprintForward();
+
+        float targetSpeed = m_input.sprint && m_canSprintForward ? m_sprintSpeed : m_moveSpeed;
 
         // 속도 제약은 시점이 아니라 상태에 걸립니다. 비전투 백뷰에서는 전력질주가 그대로 살아 있습니다.
         if (m_isCombatStance || m_isReload)
         {
             targetSpeed = m_moveSpeed;
+        }
+
+        // 웅크리기는 전투/재장전보다 뒤에서 덮습니다. 조준하며 웅크려도 웅크림 속도가 유지되어야 하고,
+        // 이 순서 덕분에 웅크린 동안은 전력질주가 따로 막지 않아도 자연히 잠깁니다.
+        if (m_input.Crouch)
+        {
+            targetSpeed = m_crouchSpeed;
         }
 
         if (m_input.move == Vector2.zero)
@@ -1560,14 +2007,6 @@ public class ThirdPersonController : MonoBehaviour
             m_animationBlend = 0f;
         }
 
-        Vector3 inputDirection = new Vector3(m_input.move.x, 0.0f, m_input.move.y).normalized;
-
-        if (m_input.move != Vector2.zero)
-        {
-            m_targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg +
-                               m_mainCamera.transform.eulerAngles.y;
-        }
-
         ApplyBodyRotation();
 
         // 이동 방향은 시점 모드와 무관하게 항상 카메라 기준 입력 방향입니다.
@@ -1582,6 +2021,220 @@ public class ThirdPersonController : MonoBehaviour
             m_animator.SetFloat(m_animIDSpeed, m_animationBlend);
             m_animator.SetFloat(m_animIDMotionSpeed, inputMagnitude);
         }
+
+        UpdateLocomotionAnimator();
+    }
+
+    /// <summary>
+    /// 지금 이동 방향으로 전력질주할 수 있는지 판정합니다.
+    /// </summary>
+    /// <returns>이동 방향이 몸 기준 전방 부채꼴 안이면 true입니다.</returns>
+    /// <remarks>
+    /// 달리기 클립이 전방 세 방향(정면, 좌우 45도)뿐입니다. 뒤나 옆으로 달리는 동작은 기획상 없는 것이라
+    /// 없는 방향으로 달릴 수 있게 두면 정면 달리기 모션인 채로 옆으로 미끄러집니다.
+    ///
+    /// 시작 각도와 유지 각도를 다르게 두는 이유는 대각선 입력이 정확히 경계에 놓이기 때문입니다.
+    /// 45도 하나로 판정하면 대각선 달리기가 늘 경계에 걸려, 몸이 카메라를 따라 미세하게 흔들릴 때마다
+    /// 달리기와 걷기가 번갈아 켜집니다. 실측에서 대각선 달리기의 끊김으로 드러났습니다.
+    ///
+    /// 판정 기준을 실제 속도가 아니라 입력 방향으로 잡습니다. 속도를 보면 이 판정이 속도를 정하고
+    /// 그 속도가 다시 판정에 들어오는 되먹임이 생깁니다.
+    ///
+    /// 자유 시점에서는 몸이 이동 방향으로 돌아가므로 각도 차가 곧 0이 되어 사실상 항상 허용됩니다.
+    /// 제한이 실제로 걸리는 것은 몸이 카메라에 묶여 있는 백뷰입니다.
+    /// </remarks>
+    private bool EvaluateSprintForward()
+    {
+        if (m_input.move == Vector2.zero)
+        {
+            return false;
+        }
+
+        float angle = Mathf.Abs(Mathf.DeltaAngle(transform.eulerAngles.y, m_targetRotation));
+        float limit = m_canSprintForward
+            ? m_sprintForwardAngle + m_sprintReleaseMargin
+            : m_sprintForwardAngle;
+
+        return angle <= limit;
+    }
+
+    /// <summary>
+    /// 8방향 이동 블렌드와 조준/웅크림 분기에 필요한 애니메이터 파라미터를 갱신합니다.
+    /// </summary>
+    /// <remarks>
+    /// 이동 방향은 실제 속도를 몸 기준으로 바꿔 넣습니다. 감염체(<see cref="EnemyController"/>)와 같은 규약입니다.
+    /// 월드 방향을 그대로 쓰면 몸이 어디를 보든 같은 값이 되어 옆걸음과 앞걸음을 구분하지 못합니다.
+    /// 입력이 아니라 속도를 쓰기 때문에 벽에 막히면 값이 0이 되어 제자리걸음이 멈춥니다.
+    ///
+    /// 크기는 버리고 방향만 넣습니다. 걷기/달리기 구분은 <c>MoveSpeed</c>가 담당합니다.
+    /// 블렌드 트리가 반지름으로 속도를 구분하는 형태라면 여기서 정규화하지 말고 속력을 함께 실어야 합니다.
+    /// </remarks>
+    /// <summary>
+    /// 애니메이터에 넣을 이동 방향을 갱신합니다. 이동 중에는 각도만 돌리고 크기는 1로 유지합니다.
+    /// </summary>
+    /// <param name="desired">몸 기준 목표 이동 방향입니다. 정지 중이면 값이 의미 없습니다.</param>
+    /// <param name="moving">지금 실제로 이동 중인지 여부입니다.</param>
+    private void UpdateSmoothedMoveDirection(Vector2 desired, bool moving)
+    {
+        // 방향(각도)과 세기(크기)를 나눠서 다룹니다. 각도는 어느 클립을 쓸지, 크기는 정지 클립과
+        // 그 방향 클립을 얼마나 섞을지를 정합니다. 둘을 한 벡터로 뭉쳐 보간하면 방향을 바꾸는 것만으로
+        // 크기가 함께 줄었다 늘어 정지 자세가 끼어듭니다.
+        float magnitude = m_moveDirectionSmoothed.magnitude;
+        Vector2 direction = magnitude > 0.0001f
+            ? m_moveDirectionSmoothed / magnitude
+            : Vector2.zero;
+
+        float magnitudeStep = m_moveStartStopDuration <= 0.0f
+            ? 1.0f
+            : Time.deltaTime / m_moveStartStopDuration;
+
+        magnitude = Mathf.MoveTowards(magnitude, moving ? 1.0f : 0.0f, magnitudeStep);
+
+        if (!moving)
+        {
+            // 멈출 때는 마지막 방향을 유지한 채 세기만 줄여 정지 자세로 잦아듭니다.
+            m_moveDirectionSmoothed = direction * magnitude;
+            return;
+        }
+
+        if (direction == Vector2.zero)
+        {
+            // 정지에서 막 출발하는 프레임에는 돌릴 기준 방향이 없습니다. 방향은 바로 잡되
+            // 세기는 위에서 이미 0부터 오르고 있으므로 정지 자세에서 서서히 걸어 나갑니다.
+            m_moveDirectionSmoothed = desired.normalized * magnitude;
+            return;
+        }
+
+        float angle = Vector2.SignedAngle(direction, desired);
+
+        // 크게 꺾는 것은 방향 조정이 아니라 방향 교체입니다. 좌에서 우로 바꾸는 것이 그렇습니다.
+        // 이때 천천히 돌리면 앞이나 뒤 걷기를 거쳐 가느라 중간에 엉뚱한 모션이 눈에 띄고,
+        // 한 프레임에 끊어 붙이면 툭 끊겨 보입니다. 그래서 값을 갈아끼우지 않고 아주 빠르게 돌립니다.
+        // 몇 프레임이라도 블렌드가 남아 있어야 발이 이어져 보입니다.
+        float turnDuration = Mathf.Abs(angle) >= m_moveDirectionSnapAngle
+            ? m_moveDirectionFlipDuration
+            : m_moveDirectionDamp;
+
+        float turnStep = turnDuration <= 0.0f ? 1.0f : Time.deltaTime / turnDuration;
+
+        float maxDegrees = 180.0f * turnStep;
+        float delta = Mathf.Clamp(angle, -maxDegrees, maxDegrees);
+
+        float radians = delta * Mathf.Deg2Rad;
+        float cos = Mathf.Cos(radians);
+        float sin = Mathf.Sin(radians);
+
+        Vector2 rotated = new Vector2(
+            direction.x * cos - direction.y * sin,
+            direction.x * sin + direction.y * cos);
+
+        m_moveDirectionSmoothed = rotated.normalized * magnitude;
+    }
+
+    private void UpdateLocomotionAnimator()
+    {
+        if (!m_hasAnimator)
+        {
+            return;
+        }
+
+        Vector3 velocity = m_controller.velocity;
+        velocity.y = 0.0f;
+
+        float horizontalSpeed = velocity.magnitude;
+        bool moving = horizontalSpeed > MoveDirectionThreshold;
+
+        // 방향은 감쇠해서 넣습니다. 입력이 바뀌는 순간 몸 기준 방향이 45도씩 튀는데,
+        // 그대로 넣으면 블렌드 가중치가 한 프레임에 갈아타면서 발걸음이 끊깁니다.
+        Vector3 local = moving
+            ? transform.InverseTransformDirection(velocity / horizontalSpeed)
+            : Vector3.zero;
+
+        UpdateSmoothedMoveDirection(new Vector2(local.x, local.z), moving);
+
+        m_animator.SetFloat(m_animIDMoveX, m_moveDirectionSmoothed.x);
+        m_animator.SetFloat(m_animIDMoveZ, m_moveDirectionSmoothed.y);
+
+        m_animator.SetBool(m_animIDIsMove, moving);
+        m_animator.SetFloat(m_animIDMoveState, UpdateMoveState());
+        m_animator.SetBool(m_animIDCrouch, m_input.Crouch);
+
+        // IsAim은 ADS만이 아니라 전투 자세 전체입니다. 힙파이어로 쏘는 동안 상체가 총을 내리고 있으면
+        // 총알은 나가는데 조준 포즈가 없는 구간이 생깁니다. 백뷰/전력질주 잠금과도 같은 기준입니다.
+        //
+        // 재장전도 포함하는 이유는 하체 때문입니다. 재장전은 전투 자세를 벗어나므로 이 값이 내려가는데,
+        // 그러면 Base Layer가 조준 이동 블렌드에서 비조준 이동 블렌드로 통째로 갈아탑니다. 게걸음 클립이
+        // 재장전을 시작하고 끝낼 때마다 바뀌어 걸음걸이가 흔들려 보였습니다.
+        // 상체는 어차피 재장전 클립이 덮으므로, 하체만 조준 보행을 유지시킵니다.
+        m_animator.SetBool(m_animIDAim, m_isCombatStance || m_isReload);
+
+        UpdateLookAnimator();
+    }
+
+    /// <summary>
+    /// 이동 단계(웅크림/걷기/달리기)를 목표 값으로 보간하고 현재 값을 돌려줍니다.
+    /// </summary>
+    /// <returns>이번 프레임에 애니메이터에 넣을 MoveState 값입니다.</returns>
+    /// <remarks>
+    /// 값을 즉시 바꾸지 않고 보간하는 이유는 걷기와 달리기 사이가 한 단계 차이라 중간값이
+    /// 두 동작을 섞은 자연스러운 자세가 되기 때문입니다. 즉시 바꾸면 발걸음이 튑니다.
+    ///
+    /// 축의 순서를 웅크림 0, 걷기 1, 달리기 2로 잡은 것도 같은 이유입니다. 웅크림과 달리기를 양 끝에 두면
+    /// 그 둘이 직접 섞이는 일이 없고, 웅크린 채 달리기를 눌러도 걷기를 지나며 이어집니다.
+    ///
+    /// 전력질주 판정에 <see cref="CanSprintTowardInput"/>을 함께 보는 이유는 실제 속도와 자세를 맞추기
+    /// 위해서입니다. 부채꼴을 벗어난 방향은 걷기 속도로 움직이므로 자세도 걷기여야 합니다.
+    /// </remarks>
+    private float UpdateMoveState()
+    {
+        float target = MoveStateWalk;
+
+        if (m_input.Crouch)
+        {
+            target = MoveStateCrouch;
+        }
+        else if (m_input.sprint && !m_isCombatStance && !m_isReload && m_canSprintForward)
+        {
+            target = MoveStateRun;
+        }
+
+        m_moveState = m_moveStateBlendDuration <= 0.0f
+            ? target
+            : Mathf.MoveTowards(m_moveState, target, Time.deltaTime / m_moveStateBlendDuration);
+
+        return m_moveState;
+    }
+
+    /// <summary>
+    /// 카메라와 몸의 각도 차를 -1~1로 정규화해 상체 조준 오프셋 파라미터에 넣습니다.
+    /// </summary>
+    /// <remarks>
+    /// 마우스 이동량이 아니라 "몸이 카메라를 얼마나 못 따라갔는지"입니다. 백뷰에서는 몸이 카메라를
+    /// 곧바로 따라가므로 0에 가깝고, 자유 시점에서는 크게 벌어집니다.
+    ///
+    /// 규약: <c>LookX</c>는 -1이 카메라가 몸의 왼쪽, +1이 오른쪽입니다.
+    /// <c>LookY</c>는 -1이 최대 아래, +1이 최대 위입니다. StarterAssets 피치는 값이 커질수록 아래를 보므로
+    /// 부호를 뒤집습니다. 위아래 한계가 서로 다르므로 각 방향을 자기 한계로 나눠 양 끝이 정확히 ±1이 되게 합니다.
+    ///
+    /// 반동 오프셋은 넣지 않습니다. 조준 의도만 담아야 발사 중에 상체가 파라미터를 따라 떨지 않습니다.
+    /// </remarks>
+    private void UpdateLookAnimator()
+    {
+        float lookX = 0.0f;
+
+        if (m_mainCamera != null)
+        {
+            float yawDelta = Mathf.DeltaAngle(transform.eulerAngles.y, m_mainCamera.transform.eulerAngles.y);
+            lookX = Mathf.Clamp(yawDelta / MaxLookYaw, -1.0f, 1.0f);
+        }
+
+        float pitchLimit = Mathf.Abs(m_cinemachineTargetPitch >= 0.0f ? m_topClamp : m_bottomClamp);
+        float lookY = pitchLimit <= Mathf.Epsilon
+            ? 0.0f
+            : -Mathf.Clamp(m_cinemachineTargetPitch / pitchLimit, -1.0f, 1.0f);
+
+        m_animator.SetFloat(m_animIDLookX, lookX);
+        m_animator.SetFloat(m_animIDLookY, lookY);
     }
 
     /// <summary>
@@ -1612,7 +2265,7 @@ public class ThirdPersonController : MonoBehaviour
         }
 
         m_viewMode = ResolveViewMode(m_viewContext);
-        ApplyNonCombatRig();
+        ApplyStateCamera();
     }
 
     /// <summary>
@@ -1628,33 +2281,53 @@ public class ThirdPersonController : MonoBehaviour
             return CameraViewMode.BackView;
         }
 
-        // 비전투 백뷰 리그가 아직 배선되지 않았으면 보여 줄 카메라가 없으므로 자유 시점으로 폴백합니다.
-        if (m_nonCombatBackViewCamera == null)
-        {
-            return CameraViewMode.FreeLook;
-        }
-
-        bool backView = context == ViewContext.Idle ? m_idleBackView : m_nonCombatBackView;
-
-        return backView ? CameraViewMode.BackView : CameraViewMode.FreeLook;
+        return context == ViewContext.Idle ? m_idleViewMode : m_nonCombatViewMode;
     }
 
     /// <summary>
-    /// 비전투 백뷰 리그의 활성 상태를 현재 시점 모드에 맞춥니다.
+    /// 현재 시점 컨텍스트에 배정된 카메라만 활성으로 남깁니다.
     /// </summary>
-    /// <remarks>전투 리그는 AimController가 소유하므로 여기서는 건드리지 않습니다.</remarks>
-    private void ApplyNonCombatRig()
+    /// <remarks>
+    /// 전투 카메라는 <see cref="AimController"/>가 소유하므로 여기서는 건드리지 않습니다.
+    /// 한 카메라에 주인이 둘이면 활성 전환과 FOV 제어가 서로 다른 프레임에 갈라집니다.
+    ///
+    /// 슬롯이 비어 있으면 아무것도 켜지 않습니다. 슬롯에 없는 상시 활성 카메라는 끄지 않으므로
+    /// 그 카메라가 자연히 폴백이 됩니다. 두 슬롯에 같은 카메라를 물려도 결과는 같습니다.
+    /// </remarks>
+    private void ApplyStateCamera()
     {
-        if (m_nonCombatBackViewCamera == null)
+        CinemachineCamera desired = null;
+
+        if (m_viewContext == ViewContext.Idle)
+        {
+            desired = m_idleCamera;
+        }
+        else if (m_viewContext != ViewContext.Combat)
+        {
+            desired = m_nonCombatCamera;
+        }
+
+        SyncCameraActive(m_idleCamera, desired);
+        SyncCameraActive(m_nonCombatCamera, desired);
+    }
+
+    /// <summary>
+    /// 슬롯 카메라의 활성 상태를 이번 프레임의 목표 카메라와 일치시킵니다.
+    /// </summary>
+    /// <param name="camera">확인할 슬롯 카메라입니다.</param>
+    /// <param name="desired">이번 프레임에 활성이어야 할 카메라입니다.</param>
+    private static void SyncCameraActive(CinemachineCamera camera, CinemachineCamera desired)
+    {
+        if (camera == null)
         {
             return;
         }
 
-        bool active = m_viewContext != ViewContext.Combat && m_viewMode == CameraViewMode.BackView;
+        bool active = camera == desired;
 
-        if (m_nonCombatBackViewCamera.gameObject.activeSelf != active)
+        if (camera.gameObject.activeSelf != active)
         {
-            m_nonCombatBackViewCamera.gameObject.SetActive(active);
+            camera.gameObject.SetActive(active);
         }
     }
 
@@ -1667,8 +2340,10 @@ public class ThirdPersonController : MonoBehaviour
     /// 예전에는 백뷰만 <c>Vector3.Lerp(..., Time.deltaTime * 50f)</c>를 썼는데,
     /// 그 형태는 프레임레이트에 따라 수렴 속도가 달라지고 모드가 바뀌는 프레임에 회전 속도가 튑니다.
     ///
-    /// 감쇠 시간만 전투/비전투로 나눕니다. SmoothDamp는 회전 속도를 상태로 들고 있어서
-    /// 보간 도중 감쇠 시간이 바뀌어도 각도가 끊기지 않고 가속도만 달라집니다.
+    /// 감쇠 시간도 전투 여부가 아니라 시점 모드로 갈립니다. 비전투 백뷰의 카메라 거동이 힙파이어와
+    /// 같아야 하므로, 백뷰인 동안은 전투든 아니든 같은 값을 씁니다.
+    /// SmoothDamp는 회전 속도를 상태로 들고 있어서 보간 도중 감쇠 시간이 바뀌어도
+    /// 각도가 끊기지 않고 가속도만 달라집니다.
     /// </remarks>
     private void ApplyBodyRotation()
     {
@@ -1684,7 +2359,7 @@ public class ThirdPersonController : MonoBehaviour
             ? m_mainCamera.transform.eulerAngles.y
             : m_targetRotation;
 
-        float smoothTime = m_isCombatStance ? m_combatRotationSmoothTime : m_rotationSmoothTime;
+        float smoothTime = backView ? m_backViewRotationSmoothTime : m_rotationSmoothTime;
 
         float rotation = Mathf.SmoothDampAngle(
             transform.eulerAngles.y,
@@ -1774,6 +2449,11 @@ public class ThirdPersonController : MonoBehaviour
     /// </summary>
     private void OnDrawGizmosSelected()
     {
+        if (!m_debugDrawGroundCheck)
+        {
+            return;
+        }
+
         Color transparentGreen = new Color(0.0f, 1.0f, 0.0f, 0.35f);
         Color transparentRed = new Color(1.0f, 0.0f, 0.0f, 0.35f);
 
