@@ -530,6 +530,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
+        // 잠금은 풀렸지만 이탈 블렌드가 남아 있으면 위치는 아직 루트 모션이 쥐고 있습니다.
+        // 판단은 이미 재개된 상태이므로 아래 Tick은 그대로 돌립니다.
+        UpdateStaggerHandover();
+
         m_current?.Tick();
     }
 
@@ -577,6 +581,30 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>이번 경직에서 애니메이터의 실제 클립 길이를 이미 반영했는지 여부입니다.</summary>
     private bool m_staggerLengthResolved;
+
+    /// <summary>
+    /// 위치를 루트 모션이 쥐고 있는 구간인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// <b>행동 잠금보다 길게 유지됩니다.</b> 잠금이 풀리는 순간 위치를 Agent에 돌려주면, 애니메이터가 아직
+    /// 경직에서 빠져나오는 이탈 블렌드(0.25초) 중인데 몸은 Agent가 끌고 가 위치가 끊겨 보입니다.
+    /// 블렌드가 끝날 때까지 루트 모션이 위치를 계속 쥐고 있어야 일어서는 동작과 달리기가 이어집니다.
+    /// </remarks>
+    private bool m_staggerRootMotionActive;
+
+    /// <summary>이탈 블렌드가 끝나지 않아도 위치를 Agent에 돌려줄 한계 시각입니다.</summary>
+    /// <remarks>
+    /// 애니메이터 배선이 없거나 다른 상태로 튀어 블렌드 종료를 감지하지 못하면 위치 소유권이 영구히
+    /// 루트 모션에 남습니다. 그러면 Agent 이동이 화면에 반영되지 않아 제자리에서 미끄러지는 모습이 됩니다.
+    /// </remarks>
+    private float m_staggerHandoverDeadline;
+
+    /// <summary>이탈 블렌드를 기다려 줄 최대 시간(초)입니다.</summary>
+    /// <remarks>애니메이터의 이탈 전이(0.25초)보다 넉넉하게 둡니다.</remarks>
+    private const float StaggerHandoverTimeout = 0.6f;
+
+    /// <summary>직전 프레임의 위치입니다. 루트 모션이 위치를 쥔 구간에서 실제 속도를 재는 데 씁니다.</summary>
+    private Vector3 m_lastLocomotionPosition;
 
     /// <summary>경직이 시작된 위치입니다. 루트 모션이 실제로 얼마나 옮겼는지 확인하는 데 씁니다.</summary>
     private Vector3 m_staggerStartPosition;
@@ -631,8 +659,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         }
 
         m_isStaggered = true;
+        m_staggerRootMotionActive = true;
         m_staggerLengthResolved = false;
         m_staggerStartPosition = transform.position;
+
+        // 실제 속도 측정의 기준점입니다. 초기화하지 않으면 첫 프레임 변위가 예전 위치와의 차이로 잡혀
+        // 이동 블렌드가 한 프레임 튑니다.
+        m_lastLocomotionPosition = transform.position;
 
         // 애니메이터 스테이트에 들어가기 전까지 쓰는 임시값입니다. 들어간 뒤에는 실제 재생 길이로 다시 잡습니다.
         m_staggerEndTime = Time.time + HitStunDuration;
@@ -731,31 +764,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         EndStaggerAnimation();
 
-        if (agent != null && agent.enabled)
-        {
-            // 루트 모션이 옮겨 놓은 최종 위치로 Agent를 통째로 이동시킨 뒤 위치 소유권을 돌려줍니다.
-            // Warp는 내부 위치와 경로 상태를 함께 맞춰 주므로, nextPosition만 대입할 때 남는 어긋남이 없습니다.
-            agent.Warp(transform.position);
-            agent.updatePosition = true;
-
-            // 그래도 NavMesh 밖이면 되돌립니다. 밖에 서 있으면 경로 계산이 전부 실패해 유효 대상을 잃고,
-            // 추격이 갈 곳 없이 제자리에 굳습니다(경직을 두 번 당한 개체가 일어나서 멈춰 있던 증상).
-            if (!agent.isOnNavMesh
-                && NavMesh.SamplePosition(
-                    transform.position, out NavMeshHit recovery, StaggerNavMeshSampleRadius, NavMesh.AllAreas))
-            {
-                agent.Warp(recovery.position);
-            }
-
-            if (agent.isOnNavMesh)
-            {
-                agent.ResetPath();
-            }
-            else if (m_debugLogStagger)
-            {
-                Debug.LogWarning("[Stagger] 경직 후 NavMesh 밖에 남았습니다. 추격이 멈출 수 있습니다.", this);
-            }
-        }
+        // 위치 소유권은 여기서 돌려주지 않습니다. 애니메이터가 아직 경직에서 빠져나오는 중이므로,
+        // 이탈 블렌드가 끝날 때까지 루트 모션이 위치를 계속 쥐고 있어야 동작이 이어집니다.
+        // 인계는 UpdateStaggerHandover가 처리합니다.
+        m_staggerHandoverDeadline = Time.time + StaggerHandoverTimeout;
 
         // 면역 윈도우는 경직이 끝난 시점부터 재므로, 끝났다는 사실을 누적 소유자에게 알려야 합니다.
         enemyHealth?.NotifyStaggerEnded();
@@ -792,9 +804,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <see cref="NavMesh.SamplePosition"/>으로 한 번 보정하는 것은 벽을 뚫고 밀려나거나 바닥 밖으로
     /// 나가는 것을 막기 위해서입니다. 밀리는 거리가 1.25m라 좁은 통로에서는 실제로 벽에 닿습니다.
     ///
-    /// <b>경직 중이 아니면 변위를 버립니다.</b> 이동 클립에도 루트 모션이 들어 있어 그대로 소비하면
+    /// <b>이 구간 밖에서는 변위를 버립니다.</b> 이동 클립에도 루트 모션이 들어 있어 그대로 소비하면
     /// NavMeshAgent가 시키는 이동 위에 애니메이션 이동이 겹쳐 두 배로 움직입니다.
-    /// 이동의 주인은 여전히 Agent이고, 경직만 예외입니다.
+    /// 이동의 주인은 여전히 Agent이고, 경직과 그 이탈 블렌드만 예외입니다.
+    ///
+    /// 구간이 잠금보다 긴 이유는 <see cref="UpdateStaggerHandover"/>에 있습니다. 이탈 블렌드 동안에는
+    /// 경직 자세와 이동 자세가 섞이므로, 그 섞인 결과의 루트 모션을 그대로 따라가야 위치가 이어집니다.
     ///
     /// 회전(<see cref="Animator.deltaRotation"/>)은 일부러 쓰지 않습니다. 이 클립의 루트 회전은
     /// 시작과 끝이 같아 순 회전이 0이고(흔들렸다가 제자리로 돌아옴), 몸이 휘청이는 모습은 이미 뼈 애니메이션이
@@ -802,7 +817,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private void OnAnimatorMove()
     {
-        if (!m_isStaggered || animator == null)
+        if (!m_staggerRootMotionActive || animator == null)
         {
             return;
         }
@@ -828,7 +843,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private const float StaggerNavMeshSampleRadius = 2.0f;
 
-    /// <summary>NavMeshAgent 속도를 애니메이터 MoveSpeed 파라미터로 전달합니다.</summary>
+    /// <summary>이동 속도를 애니메이터 MoveSpeed 파라미터로 전달합니다.</summary>
+    /// <remarks>
+    /// 보통은 <see cref="NavMeshAgent.velocity"/>를 씁니다. 다만 경직과 그 이탈 블렌드 동안에는 위치의 주인이
+    /// 루트 모션이라 Agent 속도가 실제 이동과 다릅니다. Agent는 내부 경로만 진행하고 있어서, 그 값을 쓰면
+    /// 일어서는 중인데 이동 블렌드가 예전 방향으로 전력 질주를 가리켜 자세가 어긋납니다.
+    /// 그 구간에서는 실제 변위로 속도를 재서 넣습니다.
+    /// </remarks>
     private void UpdateLocomotionAnimator()
     {
         if (animator == null || agent == null)
@@ -836,7 +857,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
-        Vector3 velocity = agent.velocity;
+        Vector3 velocity = m_staggerRootMotionActive
+            ? (transform.position - m_lastLocomotionPosition) / Mathf.Max(Time.deltaTime, 0.0001f)
+            : agent.velocity;
+
+        m_lastLocomotionPosition = transform.position;
+
         float speed = velocity.magnitude;
 
         animator.SetFloat(AnimMoveSpeed, speed);
@@ -1437,12 +1463,74 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private void RestoreAgentPositionOwnership()
     {
+        m_staggerRootMotionActive = false;
+
         if (agent == null || !agent.enabled || agent.updatePosition)
         {
             return;
         }
 
+        // 루트 모션이 옮겨 놓은 최종 위치로 Agent를 통째로 이동시킨 뒤 소유권을 돌려줍니다.
+        // Warp는 내부 위치와 경로 상태를 함께 맞춰 주므로 nextPosition만 대입할 때 남는 어긋남이 없습니다.
         agent.Warp(transform.position);
         agent.updatePosition = true;
+
+        // 그래도 NavMesh 밖이면 되돌립니다. 밖에 서 있으면 경로 계산이 전부 실패해 유효 대상을 잃고,
+        // 추격이 갈 곳 없이 제자리에 굳습니다(경직을 두 번 당한 개체가 일어나서 멈춰 있던 증상).
+        if (!agent.isOnNavMesh
+            && NavMesh.SamplePosition(
+                transform.position, out NavMeshHit recovery, StaggerNavMeshSampleRadius, NavMesh.AllAreas))
+        {
+            agent.Warp(recovery.position);
+        }
+
+        if (agent.isOnNavMesh)
+        {
+            // 경직 전 경로는 밀려나기 전 위치 기준이라 그대로 두면 밀려난 만큼 되돌아가는 이동이 먼저 나옵니다.
+            agent.ResetPath();
+        }
+        else if (m_debugLogStagger)
+        {
+            Debug.LogWarning("[Stagger] 경직 후 NavMesh 밖에 남았습니다. 추격이 멈출 수 있습니다.", this);
+        }
+    }
+
+    /// <summary>
+    /// 경직 이탈 블렌드가 끝났으면 위치 소유권을 Agent에 돌려줍니다.
+    /// </summary>
+    /// <remarks>
+    /// 잠금이 풀린 뒤에도 애니메이터는 이탈 전이(0.25초) 동안 경직 자세에서 빠져나오는 중입니다.
+    /// 그 구간의 루트 모션까지 위치에 반영해야 일어서는 동작과 이후 이동이 이어집니다.
+    /// 블렌드 중에 Agent가 위치를 끌고 가면 몸이 자세와 어긋나 순간이동처럼 보입니다.
+    ///
+    /// 블렌드 중에도 <b>행동은 이미 재개된 상태</b>입니다. 잠금은 위치가 아니라 판단을 막는 것이므로,
+    /// 이 구간에 추격이 경로를 세워 두면 인계 직후 곧바로 달릴 수 있습니다.
+    ///
+    /// 감지 실패를 대비해 시간 제한을 둡니다. 애니메이터 배선이 없으면 블렌드 종료를 알 수 없고,
+    /// 그대로 두면 Agent 이동이 영구히 화면에 반영되지 않습니다.
+    /// </remarks>
+    private void UpdateStaggerHandover()
+    {
+        if (!m_staggerRootMotionActive || m_isStaggered)
+        {
+            return;
+        }
+
+        if (animator != null && Time.time < m_staggerHandoverDeadline)
+        {
+            // 전이 중이면 아직 경직 자세가 섞여 있습니다.
+            if (animator.IsInTransition(0))
+            {
+                return;
+            }
+
+            // 전이가 없더라도 아직 경직 스테이트면 기다립니다.
+            if (animator.GetCurrentAnimatorStateInfo(0).shortNameHash == StaggerStateHash)
+            {
+                return;
+            }
+        }
+
+        RestoreAgentPositionOwnership();
     }
 }
