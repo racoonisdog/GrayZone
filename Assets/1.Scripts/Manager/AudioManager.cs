@@ -10,7 +10,7 @@ using UnityEngine.Audio;
 /// 이 컴포넌트는 전달받은 클립을 지정된 월드 위치에서 재생하는 공간 출력 정책만 담당합니다.
 /// </remarks>
 [DisallowMultipleComponent]
-public sealed class FieldAudioSystem : MonoBehaviour
+public sealed class AudioManager : MonoBehaviour
 {
     private sealed class Voice
     {
