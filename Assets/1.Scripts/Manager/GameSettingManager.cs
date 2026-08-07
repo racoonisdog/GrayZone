@@ -17,10 +17,10 @@ public class GameSettingManager : MonoBehaviour
 
     public static GameSettingManager Instance { get; private set; }
 
-    [Header("»≠∏È º≥¡§")]
+    [Header("Display Settings")]
     [SerializeField] private SettingSnapshot currentSettings = new SettingSnapshot();
 
-    [Header("ø¿µø¿ πÕº≠ (º±≈√)")]
+    [Header("Audio Mixer (ÏÑ†ÌÉù)")]
     [SerializeField] private AudioMixer audioMixer;
     [SerializeField] private string masterVolumeParam = "MasterVolume";
     [SerializeField] private string bgmVolumeParam = "BgmVolume";

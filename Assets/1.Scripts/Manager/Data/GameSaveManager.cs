@@ -6,7 +6,7 @@ public class GameSaveManager : MonoBehaviour
 {
     public static GameSaveManager Instance { get; private set; }
 
-    [Header("저장 설정")]
+    [Header("Save Settings")]
     [Tooltip("프로필 ID가 지정되지 않았을 때 사용할 기본 저장 프로필 ID입니다.")]
     [SerializeField] private string defaultProfileId = SaveFilePaths.DefaultProfileId;
     [Tooltip("JSON 저장 파일을 사람이 읽기 쉬운 들여쓰기 형식으로 기록할지 여부입니다.")]

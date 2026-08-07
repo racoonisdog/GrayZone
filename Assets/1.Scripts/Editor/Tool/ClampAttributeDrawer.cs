@@ -17,6 +17,11 @@ using UnityEngine;
 [CustomPropertyDrawer(typeof(ClampAttribute))]
 public class ClampAttributeDrawer : PropertyDrawer
 {
+    /// <summary>선언된 범위에 맞춰 슬라이더 또는 제한된 입력칸으로 필드를 그립니다.</summary>
+    /// <param name="position">필드를 그릴 영역입니다.</param>
+    /// <param name="property">그릴 대상 프로퍼티입니다.</param>
+    /// <param name="label">표시할 항목 이름입니다.</param>
+    /// <remarks>숫자가 아닌 필드에 붙은 것은 선언 실수이므로 조용히 넘기지 않고 그 자리에 알립니다.</remarks>
     public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
     {
         ClampAttribute clamp = (ClampAttribute)attribute;

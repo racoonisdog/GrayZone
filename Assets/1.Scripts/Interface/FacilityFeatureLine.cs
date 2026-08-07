@@ -12,6 +12,9 @@ public readonly struct FacilityFeatureLine
     /// <summary>항목 값/변화(예: "3 → 4", "해금").</summary>
     public readonly string Value;
 
+    /// <summary>표시할 항목 이름과 값을 묶습니다.</summary>
+    /// <param name="label">항목 이름입니다.</param>
+    /// <param name="value">항목 값 또는 변화 표기입니다.</param>
     public FacilityFeatureLine(string label, string value)
     {
         Label = label;

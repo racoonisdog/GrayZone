@@ -20,6 +20,8 @@ public class NoiseChaseState : EnemyStateBase
     /// <summary>소음 추적 상태를 생성합니다.</summary>
     public NoiseChaseState(EnemyController controller) : base(controller) { }
 
+    /// <summary>받아들인 소음 위치를 목적지로 잡고 소음 추적 속도로 이동을 시작합니다.</summary>
+    /// <remarks>비교전 상태이므로 교전 진입이나 하울링 조건은 여기서 충족되지 않습니다.</remarks>
     public override void Enter()
     {
         Controller.PlayChaseFeedback();
@@ -39,6 +41,8 @@ public class NoiseChaseState : EnemyStateBase
         RefreshDestination();
     }
 
+    /// <summary>소음 위치까지 이동하며 도착 여부와 직접 인식을 확인합니다.</summary>
+    /// <remarks>도착하면 소음 수색으로, 캐릭터를 직접 인식하면 즉시 교전으로 전이합니다.</remarks>
     public override void Tick()
     {
         EnemyTargetSensor sensor = Controller.Sensor;

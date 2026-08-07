@@ -7,30 +7,30 @@ using UnityEngine.UI;
 
 public class BootLogo : MonoBehaviour
 {
-    [Header("ÂüÁ¶")]
+    [Header("References")]
     [SerializeField] private CanvasGroup backgroundGroup;
     [SerializeField] private CanvasGroup logoGroup;
     [SerializeField] private Image logoImage;
 
-    [Header("·Î°í ½ÃÄö½º")]
-    [Tooltip("¿©·¯ ·Î°í¸¦ ¼ø¼­´ë·Î Àç»ıÇÕ´Ï´Ù. ºñ¾î ÀÖÀ¸¸é ÇöÀç ·Î°í ÀÌ¹ÌÁö ½ºÇÁ¶óÀÌÆ®¸¦ »ç¿ëÇÕ´Ï´Ù.")]
+    [Header("Logo Sequence")]
+    [Tooltip("ì—¬ëŸ¬ ë¡œê³ ë¥¼ ìˆœì„œëŒ€ë¡œ ì¬ìƒí•©ë‹ˆë‹¤. ë¹„ì–´ ìˆìœ¼ë©´ í˜„ì¬ ë¡œê³  ì´ë¯¸ì§€ ìŠ¤í”„ë¼ì´íŠ¸ë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.")]
     [SerializeField] private List<Sprite> logoSequence = new List<Sprite>();
 
-    [Header("Å¸ÀÌ¹Ö")]
+    [Header("Timing")]
     [SerializeField] private float fadeInDuration = 1f;
     [SerializeField] private float holdDuration = 1f;
     [SerializeField] private float fadeOutDuration = 1f;
 
-    [Header("¹è°æ ÆäÀÌµå (¼±ÅÃ)")]
+    [Header("Background Fade (ì„ íƒ)")]
     [SerializeField] private bool useBackgroundFade = false;
     [SerializeField] private float backgroundFadeInDuration = 0.2f;
     [SerializeField] private float backgroundFadeOutDuration = 0.35f;
 
-    [Header("½ºÅµ (¼±ÅÃ)")]
+    [Header("Skip (ì„ íƒ)")]
     [SerializeField] private bool allowSkip = false;
     [SerializeField] private KeyCode skipKey = KeyCode.Space;
 
-    [Header("¿¬Ãâ Á¾·á ÈÄ")]
+    [Header("After Sequence")]
     [SerializeField] private bool loadNextScene = false;
     [SerializeField] private string nextSceneName = string.Empty;
     [SerializeField] private UnityEvent onSequenceCompleted;

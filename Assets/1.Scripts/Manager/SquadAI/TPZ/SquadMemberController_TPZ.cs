@@ -38,10 +38,10 @@ public class SquadMemberController_TPZ : MonoBehaviour
     public string MemberName => memberName;
     public SquadRole Role => role;
 
-    /// <summary>현재 플레이어가 직접 조작하는 PlayerSquadMember인지 여부입니다.</summary>
+    /// <summary>?꾩옱 ?뚮젅?댁뼱媛 吏곸젒 議곗옉?섎뒗 PlayerSquadMember?몄? ?щ??낅땲??</summary>
     public bool IsPlayerSquadMember => isPlayerSquadMember;
 
-    /// <summary>현재 스쿼드 AI가 조작하는 AiSquadMember인지 여부입니다.</summary>
+    /// <summary>?꾩옱 ?ㅼ옘??AI媛 議곗옉?섎뒗 AiSquadMember?몄? ?щ??낅땲??</summary>
     public bool IsAiSquadMember => !isPlayerSquadMember;
     public bool IsAlive => isAlive;
     public bool IsDown => isDown;
@@ -55,7 +55,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
-        // �ʱ� ���� ������ SquadManager_TPZ�� ����
+        // 초기 조작 상태는 여기서 정하지 않는다. SquadManager_TPZ가 스쿼드 전환 시 적용한다.
     }
 
     private void AutoFindReferences()
@@ -99,9 +99,9 @@ public class SquadMemberController_TPZ : MonoBehaviour
     }
 
     /// <summary>
-    /// 이 멤버의 현재 역할을 PlayerSquadMember 또는 AiSquadMember로 설정합니다.
+    /// ??硫ㅻ쾭???꾩옱 ??븷??PlayerSquadMember ?먮뒗 AiSquadMember濡??ㅼ젙?⑸땲??
     /// </summary>
-    /// <param name="value">PlayerSquadMember로 설정하면 true입니다.</param>
+    /// <param name="value">PlayerSquadMember濡??ㅼ젙?섎㈃ true?낅땲??</param>
     public void SetPlayerSquadMember(bool value)
     {
         isPlayerSquadMember = value;
@@ -184,7 +184,7 @@ public class SquadMemberController_TPZ : MonoBehaviour
         if (followerAI != null)
             followerAI.enabled = allowAiSquadMember;
 
-        // PlayerInput�� ��������
+        // PlayerInput도 같은 조작권 전환을 따른다.
         if (playerInput != null)
         {
             if (allowDirectControl)

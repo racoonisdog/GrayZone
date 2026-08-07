@@ -13,24 +13,24 @@ public class GameDataManager : MonoBehaviour
     /// <summary>현재 GameManager 자식에서 활성화된 전역 데이터 매니저 인스턴스입니다.</summary>
     public static GameDataManager Instance { get; private set; }
 
-    [Header("공용 진행 정본")]
+    [Header("Progress")]
     [Tooltip("마지막으로 진행한 스테이지의 영속 ID입니다.")]
     [SerializeField] private string lastStageId = string.Empty;
     [Tooltip("현재 셸터 안정도입니다. 0~100 범위로 유지됩니다.")]
     [Range(0, 100)][SerializeField] private int shelterStability = 100;
     [Tooltip("현재 셸터 진행 일차입니다. 1 이상으로 유지됩니다.")]
     [Min(1)][SerializeField] private int currentDay = 1;
-    [Header("자원 정본")]
+    [Header("Resources")]
     [Tooltip("자원 종류별 현재 보유량입니다. 같은 종류는 런타임에 하나로 정규화됩니다.")]
     [SerializeField] private List<ResourceAmountState> resourceAmounts = new();
     [SerializeField] private List<ItemStorageEntry> itemStorageEntries = new();
 
-    [Header("보유 캐릭터 및 장비 정본")]
+    [Header("Characters & Equipment")]
     [Tooltip("Field와 Shelter가 공통으로 복사해 사용하는 캐릭터 스냅샷 정본입니다.")]
     [FormerlySerializedAs("ownedCharacters")]
     [SerializeField] private List<CharacterSnapshotData> characters = new();
 
-    [Header("셸터 정본")]
+    [Header("Shelter")]
     [Tooltip("현재 출전 대상으로 선택된 캐릭터 런타임 ID 목록입니다. 최대 3명입니다.")]
     [FormerlySerializedAs("battleSquadNpcDefinitionIds")]
     [FormerlySerializedAs("playableSquadDefinitionIds")]
@@ -41,7 +41,7 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
     [SerializeField] private ManufacturingRuntimeData manufacturing = new();
 
-    [Header("최근 필드 정산 정본")]
+    [Header("Last Field Settlement")]
     [Tooltip("마지막으로 정산 반영이 완료된 필드 ID이며 중복 반영 방지 키로 사용합니다.")]
     [FormerlySerializedAs("lastSettledBattleId")]
     [SerializeField] private string lastSettledFieldId = string.Empty;

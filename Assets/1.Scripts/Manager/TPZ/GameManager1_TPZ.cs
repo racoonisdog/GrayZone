@@ -20,7 +20,7 @@ public class GameManager1_TPZ : MonoBehaviour
     private Text bulletText;
     private int maxBullet = 30;
     private int currentBullet = 0;
-    [SerializeField] private GameObject muzzleFlashPrefab; // ProjectÀÇ MuzzleFlash ÇÁ¸®ÆÕ
+    [SerializeField] private GameObject muzzleFlashPrefab; // Projectì˜ MuzzleFlash í”„ë¦¬íŒ¹
     private GameObject muzzleFlashInstance;
     private FollowTransform muzzleFollow;
     private ParticleSystem[] muzzleParticles;
@@ -47,13 +47,13 @@ public class GameManager1_TPZ : MonoBehaviour
 
         InitBullet();
 
-        // --- MuzzleFlash Init (1È¸) ---
+        // --- MuzzleFlash Init (1íšŒ) ---
         if (muzzleFlashInstance != null)
-            return; // ÀÌ¹Ì ¸¸µé¾úÀ¸¸é ¶Ç ¸¸µéÁö ¾ÊÀ½
+            return; // ì´ë¯¸ ë§Œë“¤ì—ˆìœ¼ë©´ ë˜ ë§Œë“¤ì§€ ì•ŠìŒ
 
         if (muzzleFlashPrefab == null)
         {
-            Debug.LogError("[GameManager] muzzleFlashPrefabÀÌ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù.", this);
+            Debug.LogError("[GameManager] muzzleFlashPrefabì´ í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
             return;
         }
 
@@ -138,7 +138,7 @@ public class GameManager1_TPZ : MonoBehaviour
     {
         if (muzzleParticles == null || muzzleFlashInstance == null) return;
 
-        // È¤½Ã ²¨Á®ÀÖÀ¸¸é ´Ù½Ã ÄÑ±â
+        // í˜¹ì‹œ êº¼ì ¸ìˆìœ¼ë©´ ë‹¤ì‹œ ì¼œê¸°
         if (!muzzleFlashInstance.activeInHierarchy)
             muzzleFlashInstance.SetActive(true);
 
@@ -146,7 +146,7 @@ public class GameManager1_TPZ : MonoBehaviour
         {
             if (ps == null) continue;
 
-            // ps°¡ ºÙÀº ¿ÀºêÁ§Æ®°¡ ²¨Á®ÀÖÀ» ¼öµµ ÀÖ¾î¼­ ÀÌ°Íµµ ÄÑ±â
+            // psê°€ ë¶™ì€ ì˜¤ë¸Œì íŠ¸ê°€ êº¼ì ¸ìˆì„ ìˆ˜ë„ ìˆì–´ì„œ ì´ê²ƒë„ ì¼œê¸°
             if (!ps.gameObject.activeInHierarchy)
                 ps.gameObject.SetActive(true);
 
