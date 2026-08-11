@@ -86,6 +86,9 @@ public class SquadManager : MonoBehaviour
     [Tooltip("PlayerSquadMember가 사망해 자동 전환될 때도 Transform 스왑 방식을 사용할지 여부입니다.")]
     [SerializeField] private bool m_swapMemberTransformsOnDeath;
 
+    [Tooltip("다운 강제 전환에서 카메라가 새 캐릭터로 넘어가는 데 쓰는 시간입니다. 이 시간이 지나야 조작권이 넘어가고, 그동안은 AI가 그 캐릭터를 계속 조작합니다.")]
+    [SerializeField] private float m_forcedSwitchCameraDuration = 0.5f;
+
     [Tooltip("전환 입력을 다시 받기까지 기다리는 시간(초)입니다. 연타로 전환이 겹쳐 쌓이는 것을 막습니다. 사망 자동 전환에는 적용하지 않습니다.")]
     [SerializeField] private float m_switchInputCooldown = 0.1f;
 
@@ -146,6 +149,15 @@ public class SquadManager : MonoBehaviour
     private bool m_hasInitialized;
     private bool m_squadEliminationNotified;
     private readonly List<SquadMemberController> m_subscribedMemberDeathEvents = new List<SquadMemberController>();
+
+    /// <summary>진행 중인 다운 강제 전환의 카메라 이동 구간입니다. 없으면 null입니다(§15.1).</summary>
+    private Coroutine m_forcedSwitchRoutine;
+
+    /// <summary>지금 다운 강제 전환의 카메라 이동 중인지 여부입니다.</summary>
+    /// <remarks>
+    /// 이 구간에는 조작권이 아직 넘어가지 않았고 대상 캐릭터를 AI가 조작합니다(§15.1). 진단용입니다.
+    /// </remarks>
+    public bool IsForcedSwitching => m_forcedSwitchRoutine != null;
 
     /// <summary>조작 가능한 스쿼드원이 한 명도 남지 않아 게임오버 조건이 성립했을 때 발생합니다.</summary>
     public event Action OnSquadEliminated;
@@ -600,6 +612,33 @@ public class SquadManager : MonoBehaviour
 
     private bool TrySwitchToNextMember(bool useTransformSwap, bool logDebug = true)
     {
+        if (!TryFindNextSwitchableIndex(out int nextIndex))
+        {
+            return false;
+        }
+
+        SwitchToMember(nextIndex, useTransformSwap, logDebug);
+        return true;
+    }
+
+    /// <summary>
+    /// 고정된 슬롯 순서에 따라 다음으로 조작 가능한 멤버를 찾습니다.
+    /// </summary>
+    /// <param name="index">찾은 멤버의 인덱스입니다.</param>
+    /// <returns>후보를 찾았으면 true입니다.</returns>
+    /// <remarks>
+    /// 공용 문서 `스쿼드 AI 시스템` §15.1의 "고정된 슬롯 순서에 따라 다음 조작 가능한 슬롯을 탐색한다"와
+    /// "다운되거나 전투 이탈한 캐릭터가 배정된 슬롯은 전환 후보에서 제외한다"입니다. 제외 조건은
+    /// <see cref="CanSwitchTo"/>가 들고 있습니다.
+    /// <para>
+    /// 탐색과 전환을 나눈 이유는 강제 전환이 <b>둘 사이에 카메라 이동 구간</b>을 두기 때문입니다(§15.1).
+    /// 즉시 전환하는 경로와 대상만 먼저 정하는 경로가 같은 탐색을 씁니다.
+    /// </para>
+    /// </remarks>
+    private bool TryFindNextSwitchableIndex(out int index)
+    {
+        index = -1;
+
         if (m_squadMembers == null || m_squadMembers.Count == 0)
         {
             return false;
@@ -619,7 +658,7 @@ public class SquadManager : MonoBehaviour
 
             if (CanSwitchTo(nextIndex))
             {
-                SwitchToMember(nextIndex, useTransformSwap, logDebug);
+                index = nextIndex;
                 return true;
             }
         }
@@ -784,7 +823,7 @@ public class SquadManager : MonoBehaviour
             return;
         }
 
-        bool switched = TrySwitchToNextMember(m_swapMemberTransformsOnDeath, false);
+        bool switched = BeginForcedSwitch();
 
         if (!switched && m_logSwitchDebug)
         {
@@ -792,6 +831,83 @@ public class SquadManager : MonoBehaviour
         }
 
         NotifySquadEliminatedIfNeeded();
+    }
+
+    /// <summary>
+    /// 다운 강제 전환을 시작합니다. 카메라만 먼저 옮기고 조작권은 나중에 넘깁니다(§15.1).
+    /// </summary>
+    /// <returns>넘길 수 있는 멤버를 찾아 전환을 시작했으면 true입니다.</returns>
+    /// <remarks>
+    /// 문서가 조작권 이양을 <b>카메라 이동이 끝난 뒤</b>로 규정합니다 - "카메라 이동 중 선택된 슬롯은
+    /// 기존 AI 판단으로 해당 캐릭터를 계속 조작한다", "카메라 이동 완료 시 선택된 슬롯의 역할을 AI 조작에서
+    /// 플레이어 조작으로 변경한다". 그래서 대상만 먼저 정해 카메라를 보내고, 역할 변경은 코루틴이 뒤에 합니다.
+    /// <para>
+    /// <b>이동 시간은 고정값입니다</b>(<see cref="m_forcedSwitchCameraDuration"/>). 두 기획 문서 모두
+    /// 완료 시점을 규정하지 않아 사용자 결정으로 고정 시간을 택했습니다. 카메라가 목표에 닿았는지로
+    /// 판정하면 멀리 떨어진 동료로 갈 때 입력 잠금이 길어지고, 감쇠 특성상 끝이 느려져 임계값에 민감해집니다.
+    /// </para>
+    /// <para>
+    /// 전환 구간 동안 입력은 저절로 막힙니다. 다운된 멤버는 다운으로, 새 멤버는 아직 AI라서 양쪽 모두
+    /// <see cref="SquadMemberController"/>가 <see cref="PlayerInputController"/>를 꺼 둔 상태이기 때문입니다.
+    /// 그래서 "마우스와 카메라 회전 입력을 적용하거나 누적하지 않는다"(`캐릭터 행동 시스템` §14)에
+    /// 별도 잠금 경로가 필요하지 않습니다.
+    /// </para>
+    /// </remarks>
+    private bool BeginForcedSwitch()
+    {
+        if (!TryFindNextSwitchableIndex(out int nextIndex))
+        {
+            return false;
+        }
+
+        // 이미 전환 중이면 그것을 버리고 새로 시작합니다. 앞 대상이 전환 중에 다운됐을 때
+        // 옛 코루틴이 살아 있으면 조작 불가 캐릭터로 조작권이 넘어갑니다.
+        if (m_forcedSwitchRoutine != null)
+        {
+            StopCoroutine(m_forcedSwitchRoutine);
+        }
+
+        m_forcedSwitchRoutine = StartCoroutine(ForcedSwitchRoutine(nextIndex));
+        return true;
+    }
+
+    /// <summary>
+    /// 카메라를 먼저 보내고, 이동 시간이 지난 뒤 조작권을 넘깁니다(§15.1).
+    /// </summary>
+    /// <param name="index">조작권을 넘길 멤버 인덱스입니다.</param>
+    private IEnumerator ForcedSwitchRoutine(int index)
+    {
+        SquadMemberController target = m_squadMembers[index];
+
+        // 역할은 그대로 두고 카메라만 보냅니다. 대상은 아직 AI 조작이라 이 구간에도 스스로 움직입니다.
+        SetCameraTarget(target);
+
+        yield return new WaitForSeconds(Mathf.Max(0.0f, m_forcedSwitchCameraDuration));
+
+        m_forcedSwitchRoutine = null;
+
+        // 이동하는 동안 대상이 다운되거나 죽었을 수 있습니다. 그러면 처음부터 다시 고릅니다.
+        if (!CanSwitchTo(index))
+        {
+            if (!BeginForcedSwitch())
+            {
+                NotifySquadEliminatedIfNeeded();
+            }
+
+            yield break;
+        }
+
+        // 강제 전환은 캐릭터와 위치를 교환하지 않습니다(§15.1).
+        SwitchToMember(index, false, false);
+
+        // AI가 들고 있던 이동 목적지·조준·연속 사격 의도는 여기서 끝납니다. 역할이 바뀌면
+        // SquadMemberController가 SquadAIController를 끄고, 그때 ClearFollowState가 판단 정보를 지웁니다.
+        // 남은 것은 사람 입력 인계뿐입니다(`캐릭터 행동 시스템` §14).
+        PlayerInputController input = target.GetComponent<PlayerInputController>();
+        if (input != null)
+        {
+            input.ApplyForcedSwitchInputHandover();
+        }
     }
 
     /// <summary>조작 가능한 멤버가 한 명도 남지 않았으면 전멸 이벤트를 한 번만 발생시킵니다.</summary>
@@ -1113,12 +1229,26 @@ public class SquadManager : MonoBehaviour
     /// </summary>
     private void UpdateCameraTarget()
     {
-        if (PlayerSquadMember == null)
+        SetCameraTarget(PlayerSquadMember);
+    }
+
+    /// <summary>
+    /// 지정한 멤버의 카메라 타겟을 follow/aim 카메라에 반영합니다.
+    /// </summary>
+    /// <param name="member">카메라가 따라갈 멤버입니다.</param>
+    /// <remarks>
+    /// 조작 멤버가 아닌 대상도 받습니다. 다운 강제 전환은 조작권을 넘기기 <b>전에</b> 카메라부터
+    /// 보내야 하기 때문입니다(§15.1 "카메라 이동 중 선택된 슬롯은 기존 AI 판단으로 해당 캐릭터를
+    /// 계속 조작한다").
+    /// </remarks>
+    private void SetCameraTarget(SquadMemberController member)
+    {
+        if (member == null)
         {
             return;
         }
 
-        Transform target = PlayerSquadMember.CameraTarget;
+        Transform target = member.CameraTarget;
 
         if (target == null)
         {

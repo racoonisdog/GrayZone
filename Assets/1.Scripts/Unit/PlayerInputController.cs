@@ -667,6 +667,44 @@ public class PlayerInputController : MonoBehaviour
     }
 
     /// <summary>
+    /// 다운 강제 전환이 끝났을 때 새 조작 캐릭터에 넘길 입력만 인계합니다.
+    /// </summary>
+    /// <remarks>
+    /// 공용 문서 `캐릭터 행동 시스템` §14가 정본입니다. 일반 전환과 다른 규칙을 씁니다.
+    /// <para>
+    /// <b>이동 방향만 넘깁니다</b>("이동 방향 입력만 전환 완료 시점까지 유지되고 있으면 새 조작
+    /// 캐릭터에 적용한다"). 전환 중 계속 앞으로 가고 있었다면 조작권을 받자마자 멈춰 서지 않습니다.
+    /// </para>
+    /// <para>
+    /// <b>달리기·조준·사격은 누르고 있어도 넘기지 않습니다</b>("전환 중 유지되고 있어도 중립 상태로
+    /// 처리한다", "전환 완료 후 입력을 놓았다가 다시 해야 적용한다"). 그래서 <see cref="ResyncHeldInputFromDevices"/>를
+    /// 쓰지 않습니다. 그쪽은 눌린 것을 전부 다시 읽어 오므로 이 규칙과 정반대입니다.
+    /// </para>
+    /// <para>
+    /// 점프·재장전 같은 시점성 입력은 애초에 유지 상태가 아니라 여기서 다룰 것이 없습니다
+    /// ("적용하거나 버퍼링하지 않는다").
+    /// </para>
+    /// </remarks>
+    public void ApplyForcedSwitchInputHandover()
+    {
+        ResetInputState();
+
+#if ENABLE_INPUT_SYSTEM
+        CachePlayerInput();
+        if (m_playerInput == null || m_playerInput.actions == null)
+        {
+            return;
+        }
+
+        InputAction move = m_playerInput.actions.FindAction("Move", false);
+        if (move != null)
+        {
+            m_move = move.ReadValue<Vector2>();
+        }
+#endif
+    }
+
+    /// <summary>
     /// 상호작용 상태를 유지한 채 이동·시점·행동 입력만 초기화합니다.
     /// </summary>
     public void ResetNonInteractionInputState()
