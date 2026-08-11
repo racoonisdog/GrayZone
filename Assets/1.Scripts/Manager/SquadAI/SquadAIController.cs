@@ -189,6 +189,12 @@ public class SquadAIController : MonoBehaviour
     // 현재 대상 판단입니다. 이동과 별개 축이라 따로 둡니다(§9).
     private readonly SquadAITargeting m_targeting = new SquadAITargeting();
 
+    // 이번 프레임에 무엇을 요청할지 정하는 판정입니다(§18.1). 실행 함수들은 이 결과만 봅니다.
+    private readonly SquadAIDecision m_decision = new SquadAIDecision();
+
+    // 마지막으로 확정한 행동 요청입니다. 실행과 진단이 같은 값을 봐야 어긋나지 않습니다.
+    private SquadAIDecision.Result m_currentDecision;
+
     // 이번 프레임에 겨눌 지점입니다. 유예 중에는 마지막 확인 위치입니다(§8.5).
     private Vector3 m_aimPoint;
     private bool m_hasAimPoint;
@@ -314,6 +320,13 @@ public class SquadAIController : MonoBehaviour
     /// AI마다 따로 정합니다. 컴포넌트가 아니라 이 컨트롤러가 소유하는 일반 객체입니다.
     /// </remarks>
     public SquadAITargeting Targeting => m_targeting;
+
+    /// <summary>이번 프레임에 확정된 행동 요청입니다(§18.1).</summary>
+    /// <remarks>
+    /// 실행 함수들이 보는 것과 같은 값입니다. 어떤 우선순위 단계가 이 행동을 정했는지는
+    /// <see cref="SquadAIDecision.Result.Step"/>에 문서 번호로 들어 있습니다.
+    /// </remarks>
+    public SquadAIDecision.Result CurrentDecision => m_currentDecision;
 
     /// <summary>이번 프레임에 겨누고 있는 지점입니다. 대상이 없으면 false입니다.</summary>
     /// <param name="point">겨누는 지점입니다. 유예 중에는 마지막 확인 위치입니다.</param>
@@ -592,7 +605,7 @@ public class SquadAIController : MonoBehaviour
     /// </remarks>
     private bool HandleAimRotation()
     {
-        if (!m_hasAimPoint)
+        if (!m_currentDecision.Aim || !m_hasAimPoint)
         {
             return false;
         }
@@ -638,17 +651,14 @@ public class SquadAIController : MonoBehaviour
             return;
         }
 
-        // 사격을 막아도 대상 선정과 조준은 그대로 둡니다. 겨누기와 쏘기는 다른 판정이며(§8.5),
-        // 조준까지 끄면 동료가 적을 등지고 서 있어 무엇을 노리는지 볼 수 없습니다.
-        if (!m_debugAllowFiring)
+        // 발사 요청은 판정이 이미 끝냈습니다(§18.1 5). 사격을 막아도 대상 선정과 조준은 그대로 두는데,
+        // 겨누기와 쏘기는 다른 판정이며(§8.5) 조준까지 끄면 동료가 적을 등지고 서 있어
+        // 무엇을 노리는지 볼 수 없기 때문입니다.
+        //
+        // 조준 정렬만 여기서 봅니다. 이번 프레임의 몸 회전 결과에 의존하므로 판정 시점에는 아직
+        // 확정되지 않은 값입니다. 사격선이 막히거나 조준이 어긋나면 즉시 멈춥니다(§10.1, §11.2).
+        if (!m_currentDecision.Fire || !IsAimAligned)
         {
-            m_isBursting = false;
-            return;
-        }
-
-        if (!m_targeting.CanFireAtCurrentTarget || !IsAimAligned)
-        {
-            // 사격선이 막히거나 조준이 어긋나면 즉시 멈춥니다(§10.1, §11.2).
             m_isBursting = false;
             return;
         }
@@ -763,17 +773,11 @@ public class SquadAIController : MonoBehaviour
     }
 
     /// <summary>
-    /// 재장전이 필요한지 판단하고 시작합니다(§12.1).
+    /// 확정된 재장전 요청을 시작합니다(§12.1).
     /// </summary>
     /// <remarks>
-    /// <b>빈 탄창은 조건 없이 재장전합니다.</b> 문서가 "현재 탄창이 0이고 예비 탄약이 있으면 AI가 직접
-    /// 재장전을 요청한다", "헛방 피드백을 재장전 트리거로 사용할 필요가 없다"고 규정합니다.
-    /// 즉 플레이어처럼 빈 방아쇠를 당겨 볼 필요가 없습니다.
-    /// <para>
-    /// <b>전술 재장전</b>(탄이 남았는데 미리 채우는 것)은 조건이 더 붙습니다. 개인 사격선이 확보된 적이
-    /// 있으면 시작하지 않고, 합류 같은 상위 행동이 없을 때만 합니다. 잔탄 기준이 밸런스 영역이라
-    /// 기본값 0(=사용 안 함)으로 두었습니다.
-    /// </para>
+    /// 빈 탄창인지 전술 재장전인지, 지금 해도 되는지는 <see cref="SquadAIDecision"/>이 §18.1 순서로
+    /// 이미 정했습니다(빈 탄창은 3번, 전술은 6번). 여기서는 그 요청을 수행만 합니다.
     /// <para>
     /// 시작한 재장전은 중간에 끊지 않습니다(§12.2 "새로운 적이 사격 가능한 상태가 되어도 완료한다").
     /// <see cref="Gun"/>이 <c>Invoke</c>로 완료를 예약하므로 여기서 아무것도 하지 않으면 그대로 완료됩니다.
@@ -781,32 +785,9 @@ public class SquadAIController : MonoBehaviour
     /// </remarks>
     private void HandleReload()
     {
-        // 사격을 막아 둔 동안에는 재장전도 하지 않습니다. 쏘지 않으니 탄이 줄지 않고,
-        // 그 상태에서 재장전만 돌면 무엇을 보고 있는지 헷갈립니다.
-        if (!m_debugAllowFiring)
-        {
-            return;
-        }
-
-        if (m_weapon == null || m_weapon.IsReloading || !m_weapon.CanReload)
-        {
-            return;
-        }
-
-        // 빈 탄창은 무조건 재장전합니다.
-        if (m_weapon.CurrentBullet <= 0)
-        {
-            m_weapon.StartReload();
-            return;
-        }
-
-        if (m_tacticalReloadThreshold <= 0 || m_weapon.CurrentBullet > m_tacticalReloadThreshold)
-        {
-            return;
-        }
-
-        // 전술 재장전: 지금 쏠 수 있는 적이 있거나 합류 중이면 시작하지 않습니다.
-        if (m_targeting.CanFireAtCurrentTarget || m_isJoining)
+        // 무엇을 재장전할지는 판정이 이미 끝냈습니다(§18.1 3과 6). 여기서는 요청만 수행합니다.
+        // 진행 중인 재장전은 판정이 None을 돌려주므로 자연히 끊기지 않습니다(§12.2).
+        if (m_currentDecision.Reload == SquadAIReloadIntent.None || m_weapon == null)
         {
             return;
         }
@@ -861,6 +842,9 @@ public class SquadAIController : MonoBehaviour
         // 문서도 AI 슬롯이 비활성화되면 판단 정보를 제거하라고 규정합니다(§9.5).
         m_targeting.Clear();
 
+        // 마지막 행동 요청도 비웁니다. 남겨 두면 다시 AI가 된 첫 프레임에 옛 요청이 한 번 실행됩니다.
+        m_currentDecision = default;
+
         // 전투 자세도 내립니다. 그러지 않으면 조준 리그가 올라간 채로 남아, 조작 멤버가 됐을 때
         // AimController가 자기 상태에서 시작하지 못하고 어긋난 자세를 물려받습니다.
         m_hasAimPoint = false;
@@ -882,8 +866,22 @@ public class SquadAIController : MonoBehaviour
     }
 
     /// <summary>
-    /// 리더 위치를 주기적으로 갱신하고, 이동 방향 회전과 애니메이션 파라미터를 처리합니다.
+    /// 정보를 갱신하고, 이번 프레임의 행동 요청을 정한 뒤, 그 요청을 실행합니다.
     /// </summary>
+    /// <remarks>
+    /// 세 구간이 이 순서로 고정입니다.
+    /// <para>
+    /// 1. <b>정보 갱신</b> - 대상 판단(§9)과 이동 축 상태(경로상 거리, 합류 히스테리시스).
+    ///    무엇을 할지는 아직 정하지 않습니다.
+    /// 2. <b>판정</b> - <see cref="SquadAIDecision"/>이 §18.1의 우선순위 7단계를 위에서부터 확인해
+    ///    이번 프레임의 요청을 확정합니다. 우선순위는 오직 그 안에만 있습니다.
+    /// 3. <b>실행</b> - 아래 함수들은 요청을 수행만 하고 "할지 말지"를 다시 판단하지 않습니다.
+    /// </para>
+    /// <para>
+    /// 이동만 갱신 주기를 따릅니다. 목적지를 매 프레임 다시 고르면 경로 계산 비용이 크고 발이 떨립니다
+    /// (§6.3). 조준·사격·재장전은 매 프레임 돕니다.
+    /// </para>
+    /// </remarks>
     private void Update()
     {
         if (!m_hasRequiredReferences)
@@ -891,27 +889,46 @@ public class SquadAIController : MonoBehaviour
             return;
         }
 
+        // --- 1. 정보 갱신 ---
+
         // 대상 판단은 이동과 별개 축이라 이동을 못 하는 상황에서도 계속 돕니다.
         // 다만 다운·전투 이탈은 판단 자체를 멈춰야 하므로 Context.CanEngage가 걸러 냅니다(§9.5).
         UpdateTargeting();
 
-        if (!CanFollow(out Transform leader))
-        {
-            UpdateMoveAnimation(Vector3.zero);
-            return;
-        }
+        bool canFollow = CanFollow(out Transform leader);
 
-        if (leader == transform)
-        {
-            StopAgent();
-            UpdateMoveAnimation(Vector3.zero);
-            return;
-        }
+        // 자기 자신이 리더인 경우는 갈 곳이 없는 것이지 행동 제한이 아니지만, 결과가 같으므로
+        // 같은 분기로 접습니다. 다만 이쪽은 명시적으로 세워야 합니다.
+        bool selfIsLeader = canFollow && leader == transform;
+        bool canAct = canFollow && !selfIsLeader;
 
-        if (Time.time >= m_nextUpdateTime)
+        bool movementDue = canAct && Time.time >= m_nextUpdateTime;
+        if (movementDue)
         {
             m_nextUpdateTime = Time.time + m_updateInterval;
-            UpdateFollowTarget(leader);
+            movementDue = UpdateJoinState(leader);
+        }
+
+        // --- 2. 판정 ---
+
+        m_currentDecision = m_decision.Resolve(BuildDecisionContext(canAct, selfIsLeader));
+
+        // --- 3. 실행 ---
+
+        if (m_currentDecision.Kind == SquadAIActionKind.Restricted)
+        {
+            if (m_currentDecision.HoldPosition)
+            {
+                StopAgent();
+            }
+
+            UpdateMoveAnimation(Vector3.zero);
+            return;
+        }
+
+        if (movementDue)
+        {
+            ExecuteMovement(leader);
         }
 
         // 조준이 이동 방향 회전을 이깁니다. 둘 다 몸을 돌리므로 한쪽만 이겨야 하고,
@@ -925,6 +942,40 @@ public class SquadAIController : MonoBehaviour
         HandleReload();
         HandleCombatStance();
         HandleAnimation();
+    }
+
+    /// <summary>
+    /// 판정에 넘길 현재 사정을 모읍니다.
+    /// </summary>
+    /// <param name="canAct">지금 행동 요청을 낼 수 있는 상태인지입니다.</param>
+    /// <param name="holdPosition">활동 제한 상태에서 이동을 멈춰 세워야 하는지입니다.</param>
+    /// <returns>판정에 넘길 사정입니다.</returns>
+    /// <remarks>
+    /// 컴포넌트를 뒤지는 일은 여기서 끝냅니다. <see cref="SquadAIDecision"/>은 규칙만 들고 있어야
+    /// 우선순위가 한눈에 읽힙니다. <see cref="SquadAITargeting"/>과 같은 방식입니다.
+    /// </remarks>
+    private SquadAIDecision.Context BuildDecisionContext(bool canAct, bool holdPosition)
+    {
+        return new SquadAIDecision.Context
+        {
+            CanAct = canAct,
+            HoldPosition = holdPosition,
+
+            // §16 자동 구조는 미구현입니다. 판정에 자리는 있고 입력이 아직 없습니다.
+            RescueRequested = false,
+
+            HasWeapon = m_weapon != null,
+            IsReloading = m_weapon != null && m_weapon.IsReloading,
+            CanStartReload = m_weapon != null && m_weapon.CanReload,
+            CurrentBullet = m_weapon != null ? m_weapon.CurrentBullet : 0,
+            TacticalReloadThreshold = m_tacticalReloadThreshold,
+            FiringEnabled = m_debugAllowFiring,
+
+            IsJoining = m_isJoining,
+            HasTarget = m_targeting.CurrentTarget != null,
+            HasAimPoint = m_hasAimPoint,
+            CanFireAtTarget = m_targeting.CanFireAtCurrentTarget,
+        };
     }
 
     /// <summary>
@@ -998,21 +1049,19 @@ public class SquadAIController : MonoBehaviour
     }
 
     /// <summary>
-    /// 플레이어까지의 경로상 거리로 합류 여부를 판정하고, 필요하면 합류 목적지를 골라 Agent에 지시합니다.
+    /// 플레이어까지의 경로상 거리를 재고 합류 여부를 갱신합니다. 이동은 실행하지 않습니다.
     /// </summary>
     /// <param name="leader">따라갈 플레이어 조작 캐릭터의 Transform입니다.</param>
+    /// <returns>이동할 수 있는 상태이면 true입니다. 경로가 없으면 false입니다.</returns>
     /// <remarks>
-    /// 공용 문서 `스쿼드 AI 시스템` v0.2 §6 기준입니다. 세 가지가 이 규칙의 핵심입니다.
+    /// 공용 문서 `스쿼드 AI 시스템` v0.2 §6 기준입니다. <b>직선거리를 쓰지 않습니다</b>(§6.2) - 벽 하나를
+    /// 사이에 두면 직선으로는 가까워도 실제로는 멀리 돌아야 하므로 판정에 경로상 거리를 씁니다.
     /// <para>
-    /// 1. <b>직선거리를 쓰지 않습니다</b>(§6.2). 벽 하나를 사이에 두면 직선으로는 가까워도 실제로는 멀리 돌아야
-    ///    하므로, 판정에 경로상 거리를 씁니다.
-    /// 2. <b>고정 자리를 쓰지 않습니다</b>(§6.1이 `슬롯별 고정 위치`를 금지). 목적지는 플레이어 주변에서
-    ///    그때그때 가장 짧게 갈 수 있는 빈 자리를 고릅니다(§6.3).
-    /// 3. <b>목적지를 매번 다시 고르지 않습니다</b>(§6.3). 기존 목적지가 완료 반경 안이고 아직 갈 수 있으면
-    ///    그대로 씁니다. 매번 고르면 후보가 미세하게 바뀌며 발이 떨립니다.
+    /// 여기서 갱신한 합류 여부를 <see cref="SquadAIDecision"/>이 §18.1 4번 입력으로 읽습니다. 그래서
+    /// 이 함수는 판정보다 먼저 돌아야 하고, 판정과 실행 사이에 끼어들면 안 됩니다.
     /// </para>
     /// </remarks>
-    private void UpdateFollowTarget(Transform leader)
+    private bool UpdateJoinState(Transform leader)
     {
         ApplyAvoidancePriority(ResolveMemberOrder());
 
@@ -1024,7 +1073,7 @@ public class SquadAIController : MonoBehaviour
             StopAgent();
             m_isJoining = false;
             ApplyFollowSpeed(leader);
-            return;
+            return false;
         }
 
         // 합류는 시작 거리에서 켜고 완료 거리에서 끕니다(§6.2). 한 거리로 판정하면 경계에서 뒤집힙니다.
@@ -1048,9 +1097,26 @@ public class SquadAIController : MonoBehaviour
             m_isJoining = true;
         }
 
-        // 합류가 아니면 전투 위치 조정을 먼저 봅니다. 합류가 전투 위치 조정보다 우선이므로(§18.1)
-        // 이 분기는 합류 판정 뒤에 있습니다. 옮길 이유가 없으면 아래 동행 로직이 그대로 이어집니다.
-        if (!m_isJoining && TryResolveCombatPosition(leader, out Vector3 combatPosition))
+        return true;
+    }
+
+    /// <summary>
+    /// 확정된 행동 요청에 맞춰 이동만 실행합니다.
+    /// </summary>
+    /// <param name="leader">따라갈 플레이어 조작 캐릭터의 Transform입니다.</param>
+    /// <remarks>
+    /// 여기서는 "어느 행동인가"를 다시 판단하지 않습니다. 그것은 <see cref="SquadAIDecision"/>이 §18.1
+    /// 순서대로 이미 정했습니다. 이 함수가 하는 판단은 <b>그 행동을 이룰 자리가 실제로 있는가</b>뿐입니다.
+    /// <para>
+    /// 전투 위치를 찾지 못하면 동행 경로로 흘러내립니다. §10.2가 "조건을 충족하는 위치가 없으면 무리하게
+    /// 이동하지 않고 동행 행동을 유지한다"고 규정하므로, 자리가 없을 때 제자리에서 쏘는 것이 맞습니다.
+    /// </para>
+    /// </remarks>
+    private void ExecuteMovement(Transform leader)
+    {
+        SquadAIActionKind kind = m_currentDecision.Kind;
+
+        if (kind == SquadAIActionKind.Combat && TryResolveCombatPosition(leader, out Vector3 combatPosition))
         {
             m_destination = combatPosition;
             m_hasDestination = true;
@@ -1073,7 +1139,10 @@ public class SquadAIController : MonoBehaviour
         }
 
         // 완료 반경 안에 이미 서 있고 자리가 유효하면 위치를 조정하지 않습니다(§6.1).
-        if (!m_isJoining && m_pathDistanceToLeader <= m_joinCompleteDistance && IsPositionClear(transform.position))
+        // 합류 중에는 아직 도착하지 않은 것이므로 이 분기를 타지 않습니다.
+        if (kind != SquadAIActionKind.Join
+            && m_pathDistanceToLeader <= m_joinCompleteDistance
+            && IsPositionClear(transform.position))
         {
             StopAgent();
             m_hasDestination = false;

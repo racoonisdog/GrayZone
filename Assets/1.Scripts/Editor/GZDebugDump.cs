@@ -126,6 +126,20 @@ namespace GrayZone.EditorTools
                         bursting = ai.IsBursting,
                         allowFiring = ai.AllowFiring,
                     },
+                    // AI 행동 판정(§18.1). step은 이 결정을 확정한 문서 우선순위 번호입니다.
+                    // 컴포넌트가 꺼져 있으면 Update가 돌지 않아 판정도 없습니다. 그때 마지막 값을 그대로
+                    // 내보내면 조작 멤버가 판정을 내린 것처럼 읽히므로 null로 비웁니다.
+                    decision = (ai == null || !ai.enabled) ? null : new
+                    {
+                        kind = ai.CurrentDecision.Kind.ToString(),
+                        step = ai.CurrentDecision.Step.ToString(),
+                        aim = ai.CurrentDecision.Aim,
+                        fire = ai.CurrentDecision.Fire,
+                        reload = ai.CurrentDecision.Reload.ToString(),
+                        holdPosition = ai.CurrentDecision.HoldPosition,
+                        joining = ai.IsJoining,
+                        repositioning = ai.IsRepositioning,
+                    },
                 });
             }
 
