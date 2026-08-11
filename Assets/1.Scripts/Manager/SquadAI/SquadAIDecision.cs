@@ -177,6 +177,13 @@ public class SquadAIDecision
         /// <summary>발사 요청입니다. 조준 정렬 여부는 실행 계층이 따로 봅니다.</summary>
         public bool Fire;
 
+        /// <summary>달려서 이동할지입니다(§13).</summary>
+        /// <remarks>
+        /// 합류일 때만 켜집니다. 전투 중 이동은 §10.3이 개인적인 회피를 위한 달리기 반복을 금지하고,
+        /// 평상시 동행은 걷기에 여유 배수를 얹는 것으로 충분합니다.
+        /// </remarks>
+        public bool Sprint;
+
         /// <summary>새로 시작할 재장전입니다.</summary>
         public SquadAIReloadIntent Reload;
     }
@@ -226,6 +233,14 @@ public class SquadAIDecision
         {
             result.Kind = SquadAIActionKind.Join;
             result.Aim = context.HasAimPoint;
+
+            // 재장전 중에는 걷습니다(§13 "진행 중인 재장전이 있으면 일반 이동과 함께 완료하고 필요한
+            // 경우 이후 달린다", §18.2 "재장전 중 합류에 달리기 필요 -> 재장전 완료 후 달리기 재평가").
+            // 합류를 멈추는 것이 아니라 이동 방식만 걷기로 두는 것이므로 §18.1 4번은 그대로 유지됩니다.
+            // 재장전이 끝나면 이 조건이 저절로 풀려 달리기가 다시 켜집니다. 그것이 "재평가"입니다.
+            // 이번 프레임에 재장전을 시작하기로 했다면 그것도 곧 진행 중이 되므로 함께 봅니다.
+            result.Sprint = !context.IsReloading && result.Reload == SquadAIReloadIntent.None;
+
             result.Step = result.Reload == SquadAIReloadIntent.EmptyMagazine
                 ? SquadAIDecisionStep.PendingReload
                 : SquadAIDecisionStep.Join;

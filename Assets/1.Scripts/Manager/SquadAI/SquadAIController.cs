@@ -1072,7 +1072,10 @@ public class SquadAIController : MonoBehaviour
         {
             StopAgent();
             m_isJoining = false;
-            ApplyFollowSpeed(leader);
+
+            // 합류를 접었으므로 달리기도 내립니다. 이 시점에는 이번 프레임 판정이 아직 없어
+            // 직전 값을 쓰면 달리기 속도가 남습니다.
+            ApplyFollowSpeed(leader, false);
             return false;
         }
 
@@ -1122,16 +1125,8 @@ public class SquadAIController : MonoBehaviour
             m_hasDestination = true;
 
             // 전투 중 이동은 걷기입니다. 달리면 조준이 흔들리고, §10.3도 개인적인 회피를 위한
-            // 달리기 반복을 금지합니다. ApplyFollowSpeed가 m_isSprinting을 합류 여부로 다시 쓰므로
-            // 그 뒤에 걷기 속도를 덮어씁니다.
-            ApplyFollowSpeed(leader);
-            m_isSprinting = false;
-
-            ThirdPersonController leaderController = ResolveLeaderController(leader);
-            if (leaderController != null)
-            {
-                m_agent.speed = leaderController.MoveSpeed * Mathf.Max(1.0f, m_followSpeedMultiplier);
-            }
+            // 달리기 반복을 금지합니다. 판정이 Combat에는 달리기를 얹지 않으므로 그대로 따릅니다.
+            ApplyFollowSpeed(leader, m_currentDecision.Sprint);
 
             m_agent.isStopped = false;
             m_agent.SetDestination(combatPosition);
@@ -1146,21 +1141,21 @@ public class SquadAIController : MonoBehaviour
         {
             StopAgent();
             m_hasDestination = false;
-            ApplyFollowSpeed(leader);
+            ApplyFollowSpeed(leader, m_currentDecision.Sprint);
             return;
         }
 
         if (!TryResolveDestination(leader, out Vector3 destination))
         {
             StopAgent();
-            ApplyFollowSpeed(leader);
+            ApplyFollowSpeed(leader, m_currentDecision.Sprint);
             return;
         }
 
         m_destination = destination;
         m_hasDestination = true;
 
-        ApplyFollowSpeed(leader);
+        ApplyFollowSpeed(leader, m_currentDecision.Sprint);
 
         m_agent.isStopped = false;
         m_agent.SetDestination(destination);
@@ -1617,21 +1612,23 @@ public class SquadAIController : MonoBehaviour
     }
 
     /// <summary>
-    /// 합류 중인지에 따라 걷기와 달리기 속도를 고릅니다.
+    /// 확정된 달리기 요청에 맞춰 Agent 이동 속도를 고릅니다.
     /// </summary>
     /// <param name="leader">속도 기준을 읽어올 플레이어 조작 캐릭터입니다.</param>
+    /// <param name="sprint">달려야 하면 true입니다.</param>
     /// <remarks>
     /// §6.1은 "플레이어의 달리기 상태를 그대로 복사하지 않는다", §6.2는 "합류 시작 조건을 충족하면
-    /// 달리기를 사용한다"고 규정합니다. 그래서 리더가 달리는지가 아니라 <b>내가 합류 중인지</b>로 정합니다.
+    /// 달리기를 사용한다"고 규정합니다. 그래서 리더가 달리는지는 보지 않습니다. 달릴지 말지는
+    /// <see cref="SquadAIDecision"/>이 정하고(§13의 재장전 중 걷기 포함) 여기서는 속도만 고릅니다.
     /// 속도값 자체는 리더의 <see cref="ThirdPersonController"/>에서 읽어 플레이어와 어긋나지 않게 합니다.
     /// <para>
     /// 멈추는 경로에서도 이 함수를 부릅니다(실측). 그러지 않으면 합류를 끝낸 뒤에도 Agent에 달리기 속도가
     /// 남아, 다음에 다시 움직이기 시작하는 첫 프레임이 달리기 속도로 출발합니다.
     /// </para>
     /// </remarks>
-    private void ApplyFollowSpeed(Transform leader)
+    private void ApplyFollowSpeed(Transform leader, bool sprint)
     {
-        m_isSprinting = m_isJoining;
+        m_isSprinting = sprint;
 
         ThirdPersonController leaderController = ResolveLeaderController(leader);
         if (leaderController == null)

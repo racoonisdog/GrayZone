@@ -135,6 +135,7 @@ namespace GrayZone.EditorTools
                         step = ai.CurrentDecision.Step.ToString(),
                         aim = ai.CurrentDecision.Aim,
                         fire = ai.CurrentDecision.Fire,
+                        sprint = ai.CurrentDecision.Sprint,
                         reload = ai.CurrentDecision.Reload.ToString(),
                         holdPosition = ai.CurrentDecision.HoldPosition,
                         joining = ai.IsJoining,
