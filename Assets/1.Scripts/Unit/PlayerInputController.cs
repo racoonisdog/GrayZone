@@ -550,13 +550,32 @@ public class PlayerInputController : MonoBehaviour
     /// </remarks>
     public void SetPlayerCursorMode(bool cursorMode)
     {
-        m_isInputEnabled = !cursorMode;
-        ResetInputState();
-        SetCursorInputForLook(!cursorMode);
+        SetInputGate(!cursorMode);
         SetCursorLocked(!cursorMode);
         Cursor.visible = cursorMode;
+    }
 
-        if (m_isInputEnabled)
+    /// <summary>
+    /// 이 멤버의 게임플레이 입력 게이트만 여닫습니다. OS 커서는 건드리지 않습니다.
+    /// </summary>
+    /// <param name="enabled">입력을 받으면 true, 막으면 false입니다.</param>
+    /// <remarks>
+    /// <b>조작 중이 아닌 멤버에도 걸기 위한 진입점입니다.</b> 커서는 화면에 하나뿐이라 스쿼드 전체에
+    /// 걸 수 없지만, 이 게이트는 멤버마다 따로 있고 <b>컴포넌트가 꺼져도 값이 남습니다</b>.
+    /// 그래서 조작 멤버에게만 걸면, 걸 때와 풀 때의 조작 멤버가 다를 경우 한쪽이 막힌 채 남습니다.
+    /// 실제로 그 경로로 "전환하면 총이 안 나가고 마우스 시점도 안 먹는" 결함이 보고됐습니다.
+    /// <para>
+    /// 스쿼드 전체 적용은 <see cref="SquadManager"/>가 멤버를 순회하며 이 함수를 부르는 형태로 합니다.
+    /// 커서를 함께 다루는 <see cref="SetPlayerCursorMode"/>는 조작 멤버 하나에만 씁니다.
+    /// </para>
+    /// </remarks>
+    public void SetInputGate(bool enabled)
+    {
+        m_isInputEnabled = enabled;
+        ResetInputState();
+        SetCursorInputForLook(enabled);
+
+        if (enabled)
         {
             ResyncHeldInputFromDevices();
         }

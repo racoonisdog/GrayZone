@@ -265,14 +265,17 @@ public class FieldManager : MonoBehaviour, IInputModeController
             switch (mode)
             {
                 case InputMode.UI:
-                    m_cachedAimController.ForceStopAim();
-                    m_cachedThirdPersonController.SetLockCameraPosition(true);
+                    // 멤버별 상태는 스쿼드 전원에게 겁니다. 조작 멤버에게만 걸면 걸 때와 풀 때의
+                    // 조작 멤버가 다를 경우 한쪽이 막힌 채 남습니다(다운 강제 전환은 UI 중에도 일어납니다).
+                    m_squadManager.ApplyInputModeToSquad(false);
+
+                    // 커서는 화면에 하나뿐이라 조작 멤버 쪽에서 한 번만 다룹니다.
                     m_cachedPlayerInputController.SetPlayerCursorMode(true);
                     break;
 
                 case InputMode.Gameplay:
+                    m_squadManager.ApplyInputModeToSquad(true);
                     m_cachedPlayerInputController.SetPlayerCursorMode(false);
-                    m_cachedThirdPersonController.SetLockCameraPosition(false);
                     break;
 
                 default:

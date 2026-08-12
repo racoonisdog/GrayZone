@@ -931,6 +931,60 @@ public class SquadManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 입력 모드에 따른 멤버별 상태를 스쿼드 전원에게 적용합니다.
+    /// </summary>
+    /// <param name="gameplayEnabled">게임플레이 입력을 받으면 true, UI 모드처럼 막으면 false입니다.</param>
+    /// <remarks>
+    /// <b>조작 멤버에게만 걸면 안 되는 것들만 여기 모읍니다.</b> 입력 게이트와 카메라 잠금은 멤버마다
+    /// 따로 있고 컴포넌트가 꺼져도 값이 남습니다. 그래서 걸 때와 풀 때의 조작 멤버가 다르면
+    /// 한쪽이 막힌 채 남고, 나중에 그 멤버로 전환하면 사격도 시점 회전도 죽습니다(실제 보고된 결함).
+    /// <para>
+    /// 조작 멤버가 바뀌는 경로는 입력만이 아닙니다. 다운 강제 전환은 체력 이벤트로 일어나 UI가 열린
+    /// 중에도 발생합니다. 그래서 "지금 조작 멤버"를 기준으로 거는 방식은 원리적으로 새 나갑니다.
+    /// </para>
+    /// <para>
+    /// 커서는 화면에 하나뿐이라 여기서 다루지 않습니다. 그쪽은 모드 소유자가 조작 멤버 하나에 겁니다.
+    /// </para>
+    /// </remarks>
+    public void ApplyInputModeToSquad(bool gameplayEnabled)
+    {
+        if (m_squadMembers == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < m_squadMembers.Count; i++)
+        {
+            SquadMemberController member = m_squadMembers[i];
+            if (member == null)
+            {
+                continue;
+            }
+
+            PlayerInputController input = member.GetComponent<PlayerInputController>();
+            if (input != null)
+            {
+                input.SetInputGate(gameplayEnabled);
+            }
+
+            ThirdPersonController controller = member.GetComponent<ThirdPersonController>();
+            if (controller != null)
+            {
+                controller.SetLockCameraPosition(!gameplayEnabled);
+            }
+
+            if (!gameplayEnabled)
+            {
+                AimController aim = member.GetComponent<AimController>();
+                if (aim != null)
+                {
+                    aim.ForceStopAim();
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// 지정한 인덱스의 스쿼드 멤버가 조작 대상으로 전환 가능한지 확인합니다.
     /// </summary>
     /// <param name="index">검사할 스쿼드 멤버 인덱스입니다.</param>
