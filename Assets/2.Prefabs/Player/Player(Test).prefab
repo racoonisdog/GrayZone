@@ -927,6 +927,9 @@ MonoBehaviour:
   m_sprintForwardAngle: 60
   m_sprintReleaseMargin: 20
   m_moveDirectionDamp: 0.1
+  m_moveDirectionSnapAngle: 100
+  m_moveDirectionFlipDuration: 0.06
+  m_moveStartStopDuration: 0.18
   m_crouchSpeed: 1.2
   m_crouchHeight: 1.1
   m_crouchTransitionDuration: 0.2
@@ -934,9 +937,9 @@ MonoBehaviour:
   m_rotationSmoothTime: 0.12
   m_speedChangeRate: 10
   m_jumpHeight: 1.2
-  m_gravity: -15
-  m_jumpTimeout: 0.5
-  m_fallTimeout: 0.15
+  m_gravity: -22
+  m_jumpTimeout: 0.15
+  m_fallTimeout: 0.07
   m_groundedOffset: -0.14
   m_groundedRadius: 0.28
   m_groundLayers:
@@ -1037,6 +1040,7 @@ MonoBehaviour:
   m_landingAudioClip: {fileID: 0}
   m_footstepAudioClips: []
   m_footstepAudioVolume: 0.5
+  m_debugDrawGroundCheck: 1
 --- !u!114 &3705982125215987319
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1125,10 +1129,11 @@ MonoBehaviour:
     m_Bits: 0
   m_hitscanBlockMarker: {fileID: 6357877199343085097}
   m_hitscanBlockMarkerOffset: 0.01
-  m_hipfireHoldDuration: 2
+  m_hipfireHoldDuration: 0
   m_adsFov: 20
   m_hipfireFov: 30
   m_zoomLerpSpeed: 10
+  m_recoilAnimationWeight: 1
   m_enableAimRecoil: 1
   m_enableVisualKick: 1
   m_visualKickRecoveryMode: 0
@@ -1360,12 +1365,12 @@ MonoBehaviour:
   m_isPlayerSquadMember: 1
   m_isAlive: 1
   m_isDown: 0
-  m_playerInputs: {fileID: 0}
+  m_playerInputController: {fileID: 0}
   m_thirdPersonController: {fileID: 6619302410003073894}
   m_aimController: {fileID: 3717923713268448865}
   m_weaponController: {fileID: 0}
   m_animator: {fileID: 1181764748249198491}
-  m_followerAI: {fileID: 2541699958142911339}
+  m_squadAIController: {fileID: 2541699958142911339}
   m_playerInput: {fileID: 7621038594789695661}
   m_cameraTarget: {fileID: 7990953520031437800}
   m_navMeshAgent: {fileID: 6562217736186404616}
@@ -1384,11 +1389,40 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 92fb0dca7ec123849a2b2daf7f0daba3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SquadFollowerAI
-  m_followDistance: 2.5
-  m_stopDistance: 1.5
+  m_joinStartDistance: 7
+  m_joinCompleteDistance: 2
+  m_followSpeedMultiplier: 1.15
   m_updateInterval: 0.15
-  m_followOffset: {x: 0, y: 0, z: -2}
+  m_destinationCandidateCount: 8
+  m_destinationClearance: 0.9
+  m_baseAvoidancePriority: 50
+  m_sightRange: 20
+  m_sightAngle: 120
+  m_eyePoint: {fileID: 0}
+  m_eyeHeight: 1.6
+  m_reevaluateInterval: 0.5
+  m_targetHoldGrace: 5
+  m_distanceThreatWeight: 10
+  m_distanceThreatFalloff: 30
+  m_currentTargetBonus: 3
+  m_damageThreatPerPoint: 0.5
+  m_damageThreatDecayPerSecond: 1
+  m_sustainedBlockDuration: 1
+  m_allyBlockRadius: 0.6
+  m_reactionTime: 0.35
+  m_aimRotationSpeed: 12
+  m_aimToleranceAngle: 8
+  m_burstDuration: 0.8
+  m_burstRestDuration: 0.5
+  m_aimErrorRadius: 0.35
+  m_tacticalReloadThreshold: 0
+  m_keepAwayDistance: 3
+  m_retreatStep: 2.5
+  m_combatPositionInterval: 0.4
   m_rotationSpeed: 10
+  m_moveStateBlendDuration: 0.2
+  m_debugAllowFiring: 1
+  m_debugDrawJoinDistances: 0
 --- !u!195 &6562217736186404616
 NavMeshAgent:
   m_ObjectHideFlags: 0
@@ -1423,7 +1457,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 12a4bcce06815ce4483818d52e4c12bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SOBinder
-  m_sharedBalance: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
+  m_sharedBalance: {fileID: 0}
   m_sharedFeedback: {fileID: 0}
   m_includeChildren: 1
   m_logResult: 0
@@ -2394,7 +2428,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4693724506572384012, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
       propertyPath: m_hitscanLayerMask.m_Bits
-      value: 4294958591
+      value: 4294942207
       objectReference: {fileID: 0}
     - target: {fileID: 5108517961052224996, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
       propertyPath: m_Name

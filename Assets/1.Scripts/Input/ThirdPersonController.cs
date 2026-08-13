@@ -1929,7 +1929,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
-    /// 입력 상태, 전력질주 상태, 조준/재장전 상태를 반영해 캐릭터를 이동 및 회전시킵니다.
+    /// 입력 상태, 전력질주 상태, 전투 자세를 반영해 캐릭터를 이동 및 회전시킵니다.
     /// </summary>
     private void Move()
     {
@@ -1949,12 +1949,20 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         float targetSpeed = m_input.sprint && m_canSprintForward ? m_sprintSpeed : m_moveSpeed;
 
         // 속도 제약은 시점이 아니라 상태에 걸립니다. 비전투 백뷰에서는 전력질주가 그대로 살아 있습니다.
-        if (m_isCombatStance || m_isReload)
+        //
+        // 재장전은 여기에 넣지 않습니다. 달리면서 재장전하는 것이 지금의 조작 방침이라,
+        // 재장전이 속도를 걷기로 끌어내리면 달리기가 사실상 끊깁니다. 상체는 Action Layer(상체 마스크)의
+        // 재장전 클립이, 하체는 Base Layer 조준 분기의 달리기 티어가 각각 담당하므로 겹쳐도 자세가 성립합니다.
+        //
+        // 기획 편차: 캐릭터 행동 시스템 §6 「달리기 중에는 재장전을 시작할 수 없다」, §10.2 「달리기와
+        // 구조는 재장전을 보류할 수 있다」와 어긋납니다. 사용자 지시로 코드를 먼저 바꾼 상태이며,
+        // 문서 개정 전까지 이 편차를 문서 쪽 실수로 오해해 되돌리지 말 것.
+        if (m_isCombatStance)
         {
             targetSpeed = m_moveSpeed;
         }
 
-        // 웅크리기는 전투/재장전보다 뒤에서 덮습니다. 조준하며 웅크려도 웅크림 속도가 유지되어야 하고,
+        // 웅크리기는 전투 자세보다 뒤에서 덮습니다. 조준하며 웅크려도 웅크림 속도가 유지되어야 하고,
         // 이 순서 덕분에 웅크린 동안은 전력질주가 따로 막지 않아도 자연히 잠깁니다.
         if (m_input.Crouch)
         {
@@ -2184,6 +2192,9 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     ///
     /// 전력질주 판정에 <see cref="CanSprintTowardInput"/>을 함께 보는 이유는 실제 속도와 자세를 맞추기
     /// 위해서입니다. 부채꼴을 벗어난 방향은 걷기 속도로 움직이므로 자세도 걷기여야 합니다.
+    ///
+    /// 같은 이유로 재장전은 이 판정에서 빠져 있습니다. <see cref="Move"/>가 재장전 중에도 달리기 속도를
+    /// 그대로 내주므로, 여기서 걷기로 묶으면 달리는 속도에 걷는 하체가 붙어 발이 미끄러집니다.
     /// </remarks>
     private float UpdateMoveState()
     {
@@ -2193,7 +2204,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         {
             target = MoveStateCrouch;
         }
-        else if (m_input.sprint && !m_isCombatStance && !m_isReload && m_canSprintForward)
+        else if (m_input.sprint && !m_isCombatStance && m_canSprintForward)
         {
             target = MoveStateRun;
         }

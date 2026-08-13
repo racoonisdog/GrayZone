@@ -29,6 +29,9 @@ public class FieldManager : MonoBehaviour, IInputModeController
     [FormerlySerializedAs("m_enemyCorpseSettings")]
     [SerializeField] private EnemyManager m_enemyManager;
 
+    [Tooltip("재질별 소음 차폐율과 경로 차폐 누적을 소유하는 자식 오브젝트의 매니저입니다. 없으면 소음이 벽을 그대로 통과합니다.")]
+    [SerializeField] private NoiseManager m_noiseManager;
+
     [Tooltip("스쿼드 전멸 시 표시할 게임오버 화면입니다. 비어 있으면 비활성 오브젝트까지 포함해 자동 탐색합니다.")]
     [SerializeField] private GameOverUIController m_gameOverUI;
 
@@ -60,6 +63,12 @@ public class FieldManager : MonoBehaviour, IInputModeController
     public EnemyManager EnemyManager => m_enemyManager != null
         ? m_enemyManager
         : m_enemyManager = GetComponentInChildren<EnemyManager>(true);
+
+    /// <summary>재질별 소음 차폐율과 경로 차폐 누적을 소유하는 매니저입니다.</summary>
+    /// <remarks>없으면 <c>null</c>입니다. 듣는 쪽은 이 경우 차폐를 적용하지 않습니다.</remarks>
+    public NoiseManager NoiseManager => m_noiseManager != null
+        ? m_noiseManager
+        : m_noiseManager = GetComponentInChildren<NoiseManager>(true);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStaticState()
@@ -105,6 +114,11 @@ public class FieldManager : MonoBehaviour, IInputModeController
         {
             m_enemyManager = GetComponentInChildren<EnemyManager>(true);
         }
+
+        if (m_noiseManager == null)
+        {
+            m_noiseManager = GetComponentInChildren<NoiseManager>(true);
+        }
     }
 
     /// <summary>빠진 자식 매니저를 한 번에 알립니다.</summary>
@@ -126,6 +140,11 @@ public class FieldManager : MonoBehaviour, IInputModeController
         if (m_enemyManager == null)
         {
             Debug.LogWarning("[FieldManager] EnemyManager 자식 오브젝트를 찾지 못했습니다. 시체 처리 설정이 적용되지 않습니다.", this);
+        }
+
+        if (m_noiseManager == null)
+        {
+            Debug.LogWarning("[FieldManager] NoiseManager 자식 오브젝트를 찾지 못했습니다. 소음이 벽에 막히지 않고 그대로 전달됩니다.", this);
         }
     }
 
@@ -249,11 +268,11 @@ public class FieldManager : MonoBehaviour, IInputModeController
     /// </remarks>
     public int SetInputMode(InputMode mode)
     {
-        if (m_currentInputMode == mode)
-        {
-            return 1;
-        }
-
+        // 같은 모드여도 다시 적용합니다. 이 필드는 "지금 상태가 이럴 것"이라는 믿음일 뿐이고,
+        // 이 함수를 거치지 않고 멤버 입력을 만지는 경로(디버그 트레이너의 배경 조작 토글 등)가
+        // 있어 실제 상태와 어긋날 수 있습니다. 조기 반환을 두면 그때 이 함수가 성공을 반환하면서
+        // 아무것도 하지 않아, 스쿼드 전원의 입력이 죽은 채로 복구가 끝난 것처럼 보입니다(실측).
+        // 아래 적용은 모두 멱등이므로 다시 걸어도 안전합니다.
         if (!TryResolveCurrentPlayerControls())
         {
             Debug.LogWarning("[FieldManager] 현재 PlayerSquadMember의 필수 입력 참조를 확보하지 못했습니다.", this);

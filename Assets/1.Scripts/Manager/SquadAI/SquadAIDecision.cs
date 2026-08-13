@@ -117,9 +117,18 @@ public class SquadAIDecision
         /// </remarks>
         public bool HoldPosition;
 
-        /// <summary>자동 구조가 필요한지입니다(§18.1 2, §16).</summary>
-        /// <remarks><b>미구현이라 항상 false입니다.</b> 우선순위 자리만 잡아 둔 입력입니다.</remarks>
+        /// <summary>자동 구조를 수행할 대상이 정해졌는지입니다(§18.1 2, §16).</summary>
+        /// <remarks>
+        /// 대상 선정과 선점 중재는 호출자가 끝내고 결과만 넘깁니다. "누가 구조할지"는 스쿼드 차원
+        /// 결정이라 개별 AI의 판정이 정할 수 있는 것이 아니기 때문입니다.
+        /// </remarks>
         public bool RescueRequested;
+
+        /// <summary>구조 대상에게 닿아 지금 기립시키는 중인지입니다(§16).</summary>
+        /// <remarks>
+        /// 접근과 홀드를 가르는 값입니다. 홀드 중에는 제자리에 서 있어야 하므로 이동을 멈춥니다.
+        /// </remarks>
+        public bool RescueInReach;
 
         /// <summary>무기를 들고 있는지입니다.</summary>
         public bool HasWeapon;
@@ -212,12 +221,20 @@ public class SquadAIDecision
         }
 
         // 2. 자동 구조(§16).
-        //    미구현이라 RescueRequested가 항상 false입니다. 자리를 비워 두면 나중에 넣을 때 어느 순서인지
-        //    다시 찾아야 하므로 분기만 먼저 둡니다.
+        //    "접근부터 구조 완료까지 동행, 합류, 재장전, 자세 동조와 위치 조정보다 구조를 우선한다"이므로
+        //    아래 어느 것도 보지 않고 여기서 끝냅니다. 재장전도 내지 않습니다 - 3번이 2번을 이길 수 없고,
+        //    문서도 "보류된 재장전은 구조 완료 또는 취소 후에 자동 재개한다"로 뒤로 미룹니다.
+        //
+        //    조준·사격을 내지 않는 이유는 구조가 비전투 상태에서만 시작되기 때문입니다. 전투가 시작되면
+        //    구조 자체가 취소되므로(호출자가 RescueRequested를 내림) 여기서 겸할 일이 없습니다.
         if (context.RescueRequested)
         {
             result.Kind = SquadAIActionKind.Rescue;
             result.Step = SquadAIDecisionStep.AutoRescue;
+
+            // 대상에 닿았으면 멈춰 서서 기립시킵니다. 아직이면 걸어서 접근합니다.
+            // 달리지 않는 이유는 합류(§6.2)만 달리기를 쓰도록 규정돼 있고, 구조는 비전투 행동이기 때문입니다.
+            result.HoldPosition = context.RescueInReach;
             return result;
         }
 

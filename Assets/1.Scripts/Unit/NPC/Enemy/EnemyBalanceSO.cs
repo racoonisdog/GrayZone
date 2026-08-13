@@ -103,6 +103,13 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("새 후보가 현재 대상보다 이만큼(m) 더 가까워야 대상을 바꿉니다. 경계에서 대상이 떨리는 것을 막습니다.")]
     [SerializeField] private float m_targetSwitchPathDistanceDelta = 2f;
 
+    [Header("Combat Search")]
+    [Tooltip("마지막 확인 위치에 도착한 뒤 그 주변을 훑는 시간(초)입니다. 이 시간 안에 대상을 다시 못 찾으면 교전이 끝나고 배회로 돌아갑니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_combatSearchDuration = 6f;
+
+    [Tooltip("교전 수색 중 배회할 반경(m)입니다. 마지막 확인 위치가 기준입니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_combatSearchRadius = 6f;
+
     [Header("Hit Reaction")]
     [Tooltip("경직 상태에서 이동·회전·상태 전환을 모두 잠그는 시간(초)입니다. 경직 클립(Stagger_Large01)의 길이 3초와 맞춘 값이며, " +
              "이보다 짧으면 클립이 중간에 끊겨 뒤로 밀리다 만 자세로 복귀합니다.")]
@@ -224,6 +231,12 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
 
     /// <summary>경직 종료 후 재경직 최소 간격(초)입니다.</summary>
     public float HitStunCooldown => Mathf.Max(0f, m_hitStunCooldown);
+
+    /// <summary>교전 수색 시간(초)입니다.</summary>
+    public float CombatSearchDuration => Mathf.Max(0f, m_combatSearchDuration);
+
+    /// <summary>교전 수색 반경(m)입니다.</summary>
+    public float CombatSearchRadius => Mathf.Max(0.1f, m_combatSearchRadius);
 
     /// <summary>경직이 발동하는 경직력 누적 한계치입니다.</summary>
     /// <remarks>0이면 한 대만 맞아도 경직되므로 하한을 둡니다.</remarks>

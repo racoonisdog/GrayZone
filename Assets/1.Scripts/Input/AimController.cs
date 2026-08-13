@@ -869,6 +869,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <param name="feedback">헤드샷·킬 여부를 담은 피격 피드백입니다.</param>
     private void OnWeaponHitFeedback(CombatDamage.HitFeedback feedback)
     {
+        LogHitMarkerFeedback();
+
         if (m_crosshairController == null)
         {
             return;
@@ -880,6 +882,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         {
             m_crosshairController.ShowKill();
         }
+    }
+
+    /// <summary>피해 이벤트가 플레이어 조준선까지 전달되는지 확인하는 임시 에디터 로그입니다.</summary>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private void LogHitMarkerFeedback()
+    {
+        Debug.Log(
+            $"[DEBUG-HITMARKER] receiver={name} " +
+            $"crosshair={(m_crosshairController != null ? m_crosshairController.name : "none")} " +
+            $"enabled={(m_crosshairController != null && m_crosshairController.HitMarkerEnabled)}",
+            this);
     }
 
     /// <summary>
@@ -1600,6 +1613,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             mask = baseMask & ~(1 << gameObject.layer);
         }
 
+        // 부위 히트박스는 평소 꺼져 있으므로 카메라 조준점도 1차 HitDetectVolume을 볼 수 있어야 합니다.
+        // 그렇지 않으면 조준점이 적 뒤의 먼 지점으로 남아, 카메라와 총구의 시차만큼 실제 레이가 옆으로
+        // 밀립니다. 몸통은 우연히 맞아도 팔·손처럼 작은 부위는 비껴갈 수 있습니다.
+        if (m_weaponController != null)
+        {
+            mask |= m_weaponController.HitDetectLayerMask.value;
+        }
+
         // 아군의 몸은 조준점으로 잡지 않습니다. 팀원이 앞을 지나가는 순간 조준점이 그 등판으로 당겨지면
         // 화면 중앙의 적을 겨누고 있는데도 조준 거리와 차단 표시가 함께 어긋납니다.
         if (TryTraceAim(cameraTransform.position, GetAimForward(), aimDistance, mask, out RaycastHit hit))
@@ -1635,7 +1656,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         Faction faction = m_weaponController != null ? m_weaponController.OwnerFaction : Faction.Player;
 
         int count = Physics.RaycastNonAlloc(
-            origin, direction, m_aimTraceBuffer, distance, mask, QueryTriggerInteraction.UseGlobal);
+            origin, direction, m_aimTraceBuffer, distance, mask, QueryTriggerInteraction.Collide);
 
         return Gun.TryResolveNearestBlocking(m_aimTraceBuffer, count, faction, passAllies, out hit);
     }

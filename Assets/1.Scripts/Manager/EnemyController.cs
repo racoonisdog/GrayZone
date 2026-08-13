@@ -78,6 +78,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Tooltip("소음 수색 중 배회할 반경(m)입니다.")]
     [SerializeField] private float noiseSearchRadius = 5f;
 
+    [Header("Combat Search")]
+    [Tooltip("마지막 확인 위치에 도착한 뒤 그 주변을 훑는 시간(초)입니다. 이 시간 안에 대상을 다시 못 찾으면 교전이 끝나고 배회로 돌아갑니다.")]
+    [SerializeField] private float combatSearchDuration = 6f;
+
+    [Tooltip("교전 수색 중 배회할 반경(m)입니다. 마지막 확인 위치가 기준입니다.")]
+    [SerializeField] private float combatSearchRadius = 6f;
+
     [Header("Howl")]
     [Tooltip("하울링이 전달되는 고정 반경(m)입니다. 벽이나 엄폐물은 판정에 쓰지 않습니다.")]
     [SerializeField] private float howlRadius = 25f;
@@ -361,6 +368,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>소음 수색 중 배회할 반경입니다.</summary>
     public float NoiseSearchRadius => noiseSearchRadius;
 
+    /// <summary>교전 수색 시간입니다. 이 시간이 지나면 교전이 끝납니다(§5.8.4).</summary>
+    public float CombatSearchDuration => combatSearchDuration;
+
+    /// <summary>교전 수색 중 배회할 반경입니다.</summary>
+    public float CombatSearchRadius => combatSearchRadius;
+
     /// <summary>하울링이 전달되는 고정 반경입니다.</summary>
     public float HowlRadius => howlRadius;
 
@@ -448,6 +461,8 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         noiseArriveDistance = balance.NoiseArriveDistance;
         noiseSearchDuration = balance.NoiseSearchDuration;
         noiseSearchRadius = balance.NoiseSearchRadius;
+        combatSearchDuration = balance.CombatSearchDuration;
+        combatSearchRadius = balance.CombatSearchRadius;
         howlRadius = balance.HowlRadius;
         howlBroadcastTime = balance.HowlBroadcastTime;
         howlDuration = balance.HowlDuration;
@@ -603,8 +618,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <remarks>애니메이터의 이탈 전이(0.25초)보다 넉넉하게 둡니다.</remarks>
     private const float StaggerHandoverTimeout = 0.6f;
 
-    /// <summary>직전 프레임의 위치입니다. 루트 모션이 위치를 쥔 구간에서 실제 속도를 재는 데 씁니다.</summary>
-    private Vector3 m_lastLocomotionPosition;
+    /// <summary>경직 전 Agent의 회전 갱신 설정입니다. 인계 시 그대로 되돌립니다.</summary>
+    /// <remarks>프리팹 값을 가정하지 않고 원래 값을 기억합니다. 다른 시스템이 껐다 켰을 수 있습니다.</remarks>
+    private bool m_agentRotationBeforeStagger = true;
 
     /// <summary>경직이 시작된 위치입니다. 루트 모션이 실제로 얼마나 옮겼는지 확인하는 데 씁니다.</summary>
     private Vector3 m_staggerStartPosition;
@@ -656,16 +672,18 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         if (agent != null && agent.enabled)
         {
             agent.updatePosition = false;
+
+            // 회전도 함께 뺏습니다. 위치만 넘겨받으면 Agent가 자기 내부 속도 방향으로 몸을 계속 돌려,
+            // 쓰러져 있는 동안 몸이 제자리에서 회전하며 버벅이는 것처럼 보입니다.
+            // 경직 클립의 몸 흔들림은 이미 뼈 애니메이션이 표현하므로 이 구간에 회전 주체가 따로 있을 이유가 없습니다.
+            m_agentRotationBeforeStagger = agent.updateRotation;
+            agent.updateRotation = false;
         }
 
         m_isStaggered = true;
         m_staggerRootMotionActive = true;
         m_staggerLengthResolved = false;
         m_staggerStartPosition = transform.position;
-
-        // 실제 속도 측정의 기준점입니다. 초기화하지 않으면 첫 프레임 변위가 예전 위치와의 차이로 잡혀
-        // 이동 블렌드가 한 프레임 튑니다.
-        m_lastLocomotionPosition = transform.position;
 
         // 애니메이터 스테이트에 들어가기 전까지 쓰는 임시값입니다. 들어간 뒤에는 실제 재생 길이로 다시 잡습니다.
         m_staggerEndTime = Time.time + HitStunDuration;
@@ -793,6 +811,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 그 변위를 버리면 화면에서는 밀려나는데 실제 위치는 그대로여서, 발이 미끄러지고
     /// 사거리 판정도 밀리지 않은 위치를 기준으로 남습니다.
     ///
+    /// <b>클립 임포트 설정에 의존합니다.</b> 경직 클립의 Root Transform Position(XZ)에서
+    /// <c>Bake Into Pose</c>가 켜져 있으면 수평 이동이 포즈에 구워져 루트가 움직이지 않고,
+    /// <see cref="Animator.deltaPosition"/>의 XZ가 0이 되어 이 코드가 아무 일도 하지 않습니다.
+    /// 그 상태에서는 몸만 뒤로 밀려 보이다가 클립이 끝나면 제자리로 돌아옵니다.
+    /// 이동 클립(달리기 등)은 NavMeshAgent가 이동을 소유해야 하므로 반대로 켜 두는 것이 맞습니다.
+    ///
     /// <b>경직 동안에는 Agent가 아니라 루트 모션이 위치의 주인입니다.</b> <c>updatePosition</c>을 켠 채로 두면
     /// Agent가 매 프레임 <c>transform.position</c>을 자기 내부 위치로 덮어써서, 밀려난 만큼이 조금씩 되돌아가
     /// 클립이 끝난 자리가 아닌 어중간한 지점에 서게 됩니다. 그래서 <see cref="HandleStaggered"/>에서
@@ -822,19 +846,41 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
-        // 밀려난 지점을 NavMesh 위로 당깁니다. 당길 수 없으면 아예 옮기지 않습니다.
+        // 이 프레임의 루트 모션 변위를 현재 위치에 더합니다.
         //
+        // 절대 위치(rootPosition)가 아니라 변위(deltaPosition)를 쓰는 이유는, 아바타 루트와 GameObject
+        // 피벗이 어긋나 있으면 절대 위치 대입이 매 프레임 그 차이만큼 튀기 때문입니다.
+        // 변위는 그 차이와 무관하게 "이번 프레임에 얼마나 움직였는가"만 담습니다.
+        Vector3 target = transform.position + animator.deltaPosition;
+
         // NavMesh 밖으로 한 발이라도 나가면 그 지점에서 출발하는 경로 계산이 전부 실패하고
         // (EnemyTargetSensor.GetPathDistance가 PathComplete만 인정) 유효 대상이 사라집니다.
         // 그러면 추격이 갈 곳을 잃고 제자리에 굳습니다. 밀리다 마는 것이 굳는 것보다 낫습니다.
-        if (!NavMesh.SamplePosition(
-                animator.rootPosition, out NavMeshHit hit, StaggerNavMeshSampleRadius, NavMesh.AllAreas))
+        if (!NavMesh.SamplePosition(target, out NavMeshHit hit, StaggerNavMeshSampleRadius, NavMesh.AllAreas))
         {
             return;
         }
 
-        transform.position = hit.position;
+        // 스냅 결과를 매 프레임 그대로 쓰면 안 됩니다. SamplePosition은 "가장 가까운 NavMesh 지점"이라
+        // 경계나 기울어진 바닥에서는 프레임마다 조금씩 다른 곳을 돌려주고, 그 흔들림이 버벅임으로 보입니다.
+        //
+        // 그래서 수평 편차로 판정만 합니다. 편차가 작으면 이미 NavMesh 위이므로 루트 모션의 수평 이동을
+        // 그대로 두고 높이만 바닥에 맞춥니다. 편차가 크면 실제로 벗어난 것이므로 통째로 당깁니다.
+        Vector3 flatTarget = new Vector3(target.x, 0.0f, target.z);
+        Vector3 flatHit = new Vector3(hit.position.x, 0.0f, hit.position.z);
+
+        transform.position = (flatTarget - flatHit).sqrMagnitude
+                <= StaggerOnMeshTolerance * StaggerOnMeshTolerance
+            ? new Vector3(target.x, hit.position.y, target.z)
+            : hit.position;
     }
+
+    /// <summary>루트 모션 목표 지점을 NavMesh 위로 볼 수평 허용 오차(m)입니다.</summary>
+    /// <remarks>
+    /// 이 값보다 가까우면 스냅 결과를 무시하고 루트 모션의 수평 이동을 그대로 씁니다.
+    /// 매 프레임 스냅으로 생기는 미세한 좌우 흔들림을 없애기 위한 것입니다.
+    /// </remarks>
+    private const float StaggerOnMeshTolerance = 0.25f;
 
     /// <summary>경직 루트 모션 위치를 NavMesh 위로 당길 때 허용하는 반경(m)입니다.</summary>
     /// <remarks>
@@ -848,7 +894,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 보통은 <see cref="NavMeshAgent.velocity"/>를 씁니다. 다만 경직과 그 이탈 블렌드 동안에는 위치의 주인이
     /// 루트 모션이라 Agent 속도가 실제 이동과 다릅니다. Agent는 내부 경로만 진행하고 있어서, 그 값을 쓰면
     /// 일어서는 중인데 이동 블렌드가 예전 방향으로 전력 질주를 가리켜 자세가 어긋납니다.
-    /// 그 구간에서는 실제 변위로 속도를 재서 넣습니다.
+    ///
+    /// 그 구간에는 <b>0을 넣습니다.</b> 실제 변위로 속도를 재는 방법도 써 봤지만, 프레임 단위 루트 모션은
+    /// 값이 크게 출렁여서 이동 블렌드가 따라 떨리고 그것이 일어날 때의 버벅임으로 보였습니다.
+    /// 일어서는 동안은 걷는 것이 아니므로 0이 뜻으로도 맞습니다.
+    ///
+    /// 인계 직후 값이 튀지 않는 이유는, <c>ResetPath</c>와 <c>Warp</c>를 거친 Agent가 정지 상태에서
+    /// 가속도(8m/s²)를 따라 올라오기 때문입니다. 0에서 실제 속도로 이어집니다.
     /// </remarks>
     private void UpdateLocomotionAnimator()
     {
@@ -857,11 +909,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
-        Vector3 velocity = m_staggerRootMotionActive
-            ? (transform.position - m_lastLocomotionPosition) / Mathf.Max(Time.deltaTime, 0.0001f)
-            : agent.velocity;
-
-        m_lastLocomotionPosition = transform.position;
+        Vector3 velocity = m_staggerRootMotionActive ? Vector3.zero : agent.velocity;
 
         float speed = velocity.magnitude;
 
@@ -1474,6 +1522,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         // Warp는 내부 위치와 경로 상태를 함께 맞춰 주므로 nextPosition만 대입할 때 남는 어긋남이 없습니다.
         agent.Warp(transform.position);
         agent.updatePosition = true;
+        agent.updateRotation = m_agentRotationBeforeStagger;
 
         // 그래도 NavMesh 밖이면 되돌립니다. 밖에 서 있으면 경로 계산이 전부 실패해 유효 대상을 잃고,
         // 추격이 갈 곳 없이 제자리에 굳습니다(경직을 두 번 당한 개체가 일어나서 멈춰 있던 증상).

@@ -40,16 +40,16 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
     }
 
     /// <summary>배회 상태에 진입한 순간의 행동 사운드를 출력합니다.</summary>
-    public void PlayIdle(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.IdleSounds : null, ref m_lastIdleIndex, false);
+    public void PlayIdle(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.IdleSounds : null, ref m_lastIdleIndex, false, AudioPriorityClass.EnemyAmbient);
 
     /// <summary>교전 상태에 처음 진입한 순간의 경계 사운드를 출력합니다.</summary>
-    public void PlayAlert(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.AlertSounds : null, ref m_lastAlertIndex, true);
+    public void PlayAlert(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.AlertSounds : null, ref m_lastAlertIndex, true, AudioPriorityClass.EnemyCritical);
 
     /// <summary>추적 상태에 진입한 순간의 행동 사운드를 출력합니다.</summary>
-    public void PlayChase(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.ChaseSounds : null, ref m_lastChaseIndex, false);
+    public void PlayChase(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.ChaseSounds : null, ref m_lastChaseIndex, false, AudioPriorityClass.EnemyAmbient);
 
     /// <summary>공격 동작을 시작한 순간의 행동 사운드를 출력합니다.</summary>
-    public void PlayAttack(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.AttackSounds : null, ref m_lastAttackIndex, true);
+    public void PlayAttack(EnemyFeedbackSO feedback) => PlayLocal(feedback != null ? feedback.AttackSounds : null, ref m_lastAttackIndex, true, AudioPriorityClass.EnemyCritical);
 
     /// <summary>실제 피격 위치에서 피격 이펙트·사운드·혈흔을 출력합니다.</summary>
     public void PlayHit(EnemyFeedbackSO feedback, Vector3 point, Vector3 normal, Transform hitTransform)
@@ -69,7 +69,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
             effects.SpawnDecal(feedback.BloodDecalPrefab, point, normal, feedback.BloodDecalLifetime, hitTransform);
         }
 
-        PlayWorld(feedback.HitSounds, ref m_lastHitIndex, point);
+        PlayWorld(feedback.HitSounds, ref m_lastHitIndex, point, AudioPriorityClass.EnemyCritical);
     }
 
     /// <summary>사망 위치에서 사망 사운드를 독립 one-shot으로 출력합니다.</summary>
@@ -80,10 +80,14 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
             m_actionAudioSource.Stop();
         }
 
-        PlayWorld(feedback != null ? feedback.DeathSounds : null, ref m_lastDeathIndex, transform.position);
+        PlayWorld(feedback != null ? feedback.DeathSounds : null, ref m_lastDeathIndex, transform.position, AudioPriorityClass.EnemyCritical);
     }
 
-    private void PlayLocal(IReadOnlyList<AudioClip> clips, ref int lastIndex, bool interruptCurrent)
+    private void PlayLocal(
+        IReadOnlyList<AudioClip> clips,
+        ref int lastIndex,
+        bool interruptCurrent,
+        AudioPriorityClass priorityClass)
     {
         AudioSource source = EnsureActionAudioSource();
         if (source == null || (source.isPlaying && !interruptCurrent))
@@ -101,11 +105,17 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
             source.Stop();
         }
 
+        // 한 소스가 배회음과 경계음을 함께 내므로 등급은 소스 준비 때가 아니라 재생마다 갱신해야 합니다.
+        source.priority = AudioManager.ResolveUnityPriority(priorityClass);
         source.pitch = 1.0f + Random.Range(-m_pitchVariation, m_pitchVariation);
         source.PlayOneShot(clip, m_volume);
     }
 
-    private void PlayWorld(IReadOnlyList<AudioClip> clips, ref int lastIndex, Vector3 position)
+    private void PlayWorld(
+        IReadOnlyList<AudioClip> clips,
+        ref int lastIndex,
+        Vector3 position,
+        AudioPriorityClass priorityClass)
     {
         if (!FeedbackPlaybackUtility.TryPickClip(clips, ref lastIndex, out AudioClip clip))
         {
@@ -114,7 +124,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
 
         float pitch = 1.0f + Random.Range(-m_pitchVariation, m_pitchVariation);
         AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
-        if (fieldAudio != null && fieldAudio.PlayOneShotAt(clip, position, m_volume, pitch))
+        if (fieldAudio != null && fieldAudio.PlayOneShotAt(clip, position, priorityClass, m_volume, pitch))
         {
             return;
         }
@@ -122,6 +132,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
         AudioSource source = EnsureActionAudioSource();
         if (source != null)
         {
+            source.priority = AudioManager.ResolveUnityPriority(priorityClass);
             source.pitch = pitch;
             source.PlayOneShot(clip, m_volume);
         }
@@ -136,21 +147,40 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
             m_actionAudioSource = sourceObject.AddComponent<AudioSource>();
         }
 
-        m_actionAudioSource.playOnAwake = false;
         m_actionAudioSource.loop = false;
-        m_actionAudioSource.spatialBlend = 1.0f;
-        m_actionAudioSource.dopplerLevel = 0.0f;
-        m_actionAudioSource.rolloffMode = AudioRolloffMode.Logarithmic;
-        m_actionAudioSource.minDistance = Mathf.Max(0.01f, m_minDistance);
-        m_actionAudioSource.maxDistance = Mathf.Max(m_actionAudioSource.minDistance, m_maxDistance);
 
         AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
-        if (fieldAudio != null && fieldAudio.OutputMixerGroup != null)
+        if (fieldAudio != null)
         {
-            m_actionAudioSource.outputAudioMixerGroup = fieldAudio.OutputMixerGroup;
+            // 이 소스는 풀 밖에서 소리를 내므로, 개인 사운드로 등록해 씬 전체 동시 발음 총량에 포함시킵니다.
+            fieldAudio.ApplyWorldSourcePolicy(
+                m_actionAudioSource,
+                AudioPriorityClass.EnemyAmbient,
+                m_minDistance,
+                m_maxDistance);
+            fieldAudio.RegisterPersonalSource(m_actionAudioSource);
+        }
+        else
+        {
+            m_actionAudioSource.playOnAwake = false;
+            m_actionAudioSource.spatialBlend = 1.0f;
+            m_actionAudioSource.dopplerLevel = 0.0f;
+            m_actionAudioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+            m_actionAudioSource.minDistance = Mathf.Max(0.01f, m_minDistance);
+            m_actionAudioSource.maxDistance = Mathf.Max(m_actionAudioSource.minDistance, m_maxDistance);
         }
 
         return m_actionAudioSource;
+    }
+
+    /// <summary>개체가 사라질 때 개인 사운드 등록을 해제합니다.</summary>
+    private void OnDestroy()
+    {
+        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        if (fieldAudio != null)
+        {
+            fieldAudio.UnregisterPersonalSource(m_actionAudioSource);
+        }
     }
 
     /// <summary>

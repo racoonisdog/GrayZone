@@ -99,6 +99,9 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     private int m_lastReloadIndex = -1;
     private PersonalEffectPool m_personalEffectPool;
 
+    /// <summary>이 무기를 든 스쿼드 멤버입니다. 조작 주체 판정의 정본 소유자입니다.</summary>
+    private SquadMemberController m_ownerMember;
+
     private const float ImpactSurfaceOffset = 0.002f;
 
     /// <summary>이 무기에 지정된 개별 피드백 SO입니다. 지정하지 않았으면 <c>null</c>입니다.</summary>
@@ -144,10 +147,16 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
         m_personalEffectPool?.RecycleAll();
     }
 
-    /// <summary>무기가 파괴되기 전에 공용 예산에 보고한 개인 이펙트 개수를 정리합니다.</summary>
+    /// <summary>무기가 파괴되기 전에 공용 예산에 보고한 개인 이펙트·사운드 등록을 정리합니다.</summary>
     private void OnDestroy()
     {
         m_personalEffectPool?.RecycleAll();
+
+        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        if (fieldAudio != null)
+        {
+            fieldAudio.UnregisterPersonalSource(m_audioSource);
+        }
     }
 
     /// <summary>
@@ -287,8 +296,30 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
             return;
         }
 
+        source.priority = AudioManager.ResolveUnityPriority(ResolveCombatPriorityClass());
         source.pitch = 1.0f + Random.Range(-m_pitchVariation, m_pitchVariation);
         source.PlayOneShot(clip, m_volume);
+    }
+
+    /// <summary>
+    /// 이 무기 소리의 보호 등급을 정합니다. 플레이어가 직접 조작하는 멤버의 무기가 가장 높습니다.
+    /// </summary>
+    /// <remarks>
+    /// 조작 주체는 런타임에 바뀌므로(<see cref="SquadMemberController.OnPlayerSquadMemberChanged"/>)
+    /// 등급을 캐시하지 않고 재생마다 다시 묻습니다. 컴포넌트 참조만 캐시합니다.
+    /// 스쿼드 멤버에 속하지 않은 무기는 플레이어 것으로 봅니다. 자기 총성이 씹히는 편이
+    /// 남의 총성이 씹히는 것보다 나쁘므로, 판정이 불확실할 때는 더 보호하는 쪽으로 기울입니다.
+    /// </remarks>
+    private AudioPriorityClass ResolveCombatPriorityClass()
+    {
+        if (m_ownerMember == null)
+        {
+            m_ownerMember = GetComponentInParent<SquadMemberController>(true);
+        }
+
+        return m_ownerMember == null || m_ownerMember.IsPlayerSquadMember
+            ? AudioPriorityClass.PlayerCritical
+            : AudioPriorityClass.AllyCombat;
     }
 
     private AudioSource EnsureAudioSource()
@@ -300,18 +331,28 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
             m_audioSource = sourceObject.AddComponent<AudioSource>();
         }
 
-        m_audioSource.playOnAwake = false;
         m_audioSource.loop = false;
-        m_audioSource.spatialBlend = 1.0f;
-        m_audioSource.dopplerLevel = 0.0f;
-        m_audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
-        m_audioSource.minDistance = Mathf.Max(0.01f, m_minDistance);
-        m_audioSource.maxDistance = Mathf.Max(m_audioSource.minDistance, m_maxDistance);
 
         AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
-        if (fieldAudio != null && fieldAudio.OutputMixerGroup != null)
+        if (fieldAudio != null)
         {
-            m_audioSource.outputAudioMixerGroup = fieldAudio.OutputMixerGroup;
+            // 무기 소리는 손을 따라 움직여야 해서 풀을 쓰지 않습니다. 대신 개인 사운드로 등록해
+            // 공용 풀이 그만큼 양보하게 만듭니다. EffectPool의 개인 이펙트 회계와 같은 방식입니다.
+            fieldAudio.ApplyWorldSourcePolicy(
+                m_audioSource,
+                ResolveCombatPriorityClass(),
+                m_minDistance,
+                m_maxDistance);
+            fieldAudio.RegisterPersonalSource(m_audioSource);
+        }
+        else
+        {
+            m_audioSource.playOnAwake = false;
+            m_audioSource.spatialBlend = 1.0f;
+            m_audioSource.dopplerLevel = 0.0f;
+            m_audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+            m_audioSource.minDistance = Mathf.Max(0.01f, m_minDistance);
+            m_audioSource.maxDistance = Mathf.Max(m_audioSource.minDistance, m_maxDistance);
         }
 
         return m_audioSource;

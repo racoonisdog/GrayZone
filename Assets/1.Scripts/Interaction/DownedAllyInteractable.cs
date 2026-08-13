@@ -56,6 +56,14 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
 
     public float ReviveHoldProgress01 => m_holdProgress01;
 
+    /// <summary>지금 이 대상을 구조하고 있는 멤버입니다. 홀드 중이 아니면 <c>null</c>입니다.</summary>
+    /// <remarks>
+    /// AI 자동 구조가 "누가 이미 붙어 있는가"를 보기 위한 값입니다. 공용 문서 `스쿼드 AI 시스템` §16이
+    /// "플레이어가 이미 구조 중이면 AI는 같은 구조를 시도하지 않는다"와 "AI 조작 슬롯 하나만 구조를
+    /// 시작한다"를 규정하므로, 홀드 여부만으로는 부족하고 <b>누구인지</b>가 필요합니다.
+    /// </remarks>
+    public SquadMemberController ActiveInteractorMember => m_holdActive ? m_activeInteractorMember : null;
+
     public PlayerHealth TargetHealth => m_playerHealth;
 
     public SquadMemberController TargetMember => m_memberController;

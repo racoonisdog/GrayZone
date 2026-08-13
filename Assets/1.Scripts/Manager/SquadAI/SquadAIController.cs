@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Serialization;
@@ -59,8 +60,8 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("합류 목적지 후보를 플레이어 주위 몇 방향에서 뽑을지입니다. 고정 자리가 아니라 매번 가장 가까운 빈 자리를 고르기 위한 표본 수입니다.")]
     [SerializeField] private int m_destinationCandidateCount = 8;
 
-    [Tooltip("합류 목적지가 다른 캐릭터와 이 거리 안이면 겹친 것으로 보고 후보에서 제외합니다.")]
-    [SerializeField] private float m_destinationClearance = 0.9f;
+    // AI 팀원끼리 유지할 간격은 SquadManager.AiMemberSpacing이 소유합니다. 스쿼드 전체에 걸리는
+    // 편성 규칙이라 멤버마다 사본을 두면 값이 어긋나고, 나중에 합류한 멤버만 옛 값을 씁니다.
 
     [Tooltip("동행 AI의 회피 우선순위 기준값입니다. 멤버 순번을 더해 서로 다른 값을 씁니다. 낮을수록 우선합니다.")]
     [SerializeField] private int m_baseAvoidancePriority = 50;
@@ -139,6 +140,16 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("전투 위치를 다시 찾는 주기입니다. 짧으면 사격선이 잠깐 막힐 때마다 자리를 옮겨 산만해집니다.")]
     [SerializeField] private float m_combatPositionInterval = 0.4f;
 
+    [Foldout("Rescue Options")]
+    [Tooltip("자동 구조를 시작할 최대 거리입니다. 이보다 먼 다운 아군은 검토하지 않습니다. 0 이하면 거리 제한이 없습니다.")]
+    [SerializeField] private float m_rescueSearchRange = 25.0f;
+
+    [Tooltip("구조 대상에게 이 거리 안으로 들어오면 멈춰 서서 기립시킵니다. 상호작용 사거리와 맞춰야 합니다.")]
+    [SerializeField] private float m_rescueReachDistance = 1.8f;
+
+    [Tooltip("접근 경로가 없어 구조가 취소되면 이 시간 동안 같은 대상을 다시 고르지 않습니다. 밸런스 영역입니다(§19).")]
+    [SerializeField] private float m_rescueRetryInterval = 5.0f;
+
     [Foldout("Move Options")]
     [Tooltip("이동 방향으로 회전하는 속도입니다.")]
     [FormerlySerializedAs("rotationSpeed")]
@@ -147,10 +158,10 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("걷기와 달리기 자세를 오가는 데 걸리는 시간입니다. ThirdPersonController의 같은 값과 맞춰야 조작 전환 시 자세가 튀지 않습니다.")]
     [SerializeField] private float m_moveStateBlendDuration = 0.2f;
 
-    [Foldout("Debug")]
-    [Tooltip("끄면 이 AI가 발사하지 않습니다. 대상 선정과 조준은 그대로 하므로 겨누기만 하고 쏘지 않습니다. 재장전도 함께 멈춥니다.")]
-    [SerializeField] private bool m_debugAllowFiring = true;
+    // 발사 허용 여부는 SquadManager.AiFiringAllowed가 소유합니다. 스쿼드 전체 설정이라 조작 캐릭터를
+    // 전환해도 유지돼야 하고, 멤버마다 사본을 두면 전환·구조 복귀 때 누가 옛 값을 쥐는지가 갈립니다.
 
+    [Foldout("Debug")]
     [Tooltip("이 동행 AI를 선택했을 때 합류 시작 거리와 합류 완료 거리를 리더 기준 원 두 개로 표시합니다. 리더가 없으면 그리지 않습니다.")]
     [SerializeField] private bool m_debugDrawJoinDistances = false;
 
@@ -194,6 +205,21 @@ public class SquadAIController : MonoBehaviour
 
     // 마지막으로 확정한 행동 요청입니다. 실행과 진단이 같은 값을 봐야 어긋나지 않습니다.
     private SquadAIDecision.Result m_currentDecision;
+
+    // 지금 구조하려는 대상과 그 상호작용 지점입니다(§16). 선점은 SquadManager가 중재합니다.
+    private SquadMemberController m_rescueTarget;
+    private DownedAllyInteractable m_rescueInteractable;
+
+    // 구조 홀드 진행 시간입니다. 홀드 진행도는 부르는 쪽이 소유합니다(InteractionController와 같은 방식).
+    private float m_rescueHoldTimer;
+    private bool m_rescueHoldStarted;
+
+    // 경로 실패로 취소한 대상과 다시 시도할 수 있는 시각입니다(§16 재시도 간격).
+    private SquadMemberController m_rescueRetryBlockedTarget;
+    private float m_rescueRetryAllowedTime;
+
+    // 구조 중 유효한 피격을 받았는지입니다(§16 취소 조건). 피해 알림에서 세우고 판단이 소비합니다.
+    private bool m_rescueHitWhileRescuing;
 
     // 이번 프레임에 겨눌 지점입니다. 유예 중에는 마지막 확인 위치입니다(§8.5).
     private Vector3 m_aimPoint;
@@ -328,6 +354,24 @@ public class SquadAIController : MonoBehaviour
     /// </remarks>
     public SquadAIDecision.Result CurrentDecision => m_currentDecision;
 
+    /// <summary>지금 자동 구조하려는 대상입니다. 없으면 null입니다(§16).</summary>
+    public SquadMemberController RescueTarget => m_rescueTarget;
+
+    /// <summary>자동 구조 기립 홀드의 진행도(0~1)입니다. 홀드 중이 아니면 0입니다.</summary>
+    public float RescueHoldProgress01
+    {
+        get
+        {
+            if (!m_rescueHoldStarted || m_rescueInteractable == null)
+            {
+                return 0.0f;
+            }
+
+            float duration = Mathf.Max(0.0f, m_rescueInteractable.HoldDuration);
+            return duration <= 0.0f ? 1.0f : Mathf.Clamp01(m_rescueHoldTimer / duration);
+        }
+    }
+
     /// <summary>이번 프레임에 겨누고 있는 지점입니다. 대상이 없으면 false입니다.</summary>
     /// <param name="point">겨누는 지점입니다. 유예 중에는 마지막 확인 위치입니다.</param>
     /// <returns>겨누는 중이면 true입니다.</returns>
@@ -367,13 +411,29 @@ public class SquadAIController : MonoBehaviour
     /// <remarks>진단용입니다. 거리 벌리기나 사격선 확보로 자리를 옮기는 중이면 true입니다.</remarks>
     public bool IsRepositioning => m_hasCombatPosition;
 
-    /// <summary>이 AI의 발사 허용 여부입니다.</summary>
-    /// <remarks>끄면 발사와 재장전만 멈추고 대상 선정·조준은 그대로 돕니다.</remarks>
+    /// <summary>팀 AI의 발사 허용 여부입니다.</summary>
+    /// <remarks>
+    /// 끄면 발사와 재장전만 멈추고 대상 선정·조준은 그대로 돕니다.
+    /// <para>
+    /// <b>값은 <see cref="SquadManager"/>가 소유하는 스쿼드 전체 설정입니다.</b> 이 속성은 그 값을
+    /// 그대로 보여 주고 넘겨줄 뿐이며, 여기에 쓰면 스쿼드 전원에 반영됩니다. 멤버마다 사본을 두면
+    /// 조작 캐릭터를 전환할 때 누가 옛 값을 쥐고 있는지가 갈립니다.
+    /// </para>
+    /// </remarks>
     public bool AllowFiring
     {
-        get => m_debugAllowFiring;
-        set => m_debugAllowFiring = value;
+        get => m_squadManager == null || m_squadManager.AiFiringAllowed;
+        set
+        {
+            if (m_squadManager != null)
+            {
+                m_squadManager.AiFiringAllowed = value;
+            }
+        }
     }
+
+    /// <summary>AI 팀원끼리 유지할 간격입니다. <see cref="SquadManager"/>가 소유합니다.</summary>
+    private float DestinationClearance => m_squadManager != null ? m_squadManager.AiMemberSpacing : 0.0f;
 
     /// <summary>이 AI가 적을 직접 확인할 수 있는 최대 거리입니다.</summary>
     public float SightRange => m_sightRange;
@@ -544,6 +604,13 @@ public class SquadAIController : MonoBehaviour
     public void NotifyDamagedBy(EnemyController attacker, int damage)
     {
         m_targeting.NotifyDamagedBy(attacker, damage);
+
+        // 구조 중 유효한 피격은 구조를 취소합니다(§16). 여기서는 표시만 하고 판단은 UpdateRescue가 합니다.
+        // 피해 0인 알림까지 취소로 치면 스치는 것만으로 구조가 끊깁니다.
+        if (damage > 0)
+        {
+            m_rescueHitWhileRescuing = true;
+        }
     }
 
     /// <summary>
@@ -828,7 +895,10 @@ public class SquadAIController : MonoBehaviour
     private void ClearFollowState()
     {
         m_isJoining = false;
-        m_hasDestination = false;
+
+        // 찜도 함께 놓습니다. AI에서 벗어난 멤버의 찜이 남아 있으면 남은 AI가 그 자리를 못 씁니다.
+        ClearFollowDestination();
+
         m_hasCombatPosition = false;
         m_pathDistanceToLeader = -1.0f;
         m_isSprinting = false;
@@ -844,6 +914,10 @@ public class SquadAIController : MonoBehaviour
 
         // 마지막 행동 요청도 비웁니다. 남겨 두면 다시 AI가 된 첫 프레임에 옛 요청이 한 번 실행됩니다.
         m_currentDecision = default;
+
+        // 진행 중인 구조도 접습니다(§16 "구조자가 다운되거나 ... 구조를 취소한다").
+        // 시작한 홀드를 놓지 않으면 대상의 다운 타이머가 멈춘 채 남습니다.
+        ClearRescue(false);
 
         // 전투 자세도 내립니다. 그러지 않으면 조준 리그가 올라간 채로 남아, 조작 멤버가 됐을 때
         // AimController가 자기 상태에서 시작하지 못하고 어긋난 자세를 물려받습니다.
@@ -902,6 +976,9 @@ public class SquadAIController : MonoBehaviour
         bool selfIsLeader = canFollow && leader == transform;
         bool canAct = canFollow && !selfIsLeader;
 
+        // 구조 판단은 합류·전투보다 위라(§18.1 2) 그 둘보다 먼저 갱신합니다.
+        UpdateRescue(canAct);
+
         bool movementDue = canAct && Time.time >= m_nextUpdateTime;
         if (movementDue)
         {
@@ -938,10 +1015,266 @@ public class SquadAIController : MonoBehaviour
             HandleRotation();
         }
 
+        HandleRescueHold();
         HandleFiring();
         HandleReload();
         HandleCombatStance();
         HandleAnimation();
+    }
+
+    /// <summary>
+    /// 자동 구조를 시작할지, 유지할지, 접을지를 갱신합니다(§16).
+    /// </summary>
+    /// <param name="canAct">지금 행동할 수 있는 상태인지입니다.</param>
+    /// <remarks>
+    /// <b>비전투에서만 시작합니다</b>("AI는 스쿼드가 비전투 상태일 때만 자동 구조를 시작한다").
+    /// 전투 중 위험을 감수하는 구조는 플레이어가 직접 결정할 몫입니다. 대신 별도의 안전 대기시간은
+    /// 두지 않습니다 - 문서가 "비전투 상태가 확인되면 별도의 추가 안전 대기시간 없이 검토한다"고
+    /// 못박습니다.
+    /// <para>
+    /// <b>선점은 스쿼드가 중재합니다</b>. 여기서는 후보를 고르고 <see cref="SquadManager.TryClaimAutoRescue"/>에
+    /// 물어보기만 합니다. 각자 판단하면 여럿이 같은 대상으로 달려가 그동안 동행이 비게 됩니다.
+    /// </para>
+    /// <para>
+    /// 취소 조건은 문서의 다섯 가지입니다 - 새 전투, 구조자 피격, 구조자 다운, 대상 무효화, 경로 상실.
+    /// 그중 <b>경로 상실만</b> 재시도 간격이 붙습니다. 나머지는 조건이 풀리면 바로 다시 검토해도 됩니다.
+    /// </para>
+    /// </remarks>
+    private void UpdateRescue(bool canAct)
+    {
+        SquadManager manager = m_squadManager;
+        if (manager == null || m_memberController == null)
+        {
+            ClearRescue(false);
+            return;
+        }
+
+        bool inCombat = manager.Engagement != null && manager.Engagement.IsInCombat;
+
+        // 취소 조건 - 새 전투 시작, 구조자 피격, 구조자 다운·사망.
+        // 피격은 여기서 소비합니다. 구조를 하고 있지 않을 때 쌓인 표시는 의미가 없습니다.
+        bool hitWhileRescuing = m_rescueHitWhileRescuing;
+        m_rescueHitWhileRescuing = false;
+
+        if (!canAct || inCombat || hitWhileRescuing)
+        {
+            ClearRescue(false);
+            return;
+        }
+
+        // 이미 맡은 대상이 있으면 그것을 유지합니다. 매번 다시 고르면 같은 거리의 두 대상 사이에서 떨립니다.
+        if (m_rescueTarget != null && !IsRescueTargetUsable(m_rescueTarget, m_rescueInteractable))
+        {
+            ClearRescue(false);
+        }
+
+        if (m_rescueTarget == null)
+        {
+            if (!TrySelectRescueTarget(manager, out SquadMemberController target, out DownedAllyInteractable interactable))
+            {
+                return;
+            }
+
+            if (!manager.TryClaimAutoRescue(m_memberController, target))
+            {
+                // 다른 AI가 이미 맡았습니다. 나는 평소 행동을 계속합니다.
+                return;
+            }
+
+            m_rescueTarget = target;
+            m_rescueInteractable = interactable;
+            m_rescueHoldTimer = 0.0f;
+            m_rescueHoldStarted = false;
+        }
+
+        // 경로가 끊기면 취소하고 재시도 간격을 겁니다(§16).
+        if (CalculatePathDistance(transform.position, m_rescueTarget.transform.position) < 0.0f)
+        {
+            ClearRescue(true);
+        }
+    }
+
+    /// <summary>
+    /// 구조할 다운 아군을 고릅니다(§16).
+    /// </summary>
+    /// <param name="manager">스쿼드 매니저입니다.</param>
+    /// <param name="target">고른 대상입니다.</param>
+    /// <param name="interactable">그 대상의 구조 상호작용입니다.</param>
+    /// <returns>고를 대상이 있으면 true입니다.</returns>
+    /// <remarks>
+    /// 이미 누군가 붙어 있는 대상은 건너뜁니다("플레이어가 이미 구조 중이면 AI는 같은 구조를 시도하지
+    /// 않는다"). 홀드 여부만이 아니라 <b>누가 붙었는지</b>를 보는 이유는 내 홀드도 홀드이기 때문입니다.
+    /// <para>
+    /// 접근 경로가 없는 대상도 후보에서 뺍니다("유효한 접근 경로가 없으면 자동 구조를 시작하지 않는다").
+    /// 직선거리로 고르면 벽 너머 아군을 골라 놓고 벽에 붙어 비빕니다.
+    /// </para>
+    /// </remarks>
+    private bool TrySelectRescueTarget(SquadManager manager, out SquadMemberController target, out DownedAllyInteractable interactable)
+    {
+        target = null;
+        interactable = null;
+
+        IReadOnlyList<SquadMemberController> members = manager.SquadMembers;
+        if (members == null)
+        {
+            return false;
+        }
+
+        float bestPathDistance = float.MaxValue;
+
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController candidate = members[i];
+            if (candidate == null || candidate == m_memberController)
+            {
+                continue;
+            }
+
+            // 경로 실패로 접었던 대상은 재시도 간격이 지나기 전까지 다시 고르지 않습니다.
+            if (candidate == m_rescueRetryBlockedTarget && Time.time < m_rescueRetryAllowedTime)
+            {
+                continue;
+            }
+
+            DownedAllyInteractable candidateInteractable = candidate.GetComponent<DownedAllyInteractable>();
+            if (!IsRescueTargetUsable(candidate, candidateInteractable))
+            {
+                continue;
+            }
+
+            float flat = FlatDistance(transform.position, candidate.transform.position);
+            if (m_rescueSearchRange > 0.0f && flat > m_rescueSearchRange)
+            {
+                continue;
+            }
+
+            float pathDistance = CalculatePathDistance(transform.position, candidate.transform.position);
+            if (pathDistance < 0.0f || pathDistance >= bestPathDistance)
+            {
+                continue;
+            }
+
+            bestPathDistance = pathDistance;
+            target = candidate;
+            interactable = candidateInteractable;
+        }
+
+        return target != null;
+    }
+
+    /// <summary>
+    /// 그 대상을 지금 구조할 수 있는지 확인합니다(§16).
+    /// </summary>
+    /// <param name="candidate">확인할 멤버입니다.</param>
+    /// <param name="interactable">그 멤버의 구조 상호작용입니다.</param>
+    /// <returns>구조 대상으로 쓸 수 있으면 true입니다.</returns>
+    private bool IsRescueTargetUsable(SquadMemberController candidate, DownedAllyInteractable interactable)
+    {
+        if (candidate == null || interactable == null)
+        {
+            return false;
+        }
+
+        // 다운이 풀렸거나 죽었으면 대상이 무효화된 것입니다.
+        if (!candidate.IsAlive || !candidate.IsDown)
+        {
+            return false;
+        }
+
+        // 나 말고 다른 누군가가 이미 붙어 있으면 끼어들지 않습니다.
+        SquadMemberController activeInteractor = interactable.ActiveInteractorMember;
+        return activeInteractor == null || activeInteractor == m_memberController;
+    }
+
+    /// <summary>
+    /// 진행 중인 구조를 접습니다.
+    /// </summary>
+    /// <param name="blockRetry">경로 실패로 접는 것이면 true입니다. 재시도 간격을 겁니다(§16).</param>
+    /// <remarks>
+    /// 시작한 홀드는 반드시 취소해 줘야 합니다. <see cref="DownedAllyInteractable"/>가 홀드 중에
+    /// 대상의 다운 타이머를 멈추고 구조자 쪽 애니메이터·상호작용 잠금을 걸어 두므로,
+    /// 그냥 손을 놓으면 그 상태가 남습니다.
+    /// </remarks>
+    private void ClearRescue(bool blockRetry)
+    {
+        if (m_rescueTarget == null)
+        {
+            m_rescueHoldStarted = false;
+            m_rescueHoldTimer = 0.0f;
+            return;
+        }
+
+        if (m_rescueHoldStarted && m_rescueInteractable != null)
+        {
+            m_rescueInteractable.CancelHold(gameObject);
+        }
+
+        if (blockRetry)
+        {
+            m_rescueRetryBlockedTarget = m_rescueTarget;
+            m_rescueRetryAllowedTime = Time.time + Mathf.Max(0.0f, m_rescueRetryInterval);
+        }
+
+        if (m_squadManager != null)
+        {
+            m_squadManager.ReleaseAutoRescue(m_memberController);
+        }
+
+        m_rescueTarget = null;
+        m_rescueInteractable = null;
+        m_rescueHoldStarted = false;
+        m_rescueHoldTimer = 0.0f;
+    }
+
+    /// <summary>
+    /// 구조 대상에 닿았으면 기립 홀드를 진행합니다(§16).
+    /// </summary>
+    /// <remarks>
+    /// 홀드 진행도는 <b>부르는 쪽이 소유</b>합니다. <see cref="InteractionController"/>도 같은 방식으로
+    /// <c>m_holdTimer</c>를 굴려 넘기므로, 사람과 AI가 같은 구조 구현을 그대로 씁니다. 실제 기립·애니메이터·
+    /// 다운 타이머 처리는 전부 <see cref="DownedAllyInteractable"/> 안에 있습니다.
+    /// </remarks>
+    private void HandleRescueHold()
+    {
+        if (m_currentDecision.Kind != SquadAIActionKind.Rescue || m_rescueInteractable == null)
+        {
+            return;
+        }
+
+        if (!m_currentDecision.HoldPosition)
+        {
+            return;
+        }
+
+        if (!m_rescueHoldStarted)
+        {
+            m_rescueInteractable.BeginHold(gameObject);
+            m_rescueHoldStarted = true;
+            m_rescueHoldTimer = 0.0f;
+        }
+
+        float holdDuration = Mathf.Max(0.0f, m_rescueInteractable.HoldDuration);
+        m_rescueHoldTimer += Time.deltaTime;
+
+        float progress = holdDuration <= 0.0f
+            ? 1.0f
+            : Mathf.Clamp01(m_rescueHoldTimer / holdDuration);
+
+        m_rescueInteractable.UpdateHold(gameObject, progress);
+
+        if (m_rescueHoldTimer < holdDuration)
+        {
+            return;
+        }
+
+        // 홀드를 채웠습니다. 실제 기립은 상호작용 구현체가 합니다.
+        m_rescueInteractable.Interact(gameObject);
+        m_rescueInteractable.CompleteHold(gameObject);
+
+        // 완료 후 상태를 다시 평가합니다(§16). 대상이 일어났으므로 선점을 놓으면
+        // 다음 프레임 판정이 남은 다운 아군이나 일반 행동을 새로 고릅니다.
+        m_rescueHoldStarted = false;
+        ClearRescue(false);
     }
 
     /// <summary>
@@ -961,15 +1294,17 @@ public class SquadAIController : MonoBehaviour
             CanAct = canAct,
             HoldPosition = holdPosition,
 
-            // §16 자동 구조는 미구현입니다. 판정에 자리는 있고 입력이 아직 없습니다.
-            RescueRequested = false,
+            // 대상 선정과 선점 중재는 UpdateRescue가 이미 끝냈습니다(§16).
+            RescueRequested = m_rescueTarget != null,
+            RescueInReach = m_rescueTarget != null
+                            && FlatDistance(transform.position, m_rescueTarget.transform.position) <= m_rescueReachDistance,
 
             HasWeapon = m_weapon != null,
             IsReloading = m_weapon != null && m_weapon.IsReloading,
             CanStartReload = m_weapon != null && m_weapon.CanReload,
             CurrentBullet = m_weapon != null ? m_weapon.CurrentBullet : 0,
             TacticalReloadThreshold = m_tacticalReloadThreshold,
-            FiringEnabled = m_debugAllowFiring,
+            FiringEnabled = AllowFiring,
 
             IsJoining = m_isJoining,
             HasTarget = m_targeting.CurrentTarget != null,
@@ -1073,6 +1408,9 @@ public class SquadAIController : MonoBehaviour
             StopAgent();
             m_isJoining = false;
 
+            // 갈 수 없게 됐으므로 찜도 놓습니다. 남겨 두면 닿지도 못하는 자리를 계속 막습니다.
+            ClearFollowDestination();
+
             // 합류를 접었으므로 달리기도 내립니다. 이 시점에는 이번 프레임 판정이 아직 없어
             // 직전 값을 쓰면 달리기 속도가 남습니다.
             ApplyFollowSpeed(leader, false);
@@ -1119,10 +1457,31 @@ public class SquadAIController : MonoBehaviour
     {
         SquadAIActionKind kind = m_currentDecision.Kind;
 
+        // 구조는 다른 무엇보다 우선이므로 리더 쪽 목적지를 아예 보지 않습니다(§16 "접근부터 구조 완료까지
+        // 동행, 합류, 재장전, 자세 동조와 위치 조정보다 구조를 우선한다"). 플레이어가 합류 시작 거리 밖으로
+        // 나가도 구조를 끝낸 뒤에 합류합니다.
+        if (kind == SquadAIActionKind.Rescue)
+        {
+            if (m_currentDecision.HoldPosition || m_rescueTarget == null)
+            {
+                // 닿았으면 멈춰 서서 기립시킵니다. 접근 중 이동은 걷기입니다.
+                StopAgent();
+                ClearFollowDestination();
+                ApplyFollowSpeed(leader, false);
+                return;
+            }
+
+            SetFollowDestination(m_rescueTarget.transform.position);
+
+            ApplyFollowSpeed(leader, false);
+            m_agent.isStopped = false;
+            m_agent.SetDestination(m_destination);
+            return;
+        }
+
         if (kind == SquadAIActionKind.Combat && TryResolveCombatPosition(leader, out Vector3 combatPosition))
         {
-            m_destination = combatPosition;
-            m_hasDestination = true;
+            SetFollowDestination(combatPosition);
 
             // 전투 중 이동은 걷기입니다. 달리면 조준이 흔들리고, §10.3도 개인적인 회피를 위한
             // 달리기 반복을 금지합니다. 판정이 Combat에는 달리기를 얹지 않으므로 그대로 따릅니다.
@@ -1140,20 +1499,21 @@ public class SquadAIController : MonoBehaviour
             && IsPositionClear(transform.position))
         {
             StopAgent();
-            m_hasDestination = false;
+            ClearFollowDestination();
             ApplyFollowSpeed(leader, m_currentDecision.Sprint);
             return;
         }
 
         if (!TryResolveDestination(leader, out Vector3 destination))
         {
+            // 갈 자리를 못 찾았으면 찜도 놓습니다. 들고 있으면 못 가는 자리를 계속 막습니다.
             StopAgent();
+            ClearFollowDestination();
             ApplyFollowSpeed(leader, m_currentDecision.Sprint);
             return;
         }
 
-        m_destination = destination;
-        m_hasDestination = true;
+        SetFollowDestination(destination);
 
         ApplyFollowSpeed(leader, m_currentDecision.Sprint);
 
@@ -1399,9 +1759,15 @@ public class SquadAIController : MonoBehaviour
     /// <param name="destination">선택된 목적지입니다.</param>
     /// <returns>후보를 찾았으면 true입니다.</returns>
     /// <remarks>
-    /// 후보 각도의 시작점을 멤버 순번으로 어긋나게 둡니다. 같은 순서로 훑으면 두 멤버가 같은 후보를
-    /// 먼저 만나 같은 자리를 노립니다. 고정 자리를 주는 것이 아니라 탐색 순서만 다르게 하는 것이라
-    /// §6.1의 `슬롯별 고정 위치` 금지에 걸리지 않습니다.
+    /// 후보 고리를 멤버 순번으로 <b>서로 엇갈리게</b> 돌려 둡니다. 같은 고리를 쓰면 두 멤버가 같은 후보
+    /// 집합에서 "경로상 가장 가까운 자리"를 고르게 되고, 둘이 같은 방향에서 오면 같은 자리를 고릅니다.
+    /// 고정 자리를 주는 것이 아니라 후보 위상만 어긋나게 하는 것이라 §6.1의 `슬롯별 고정 위치` 금지에
+    /// 걸리지 않습니다.
+    /// <para>
+    /// <b>나누는 값은 AI 인원수입니다</b>(후보 수가 아닙니다). 후보 수로 나누면 8후보 기준 5.6도밖에
+    /// 벌어지지 않아 1.5m 고리에서 0.15m 차이가 됩니다. 즉 두 고리가 사실상 겹칩니다(실측으로 확인한
+    /// 결함). 인원수로 나누면 2인 기준 22.5도가 되어 후보가 서로의 사이사이에 놓입니다.
+    /// </para>
     /// </remarks>
     private bool TrySelectNearestFreePosition(Transform leader, out Vector3 destination)
     {
@@ -1410,7 +1776,7 @@ public class SquadAIController : MonoBehaviour
         int candidateCount = Mathf.Max(1, m_destinationCandidateCount);
         float radius = Mathf.Max(0.1f, m_joinCompleteDistance * DestinationRadiusRatio);
         float angleStep = 360.0f / candidateCount;
-        float angleOffset = angleStep * (ResolveMemberOrder() / (float)Mathf.Max(1, candidateCount));
+        float angleOffset = angleStep * (ResolveMemberOrder() / (float)Mathf.Max(1, ResolveAiMemberCount()));
 
         bool found = false;
         float bestDistance = float.MaxValue;
@@ -1476,6 +1842,34 @@ public class SquadAIController : MonoBehaviour
         return delta.magnitude;
     }
 
+    /// <summary>이동 목적지를 확정하고 스쿼드에 찜해 둡니다.</summary>
+    /// <param name="destination">가려는 자리입니다.</param>
+    /// <remarks>
+    /// 찜을 함께 걸어야 다른 AI가 같은 자리를 고르지 않습니다. 목적지를 정하는 곳이 여러 갈래
+    /// (동행·합류·전투 위치·구조 접근)라 한 곳으로 모아 두지 않으면 한 갈래에서 빠뜨리게 됩니다.
+    /// </remarks>
+    private void SetFollowDestination(Vector3 destination)
+    {
+        m_destination = destination;
+        m_hasDestination = true;
+        m_squadManager.ClaimDestination(m_memberController, destination);
+    }
+
+    /// <summary>이동 목적지를 비우고 찜도 놓습니다.</summary>
+    /// <remarks>
+    /// 제자리를 지키기로 했으면 찜을 놓아야 합니다. 그러지 않으면 내가 서 있지도 않은 자리를 계속
+    /// 막고 있어 다른 AI가 그 근처를 못 씁니다. 내 현재 위치는 어차피 따로 검사됩니다.
+    /// </remarks>
+    private void ClearFollowDestination()
+    {
+        m_hasDestination = false;
+
+        if (m_squadManager != null)
+        {
+            m_squadManager.ReleaseDestination(m_memberController);
+        }
+    }
+
     /// <summary>그 자리가 다른 캐릭터와 겹치지 않는지 확인합니다.</summary>
     /// <param name="position">확인할 위치입니다.</param>
     /// <returns>비어 있으면 true입니다.</returns>
@@ -1491,7 +1885,7 @@ public class SquadAIController : MonoBehaviour
             return true;
         }
 
-        float clearanceSqr = m_destinationClearance * m_destinationClearance;
+        float clearanceSqr = DestinationClearance * DestinationClearance;
         for (int i = 0; i < members.Count; i++)
         {
             SquadMemberController member = members[i];
@@ -1513,7 +1907,9 @@ public class SquadAIController : MonoBehaviour
             }
         }
 
-        return true;
+        // 다른 AI가 이미 그 자리를 찜했는지도 봅니다. 현재 위치만 보면 둘 다 멀리서 오는 중일 때
+        // 그 자리가 비어 있어 양쪽 다 통과하고, 도착해서야 겹칩니다(실측: 목적지 간격 0.31m).
+        return !m_squadManager.IsDestinationClaimedByOther(m_memberController, position, DestinationClearance);
     }
 
     /// <summary>
@@ -1564,6 +1960,35 @@ public class SquadAIController : MonoBehaviour
     /// 회피 우선순위와 후보 탐색 시작 각도를 서로 어긋나게 하는 데만 씁니다. 이 순번으로 자리를
     /// 고정하지는 않습니다. 플레이어 조작 멤버를 건너뛰고 세므로 조작권이 바뀌어도 순번이 이어집니다.
     /// </remarks>
+    /// <summary>지금 살아 있는 AI 조작 멤버가 몇 명인지 셉니다.</summary>
+    /// <returns>AI 멤버 수입니다. 최소 1을 돌려줍니다.</returns>
+    /// <remarks>
+    /// 후보 고리를 몇 등분해 엇갈리게 할지 정하는 데 씁니다. 다운·사망한 멤버를 세면 남은 인원이
+    /// 실제보다 촘촘하게 갈라져 자리가 낭비됩니다.
+    /// </remarks>
+    private int ResolveAiMemberCount()
+    {
+        var members = m_squadManager.SquadMembers;
+        if (members == null)
+        {
+            return 1;
+        }
+
+        int count = 0;
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController member = members[i];
+            if (member == null || member.IsPlayerSquadMember || !member.IsAlive || member.IsDown)
+            {
+                continue;
+            }
+
+            count++;
+        }
+
+        return Mathf.Max(1, count);
+    }
+
     private int ResolveMemberOrder()
     {
         var members = m_squadManager.SquadMembers;

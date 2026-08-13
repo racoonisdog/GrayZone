@@ -16,9 +16,14 @@ public sealed class SurfaceFeedbackSO : ScriptableObject, IFeedbackData
     [Tooltip("인스펙터와 디버그 로그에서 표면 타입을 구분할 식별 이름입니다.")]
     [SerializeField] private string m_surfaceId = "Default";
 
-    [Tooltip("이 Feedback과 연결할 물리 머티리얼 목록입니다.")]
-    [FeedbackReference(FeedbackReferenceKind.SurfaceMaterial, "물리 머티리얼 목록")]
-    [SerializeField] private PhysicsMaterial[] m_physicsMaterials = Array.Empty<PhysicsMaterial>();
+    // 재질 식별을 물리 머티리얼에서 SurfaceMaterialType으로 옮겼습니다. 소음 차폐가 같은 축을 읽어야 하는데
+    // 물리 머티리얼은 마찰·반발 값이라 식별용으로 전용하면 물리 튜닝과 분류가 서로를 흔들고, 밸런스 SO에
+    // Unity Object 참조를 담을 수 없다는 CSV 규칙에도 걸립니다. 자세한 이유는 SurfaceMaterialTag에 적었습니다.
+    //
+    // [FeedbackReference]도 함께 뗐습니다. 그 어트리뷰트는 에셋 참조의 누락을 잡는 장치인데 열거형은
+    // 참조가 아니라 값이라 검사 대상이 아닙니다. 값이 비어 있는 것은 아래 MaterialTypes 자체로 드러납니다.
+    [Tooltip("이 Feedback을 적용할 재질 목록입니다. 여러 개를 넣으면 탄착 연출에서는 같은 것으로 퉁쳐집니다.")]
+    [SerializeField] private SurfaceMaterialType[] m_materialTypes = Array.Empty<SurfaceMaterialType>();
 
     [Header("Surface Response")]
     [Tooltip("표면이 피격됐을 때 후보 중 하나를 선택해 재생할 사운드 목록입니다.")]
@@ -40,8 +45,8 @@ public sealed class SurfaceFeedbackSO : ScriptableObject, IFeedbackData
     /// <summary>표면 타입을 식별하는 이름입니다.</summary>
     public string SurfaceId => m_surfaceId;
 
-    /// <summary>이 Feedback과 연결된 물리 머티리얼 목록입니다.</summary>
-    public IReadOnlyList<PhysicsMaterial> PhysicsMaterials => m_physicsMaterials;
+    /// <summary>이 Feedback을 적용할 재질 목록입니다.</summary>
+    public IReadOnlyList<SurfaceMaterialType> MaterialTypes => m_materialTypes;
 
     /// <summary>표면 피격 사운드 후보 목록입니다.</summary>
     public IReadOnlyList<AudioClip> ImpactSounds => m_impactSounds;

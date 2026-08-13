@@ -131,6 +131,13 @@ public class SquadManager : MonoBehaviour
     [Tooltip("피격으로 확인한 공격자 위치를 실시간으로 유지하는 시간입니다. 뒤에서 맞아도 잠시 위치를 공유합니다.")]
     [SerializeField] private float m_attackerIntelHoldDuration = 3.0f;
 
+    [Foldout("Squad AI Options")]
+    [Tooltip("AI 팀원끼리 유지할 간격입니다. 목적지가 다른 AI의 현재 위치나 찜한 목적지와 이 거리 안이면 겹친 것으로 봅니다. 캡슐 반지름이 0.3이라 이 값에서 0.6을 뺀 만큼이 실제 몸 사이 여유입니다.")]
+    [SerializeField] private float m_aiMemberSpacing = 1.5f;
+
+    [Tooltip("팀 AI의 발사 허용 여부입니다. 끄면 조준과 대상 선정은 그대로 두고 발사와 재장전만 멈춥니다. 조작 중인 캐릭터의 사격에는 영향이 없습니다.")]
+    [SerializeField] private bool m_aiFiringAllowed = true;
+
     // Debug 구역은 직렬화 필드의 맨 끝에 둡니다. Foldout은 다음 Foldout이나 EndFoldout이 나올 때까지 이어지므로,
     // 중간에 두면 뒤따르는 필드가 전부 Debug 구역으로 딸려 들어갑니다.
     [Foldout("Debug")]
@@ -152,6 +159,14 @@ public class SquadManager : MonoBehaviour
 
     /// <summary>진행 중인 다운 강제 전환의 카메라 이동 구간입니다. 없으면 null입니다(§15.1).</summary>
     private Coroutine m_forcedSwitchRoutine;
+
+    // 자동 구조를 맡은 AI 멤버와 그 대상입니다(§16). 하나만 구조하도록 스쿼드가 중재합니다.
+    private SquadMemberController m_autoRescuer;
+    private SquadMemberController m_autoRescueTarget;
+
+    // AI가 찜해 둔 이동 목적지입니다(§6.1, §6.3). 서로 같은 자리를 노리지 않게 스쿼드가 들고 있습니다.
+    private readonly Dictionary<SquadMemberController, Vector3> m_destinationClaims =
+        new Dictionary<SquadMemberController, Vector3>();
 
     /// <summary>지금 다운 강제 전환의 카메라 이동 중인지 여부입니다.</summary>
     /// <remarks>
@@ -931,6 +946,187 @@ public class SquadManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 지금 자동 구조를 맡고 있는 AI 멤버입니다. 없으면 <c>null</c>입니다(§16).
+    /// </summary>
+    /// <remarks>
+    /// 문서가 "자동 구조를 수행할 수 있는 AI 조작 슬롯 <b>하나만</b> 구조를 시작한다"고 규정하므로,
+    /// 누가 맡았는지는 개별 AI가 아니라 스쿼드가 알아야 합니다. 여럿이 동시에 달려가면 나머지는
+    /// 헛걸음하고 그동안 동행이 비는데, 각자 판단해서는 그것을 막을 수 없습니다.
+    /// </remarks>
+    public SquadMemberController AutoRescuer => m_autoRescuer;
+
+    /// <summary>
+    /// 자동 구조 대상을 선점합니다(§16).
+    /// </summary>
+    /// <param name="claimant">구조를 맡겠다는 AI 멤버입니다.</param>
+    /// <param name="target">구조할 다운된 멤버입니다.</param>
+    /// <returns>선점했으면 true입니다. 이미 다른 멤버가 맡고 있으면 false입니다.</returns>
+    /// <remarks>
+    /// 이미 자기가 들고 있으면 true를 돌려줍니다. 매 프레임 다시 불러도 되게 하기 위해서입니다.
+    /// 선점자가 죽거나 다운되면 그 선점은 무효이므로 다른 멤버가 가져갈 수 있습니다.
+    /// </remarks>
+    public bool TryClaimAutoRescue(SquadMemberController claimant, SquadMemberController target)
+    {
+        if (claimant == null || target == null)
+        {
+            return false;
+        }
+
+        if (m_autoRescuer == claimant)
+        {
+            m_autoRescueTarget = target;
+            return true;
+        }
+
+        // 앞선 선점자가 더 이상 구조할 수 있는 상태가 아니면 자리를 비웁니다.
+        if (m_autoRescuer != null && (!m_autoRescuer.IsAlive || m_autoRescuer.IsDown))
+        {
+            m_autoRescuer = null;
+            m_autoRescueTarget = null;
+        }
+
+        if (m_autoRescuer != null)
+        {
+            return false;
+        }
+
+        m_autoRescuer = claimant;
+        m_autoRescueTarget = target;
+        return true;
+    }
+
+    /// <summary>
+    /// 자동 구조 선점을 놓습니다(§16). 자기가 들고 있을 때만 풀립니다.
+    /// </summary>
+    /// <param name="claimant">선점을 놓는 멤버입니다.</param>
+    public void ReleaseAutoRescue(SquadMemberController claimant)
+    {
+        if (claimant == null || m_autoRescuer != claimant)
+        {
+            return;
+        }
+
+        m_autoRescuer = null;
+        m_autoRescueTarget = null;
+    }
+
+    /// <summary>
+    /// AI 팀원끼리 유지할 간격입니다(§6.1 "신체 겹침이나 길막이 발생하면 다른 유효 위치로 이동한다").
+    /// </summary>
+    /// <remarks>
+    /// <b>멤버가 아니라 스쿼드가 소유합니다.</b> 이것은 "이 캐릭터의 성질"이 아니라 스쿼드 전체에 걸리는
+    /// 편성 규칙이고, 멤버마다 사본을 두면 값이 서로 어긋나거나 나중에 합류한 멤버만 옛 값을 씁니다.
+    /// 조작 캐릭터를 전환해도 값이 그대로여야 한다는 요구와도 맞습니다.
+    /// </remarks>
+    public float AiMemberSpacing
+    {
+        get => m_aiMemberSpacing;
+        set => m_aiMemberSpacing = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>
+    /// 팀 AI의 발사 허용 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// <b>스쿼드 전체 설정입니다.</b> 끄면 AI가 조준과 대상 선정은 계속하되 발사와 재장전만 멈춥니다.
+    /// <para>
+    /// <b>조작 중인 캐릭터는 영향을 받지 않습니다.</b> 사람의 사격은 <see cref="AimController"/>와
+    /// <see cref="Gun"/>을 거치고, 이 값은 <see cref="SquadAIController"/>만 읽는데 그 컴포넌트는
+    /// 조작 멤버에서 꺼져 있기 때문입니다. 그래서 "끄면 플레이어는 쏠 수 있고 팀 AI만 못 쏜다"가 됩니다.
+    /// </para>
+    /// <para>
+    /// 값을 멤버가 아니라 여기 두는 이유는 전환 때문입니다. 멤버마다 사본을 들고 있으면 전환으로
+    /// 역할이 바뀔 때마다 누가 옛 값을 쥐고 있는지가 갈리고, 새로 합류하거나 구조로 돌아온 멤버는
+    /// 프리팹 기본값을 그대로 씁니다.
+    /// </para>
+    /// </remarks>
+    public bool AiFiringAllowed
+    {
+        get => m_aiFiringAllowed;
+        set => m_aiFiringAllowed = value;
+    }
+
+    /// <summary>
+    /// AI가 가려는 목적지를 찜해 둡니다(§6.1, §6.3).
+    /// </summary>
+    /// <param name="member">목적지를 정한 멤버입니다.</param>
+    /// <param name="destination">그 멤버가 가려는 자리입니다.</param>
+    /// <remarks>
+    /// <b>이 대장이 없으면 두 AI가 같은 자리로 걸어갑니다.</b> 각자 "그 자리가 비었는가"를 다른 멤버의
+    /// <b>현재 위치</b>로만 판정하는데, 둘 다 아직 멀리서 오는 중이면 그 자리는 실제로 비어 있어
+    /// 양쪽 다 통과합니다. 도착하고 나서야 겹침이 드러나고 그때는 이미 붙어 있습니다.
+    /// 실측에서 두 AI의 목적지가 0.31m 떨어져 몸이 맞닿았습니다(캡슐 반지름 각 0.30m).
+    /// <para>
+    /// 내가 어디로 갈 작정인지는 나만 알기 때문에, 이 정보는 개별 AI가 아니라 스쿼드가 들고 있어야 합니다.
+    /// </para>
+    /// </remarks>
+    public void ClaimDestination(SquadMemberController member, Vector3 destination)
+    {
+        if (member == null)
+        {
+            return;
+        }
+
+        m_destinationClaims[member] = destination;
+    }
+
+    /// <summary>찜해 둔 목적지를 놓습니다. 제자리를 지키기로 했거나 AI에서 벗어날 때 부릅니다.</summary>
+    /// <param name="member">놓는 멤버입니다.</param>
+    public void ReleaseDestination(SquadMemberController member)
+    {
+        if (member == null)
+        {
+            return;
+        }
+
+        m_destinationClaims.Remove(member);
+    }
+
+    /// <summary>
+    /// 그 자리를 다른 멤버가 이미 찜했는지 확인합니다(§6.3 "다른 캐릭터와 겹치는 위치는 제외한다").
+    /// </summary>
+    /// <param name="asker">묻는 멤버입니다. 자기 찜은 걸림돌로 보지 않습니다.</param>
+    /// <param name="position">확인할 자리입니다.</param>
+    /// <param name="clearance">이 거리 안이면 겹친 것으로 봅니다.</param>
+    /// <returns>다른 멤버의 찜과 겹치면 true입니다.</returns>
+    /// <remarks>
+    /// 죽었거나 다운된 멤버, 그리고 조작 멤버의 찜은 무시합니다. 조작 멤버는 AI 목적지를 잡지 않으며,
+    /// 전환으로 조작권이 넘어간 멤버의 옛 찜이 남아 있을 수 있습니다.
+    /// </remarks>
+    public bool IsDestinationClaimedByOther(SquadMemberController asker, Vector3 position, float clearance)
+    {
+        if (clearance <= 0.0f)
+        {
+            return false;
+        }
+
+        float clearanceSqr = clearance * clearance;
+
+        foreach (KeyValuePair<SquadMemberController, Vector3> claim in m_destinationClaims)
+        {
+            SquadMemberController member = claim.Key;
+            if (member == null || member == asker || member.IsPlayerSquadMember)
+            {
+                continue;
+            }
+
+            if (!member.IsAlive || member.IsDown)
+            {
+                continue;
+            }
+
+            Vector3 delta = claim.Value - position;
+            delta.y = 0.0f;
+            if (delta.sqrMagnitude < clearanceSqr)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// 입력 모드에 따른 멤버별 상태를 스쿼드 전원에게 적용합니다.
     /// </summary>
     /// <param name="gameplayEnabled">게임플레이 입력을 받으면 true, UI 모드처럼 막으면 false입니다.</param>
@@ -1013,7 +1209,50 @@ public class SquadManager : MonoBehaviour
             return false;
         }
 
+        // 자동 구조 중인 AI 슬롯은 전환 대상에서 제외합니다(§16 "구조 중인 AI 조작 슬롯은 일반 캐릭터
+        // 전환 대상으로 선택할 수 없다"). 전환하면 조작권이 넘어오며 AI 판단이 지워져 구조가 끊깁니다.
+        //
+        // 다만 다운 강제 전환에서 이 멤버가 마지막 후보라면 막을 수 없습니다. 그러면 조작할 캐릭터가
+        // 없어 게임오버가 되는데, 구조를 지키자고 게임을 끝내는 것은 뒤집힌 우선순위입니다.
+        if (m_autoRescuer == member && HasOtherSwitchableMember(index))
+        {
+            return false;
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// 지정한 인덱스 말고 조작 가능한 멤버가 또 있는지 확인합니다.
+    /// </summary>
+    /// <param name="excludedIndex">제외할 인덱스입니다.</param>
+    /// <returns>다른 후보가 있으면 true입니다.</returns>
+    /// <remarks>
+    /// 구조 중인 멤버를 전환 후보에서 빼도 되는지 판단하는 데 씁니다. 재귀를 피하려고
+    /// <see cref="CanSwitchTo"/>가 아니라 같은 조건을 직접 봅니다(구조 제외 조건만 뺀 것입니다).
+    /// </remarks>
+    private bool HasOtherSwitchableMember(int excludedIndex)
+    {
+        if (m_squadMembers == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < m_squadMembers.Count; i++)
+        {
+            if (i == excludedIndex)
+            {
+                continue;
+            }
+
+            SquadMemberController member = m_squadMembers[i];
+            if (member != null && member.IsAlive && !member.IsDown)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

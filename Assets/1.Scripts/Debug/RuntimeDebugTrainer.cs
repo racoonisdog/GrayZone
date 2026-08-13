@@ -204,6 +204,11 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private GameObject m_enemyTemplate;
     private GameObject m_enemyTemplateHolder;
 
+    // 스폰 원본 후보입니다. 씬에 여러 종류의 적이 있으면 어느 것을 복제할지 직접 고를 수 있게 합니다.
+    // 고르지 않았거나 고른 대상이 사라졌으면 종전대로 씬에서 가장 먼저 찾은 적을 씁니다.
+    private readonly List<EnemyController> m_enemyTemplateChoices = new List<EnemyController>();
+    private int m_enemyTemplateIndex = -1;
+
     private GUIStyle m_titleStyle;
     private GUIStyle m_headerStyle;
 
@@ -277,6 +282,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
             m_enemyTemplateHolder = null;
             m_enemyTemplate = null;
         }
+
+        // 후보는 씬의 오브젝트를 가리키므로 씬과 함께 사라집니다. 참조를 남기지 않도록 같이 비웁니다.
+        m_enemyTemplateChoices.Clear();
+        m_enemyTemplateIndex = -1;
 
         m_sceneInputModeController = null;
         m_usesSceneInputModeController = false;
@@ -560,6 +569,16 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         SquadManager squadManager = FindFirstObjectByType<SquadManager>();
         SquadMemberController player = squadManager != null ? squadManager.PlayerSquadMember : null;
+
+        // 입력 플래그는 스쿼드 전원에게 되돌립니다. PlayerInput만 켜면 컴포넌트 쪽 게이트가 내려간 채로
+        // 남아 조작이 통째로 죽습니다(배경 조작을 쓰다 닫은 경우가 그렇습니다). 그리고 배경 조작은
+        // 전원에게 걸리므로 복구도 전원에게 가야 합니다. 조작 멤버 하나만 되돌리면 나머지는 내려간 채
+        // 남고, 나중에 그 멤버로 전환했을 때 입력이 죽어 있습니다.
+        if (squadManager != null)
+        {
+            squadManager.ApplyInputModeToSquad(true);
+        }
+
         if (player != null)
         {
             PlayerInput playerInput = player.GetComponent<PlayerInput>();
@@ -569,8 +588,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
                 playerInput.SwitchCurrentActionMap("Player");
             }
 
-            // 입력 플래그까지 되돌립니다. PlayerInput만 켜면 컴포넌트 쪽 게이트가 내려간 채로 남아
-            // 조작이 통째로 죽습니다(배경 조작을 쓰다 닫은 경우가 그렇습니다).
+            // 커서는 화면에 하나뿐이라 조작 멤버 쪽에서 한 번만 다룹니다.
             player.GetComponent<PlayerInputController>()?.SetPlayerCursorMode(false);
         }
 
@@ -1750,16 +1768,21 @@ public class RuntimeDebugTrainer : MonoBehaviour
     }
 
     /// <summary>
-    /// 팀 AI의 사격 허용 여부를 켜고 끕니다.
+    /// 팀 AI의 사격 허용 여부와 팀원 간격을 조절합니다.
     /// </summary>
     /// <remarks>
-    /// 조준과 대상 선정은 그대로 두고 발사와 재장전만 막습니다. 동료 사격이 섞이면 무기 튜닝이나
-    /// 적 행동 관찰이 어려워지므로 그때 끕니다.
-    /// 개별 AI의 인스펙터 Debug 폴드아웃에도 같은 토글이 있고, 여기서는 스쿼드 전체를 한 번에 바꿉니다.
+    /// <b>이 탭의 값은 스쿼드 전체 설정입니다.</b> 지금 어떤 캐릭터를 조작 중인지와 무관하게 걸리고,
+    /// 조작 캐릭터를 전환해도 그대로 유지됩니다. 값을 <see cref="SquadManager"/>가 소유하므로
+    /// 여기서는 그 하나를 읽고 쓰기만 합니다. 멤버를 순회하며 각자에게 복사해 넣던 방식은
+    /// 전환이나 구조 복귀로 멤버 구성이 바뀔 때 일부만 옛 값을 쥐게 됩니다.
+    /// <para>
+    /// 사격 허용을 꺼도 <b>조작 중인 캐릭터는 그대로 쏠 수 있습니다</b>. 이 값은
+    /// <see cref="SquadAIController"/>만 읽고 그 컴포넌트는 조작 멤버에서 꺼져 있기 때문입니다.
+    /// </para>
     /// </remarks>
     private void DrawSquadAiControlSection()
     {
-        GUILayout.Label("■ 팀 AI 제어", m_headerStyle);
+        GUILayout.Label("■ 팀 AI 제어 (스쿼드 전체 · 전환과 무관)", m_headerStyle);
 
         SquadManager squadManager = SquadManager.Instance;
         if (squadManager == null || squadManager.SquadMembers == null)
@@ -1768,7 +1791,16 @@ public class RuntimeDebugTrainer : MonoBehaviour
             return;
         }
 
-        var controllers = new List<SquadAIController>();
+        bool requested = GUILayout.Toggle(
+            squadManager.AiFiringAllowed,
+            " 팀 AI 사격 허용 (끄면 조준만 하고 쏘지 않음 / 조작 캐릭터는 영향 없음)");
+        if (requested != squadManager.AiFiringAllowed)
+        {
+            squadManager.AiFiringAllowed = requested;
+        }
+
+        DrawSquadAiSpacingSlider(squadManager);
+
         foreach (SquadMemberController member in squadManager.SquadMembers)
         {
             if (member == null)
@@ -1777,47 +1809,41 @@ public class RuntimeDebugTrainer : MonoBehaviour
             }
 
             SquadAIController ai = member.GetComponent<SquadAIController>();
-            if (ai != null)
+            if (ai == null)
             {
-                controllers.Add(ai);
+                continue;
             }
-        }
 
-        if (controllers.Count == 0)
-        {
-            GUILayout.Label("SquadAIController를 가진 멤버가 없습니다.");
-            return;
-        }
-
-        // 하나라도 켜져 있으면 켜진 것으로 봅니다. 끌 때 전부 꺼지는 편이 직관적입니다.
-        bool anyAllowed = false;
-        foreach (SquadAIController ai in controllers)
-        {
-            if (ai.AllowFiring)
-            {
-                anyAllowed = true;
-                break;
-            }
-        }
-
-        bool requested = GUILayout.Toggle(anyAllowed, " 팀 AI 사격 허용 (끄면 조준만 하고 쏘지 않음)");
-        if (requested != anyAllowed)
-        {
-            foreach (SquadAIController ai in controllers)
-            {
-                ai.AllowFiring = requested;
-            }
-        }
-
-        foreach (SquadAIController ai in controllers)
-        {
-            SquadMemberController member = ai.GetComponent<SquadMemberController>();
-            string role = member != null && member.IsPlayerSquadMember ? "조작중" : "AI";
+            string role = member.IsPlayerSquadMember ? "조작중" : "AI";
             string targetName = ai.Targeting != null && ai.Targeting.CurrentTarget != null
                 ? ai.Targeting.CurrentTarget.name
                 : "없음";
 
-            GUILayout.Label($"  {ai.name} [{role}]  사격={(ai.AllowFiring ? "허용" : "금지")}  대상={targetName}");
+            GUILayout.Label($"  {ai.name} [{role}]  대상={targetName}");
+        }
+    }
+
+    /// <summary>
+    /// AI 팀원끼리 유지할 간격을 조절합니다(§6.1).
+    /// </summary>
+    /// <param name="squadManager">값을 소유한 스쿼드 매니저입니다.</param>
+    /// <remarks>
+    /// 캡슐 반지름이 0.3이라 실제 몸 사이 여유는 이 값에서 0.6을 뺀 만큼입니다. 값을 너무 키우면
+    /// 합류 완료 반경 안에 두 자리가 다 들어가지 못해 AI가 자리를 못 찾고 제자리에 섭니다.
+    /// </remarks>
+    private void DrawSquadAiSpacingSlider(SquadManager squadManager)
+    {
+        float spacing = squadManager.AiMemberSpacing;
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Label($"AI 팀원 간격  {spacing:F2}m  (몸 사이 여유 {Mathf.Max(0.0f, spacing - 0.6f):F2}m)",
+            GUILayout.Width(300));
+        float next = GUILayout.HorizontalSlider(spacing, 0.0f, 4.0f);
+        GUILayout.EndHorizontal();
+
+        if (!Mathf.Approximately(next, spacing))
+        {
+            squadManager.AiMemberSpacing = next;
         }
     }
 
@@ -1955,6 +1981,23 @@ public class RuntimeDebugTrainer : MonoBehaviour
         GUILayout.Label($"■ 좀비 스폰 (현재 적 {enemyCount}마리)", m_headerStyle);
 
         GUILayout.BeginHorizontal();
+        GUILayout.Label("원본", GUILayout.Width(40));
+        if (GUILayout.Button("◀", GUILayout.Width(30)))
+        {
+            CycleEnemyTemplateChoice(-1);
+        }
+        GUILayout.Label(DescribeSelectedEnemyTemplate(), GUILayout.Width(230));
+        if (GUILayout.Button("▶", GUILayout.Width(30)))
+        {
+            CycleEnemyTemplateChoice(1);
+        }
+        if (GUILayout.Button("목록 갱신", GUILayout.Width(90)))
+        {
+            RefreshEnemyTemplateChoices();
+        }
+        GUILayout.EndHorizontal();
+
+        GUILayout.BeginHorizontal();
         GUILayout.Label("좌표", GUILayout.Width(40));
         GUILayout.Label("X", GUILayout.Width(14));
         m_spawnX = GUILayout.TextField(m_spawnX, GUILayout.Width(90));
@@ -2077,7 +2120,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         // 한 번 원본 확보를 시도했고 실패했더라도, 이후 씬에 좀비가 생겼을 수 있으니 매번 재시도합니다.
-        EnemyController source = FindFirstObjectByType<EnemyController>(FindObjectsInactive.Include);
+        EnemyController source = ResolveSelectedEnemySource();
         if (source == null)
         {
             return null;
@@ -2095,6 +2138,110 @@ public class RuntimeDebugTrainer : MonoBehaviour
         m_enemyTemplate = Instantiate(source.gameObject, m_enemyTemplateHolder.transform);
         m_enemyTemplate.name = "EnemyTemplate(Trainer)";
         return m_enemyTemplate;
+    }
+
+    /// <summary>고른 스폰 원본을 돌려줍니다. 고르지 않았거나 고른 대상이 사라졌으면 씬에서 가장 먼저 찾은 적으로 되돌립니다.</summary>
+    private EnemyController ResolveSelectedEnemySource()
+    {
+        if (m_enemyTemplateIndex >= 0 && m_enemyTemplateIndex < m_enemyTemplateChoices.Count)
+        {
+            EnemyController selected = m_enemyTemplateChoices[m_enemyTemplateIndex];
+            if (selected != null)
+            {
+                return selected;
+            }
+        }
+
+        return FindFirstObjectByType<EnemyController>(FindObjectsInactive.Include);
+    }
+
+    /// <summary>씬의 적을 훑어 스폰 원본 후보 목록을 다시 만듭니다. 트레이너가 만든 사본은 후보에서 제외합니다.</summary>
+    private void RefreshEnemyTemplateChoices()
+    {
+        EnemyController previous = null;
+        if (m_enemyTemplateIndex >= 0 && m_enemyTemplateIndex < m_enemyTemplateChoices.Count)
+        {
+            previous = m_enemyTemplateChoices[m_enemyTemplateIndex];
+        }
+
+        m_enemyTemplateChoices.Clear();
+        foreach (EnemyController enemy in FindObjectsByType<EnemyController>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (enemy == null)
+            {
+                continue;
+            }
+
+            // 트레이너가 보관 중인 원본 사본과 스폰 결과물은 후보에서 뺍니다. 사본의 사본이 쌓이는 걸 막기 위함입니다.
+            string name = enemy.gameObject.name;
+            if (name.StartsWith("Enemy(Trainer)", StringComparison.Ordinal)
+                || name.StartsWith("EnemyTemplate(Trainer)", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            m_enemyTemplateChoices.Add(enemy);
+        }
+
+        m_enemyTemplateChoices.Sort((a, b) => string.CompareOrdinal(a.gameObject.name, b.gameObject.name));
+        m_enemyTemplateIndex = previous != null ? m_enemyTemplateChoices.IndexOf(previous) : -1;
+    }
+
+    /// <summary>원본 선택을 앞뒤로 옮깁니다. 목록 양 끝을 넘어가면 자동(씬에서 첫 적)으로 돌아옵니다.</summary>
+    private void CycleEnemyTemplateChoice(int step)
+    {
+        if (m_enemyTemplateChoices.Count == 0)
+        {
+            RefreshEnemyTemplateChoices();
+        }
+
+        if (m_enemyTemplateChoices.Count == 0)
+        {
+            m_enemyTemplateIndex = -1;
+            return;
+        }
+
+        int count = m_enemyTemplateChoices.Count;
+        int next = m_enemyTemplateIndex + step;
+        if (next < -1)
+        {
+            next = count - 1;
+        }
+        else if (next >= count)
+        {
+            next = -1;
+        }
+
+        if (next == m_enemyTemplateIndex)
+        {
+            return;
+        }
+
+        m_enemyTemplateIndex = next;
+
+        // 원본이 바뀌었으니 보관 중이던 사본은 버리고, 다음 스폰 때 새 원본으로 다시 복제하게 합니다.
+        if (m_enemyTemplate != null)
+        {
+            Destroy(m_enemyTemplate);
+            m_enemyTemplate = null;
+        }
+    }
+
+    /// <summary>현재 선택을 창에 표시할 문구로 만듭니다.</summary>
+    private string DescribeSelectedEnemyTemplate()
+    {
+        if (m_enemyTemplateIndex < 0 || m_enemyTemplateIndex >= m_enemyTemplateChoices.Count)
+        {
+            return "자동 (씬에서 첫 적)";
+        }
+
+        EnemyController selected = m_enemyTemplateChoices[m_enemyTemplateIndex];
+        if (selected == null)
+        {
+            return "자동 (고른 적이 사라짐)";
+        }
+
+        return $"{m_enemyTemplateIndex + 1}/{m_enemyTemplateChoices.Count}  {selected.gameObject.name}";
     }
 
     private void KillAllEnemies()

@@ -53,9 +53,10 @@ namespace GrayZone.EditorTools
                 case "anim": return DumpAnimator(p.Get("name", ""));
                 case "ragdoll": return DumpRagdoll(p.Get("name", ""));
                 case "killenemy": return KillEnemy(p.Get("name", ""));
+                case "noise": return DumpNoise(p.Get("name", ""));
                 default:
                     return new ErrorResponse(
-                        "what 파라미터가 필요합니다: combat | sceneui | go | revive | anim | ragdoll | killenemy");
+                        "what 파라미터가 필요합니다: combat | sceneui | go | revive | anim | ragdoll | killenemy | noise");
             }
         }
 
@@ -140,6 +141,9 @@ namespace GrayZone.EditorTools
                         holdPosition = ai.CurrentDecision.HoldPosition,
                         joining = ai.IsJoining,
                         repositioning = ai.IsRepositioning,
+                        // 자동 구조(§16). 대상과 기립 홀드 진행도입니다.
+                        rescueTarget = ai.RescueTarget != null ? ai.RescueTarget.name : null,
+                        rescueHold = ai.RescueHoldProgress01.ToString("F2"),
                     },
                 });
             }
@@ -456,6 +460,62 @@ namespace GrayZone.EditorTools
             }
 
             return new SuccessResponse($"ragdoll: {dumps.Count} enemy(s).", dumps);
+        }
+
+        // ── noise ────────────────────────────────────────────────────────────
+        /// <summary>
+        /// 변이체별 소음 감지 상태와 차폐 판정 결과를 덤프합니다.
+        /// </summary>
+        /// <param name="nameFilter">대상 GameObject 이름 필터입니다. 비우면 전부 덤프합니다.</param>
+        /// <remarks>
+        /// 차폐가 실제로 걸렸는지는 콘솔로 알 수 없습니다. 소음이 조용히 약해지는 것이 전부라
+        /// 에러도 경고도 나지 않습니다. 그래서 통과 비율과 인지 게이지를 함께 봐야 판별됩니다.
+        ///
+        /// <c>transmission</c>은 "직전에 판정한 소음"의 값입니다. 지금 추적 중인 소음의 것이 아닙니다.
+        /// 여러 소음이 섞이는 상황에서는 마지막 하나만 보이므로, 총성 한 발씩 끊어 확인하는 편이 낫습니다.
+        /// </remarks>
+        private static object DumpNoise(string nameFilter)
+        {
+            bool useFilter = !string.IsNullOrWhiteSpace(nameFilter);
+
+            var noiseManager = FieldManager.Instance != null ? FieldManager.Instance.NoiseManager : null;
+
+            var dumps = new List<object>();
+            foreach (var controller in Object.FindObjectsByType<EnemyController>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (useFilter && !controller.name.Contains(nameFilter))
+                {
+                    continue;
+                }
+
+                var sensor = controller.Sensor;
+                if (sensor == null)
+                {
+                    continue;
+                }
+
+                bool hasNoise = sensor.TryGetNoisePosition(out Vector3 noisePosition);
+
+                dumps.Add(new
+                {
+                    go = controller.name,
+                    state = controller.Current != null ? controller.Current.GetType().Name : null,
+                    hasNoise,
+                    noisePos = hasNoise ? $"{noisePosition.x:F2},{noisePosition.y:F2},{noisePosition.z:F2}" : null,
+                    transmission = sensor.LastNoiseTransmission,
+                    awareness = sensor.NoiseAwareness,
+                    awareness01 = sensor.NoiseAwareness01,
+                    awarenessFull = sensor.IsNoiseAwarenessFull,
+                    alert = sensor.IsNoiseAlert,
+                });
+            }
+
+            return new SuccessResponse(
+                $"noise: {dumps.Count} enemy(s), noiseManager={(noiseManager != null ? "present" : "MISSING")}, " +
+                $"defaultOcclusion={(noiseManager != null ? noiseManager.DefaultOcclusion.ToString("F2") : "-")}, " +
+                $"listeners={NoiseSystem.ListenerCount}.",
+                dumps);
         }
 
         // ── killenemy ────────────────────────────────────────────────────────

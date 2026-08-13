@@ -311,7 +311,7 @@ BoxCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Size: {x: 0.11, y: 0.25, z: 0.07}
   m_Center: {x: 0, y: 0.09, z: -0.07}
@@ -328,6 +328,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &522166316665130965
 GameObject:
   m_ObjectHideFlags: 0
@@ -671,7 +672,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.08
   m_Height: 0.25
@@ -690,6 +691,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 1
+  m_alwaysActive: 0
 --- !u!1 &845233261214102499
 GameObject:
   m_ObjectHideFlags: 0
@@ -1077,6 +1079,59 @@ Transform:
   - {fileID: 8901400103227698365}
   m_Father: {fileID: 8117656178330882650}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1418407125748605732
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7971996337079578800}
+  - component: {fileID: 8065476742978168528}
+  m_Layer: 14
+  m_Name: HitDetectVolume
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7971996337079578800
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1418407125748605732}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5411129613775868190}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &8065476742978168528
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1418407125748605732}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 3.112, y: 2.9, z: 3.112}
+  m_Center: {x: 0, y: 1.45, z: 0}
 --- !u!1 &1457815585678842383
 GameObject:
   m_ObjectHideFlags: 0
@@ -1158,7 +1213,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.08
   m_Height: 0.33
@@ -1177,6 +1232,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &1489060350295392293
 GameObject:
   m_ObjectHideFlags: 0
@@ -1353,7 +1409,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.08
   m_Height: 0.3
@@ -1372,6 +1428,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &2098367263178880373
 GameObject:
   m_ObjectHideFlags: 0
@@ -1787,6 +1844,7 @@ GameObject:
   - component: {fileID: 6567124513096988904}
   - component: {fileID: 770378352016190678}
   - component: {fileID: 6582405716747375709}
+  - component: {fileID: 8215177168001985325}
   m_Layer: 9
   m_Name: Enemy(Test)
   m_TagString: Untagged
@@ -1809,6 +1867,7 @@ Transform:
   m_Children:
   - {fileID: 2961318902949780467}
   - {fileID: 1899287159798873559}
+  - {fileID: 7971996337079578800}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!95 &7939029919923514677
@@ -1959,6 +2018,8 @@ MonoBehaviour:
   noiseArriveDistance: 1.5
   noiseSearchDuration: 8
   noiseSearchRadius: 5
+  combatSearchDuration: 6
+  combatSearchRadius: 6
   howlRadius: 25
   howlBroadcastTime: 1.2
   howlDuration: 3
@@ -2042,6 +2103,20 @@ MonoBehaviour:
   m_maxInheritedAngularSpeed: 12
   m_refreshPoseBeforeHandoff: 1
   m_impulseSpreadRatio: 0.25
+--- !u!114 &8215177168001985325
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2644337924908843311}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 637dd646584452f449f0ec170213bc68, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitboxGroup
+  m_hitboxes: []
+  m_disableOnStart: 1
 --- !u!1 &2657728724699594717
 GameObject:
   m_ObjectHideFlags: 0
@@ -2257,7 +2332,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.05
   m_Height: 0.3
@@ -2276,6 +2351,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &2954974866673369924
 GameObject:
   m_ObjectHideFlags: 0
@@ -2452,7 +2528,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.05
   m_Height: 0.3
@@ -2471,6 +2547,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &3350332656165041841
 GameObject:
   m_ObjectHideFlags: 0
@@ -2654,7 +2731,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.12
   m_Height: 0.36
@@ -2673,6 +2750,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &3540160997129211271
 GameObject:
   m_ObjectHideFlags: 0
@@ -2759,7 +2837,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.1
   m_Height: 0.45
@@ -2778,6 +2856,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &3585699503370117057
 GameObject:
   m_ObjectHideFlags: 0
@@ -3412,7 +3491,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.08
   m_Height: 0.45
@@ -3431,6 +3510,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &4366227343201886174
 GameObject:
   m_ObjectHideFlags: 0
@@ -3982,7 +4062,7 @@ BoxCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Size: {x: 0.1, y: 0.2, z: 0.16}
   m_Center: {x: 0, y: 0.06, z: 0.01}
@@ -3999,6 +4079,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &4872840713818284226
 GameObject:
   m_ObjectHideFlags: 0
@@ -4241,7 +4322,7 @@ BoxCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Size: {x: 0.1, y: 0.2, z: 0.16}
   m_Center: {x: 0, y: 0.06, z: 0.01}
@@ -4258,6 +4339,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &5224939250842145677
 GameObject:
   m_ObjectHideFlags: 0
@@ -4616,7 +4698,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.12
   m_Height: 0.41
@@ -4635,6 +4717,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &5978547217624100146
 GameObject:
   m_ObjectHideFlags: 0
@@ -5142,7 +5225,7 @@ BoxCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Size: {x: 0.11, y: 0.25, z: 0.07}
   m_Center: {x: 0, y: 0.09, z: -0.07}
@@ -5159,6 +5242,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &7473851678339650429
 GameObject:
   m_ObjectHideFlags: 0
@@ -5820,7 +5904,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.07
   m_Height: 0.45
@@ -5839,6 +5923,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &8860670582591155286
 GameObject:
   m_ObjectHideFlags: 0
@@ -5920,7 +6005,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.06
   m_Height: 0.45
@@ -5939,6 +6024,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
 --- !u!1 &9075545981786135118
 GameObject:
   m_ObjectHideFlags: 0

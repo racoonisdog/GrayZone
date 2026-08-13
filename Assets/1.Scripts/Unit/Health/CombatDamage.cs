@@ -232,6 +232,38 @@ public static class CombatDamage
         // "안 맞았는데 비틀거리는" 상태가 됩니다.
         TryApplyStagger(collider, staggerPower);
 
+        LogHitPart(hitbox, target, damage, headshot);
+
         return new HitFeedback(true, headshot, target.IsDead);
+    }
+
+    /// <summary>
+    /// 표시된 부위에 맞았을 때 어디를 맞았는지 콘솔에 남깁니다.
+    /// </summary>
+    /// <param name="hitbox">맞은 부위입니다.</param>
+    /// <param name="target">피해를 받은 대상입니다.</param>
+    /// <param name="damage">실제로 들어간 피해량입니다.</param>
+    /// <param name="headshot">약점 판정이 성립했는지 여부입니다.</param>
+    /// <remarks>
+    /// 부위별 판정이 의도대로 도는지 눈으로 확인하기 위한 것입니다. 어디를 맞았는지는 이 지점만 알고 있습니다.
+    /// 여기서 부위와 피해량이 함께 정해지므로, 호출부로 올려 보내면 그 짝이 흩어집니다.
+    ///
+    /// <see cref="Hitbox.LogHit"/>가 켜진 부위만 남깁니다. 모든 대상에 켜면 교전 한 번에 수십 줄이 쌓입니다.
+    /// <c>Conditional</c>이라 비-Editor 빌드에서는 호출 자체가 사라져 문자열 조립 비용도 남지 않습니다.
+    /// </remarks>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private static void LogHitPart(Hitbox hitbox, IDamageable target, int damage, bool headshot)
+    {
+        if (hitbox == null || !hitbox.LogHit)
+        {
+            return;
+        }
+
+        // 부위 오브젝트 이름만으로는 어느 개체인지 알 수 없어 소유자를 함께 적습니다.
+        string owner = target is Component component ? component.gameObject.name : "(알 수 없음)";
+        string mark = headshot ? " [약점]" : string.Empty;
+        string killed = target.IsDead ? " [처치]" : string.Empty;
+
+        Debug.Log($"[피격] {owner} <- {hitbox.gameObject.name} 피해 {damage}{mark}{killed}", hitbox);
     }
 }

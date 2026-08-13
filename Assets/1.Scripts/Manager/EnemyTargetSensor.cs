@@ -155,6 +155,9 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <summary>현재 선택된 대상입니다.</summary>
     private SquadMemberController m_currentTarget;
 
+    /// <summary>방금 유효 대상에서 제외된 캐릭터입니다. 교전 수색이 이 캐릭터의 마지막 확인 위치를 우선합니다(§5.8.2).</summary>
+    private SquadMemberController m_lastLostTarget;
+
     /// <summary>이 변이체가 교전 상태인지 여부입니다. 비전투 감지 보호 판단에 사용합니다.</summary>
     private bool m_isEngaged;
 
@@ -181,6 +184,15 @@ public class EnemyTargetSensor : MonoBehaviour
 
     /// <summary>마지막 확인 이후 소음이 새로 갱신됐는지 여부입니다. 상태가 소비합니다.</summary>
     private bool m_noiseUpdated;
+
+    /// <summary>
+    /// 마지막으로 판정한 소음 차폐의 통과 비율입니다. 진단용이며 판단에는 쓰지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 차폐는 들리지 않게 된 소음까지 포함해 계산되므로, 이 값만으로는 지금 추적 중인 소음의 차폐인지
+    /// 알 수 없습니다. "직전에 판정한 소음이 얼마나 막혀 있었나"를 보는 용도입니다.
+    /// </remarks>
+    private float m_lastNoiseTransmission = 1f;
 
     /// <summary>
     /// 소음 인지 게이지입니다. 소음을 들을 때마다 그 강도만큼 쌓이고 시간이 지나면 줄어듭니다.
@@ -457,6 +469,13 @@ public class EnemyTargetSensor : MonoBehaviour
 
         if (best == null)
         {
+            // 방금 대상에서 제외된 캐릭터를 기억합니다. 교전 수색은 그 캐릭터의 마지막 확인 위치를
+            // 우선하도록 정해져 있습니다(§5.8.2).
+            if (m_currentTarget != null)
+            {
+                m_lastLostTarget = m_currentTarget;
+            }
+
             m_currentTarget = null;
             return;
         }
@@ -472,6 +491,64 @@ public class EnemyTargetSensor : MonoBehaviour
         {
             m_currentTarget = best;
         }
+    }
+
+    /// <summary>
+    /// 교전 수색을 시작할 마지막 확인 위치를 고릅니다.
+    /// </summary>
+    /// <param name="position">수색을 시작할 지점입니다.</param>
+    /// <returns>쓸 수 있는 마지막 확인 위치가 있으면 true입니다.</returns>
+    /// <remarks>
+    /// 우선순위는 공용 문서 §5.8.2를 따릅니다. <b>방금 대상에서 제외된 캐릭터</b>의 마지막 확인 위치가 먼저이고,
+    /// 그것을 쓸 수 없으면 <b>가장 최근에 기록된</b> 다른 캐릭터의 위치를 씁니다.
+    ///
+    /// 실시간 위치를 아는 캐릭터는 후보가 아닙니다. 그런 캐릭터가 있으면 애초에 수색이 아니라 추격을 해야 합니다.
+    ///
+    /// 이 함수는 고르기만 합니다. "한 번만 선택한다"(§5.8.2)는 규칙은 수색 상태가 진입 시점에 한 번 부르는 것으로
+    /// 지킵니다. 여기서 상태를 들고 있으면 교전이 끝나도 남아 다음 수색이 옛 지점을 씁니다.
+    /// </remarks>
+    public bool TryGetSearchPosition(out Vector3 position)
+    {
+        position = Vector3.zero;
+
+        TargetInfo preferred = FindInfo(m_lastLostTarget);
+        if (HasUsableLastKnown(preferred))
+        {
+            position = preferred.LastKnownPosition;
+            return true;
+        }
+
+        TargetInfo latest = null;
+        for (int i = 0; i < m_infos.Count; i++)
+        {
+            TargetInfo info = m_infos[i];
+            if (!HasUsableLastKnown(info))
+            {
+                continue;
+            }
+
+            if (latest == null || info.LastKnownTime > latest.LastKnownTime)
+            {
+                latest = info;
+            }
+        }
+
+        if (latest == null)
+        {
+            return false;
+        }
+
+        position = latest.LastKnownPosition;
+        return true;
+    }
+
+    /// <summary>이 기록에 수색 기준으로 쓸 만한 마지막 확인 위치가 있는지 확인합니다.</summary>
+    /// <remarks>다운된 캐릭터의 기록은 <see cref="ExpireTracking"/>이 지우므로 여기서 따로 걸러내지 않습니다.</remarks>
+    private static bool HasUsableLastKnown(TargetInfo info)
+    {
+        return info != null
+            && info.Source != InfoSource.None
+            && !info.HasAnyLivePosition;
     }
 
     /// <summary>
@@ -602,10 +679,12 @@ public class EnemyTargetSensor : MonoBehaviour
     /// 우선순위는 이 순간에만 평가합니다. 매 프레임 모든 소음을 비교하지 않습니다(§5.4.4).
     /// 그래서 "지금 추적 중인 소음" 하나만 들고 있으면 충분하며 이벤트 목록을 쌓지 않습니다.
     ///
-    /// 판정 순서에 이유가 있습니다. 가청 -> 비전투 감지 보호 -> 교전 중 무시 -> 우선순위입니다.
-    /// 가청을 먼저 보는 것은 못 들은 소음에 다른 규칙을 적용할 필요가 없기 때문입니다.
+    /// 판정 순서에 이유가 있습니다. 가청 -> 비전투 감지 보호 -> 교전 중 무시 -> 차폐 -> 우선순위입니다.
+    /// 가청을 먼저 보는 것은 못 들은 소음에 다른 규칙을 적용할 필요가 없기 때문이고, 차폐를 뒤에 두는 것은
+    /// 거기서 Raycast가 돌기 때문입니다. <see cref="CanSee"/>와 같이 싼 검사부터 하는 순서입니다.
     ///
-    /// 강도는 가청 여부를 정하지 않고 우선순위 비교에만 씁니다. 도달 거리가 곧 들리는 거리입니다.
+    /// 강도는 가청 여부를 정하지 않고 우선순위 비교와 인지 게이지에만 씁니다. 도달 거리가 곧 들리는 거리입니다.
+    /// 차폐는 그 강도를 깎으며, 완전히 막힌 경우(남는 비율 0)에만 예외적으로 가청을 취소합니다.
     /// </remarks>
     public void NotifyNoise(in NoiseEvent noise)
     {
@@ -622,13 +701,23 @@ public class EnemyTargetSensor : MonoBehaviour
         }
 
         // 유효 대상을 쫓거나 공격 중이면 관련 없는 소음으로 교전을 중단하지 않습니다(§5.4.4).
-        // 교전 수색(유효 대상이 없는 교전 상태)은 아직 없으므로 그 분기는 두지 않았습니다.
+        // 반대로 교전 수색 중(교전 상태인데 유효 대상이 없음)에는 이 조건이 성립하지 않아 소음을 받아들입니다.
+        // 그 소음으로 수색 지점을 옮기는 것은 CombatSearchState가 처리합니다(§5.8.3).
         if (m_isEngaged && HasAnyValidTarget)
         {
             return;
         }
 
-        float intensity = noise.GetIntensityAt(transform.position);
+        // 경로에 있는 구조물의 재질별 차폐율만큼 소음을 깎습니다. 완전히 막혔으면 듣지 못한 것으로 둡니다.
+        float transmission = ResolveNoiseTransmission(noise.Position);
+        m_lastNoiseTransmission = transmission;
+
+        if (transmission <= 0f)
+        {
+            return;
+        }
+
+        float intensity = noise.GetIntensityAt(transform.position) * transmission;
         if (!ShouldReplaceTrackedNoise(noise, intensity))
         {
             return;
@@ -652,6 +741,39 @@ public class EnemyTargetSensor : MonoBehaviour
     }
 
     /// <summary>
+    /// 소음이 이 변이체까지 오며 남는 비율을 구합니다.
+    /// </summary>
+    /// <param name="noisePosition">소음이 발생한 위치입니다.</param>
+    /// <returns>1이면 아무것도 막지 않았고, 0이면 완전히 막혔습니다.</returns>
+    /// <remarks>
+    /// 재질별 차폐율은 필드의 성질이므로 <see cref="NoiseManager"/>가 소유합니다. 여기서 넘기는 것은
+    /// "무엇을 장애물로 볼지"(레이어)와 "어디서 듣는지"(귀 위치)뿐입니다.
+    ///
+    /// 장애물 레이어를 시야 판정과 공유합니다. 지금은 소리를 막는 것과 시야를 막는 것이 같은 고정 환경
+    /// 콜라이더 집합이기 때문입니다. 유리창처럼 보이지만 소리를 막는 것, 커튼처럼 가리지만 소리를 통과시키는
+    /// 것이 생기면 그때 소음 전용 마스크로 분리해야 합니다.
+    ///
+    /// 귀 위치로 <see cref="GetEyePosition"/>을 씁니다. 발밑에서 쏘면 바닥 턱이나 경사에 막혀 실제보다
+    /// 자주 차폐로 판정됩니다. 가청 판정이 <c>transform.position</c>을 쓰는 것과 다른데, 그쪽은 거리만
+    /// 보므로 1.5m 차이가 문제되지 않고 이쪽은 무엇에 맞는지가 바뀝니다.
+    ///
+    /// 매니저가 없으면 차폐를 적용하지 않습니다. 값을 코드에 따로 두면 인스펙터와 코드 두 곳이 기본
+    /// 차폐율을 갖게 되어, 인스펙터를 고쳐도 안 바뀌는 상태가 생깁니다. 없다는 사실은
+    /// <see cref="FieldManager"/>가 시작할 때 경고로 알립니다.
+    /// </remarks>
+    private float ResolveNoiseTransmission(Vector3 noisePosition)
+    {
+        NoiseManager noiseManager = FieldManager.Instance != null ? FieldManager.Instance.NoiseManager : null;
+
+        if (noiseManager == null)
+        {
+            return 1f;
+        }
+
+        return noiseManager.GetTransmission(GetEyePosition(), noisePosition, m_resolvedObstacleMask);
+    }
+
+    /// <summary>
     /// 소음 인지 게이지를 시간에 따라 줄입니다.
     /// </summary>
     /// <remarks>
@@ -671,6 +793,9 @@ public class EnemyTargetSensor : MonoBehaviour
 
     /// <summary>소음 인지 게이지의 현재 값입니다.</summary>
     public float NoiseAwareness => m_noiseAwareness;
+
+    /// <summary>마지막으로 판정한 소음 차폐의 통과 비율입니다. 진단용입니다.</summary>
+    public float LastNoiseTransmission => m_lastNoiseTransmission;
 
     /// <summary>소음 인지 게이지의 진행도입니다. 0이면 평온, 1이면 한계 도달입니다.</summary>
     /// <remarks>두리번 강도를 애니메이터로 넘길 때 씁니다.</remarks>
@@ -931,6 +1056,7 @@ public class EnemyTargetSensor : MonoBehaviour
         }
 
         m_currentTarget = null;
+        m_lastLostTarget = null;
         m_nextReevaluateTime = 0f;
 
         // 하울링 수신·적용 기록 초기화(§5.8.4).

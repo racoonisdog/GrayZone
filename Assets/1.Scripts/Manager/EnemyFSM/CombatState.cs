@@ -1,5 +1,7 @@
+using UnityEngine;
+
 /// <summary>
-/// 교전 엄브렐라(composite) 상태입니다. 교전 공통 로직을 처리하고 하위 상태(추격/공격)를 구동합니다.
+/// 교전 엄브렐라(composite) 상태입니다. 교전 공통 로직을 처리하고 하위 상태(추격/공격/수색)를 구동합니다.
 /// </summary>
 /// <remarks>
 /// 공통 로직을 하위 상태 실행 前에 매 틱 한 번 처리해 하위 중복을 없애는 것이 엄브렐라의 핵심입니다.
@@ -21,7 +23,9 @@ public class CombatState : EnemyStateBase
 
     /// <summary>하울링 하위 상태입니다.</summary>
     public HowlState Howl { get; private set; }
-    // 수색(SearchState)은 슬라이스 2에서 추가.
+
+    /// <summary>교전 수색 하위 상태입니다.</summary>
+    public CombatSearchState Search { get; private set; }
 
     /// <summary>현재 활성 하위 상태입니다. 지금 추격 중인지 공격 중인지 밖에서 확인할 때 씁니다.</summary>
     public EnemyStateBase CurrentSub => m_sub;
@@ -68,6 +72,7 @@ public class CombatState : EnemyStateBase
         Chase = new ChaseState(controller);
         Attack = new AttackState(controller);
         Howl = new HowlState(controller);
+        Search = new CombatSearchState(controller);
     }
 
     /// <summary>교전을 열고 첫 대상을 고른 뒤 하위 상태를 시작합니다.</summary>
@@ -265,14 +270,73 @@ public class CombatState : EnemyStateBase
         sensor.UpdatePerception();
         sensor.ReevaluateTarget();
 
-        if (!sensor.HasAnyValidTarget)
+        if (!sensor.HasAnyValidTarget || IsStuckWithNoReachableTarget(sensor))
         {
-            // 슬라이스 2에서는 여기서 마지막 확인 위치를 골라 교전 수색으로 들어갑니다.
-            Controller.TransitionTo(Controller.Wander);
-            return;
+            // 유효 대상이 없다고 곧바로 교전을 끝내지 않습니다. 마지막으로 본 곳까지는 찾아가야 하며,
+            // 그 수색이 실패했을 때만 교전이 끝납니다(§5.8.4).
+            // 이 단계를 건너뛰면 시야 유지 시간이 끝나는 순간 배회로 돌아가 "총 맞고도 그냥 잊는" 모습이 됩니다.
+            if (m_sub != Search)
+            {
+                if (Search.CanSearch())
+                {
+                    SetSubState(Search);
+                }
+                else
+                {
+                    // 쓸 수 있는 마지막 확인 위치조차 없는 경우입니다(§5.8.4 두 번째 조건).
+                    Controller.TransitionTo(Controller.Wander);
+                    return;
+                }
+            }
+
+            // 수색 중에는 하위 상태가 스스로 종료를 판단하므로 아래로 흘려보냅니다.
         }
 
         m_sub?.Tick();
+    }
+
+    /// <summary>갈 수 있는 대상이 없는 상태가 시작된 시각입니다. 없으면 0입니다.</summary>
+    private float m_noReachableTargetSince;
+
+    /// <summary>이 시간(초) 넘게 갈 수 있는 대상이 없으면 교착으로 봅니다.</summary>
+    /// <remarks>
+    /// 경로 계산은 한두 프레임 실패했다가 곧 성공하기도 합니다(경로 계산 대기, 순간적인 NavMesh 이탈).
+    /// 즉시 판정하면 그런 흔들림에도 수색으로 튀어 추격이 끊깁니다.
+    /// </remarks>
+    private const float NoReachableTargetGrace = 1.0f;
+
+    /// <summary>
+    /// 유효 대상은 있는데 갈 수 있는 경로가 없는 상태로 굳었는지 판단합니다.
+    /// </summary>
+    /// <remarks>
+    /// <b>이 검사가 없으면 개체가 영원히 제자리에 섭니다.</b> 두 판정의 기준이 다르기 때문입니다.
+    /// <see cref="EnemyTargetSensor.HasAnyValidTarget"/>은 위치를 아는지만 보고,
+    /// <see cref="EnemyTargetSensor.CurrentTarget"/>은 <c>ReevaluateTarget</c>이 경로(PathComplete)까지
+    /// 확인해 고릅니다. 그래서 대상이 닿을 수 없는 곳에 있으면 앞은 true인데 뒤는 null이 되고,
+    /// <see cref="ChaseState"/>는 매 프레임 <c>StopMoving</c>만 부르며 아무 데도 가지 않습니다.
+    ///
+    /// 특히 <b>하울링을 받은 개체</b>에서 이 교착이 영구적입니다. 하울링 위치 정보는 시간으로 만료되지 않고
+    /// 교전이 끝날 때만 지워지는데(2026-08-04 확정), 그 교전이 끝나려면 유효 대상이 없어져야 하므로
+    /// 서로를 기다리며 빠져나오지 못합니다.
+    ///
+    /// 교착으로 판정되면 유효 대상이 없을 때와 같은 경로를 탑니다. 마지막 확인 위치로 수색을 가고,
+    /// 그것도 없으면 교전을 끝냅니다(§5.8.4). 갈 수 없는 상대를 노려보며 서 있는 것보다 낫습니다.
+    /// </remarks>
+    private bool IsStuckWithNoReachableTarget(EnemyTargetSensor sensor)
+    {
+        if (sensor.CurrentTarget != null)
+        {
+            m_noReachableTargetSince = 0.0f;
+            return false;
+        }
+
+        if (m_noReachableTargetSince <= 0.0f)
+        {
+            m_noReachableTargetSince = Time.time;
+            return false;
+        }
+
+        return Time.time - m_noReachableTargetSince >= NoReachableTargetGrace;
     }
 
     /// <summary>하위 상태를 끝내고 교전 중에만 유지되던 상태를 초기화합니다.</summary>
@@ -293,6 +357,9 @@ public class CombatState : EnemyStateBase
         // 경직 중에 교전이 끝나면 이어갈 하울링도 사라집니다. 남겨 두면 다음 교전의 첫 경직이
         // 엉뚱하게 하울링으로 이어집니다.
         m_resumeWithHowlAfterStagger = false;
+
+        // 교착 감시 시계도 초기화합니다. 남겨 두면 다음 교전이 시작하자마자 교착으로 잘못 판정됩니다.
+        m_noReachableTargetSince = 0.0f;
 
         // 경직력 누적도 비웁니다(§6). 체력과 달리 경직은 교전 안에서만 의미가 있어,
         // 한참 뒤에 다시 마주친 개체가 예전에 맞은 값 때문에 한 발에 경직되면 어긋납니다.

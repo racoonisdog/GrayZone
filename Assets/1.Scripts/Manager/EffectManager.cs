@@ -85,7 +85,7 @@ public sealed class EffectManager : MonoBehaviour
             return false;
         }
 
-        SurfaceFeedbackSO feedback = ResolveSurfaceFeedback(hit.collider.sharedMaterial);
+        SurfaceFeedbackSO feedback = ResolveSurfaceFeedback(SurfaceMaterialTag.Resolve(hit.collider));
         if (feedback == null)
         {
             return false;
@@ -148,22 +148,27 @@ public sealed class EffectManager : MonoBehaviour
             : null;
     }
 
-    /// <summary>물리 머티리얼과 일치하는 피드백을 찾고, 없으면 기본 피드백을 반환합니다.</summary>
-    public SurfaceFeedbackSO ResolveSurfaceFeedback(PhysicsMaterial material)
+    /// <summary>재질과 일치하는 피드백을 찾고, 없으면 기본 피드백을 반환합니다.</summary>
+    /// <param name="materialType">맞은 구조물의 재질입니다. <c>Unknown</c>이면 곧바로 기본 피드백입니다.</param>
+    /// <remarks>
+    /// 한 피드백이 재질을 여러 개 나열할 수 있습니다. 탄착 연출은 석재와 벽돌을 같은 돌로 퉁쳐도 되지만
+    /// 소음 차폐는 둘을 구분해야 할 수 있어, 축은 잘게 두고 묶는 것은 소비자가 각자 선언합니다.
+    /// </remarks>
+    public SurfaceFeedbackSO ResolveSurfaceFeedback(SurfaceMaterialType materialType)
     {
-        if (material != null && m_surfaceFeedbacks != null)
+        if (materialType != SurfaceMaterialType.Unknown && m_surfaceFeedbacks != null)
         {
             for (int feedbackIndex = 0; feedbackIndex < m_surfaceFeedbacks.Length; feedbackIndex++)
             {
                 SurfaceFeedbackSO feedback = m_surfaceFeedbacks[feedbackIndex];
-                if (feedback == null || feedback.PhysicsMaterials == null)
+                if (feedback == null || feedback.MaterialTypes == null)
                 {
                     continue;
                 }
 
-                for (int materialIndex = 0; materialIndex < feedback.PhysicsMaterials.Count; materialIndex++)
+                for (int materialIndex = 0; materialIndex < feedback.MaterialTypes.Count; materialIndex++)
                 {
-                    if (feedback.PhysicsMaterials[materialIndex] == material)
+                    if (feedback.MaterialTypes[materialIndex] == materialType)
                     {
                         return feedback;
                     }
@@ -189,6 +194,6 @@ public sealed class EffectManager : MonoBehaviour
         m_lastSoundIndices[feedback] = lastIndex;
 
         AudioManager audio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
-        audio?.PlayOneShotAt(clip, position);
+        audio?.PlayOneShotAt(clip, position, AudioPriorityClass.SurfaceDecor);
     }
 }

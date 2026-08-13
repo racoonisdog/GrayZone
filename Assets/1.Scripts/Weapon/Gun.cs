@@ -185,6 +185,10 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Tooltip("사격 판정이 걸릴 레이어입니다. 기본값은 전부이며, 여기서 제외한 레이어는 탄이 그대로 통과합니다.")]
     [SerializeField] private LayerMask m_hitscanLayerMask = ~0;
 
+    [Tooltip("부위 히트박스를 켤 대상을 찾는 1차 탐지 레이어입니다. HitDetectVolume의 EnemyHitDetect 레이어를 지정합니다. 비우면 부위 히트박스를 열 수 없어 해당 대상은 사격 피해를 받지 않습니다.")]
+    [FormerlySerializedAs("m_bodyDetectLayerMask")]
+    [SerializeField] private LayerMask m_hitDetectLayerMask = 0;
+
     [Tooltip("탄이 아군 유닛의 몸을 통과할지 여부입니다. 끄면 앞을 막고 선 팀원이 탄을 막습니다.")]
     [SerializeField] private bool m_allyBulletPassThrough = true;
 
@@ -349,6 +353,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Tooltip("이 무기를 선택했을 때 사격 소음의 도달 반경을 Scene 뷰에 원으로 표시합니다. 이 원 안의 변이체가 총성을 듣습니다.")]
     [SerializeField] private bool m_debugDrawShotNoiseRange = false;
 
+    [Tooltip("2단계 사격 판정의 각 단계를 콘솔에 남깁니다. 1차(HitDetectVolume 감지) / 2차(부위 히트박스 켬) / 3차(레이 재발사와 결과) 순으로 찍힙니다. 판정이 어디서 끊기는지 확인할 때만 켭니다.")]
+    [SerializeField] private bool m_debugLogTwoStage = false;
+
     // 무한 장탄수는 플레이테스트 트레이너에서도 쓰기 위해 빌드에도 컴파일하고,
     // 실제 효과는 런타임 트레이너가 활성화된 Editor/Development Build에서만 동작합니다.
     [Foldout("Debug")]
@@ -504,6 +511,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     /// <summary>히트스캔 레이캐스트가 충돌 검사할 레이어 마스크입니다.</summary>
     public LayerMask HitscanLayerMask => m_hitscanLayerMask;
+
+    /// <summary>부위별 히트박스를 열 후보를 찾는 1차 감지 레이어 마스크입니다.</summary>
+    public LayerMask HitDetectLayerMask => m_hitDetectLayerMask;
 
     /// <summary>탄이 아군 유닛의 몸을 통과하는지 여부입니다.</summary>
     public bool AllyBulletPassThrough => m_allyBulletPassThrough;
@@ -1003,44 +1013,195 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         m_shotPath.Clear();
         m_hasSurfaceImpact = false;
 
+        // 1차: HitDetectVolume으로 이 레이가 지나갈 유닛을 찾아 그들의 부위 히트박스만 켭니다.
+        // 켠 뒤에는 반드시 EnableHitboxesAlongShot 안에서 물리 씬을 동기화합니다.
+        EnableHitboxesAlongShot(origin, direction, distance);
+
+        try
+        {
+            // 2차: 방금 연 대상들의 EnemyHitbox만 포함하는 실제 사격 마스크로 같은 탄도를 다시 검사합니다.
+            int count = Physics.RaycastNonAlloc(
+                origin, direction, m_traceBuffer, distance, m_hitscanLayerMask, QueryTriggerInteraction.Collide);
+
+            CollectBlockingHits(m_traceBuffer, count, m_ownerFaction, m_allyBulletPassThrough, m_blockingHits);
+
+            // 3차: 켜진 부위를 상대로 같은 탄도를 다시 쏜 결과. 여기서 맞은 부위가 실제 판정 부위입니다.
+            LogTwoStageTrace(
+                $"3차 재발사 | 명중 {m_blockingHits.Count}개"
+                + (m_blockingHits.Count > 0
+                    ? $" 부위={m_blockingHits[0].collider.name}"
+                    : " (빗나감 - 켠 부위 사이를 통과했습니다)"));
+
+            int penetrationsUsed = 0;
+
+            for (int i = 0; i < m_blockingHits.Count; i++)
+            {
+                RaycastHit current = m_blockingHits[i];
+
+                if (!fired.HasHit)
+                {
+                    fired.HasHit = true;
+                    fired.Hit = current;
+                }
+
+                fired.EndPoint = current.point;
+
+                bool isUnit = current.collider.GetComponentInParent<IDamageable>() != null;
+
+                if (!isUnit)
+                {
+                    // 지형입니다. 여기서 멈추고, 탄흔은 이 자리에 남습니다.
+                    m_surfaceImpact = current;
+                    m_hasSurfaceImpact = true;
+                    return;
+                }
+
+                m_shotPath.Add(current);
+
+                if (!m_penetration.CanPenetrate(penetrationsUsed))
+                {
+                    return;
+                }
+
+                penetrationsUsed++;
+            }
+        }
+        finally
+        {
+            // RaycastHit은 Collider 참조와 명중 데이터를 보존하므로, 피해 적용 전이라도 즉시 닫아도 됩니다.
+            // 성공·실패·예외 어느 경로에서도 다음 프레임까지 부위 히트박스가 남지 않게 합니다.
+            DisableOpenedHitboxes();
+        }
+    }
+
+    /// <summary>이번 사격에서 부위 히트박스를 켠 유닛들입니다. 판정이 끝나면 다시 끕니다.</summary>
+    private readonly List<HitboxGroup> m_openedHitboxGroups = new List<HitboxGroup>();
+
+    /// <summary>
+    /// 사격 경로가 지나갈 유닛을 HitDetectVolume으로 찾아 그들의 부위 히트박스만 켭니다.
+    /// </summary>
+    /// <param name="origin">사격 시작점입니다.</param>
+    /// <param name="direction">사격 방향입니다.</param>
+    /// <param name="distance">사거리입니다.</param>
+    /// <remarks>
+    /// <b>왜 두 단계인가</b>: 부위 히트박스는 애니메이션 뼈에 붙어 매 프레임 위치가 바뀝니다. 항상 켜 두면
+    /// 개체 하나당 십수 개가 매 프레임 브로드페이즈를 갱신하고 그 비용이 개체 수만큼 곱해집니다.
+    /// 실제로 필요한 순간은 레이가 그 개체를 지나갈 때뿐이므로, 그때만 켭니다.
+    ///
+    /// <b>1차 마스크는 탐지 전용입니다.</b> EnemyHitDetect 외의 지형이나 이동용 콜라이더를 섞지 않습니다.
+    /// 벽과 실제 부위 판정은 2차 사격 마스크가 처리하므로, 1차 레이는 후보를 여는 책임만 가집니다.
+    ///
+    /// <b>물리 씬 동기화가 필수입니다.</b> 이 프로젝트는 <c>Physics.autoSyncTransforms</c>가 꺼져 있어,
+    /// 방금 켠 콜라이더는 애니메이션이 옮겨 놓은 최신 위치가 아니라 이전에 동기화된 위치에 있습니다.
+    /// 그대로 2차 레이를 쏘면 맞아야 할 것이 빗나가고, 그 빗나감은 재현이 어렵습니다.
+    /// </remarks>
+    private void EnableHitboxesAlongShot(Vector3 origin, Vector3 direction, float distance)
+    {
+        DisableOpenedHitboxes();
+
+        if (m_hitDetectLayerMask == 0)
+        {
+            // 탐지 마스크가 없으면 후보를 열지 않습니다. 평상시 히트박스가 꺼진 표준 대상은 맞지 않습니다.
+            return;
+        }
+
         int count = Physics.RaycastNonAlloc(
-            origin, direction, m_traceBuffer, distance, m_hitscanLayerMask, QueryTriggerInteraction.Collide);
+            origin, direction, m_traceBuffer, distance, m_hitDetectLayerMask, QueryTriggerInteraction.Collide);
 
         CollectBlockingHits(m_traceBuffer, count, m_ownerFaction, m_allyBulletPassThrough, m_blockingHits);
 
-        int penetrationsUsed = 0;
-
         for (int i = 0; i < m_blockingHits.Count; i++)
         {
-            RaycastHit current = m_blockingHits[i];
+            Collider collider = m_blockingHits[i].collider;
 
-            if (!fired.HasHit)
+            // EnemyHitDetect 레이어에는 IDamageable의 자식 HitDetectVolume만 있어야 합니다.
+            // 잘못 배치된 지형 콜라이더가 들어왔으면 그 충돌은 후보로 쓰지 않습니다.
+            if (collider.GetComponentInParent<IDamageable>() == null)
             {
-                fired.HasHit = true;
-                fired.Hit = current;
+                continue;
             }
 
-            fired.EndPoint = current.point;
-
-            bool isUnit = current.collider.GetComponentInParent<IDamageable>() != null;
-
-            if (!isUnit)
+            HitboxGroup group = collider.GetComponentInParent<HitboxGroup>();
+            if (group == null || !group.IsUsable)
             {
-                // 지형입니다. 여기서 멈추고, 탄흔은 이 자리에 남습니다.
-                m_surfaceImpact = current;
-                m_hasSurfaceImpact = true;
-                return;
+                continue;
             }
 
-            m_shotPath.Add(current);
-
-            if (!m_penetration.CanPenetrate(penetrationsUsed))
-            {
-                return;
-            }
-
-            penetrationsUsed++;
+            group.SetHitboxesEnabled(true);
+            m_openedHitboxGroups.Add(group);
         }
+
+        // 1차: 사격 레이가 HitDetectVolume을 지났는지. 여기서 0이면 그 대상은 아예 후보가 아닙니다.
+        LogTwoStageTrace(
+            $"1차 감지 | HitDetectVolume {m_blockingHits.Count}개 통과 (레이 원시 히트 {count}개)"
+            + (m_blockingHits.Count > 0 ? $" 최근접={m_blockingHits[0].collider.name}" : string.Empty));
+
+        // 2차: 그 결과로 어떤 대상의 부위 히트박스를 켰는지.
+        LogTwoStageTrace(
+            $"2차 히트박스 켬 | 대상 {m_openedHitboxGroups.Count}개"
+            + (m_openedHitboxGroups.Count > 0 ? $" [{DescribeOpenedGroups()}]" : " (없음 - 3차는 아무것도 못 맞힙니다)"));
+
+        if (m_openedHitboxGroups.Count > 0)
+        {
+            // 켠 콜라이더를 최신 뼈 위치로 옮겨 놓습니다. 이 호출이 빠지면 2차 레이가 옛 위치를 때립니다.
+            Physics.SyncTransforms();
+        }
+    }
+
+    /// <summary>이번 사격에서 켰던 부위 히트박스를 모두 되돌립니다.</summary>
+    /// <remarks>
+    /// 판정이 끝나면 곧바로 끕니다. 프레임 끝까지 두면 연사 중 다음 발이 이전 발의 상태를 물려받아,
+    /// 어떤 개체가 켜져 있는지가 사격 순서에 따라 달라집니다.
+    /// </remarks>
+    private void DisableOpenedHitboxes()
+    {
+        for (int i = 0; i < m_openedHitboxGroups.Count; i++)
+        {
+            m_openedHitboxGroups[i]?.SetHitboxesEnabled(false);
+        }
+
+        m_openedHitboxGroups.Clear();
+    }
+
+    /// <summary>2단계 사격 판정이 끊기는 지점을 찾기 위한 임시 에디터 로그입니다.</summary>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    private void LogTwoStageTrace(string message)
+    {
+        if (!m_debugLogTwoStage)
+        {
+            return;
+        }
+
+        string ownerName = m_ownerObject != null ? m_ownerObject.name : "none";
+        Debug.Log($"[사격판정] f{Time.frameCount} {ownerName}/{name} {message}", this);
+    }
+
+    /// <summary>이번 사격에서 부위 히트박스를 켠 대상들의 이름을 나열합니다.</summary>
+    /// <remarks>
+    /// 어떤 개체가 후보로 잡혔는지 로그로 확인하기 위한 것입니다. 개수만으로는 엉뚱한 대상이 열렸는지 알 수 없습니다.
+    /// 로그가 꺼져 있으면 호출되지 않으므로 평상시 문자열 조립 비용이 없습니다.
+    /// </remarks>
+    private string DescribeOpenedGroups()
+    {
+        if (m_openedHitboxGroups.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+
+        for (int i = 0; i < m_openedHitboxGroups.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(", ");
+            }
+
+            HitboxGroup group = m_openedHitboxGroups[i];
+            builder.Append(group != null ? group.gameObject.name : "(사라짐)");
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>
@@ -1491,6 +1652,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
             if (feedback.Applied)
             {
+                LogTwoStageTrace($"4차 피해 적용 | 부위={target.collider.name} 피해={damage}");
                 OnHitFeedback?.Invoke(feedback);
                 ApplyHitscanKnockback(target, shotInfo);
 
