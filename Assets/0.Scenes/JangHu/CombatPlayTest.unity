@@ -828,6 +828,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &11117869
 GameObject:
   m_ObjectHideFlags: 0
@@ -3279,6 +3281,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!136 &65188460
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -10148,6 +10152,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!136 &217137151
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -12563,6 +12569,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &271187305
 GameObject:
   m_ObjectHideFlags: 0
@@ -15474,6 +15482,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FieldAudioSystem
   m_maxWorldVoices: 32
+  m_includePersonalVoices: 1
   m_minDistance: 1
   m_maxDistance: 40
   m_outputMixerGroup: {fileID: 0}
@@ -16571,6 +16580,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 1
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &347922298
 GameObject:
   m_ObjectHideFlags: 0
@@ -16617,6 +16628,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!136 &347922301
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -29310,6 +29323,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &581119049
 GameObject:
   m_ObjectHideFlags: 0
@@ -33648,6 +33663,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!136 &673655779
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -34882,6 +34899,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!136 &694336943
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -43190,6 +43209,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &862073319
 GameObject:
   m_ObjectHideFlags: 0
@@ -50394,6 +50415,8 @@ MonoBehaviour:
   noiseArriveDistance: 1.5
   noiseSearchDuration: 8
   noiseSearchRadius: 5
+  combatSearchDuration: 6
+  combatSearchRadius: 6
   howlRadius: 25
   howlBroadcastTime: 1.2
   howlDuration: 3
@@ -50541,6 +50564,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &1009075923
 GameObject:
   m_ObjectHideFlags: 0
@@ -52246,6 +52271,7 @@ MonoBehaviour:
   - {fileID: 1134777704}
   m_swapMemberTransforms: 1
   m_swapMemberTransformsOnDeath: 0
+  m_forcedSwitchCameraDuration: 0.5
   m_switchInputCooldown: 0.2
   m_followCamera: {fileID: 327933781}
   m_aimCamera: {fileID: 891519296}
@@ -52259,6 +52285,8 @@ MonoBehaviour:
     m_Bits: 0
   m_intelTargetHeight: 1
   m_attackerIntelHoldDuration: 3
+  m_aiMemberSpacing: 1.5
+  m_aiFiringAllowed: 1
   m_logSwitchDebug: 1
 --- !u!1 &1055066336
 GameObject:
@@ -52306,6 +52334,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!136 &1055066339
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -64320,6 +64350,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &1286879594
 GameObject:
   m_ObjectHideFlags: 0
@@ -74679,6 +74711,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &1459091078
 GameObject:
   m_ObjectHideFlags: 0
@@ -76458,6 +76492,8 @@ MonoBehaviour:
   noiseArriveDistance: 1.5
   noiseSearchDuration: 8
   noiseSearchRadius: 5
+  combatSearchDuration: 6
+  combatSearchRadius: 6
   howlRadius: 25
   howlBroadcastTime: 1.2
   howlDuration: 3
@@ -88440,6 +88476,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!1 &1723639423
 GameObject:
   m_ObjectHideFlags: 0
@@ -99697,6 +99735,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 1
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!136 &1917884913
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -104096,6 +104136,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 0
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!65 &1983557832
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -110395,6 +110437,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hitbox
   m_isHeadshot: 1
+  m_alwaysActive: 0
+  m_logHit: 0
 --- !u!135 &2105075052
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -114572,6 +114616,7 @@ MonoBehaviour:
   m_effectManager: {fileID: 637130783}
   m_audioManager: {fileID: 324112391}
   m_enemyManager: {fileID: 739907602}
+  m_noiseManager: {fileID: 0}
   m_gameOverUI: {fileID: 1500241454}
   m_hideGameOverUIOnAwake: 1
 --- !u!1 &919132148585225536
@@ -115964,7 +116009,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 1539452101745766751, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_IsTrigger
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2093431808988188852, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_AnchorMax.y
@@ -115976,7 +116021,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2512216766550534553, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_Layer
-      value: 11
+      value: 9
       objectReference: {fileID: 0}
     - target: {fileID: 2996863503051404067, guid: 3ed70da4c0ab9a241bca9991a34c1422, type: 3}
       propertyPath: m_LocalPosition.x
@@ -117048,7 +117093,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3251511350542525715, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
       propertyPath: m_IsTrigger
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4216228649234502692, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
       propertyPath: m_Layer
@@ -117060,7 +117105,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5838140472483179025, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
       propertyPath: m_Layer
-      value: 11
+      value: 9
       objectReference: {fileID: 0}
     - target: {fileID: 6507399643083616427, guid: 2d5264b0b39a13e42940d0614df72c6d, type: 3}
       propertyPath: m_LocalPosition.x

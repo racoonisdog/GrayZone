@@ -5924,6 +5924,7 @@ MonoBehaviour:
   m_debugDrawDamageFalloff: 0
   m_debugFalloffRingRadius: 0.35
   m_debugDrawShotNoiseRange: 0
+  m_debugLogTwoStage: 1
   m_debugInfiniteMagazine: 0
 --- !u!114 &2567643146406257329
 MonoBehaviour:
