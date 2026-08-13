@@ -18,7 +18,7 @@ MonoBehaviour:
   m_resultResourceId: facility_upgrade_part
   m_resultQuantityPerBatch: 1
   m_requiredFacilityLevel: 1
-  m_unitWork: 6
+  m_unitWork: 3
   m_unitCosts:
   - m_resourceId: upgrade_part_material
-    m_amount: 4
+    m_amount: 5

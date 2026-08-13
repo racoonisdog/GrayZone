@@ -13,10 +13,12 @@ MonoBehaviour:
   m_Name: TestItemRecipe2
   m_EditorClassIdentifier: Assembly-CSharp::ManufacturingRecipeDefinition
   m_recipeId: magazine_01
+  m_resultKind: 0
   m_resultItem: {fileID: 11400000, guid: 331050bb17196b444a5fc0e12a60fd5c, type: 2}
+  m_resultResourceId: 
   m_resultQuantityPerBatch: 1
   m_requiredFacilityLevel: 2
-  m_unitWork: 5
+  m_unitWork: 3
   m_unitCosts:
   - m_resourceId: weapon_part_material
-    m_amount: 10
+    m_amount: 5

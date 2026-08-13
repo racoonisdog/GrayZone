@@ -13,7 +13,10 @@ MonoBehaviour:
   m_Name: TestItemRecipe
   m_EditorClassIdentifier: Assembly-CSharp::ManufacturingRecipeDefinition
   m_recipeId: PotionRecipe
+  m_resultKind: 0
   m_resultItem: {fileID: 11400000, guid: 1a32a5949f30a3c4390f96c1846dba99, type: 2}
+  m_resultResourceId: 
+  m_resultQuantityPerBatch: 1
   m_requiredFacilityLevel: 1
   m_unitWork: 3
   m_unitCosts:
