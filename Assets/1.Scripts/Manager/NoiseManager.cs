@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -8,14 +6,15 @@ using UnityEngine;
 /// <remarks>
 /// <para>
 /// 재질 판별(<see cref="SurfaceMaterialTag"/> -> <see cref="NoiseOcclusionSO"/>), 구조물 예외
-/// (<see cref="NoiseOccluder"/>), 경로상 차폐 누적을 소유합니다.
+/// (<see cref="NoiseOccluder"/>), 무엇이 소리를 막는지(레이어), 경로상 차폐 누적을 소유합니다.
 /// <see cref="EffectManager"/>가 표면 피드백에 대해 같은 자리를 맡는 것과 같은 구조이며, 재질 축도
 /// 그쪽과 공유합니다.
 /// </para>
 /// <para>
 /// 차폐 판정을 듣는 쪽(<see cref="EnemyTargetSensor"/>)이 아니라 여기에 둔 이유는 "어떤 재질이 소리를
 /// 얼마나 막는가"가 개체가 아니라 필드의 성질이기 때문입니다. 개체마다 들면 같은 벽의 차폐율이
-/// 프리팹 수만큼 생깁니다. 반대로 무엇을 장애물로 볼지(레이어)는 듣는 쪽이 넘겨 줍니다.
+/// 프리팹 수만큼 생깁니다. 무엇을 차폐물로 볼지도 같은 이유로 여기 있습니다. 예민한 개체와 둔한 개체가
+/// 서로 다른 벽에 막힌다는 것은 말이 되지 않습니다.
 /// </para>
 /// <para>
 /// <b>기획 편차</b>: 공용 `적 시스템` v0.2 §5.4.4는 "거리 감쇠 외에 벽이나 엄폐물에 의한 장애물 감쇠는
@@ -27,36 +26,54 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class NoiseManager : MonoBehaviour
 {
-    [Tooltip("등록된 재질과 일치하지 않는 구조물에 적용할 기본 차폐율입니다. 0이면 그대로 통과하고 1이면 완전히 막습니다. 물리 머티리얼이 배치되기 전에는 사실상 모든 벽이 이 값을 씁니다. 기획 미확정 - 임시값입니다.")]
-    [Range(0.0f, 1.0f)]
-    [SerializeField] private float m_defaultOcclusion = 0.5f;
+    /// <summary>차폐 레이어를 지정하지 않았을 때 사용할 구조물 레이어 이름입니다.</summary>
+    /// <remarks>
+    /// <c>Default</c>를 일부러 뺐습니다. 시야 판정은 <c>Default</c>를 포함하지만, 그 레이어에는 난간·소품처럼
+    /// 시야는 가려도 소리는 거의 막지 않는 것이 섞여 있습니다. 소리와 시야가 같은 집합을 쓰면 화분 뒤에
+    /// 섰다고 총성이 절반으로 줄어듭니다. 구조물 레이어가 정리되기 전까지는 이 기본값에서 차폐가 거의
+    /// 걸리지 않는 것이 정상이며, 그것이 "레이어가 아직 정리되지 않았다"는 신호입니다.
+    /// </remarks>
+    private static readonly string[] s_defaultOccluderLayerNames =
+    {
+        "Ground", "Environment", "Prop", "ShelterRoof", "ShelterFacility",
+    };
 
-    [Tooltip("필드에서 판별할 재질별 소음 차폐율 목록입니다.")]
-    [SerializeField] private NoiseOcclusionSO[] m_occlusions = Array.Empty<NoiseOcclusionSO>();
+    [Tooltip("재질별 소음 차폐율 표입니다. 비어 있으면 차폐를 적용하지 않습니다.")]
+    [SerializeField] private NoiseOcclusionSO m_occlusionTable;
+
+    [Tooltip("소음을 막는 것으로 취급할 레이어입니다. 시야 차단 레이어와 따로 둡니다. 비어 있으면 구조물 레이어 기본값을 쓰고 경고를 남깁니다.")]
+    [SerializeField] private LayerMask m_occluderLayer;
 
     [Tooltip("소음 하나가 통과하는 경로에서 셀 수 있는 구조물의 최대 개수입니다. 이보다 많이 겹치면 초과분은 세지 않아 차폐가 실제보다 약해집니다.")]
     [Min(1)]
     [SerializeField] private int m_maxOccluderCount = 8;
 
     [Header("Debug")]
-    [Tooltip("차폐 판정마다 통과 비율과 맞은 구조물을 콘솔에 남깁니다. 발소리처럼 잦은 소음에서는 로그가 크게 늘어납니다.")]
+    [Tooltip("차폐 판정마다 통과 비율과 맞은 구조물 수를 콘솔에 남깁니다. 발소리처럼 잦은 소음에서는 로그가 크게 늘어납니다.")]
     [SerializeField] private bool m_debugLogTransmission;
 
     /// <summary>차폐 판정에 재사용하는 Raycast 결과 버퍼입니다.</summary>
     private RaycastHit[] m_hitBuffer;
 
+    /// <summary>실제로 사용할 차폐 레이어입니다. 지정이 없으면 기본값으로 채웁니다.</summary>
+    private int m_resolvedOccluderMask;
+
     /// <summary>버퍼가 꽉 차 차폐를 과소평가했다는 경고를 이미 남겼는지 여부입니다.</summary>
     private bool m_warnedBufferFull;
 
-    /// <summary>일치하는 재질이 없을 때 적용할 기본 차폐율입니다.</summary>
-    public float DefaultOcclusion => Mathf.Clamp01(m_defaultOcclusion);
+    /// <summary>차폐율 표가 없다는 경고를 이미 남겼는지 여부입니다.</summary>
+    private bool m_warnedMissingTable;
 
-    /// <summary>필드에서 사용할 재질별 소음 차폐율 목록입니다.</summary>
-    public IReadOnlyList<NoiseOcclusionSO> Occlusions => m_occlusions;
+    /// <summary>재질별 소음 차폐율 표입니다. 없으면 <c>null</c>입니다.</summary>
+    public NoiseOcclusionSO OcclusionTable => m_occlusionTable;
+
+    /// <summary>실제로 사용 중인 차폐 레이어 마스크입니다. 진단용입니다.</summary>
+    public int OccluderMask => m_resolvedOccluderMask;
 
     private void Awake()
     {
         m_hitBuffer = new RaycastHit[Mathf.Max(1, m_maxOccluderCount)];
+        m_resolvedOccluderMask = ResolveOccluderMask();
     }
 
     /// <summary>
@@ -64,7 +81,6 @@ public sealed class NoiseManager : MonoBehaviour
     /// </summary>
     /// <param name="listenerPosition">소음을 듣는 위치입니다. 귀 높이를 넘기는 편이 정확합니다.</param>
     /// <param name="noisePosition">소음이 발생한 위치입니다.</param>
-    /// <param name="occluderMask">소음을 막는 것으로 취급할 레이어 마스크입니다.</param>
     /// <returns>1이면 아무것도 막지 않았고, 0이면 완전히 막혔습니다.</returns>
     /// <remarks>
     /// 겹친 구조물은 비율을 <b>곱합니다</b>. 차폐율 0.5인 벽 두 겹이면 0.25가 남습니다. 더하면 벽 두 겹에서
@@ -76,9 +92,15 @@ public sealed class NoiseManager : MonoBehaviour
     /// 버퍼가 꽉 차면 초과분은 세지 않습니다. 즉 오차는 항상 "덜 막힌다" 쪽이며, 소리가 통과하는 것이
     /// 막히는 것보다 눈에 덜 띄어 조용히 지나가므로 한 번은 경고를 남깁니다.
     /// </remarks>
-    public float GetTransmission(Vector3 listenerPosition, Vector3 noisePosition, int occluderMask)
+    public float GetTransmission(Vector3 listenerPosition, Vector3 noisePosition)
     {
-        if (occluderMask == 0)
+        if (m_occlusionTable == null)
+        {
+            WarnMissingTable();
+            return 1.0f;
+        }
+
+        if (m_resolvedOccluderMask == 0)
         {
             return 1.0f;
         }
@@ -99,7 +121,7 @@ public sealed class NoiseManager : MonoBehaviour
         Vector3 direction = delta / distance;
 
         int count = Physics.RaycastNonAlloc(
-            listenerPosition, direction, m_hitBuffer, distance, occluderMask, QueryTriggerInteraction.Ignore);
+            listenerPosition, direction, m_hitBuffer, distance, m_resolvedOccluderMask, QueryTriggerInteraction.Ignore);
 
         if (count >= m_hitBuffer.Length && !m_warnedBufferFull)
         {
@@ -143,9 +165,9 @@ public sealed class NoiseManager : MonoBehaviour
     /// <param name="collider">경로에서 맞은 콜라이더입니다.</param>
     /// <returns>이 구조물을 한 겹 통과할 때 깎이는 비율입니다.</returns>
     /// <remarks>
-    /// 구조물 지정(<see cref="NoiseOccluder"/>)이 재질 기본값을 이깁니다. 소리를 막는 것은 표면 재질이
-    /// 아니라 구조라서, 같은 콘크리트라도 칸막이와 방호벽이 달라야 하기 때문입니다. 다만 전부 손으로
-    /// 지정하면 값이 필드에 흩어지므로 재질로 설명되지 않는 것만 덮습니다.
+    /// 구조물 지정(<see cref="NoiseOccluder"/>)이 재질보다 앞섭니다. 두께처럼 재질로 설명되지 않는 것을
+    /// 위한 자리이며, 재질 이름으로 말할 수 있는 예외는 <see cref="SurfaceMaterialTag"/>의 소음 재질
+    /// 지정을 쓰는 편이 낫습니다. 그쪽은 차폐율 표 안에 남지만 이쪽은 표 밖의 날숫자가 됩니다.
     /// </remarks>
     private float ResolveColliderOcclusion(Collider collider)
     {
@@ -154,43 +176,52 @@ public sealed class NoiseManager : MonoBehaviour
             return overridden;
         }
 
-        return ResolveOcclusion(SurfaceMaterialTag.Resolve(collider));
+        return m_occlusionTable.Resolve(SurfaceMaterialTag.ResolveNoise(collider));
     }
 
-    /// <summary>
-    /// 재질에 대응하는 차폐율을 찾습니다.
-    /// </summary>
-    /// <param name="materialType">구조물의 재질입니다. <c>Unknown</c>이면 기본값을 씁니다.</param>
-    /// <returns>이 재질을 한 겹 통과할 때 깎이는 비율입니다.</returns>
+    /// <summary>지정된 차폐 레이어를 그대로 쓰되, 비어 있으면 구조물 기본값으로 대체합니다.</summary>
     /// <remarks>
-    /// 목록을 앞에서부터 훑어 처음 일치하는 항목을 씁니다. 같은 재질을 두 에셋이 가리키면 앞선 것이
-    /// 이깁니다. 항목 수가 재질 수만큼이라 사전을 만들 이득이 없어 선형 탐색으로 둡니다.
-    /// <see cref="EffectManager.ResolveSurfaceFeedback"/>과 같은 방식입니다.
+    /// 비워 두면 <c>Nothing</c>이라 아무것도 맞히지 못해 차폐가 통째로 죽습니다. 에러 없이 조용히 지나가고
+    /// "왜 벽 뒤 총성이 그대로 들리지?"로만 드러나므로, <see cref="EnemyLayers"/>와 같은 방식으로 기본값을
+    /// 채우고 경고를 남깁니다.
     /// </remarks>
-    public float ResolveOcclusion(SurfaceMaterialType materialType)
+    private int ResolveOccluderMask()
     {
-        if (materialType == SurfaceMaterialType.Unknown || m_occlusions == null)
+        if (m_occluderLayer.value != 0)
         {
-            return DefaultOcclusion;
+            return m_occluderLayer.value;
         }
 
-        for (int occlusionIndex = 0; occlusionIndex < m_occlusions.Length; occlusionIndex++)
+        int fallback = 0;
+        for (int i = 0; i < s_defaultOccluderLayerNames.Length; i++)
         {
-            NoiseOcclusionSO occlusion = m_occlusions[occlusionIndex];
-            if (occlusion == null || occlusion.MaterialTypes == null)
+            int layer = LayerMask.NameToLayer(s_defaultOccluderLayerNames[i]);
+            if (layer >= 0)
             {
-                continue;
-            }
-
-            for (int materialIndex = 0; materialIndex < occlusion.MaterialTypes.Count; materialIndex++)
-            {
-                if (occlusion.MaterialTypes[materialIndex] == materialType)
-                {
-                    return occlusion.Occlusion;
-                }
+                fallback |= 1 << layer;
             }
         }
 
-        return DefaultOcclusion;
+        Debug.LogWarning(
+            $"[NoiseManager] 소음 차폐 레이어가 비어 있어 기본값({string.Join("/", s_defaultOccluderLayerNames)})을 사용합니다. " +
+            "시야 차단과 달리 Default는 일부러 제외했습니다. 구조물이 Default에 있으면 차폐가 걸리지 않으니 " +
+            "레이어를 정리하거나 인스펙터에서 명시하십시오.",
+            this);
+
+        return fallback;
+    }
+
+    private void WarnMissingTable()
+    {
+        if (m_warnedMissingTable)
+        {
+            return;
+        }
+
+        m_warnedMissingTable = true;
+        Debug.LogWarning(
+            "[NoiseManager] 재질별 소음 차폐율 표(NoiseOcclusionSO)가 비어 있어 차폐를 적용하지 않습니다. " +
+            "기본 차폐율까지 표가 소유하므로, 코드에 같은 값을 두 벌 두지 않기 위해 대체값을 쓰지 않습니다.",
+            this);
     }
 }

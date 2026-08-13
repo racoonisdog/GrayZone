@@ -746,12 +746,11 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <param name="noisePosition">소음이 발생한 위치입니다.</param>
     /// <returns>1이면 아무것도 막지 않았고, 0이면 완전히 막혔습니다.</returns>
     /// <remarks>
-    /// 재질별 차폐율은 필드의 성질이므로 <see cref="NoiseManager"/>가 소유합니다. 여기서 넘기는 것은
-    /// "무엇을 장애물로 볼지"(레이어)와 "어디서 듣는지"(귀 위치)뿐입니다.
+    /// 재질별 차폐율도, 무엇이 소리를 막는지도 필드의 성질이므로 <see cref="NoiseManager"/>가 소유합니다.
+    /// 여기서 넘기는 것은 "어디서 듣는지"(귀 위치)뿐입니다.
     ///
-    /// 장애물 레이어를 시야 판정과 공유합니다. 지금은 소리를 막는 것과 시야를 막는 것이 같은 고정 환경
-    /// 콜라이더 집합이기 때문입니다. 유리창처럼 보이지만 소리를 막는 것, 커튼처럼 가리지만 소리를 통과시키는
-    /// 것이 생기면 그때 소음 전용 마스크로 분리해야 합니다.
+    /// 장애물 레이어를 시야 판정과 공유하지 않습니다. 시야 마스크에는 난간·소품처럼 시야는 가려도 소리는
+    /// 거의 막지 않는 것이 섞여 있어, 같은 집합을 쓰면 화분 뒤에 섰다고 총성이 절반으로 줄어듭니다.
     ///
     /// 귀 위치로 <see cref="GetEyePosition"/>을 씁니다. 발밑에서 쏘면 바닥 턱이나 경사에 막혀 실제보다
     /// 자주 차폐로 판정됩니다. 가청 판정이 <c>transform.position</c>을 쓰는 것과 다른데, 그쪽은 거리만
@@ -770,7 +769,7 @@ public class EnemyTargetSensor : MonoBehaviour
             return 1f;
         }
 
-        return noiseManager.GetTransmission(GetEyePosition(), noisePosition, m_resolvedObstacleMask);
+        return noiseManager.GetTransmission(GetEyePosition(), noisePosition);
     }
 
     /// <summary>

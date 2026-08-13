@@ -61,13 +61,25 @@ public sealed class SurfaceMaterialTag : MonoBehaviour
     /// </remarks>
     public static SurfaceMaterialType Resolve(Collider collider)
     {
-        if (collider == null)
-        {
-            return SurfaceMaterialType.Unknown;
-        }
-
-        SurfaceMaterialTag tag = collider.GetComponentInParent<SurfaceMaterialTag>();
+        SurfaceMaterialTag tag = FindTag(collider);
 
         return tag != null ? tag.MaterialType : SurfaceMaterialType.Unknown;
+    }
+
+    /// <summary>
+    /// 충돌한 콜라이더를 소음 차폐가 볼 재질로 판별합니다.
+    /// </summary>
+    /// <param name="collider">판별할 콜라이더입니다.</param>
+    /// <returns>소음 재질을 따로 지정했으면 그 값, 아니면 주 재질입니다.</returns>
+    public static SurfaceMaterialType ResolveNoise(Collider collider)
+    {
+        SurfaceMaterialTag tag = FindTag(collider);
+
+        return tag != null ? tag.NoiseMaterialType : SurfaceMaterialType.Unknown;
+    }
+
+    private static SurfaceMaterialTag FindTag(Collider collider)
+    {
+        return collider != null ? collider.GetComponentInParent<SurfaceMaterialTag>() : null;
     }
 }

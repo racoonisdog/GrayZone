@@ -511,9 +511,14 @@ namespace GrayZone.EditorTools
                 });
             }
 
+            var table = noiseManager != null ? noiseManager.OcclusionTable : null;
+
             return new SuccessResponse(
                 $"noise: {dumps.Count} enemy(s), noiseManager={(noiseManager != null ? "present" : "MISSING")}, " +
-                $"defaultOcclusion={(noiseManager != null ? noiseManager.DefaultOcclusion.ToString("F2") : "-")}, " +
+                $"table={(table != null ? table.name : "MISSING")}, " +
+                $"defaultOcclusion={(table != null ? table.DefaultOcclusion.ToString("F2") : "-")}, " +
+                $"occluderMask={(noiseManager != null ? noiseManager.OccluderMask.ToString() : "-")}, " +
+                $"tags={Object.FindObjectsByType<SurfaceMaterialTag>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length}, " +
                 $"listeners={NoiseSystem.ListenerCount}.",
                 dumps);
         }
