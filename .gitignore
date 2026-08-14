@@ -77,8 +77,9 @@ crashlytics-build.properties
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
-# RealToon은 SVN의 5. Projects/4.ThirdParty에서 관리한다.
-# vendor 내부의 "Assets/RealToon/..." 하드코딩은 현재 위치에 맞게 패치해 두었다.
+# RealToon은 SVN의 "5. Projects/RealToon" 전용 라인에서 관리한다(r151~).
+/Assets/RealToon
+/Assets/RealToon.meta
 Packages/com.youngwoocho02.unity-cli-connector/
 Packages/unity-cli/
 /Tools
