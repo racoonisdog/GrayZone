@@ -631,8 +631,30 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// 비활성화 중 취소된 예약 때문에 굳어버린 사격·재장전 상태를 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="OnDisable"/>이 <see cref="ResetShoot"/>·<see cref="CompleteReload"/> 예약을 취소하는데,
+    /// 두 플래그를 되돌리는 곳은 그 예약뿐입니다. 그래서 복구가 없으면 <b>사격 직후 비활성화된 총은
+    /// <c>m_canShoot=false</c>로 굳어 다시 켜도 영영 발사되지 않습니다</b>(재장전 중이었다면 같은 이유로
+    /// <c>m_isReloading=true</c>에 갇힙니다). Play Mode에서 실제로 발생한 상태이므로 가정이 아닙니다.
+    /// 재장전은 완료 예약이 사라졌으니 중단으로 처리합니다. 탄약은 채우지 않으며 다시 재장전해야 합니다.
+    /// </remarks>
+    private void OnEnable()
+    {
+        m_canShoot = true;
+        m_isReloading = false;
+
+        if (m_hasRequiredReferences)
+        {
+            UpdateBulletUI();
+        }
+    }
+
+    /// <summary>
     /// 예약된 사격 쿨다운 호출을 정리합니다.
     /// </summary>
+    /// <remarks>여기서 취소한 예약은 <see cref="OnEnable"/>이 상태를 되돌려 보상합니다. 둘은 짝입니다.</remarks>
     private void OnDisable()
     {
         CancelInvoke(nameof(ResetShoot));
