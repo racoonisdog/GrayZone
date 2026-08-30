@@ -63,12 +63,16 @@ public class PlayerInputController : MonoBehaviour
     [Tooltip("상호작용 입력이 눌린 상태(홀드 포함)인지 여부입니다.")]
     [SerializeField] private bool m_interact;
 
+    [Tooltip("인벤토리 열기 입력이 눌린 상태인지 여부입니다. 여닫기 판정은 소비 측에서 처리합니다.")]
+    [SerializeField] private bool m_inventory;
+
     // UI 커서 모드에서는 Input System 콜백이 게임플레이 상태를 다시 채우지 않도록 막습니다.
     private bool m_isInputEnabled = true;
 
 #if ENABLE_INPUT_SYSTEM
     private PlayerInput m_playerInput;
     private InputAction m_interactionAction;
+    private InputAction m_inventoryAction;
 #endif
 
     [Header("Movement Settings")]
@@ -130,6 +134,25 @@ public class PlayerInputController : MonoBehaviour
 
             RefreshInteractionInputFromAction();
             return m_interact;
+        }
+    }
+
+    /// <summary>인벤토리 입력이 눌린 상태입니다. 여닫기 전환은 소비 측에서 판정합니다.</summary>
+    /// <remarks>
+    /// <see cref="Interact"/>와 같은 모양으로 둔 이유: 두 입력 모두 콜백만으로는 조작권이 넘어간 순간의
+    /// 상태를 놓칠 수 있어, 소비 측이 읽을 때 액션에서 현재 상태를 다시 확인해야 합니다.
+    /// </remarks>
+    public bool Inventory
+    {
+        get
+        {
+            if (!m_isInputEnabled)
+            {
+                return false;
+            }
+
+            RefreshInventoryInputFromAction();
+            return m_inventory;
         }
     }
 
@@ -373,6 +396,20 @@ public class PlayerInputController : MonoBehaviour
 
         InteractInput(value.isPressed);
     }
+
+    /// <summary>
+    /// 인벤토리(Inventory) 입력 액션 콜백입니다.
+    /// </summary>
+    /// <param name="value">Input System에서 전달된 인벤토리 입력 상태입니다.</param>
+    public void OnInventory(InputValue value)
+    {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
+        InventoryInput(value.isPressed);
+    }
 #endif
 
     /// <summary>
@@ -467,6 +504,26 @@ public class PlayerInputController : MonoBehaviour
 #endif
     }
 
+    /// <summary>
+    /// 인벤토리 입력 상태를 갱신합니다.
+    /// </summary>
+    /// <param name="newInventoryState">새 인벤토리 입력 상태입니다.</param>
+    public void InventoryInput(bool newInventoryState)
+    {
+        m_inventory = newInventoryState;
+    }
+
+    private void RefreshInventoryInputFromAction()
+    {
+#if ENABLE_INPUT_SYSTEM
+        InputAction action = ResolveInventoryAction();
+        if (action != null)
+        {
+            m_inventory = action.IsPressed();
+        }
+#endif
+    }
+
 #if ENABLE_INPUT_SYSTEM
     private void CachePlayerInput()
     {
@@ -493,6 +550,24 @@ public class PlayerInputController : MonoBehaviour
             ?? m_playerInput.actions.FindAction("Interact", false);
 
         return m_interactionAction;
+    }
+
+    private InputAction ResolveInventoryAction()
+    {
+        if (m_inventoryAction != null)
+        {
+            return m_inventoryAction;
+        }
+
+        CachePlayerInput();
+        if (m_playerInput == null || m_playerInput.actions == null)
+        {
+            return null;
+        }
+
+        m_inventoryAction = m_playerInput.actions.FindAction("Inventory", false);
+
+        return m_inventoryAction;
     }
 #endif
 
