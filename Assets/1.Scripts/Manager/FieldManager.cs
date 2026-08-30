@@ -32,6 +32,9 @@ public class FieldManager : MonoBehaviour, IInputModeController
     [Tooltip("재질별 소음 차폐율과 경로 차폐 누적을 소유하는 자식 오브젝트의 매니저입니다. 없으면 소음이 벽을 그대로 통과합니다.")]
     [SerializeField] private NoiseManager m_noiseManager;
 
+    [Tooltip("스쿼드가 공동으로 쓰는 필드 인벤토리를 소유하는 자식 오브젝트의 매니저입니다. 없으면 필드에서 아이템을 획득할 수 없습니다.")]
+    [SerializeField] private SquadInventoryManager m_squadInventory;
+
     [Tooltip("스쿼드 전멸 시 표시할 게임오버 화면입니다. 비어 있으면 비활성 오브젝트까지 포함해 자동 탐색합니다.")]
     [SerializeField] private GameOverUIController m_gameOverUI;
 
@@ -69,6 +72,19 @@ public class FieldManager : MonoBehaviour, IInputModeController
     public NoiseManager NoiseManager => m_noiseManager != null
         ? m_noiseManager
         : m_noiseManager = GetComponentInChildren<NoiseManager>(true);
+
+    /// <summary>스쿼드가 공동으로 쓰는 필드 인벤토리를 소유하는 매니저입니다.</summary>
+    /// <remarks>
+    /// 없으면 <c>null</c>입니다. 인벤토리는 조작 멤버와 무관하게 스쿼드에 하나뿐이므로(공용 `인벤토리 시스템` §3.1)
+    /// 멤버 쪽이 아니라 여기서 찾습니다.
+    ///
+    /// 다른 자식 매니저와 달리 <b>자식으로 한정해 찾지 않습니다.</b> 인벤토리는 필드 설비가 아니라 스쿼드에
+    /// 속하는 것이라 계층에서 스쿼드 쪽에 두는 배치가 가능하고(현재 씬은 <c>PlayerManager</c> 아래),
+    /// 그 경우 자식 탐색으로는 영영 찾지 못해 아이템 획득이 조용히 죽습니다.
+    /// </remarks>
+    public SquadInventoryManager SquadInventory => m_squadInventory != null
+        ? m_squadInventory
+        : m_squadInventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStaticState()
@@ -119,6 +135,12 @@ public class FieldManager : MonoBehaviour, IInputModeController
         {
             m_noiseManager = GetComponentInChildren<NoiseManager>(true);
         }
+
+        if (m_squadInventory == null)
+        {
+            // 인벤토리는 자식이 아닐 수 있습니다(스쿼드 소속). SquadInventory 프로퍼티 주석 참고.
+            m_squadInventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
+        }
     }
 
     /// <summary>빠진 자식 매니저를 한 번에 알립니다.</summary>
@@ -145,6 +167,11 @@ public class FieldManager : MonoBehaviour, IInputModeController
         if (m_noiseManager == null)
         {
             Debug.LogWarning("[FieldManager] NoiseManager 자식 오브젝트를 찾지 못했습니다. 소음이 벽에 막히지 않고 그대로 전달됩니다.", this);
+        }
+
+        if (m_squadInventory == null)
+        {
+            Debug.LogWarning("[FieldManager] SquadInventoryManager 자식 오브젝트를 찾지 못했습니다. 필드에서 아이템을 획득할 수 없습니다.", this);
         }
     }
 
