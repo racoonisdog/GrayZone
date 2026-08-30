@@ -1198,7 +1198,19 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             }
 
             HitboxGroup group = m_openedHitboxGroups[i];
-            builder.Append(group != null ? group.gameObject.name : "(사라짐)");
+            if (group == null)
+            {
+                builder.Append("(사라짐)");
+                continue;
+            }
+
+            // 그룹 이름만으로는 "켰다고 기록됐는데 실제 콜라이더는 꺼져 있는" 상태를 가릴 수 없습니다.
+            // 켜진 수/수집된 수를 함께 적어 3차가 빗나갈 때 원인이 기하 문제인지 배선 문제인지 나눕니다.
+            builder.Append(group.gameObject.name);
+            builder.Append(" 부위");
+            builder.Append(group.EnabledHitboxCount);
+            builder.Append('/');
+            builder.Append(group.HitboxCount);
         }
 
         return builder.ToString();
