@@ -60,6 +60,15 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("합류 목적지 후보를 플레이어 주위 몇 방향에서 뽑을지입니다. 고정 자리가 아니라 매번 가장 가까운 빈 자리를 고르기 위한 표본 수입니다.")]
     [SerializeField] private int m_destinationCandidateCount = 8;
 
+    [Tooltip("합류 중 이 시간(초) 동안 경로가 없거나 이동 진척이 없으면 경로를 다시 탐색합니다. 재장전이나 구조처럼 정상적으로 이동하지 못하는 시간은 세지 않습니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_joinStallTime = 1.5f;
+
+    [Tooltip("이 거리(m)만큼도 플레이어에게 가까워지지 못했으면 이동 진척이 없다고 봅니다. 너무 작게 두면 제자리 흔들림을 진척으로 오인합니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_joinProgressEpsilon = 0.3f;
+
+    [Tooltip("합류 실패를 확정하기 전에 경로를 다시 탐색할 횟수입니다. 이 횟수를 넘겨도 회복되지 않으면 재배치로 넘어갑니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private int m_joinRepathLimit = 3;
+
     // AI 팀원끼리 유지할 간격은 SquadManager.AiMemberSpacing이 소유합니다. 스쿼드 전체에 걸리는
     // 편성 규칙이라 멤버마다 사본을 두면 값이 어긋나고, 나중에 합류한 멤버만 옛 값을 씁니다.
 
@@ -165,6 +174,9 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("이 동행 AI를 선택했을 때 합류 시작 거리와 합류 완료 거리를 리더 기준 원 두 개로 표시합니다. 리더가 없으면 그리지 않습니다.")]
     [SerializeField] private bool m_debugDrawJoinDistances = false;
 
+    [Tooltip("합류 실패가 확정되면 플레이어 근처 유효 위치로 즉시 재배치합니다. 연출이 없어 순간이동으로 보이므로 끌 수 있게 두었습니다. 끄면 판정과 경고만 남고 위치는 보정하지 않아, 경로가 끊긴 팀원이 그 자리에 그대로 남습니다.")]
+    [SerializeField] private bool m_repositionOnJoinFailure = true;
+
     private SquadMemberController m_memberController;
     private NavMeshAgent m_agent;
     private SquadManager m_squadManager;
@@ -172,6 +184,17 @@ public class SquadAIController : MonoBehaviour
 
     private float m_nextUpdateTime;
     private bool m_hasRequiredReferences;
+
+    // §17 합류 실패 판정 상태입니다.
+    //
+    // 진척을 "플레이어까지의 경로상 거리가 줄었는가"로 재는 이유: 실제로 걸었는지를 속도로 보면
+    // 벽에 붙어 비비는 동안에도 속도가 남아 진척으로 오인합니다. 목적지에 가까워졌는지로 보면
+    // 목적지 자체가 닿을 수 없는 자리일 때 영원히 진척이 없다고 나옵니다. 문서가 판정 기준으로
+    // 삼는 것은 "합류", 즉 플레이어에게 붙는 것이므로 그 거리를 씁니다.
+    private float m_joinStallTimer;
+    private float m_lastJoinPathDistance = -1.0f;
+    private int m_joinRepathCount;
+    private bool m_joinFailed;
 
     // 합류 중인지입니다. 시작 거리에서 켜고 완료 거리에서 끄는 히스테리시스의 한쪽입니다(§6.2).
     // 하나의 거리로 판정하면 경계에서 합류 시작과 종료가 매 갱신마다 뒤집힙니다.
@@ -333,6 +356,21 @@ public class SquadAIController : MonoBehaviour
     /// 꺼집니다. 이 값이 자주 뒤집히면 두 거리가 너무 가깝다는 뜻입니다(공용 문서 §6.2).
     /// </remarks>
     public bool IsJoining => m_isJoining;
+
+    /// <summary>합류 실패가 확정된 상태인지입니다(§17).</summary>
+    /// <remarks>
+    /// 진단용입니다. 재배치가 성공하면 즉시 내려가므로, 이 값이 계속 켜져 있으면 <b>재배치할 유효 위치를
+    /// 못 찾고 있다</b>는 뜻입니다(§17 "유효한 재배치 위치 없음 -> 강제 재배치 없이 경로 재탐색 계속").
+    /// </remarks>
+    public bool IsJoinFailed => m_joinFailed;
+
+    /// <summary>합류 실패를 확정하기까지 경로를 다시 탐색한 횟수입니다(§17).</summary>
+    /// <remarks>진단용입니다. 진척이 회복되면 0으로 돌아갑니다.</remarks>
+    public int JoinRepathCount => m_joinRepathCount;
+
+    /// <summary>이동 진척 없이 지난 시간입니다(§17).</summary>
+    /// <remarks>진단용입니다. 정상적으로 이동하지 못하는 행동 중에는 늘지 않습니다.</remarks>
+    public float JoinStallTimer => m_joinStallTimer;
 
     /// <summary>마지막으로 확정한 합류 목적지입니다. 확정 전에는 자기 위치를 돌려줍니다.</summary>
     public Vector3 CurrentDestination => m_hasDestination ? m_destination : transform.position;
@@ -533,7 +571,12 @@ public class SquadAIController : MonoBehaviour
             return;
         }
 
-        m_agent.isStopped = false;
+        // 아래 블록과 같은 이유로 NavMesh 위에 있을 때만 만집니다. 전환 직후에는 지면 보정이
+        // 실패해 아직 NavMesh를 벗어나 있을 수 있습니다.
+        if (m_agent.isOnNavMesh)
+        {
+            m_agent.isStopped = false;
+        }
 
         if (state.HasPath && m_agent.isOnNavMesh)
         {
@@ -1402,6 +1445,10 @@ public class SquadAIController : MonoBehaviour
 
         m_pathDistanceToLeader = CalculatePathDistance(transform.position, leader.position);
 
+        // §17 경로 복구 판정을 먼저 돌립니다. 경로가 없는 경우도 여기서 함께 셉니다 - 문서가
+        // "유효한 이동 경로를 찾지 못하거나 경로가 있는데도 진척이 없으면"을 한 조건으로 묶기 때문입니다.
+        UpdateJoinRecovery(leader);
+
         // 경로가 아예 없으면 갈 방법이 없으므로 제자리를 지킵니다. 직선으로 밀어붙이면 벽에 붙어 비빕니다.
         if (m_pathDistanceToLeader < 0.0f)
         {
@@ -1439,6 +1486,231 @@ public class SquadAIController : MonoBehaviour
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 합류가 막혔는지 판정하고, 확정되면 재배치로 복구합니다(§17).
+    /// </summary>
+    /// <param name="leader">따라갈 플레이어 조작 캐릭터의 Transform입니다.</param>
+    /// <remarks>
+    /// 공용 문서 `스쿼드 AI 시스템` §17과 §18.2의 "경로 단절로 합류 불가능 -> 재탐색 후 지속 실패 시
+    /// 유효 위치로 재배치"가 정본입니다. §18.1에서는 4번(합류와 경로 복구) 안에 들어가므로 별도
+    /// <see cref="SquadAIActionKind"/> 값을 만들지 않습니다. 재배치는 이동 요청이 아니라 한 순간의
+    /// 복구 동작이어서 이동 축의 배타 선택에 넣을 것이 없습니다.
+    ///
+    /// <para>
+    /// <b>거리만으로 실패를 확정하지 않습니다</b>(§17 두 번째 규칙). 멀다는 것과 갈 수 없다는 것은 다릅니다.
+    /// 그래서 판정 기준은 두 가지뿐입니다 - 경로가 없거나, 경로가 있는데도 진척이 없는 것.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>재장전과 구조 중에는 시간을 세지 않습니다</b>(§17). §18.2가 "재장전 중 합류에 달리기 필요 ->
+    /// 재장전 완료 후 달리기 재평가"로 규정하므로 그 구간은 원래 느립니다. 그 느림을 실패로 세면
+    /// 재장전할 때마다 재배치가 터집니다.
+    /// </para>
+    ///
+    /// <para>
+    /// 합류 중이 아닐 때는 판정을 돌리지 않고 상태를 비웁니다. 완료 거리 안에서 제자리를 지키는 것은
+    /// 진척이 없는 정상 상태이며(§6.4 5번), 그것까지 세면 가만히 있는 팀원이 재배치됩니다.
+    /// </para>
+    /// </remarks>
+    private void UpdateJoinRecovery(Transform leader)
+    {
+        bool pathMissing = m_pathDistanceToLeader < 0.0f;
+
+        // 합류할 이유가 없고 경로도 정상이면 판정 대상이 아닙니다.
+        if (!m_isJoining && !pathMissing)
+        {
+            ResetJoinRecovery();
+            return;
+        }
+
+        // 정상적으로 이동하지 못하는 행동 중인 시간은 실패 판정에서 제외합니다(§17).
+        // 기준 거리도 갱신하지 않습니다. 갱신하면 그 구간에 벌어진 거리가 다음 비교의 기준이 되어
+        // 재장전이 끝난 직후 한 번은 무조건 진척으로 잡힙니다.
+        bool cannotMoveNormally = m_currentDecision.Kind == SquadAIActionKind.Rescue
+                                  || (m_weapon != null && m_weapon.IsReloading);
+
+        if (cannotMoveNormally)
+        {
+            return;
+        }
+
+        // 진척은 "플레이어에게 이만큼 가까워졌는가"로 봅니다. 경로가 없는 프레임은 비교할 값이 없으므로
+        // 진척 없음으로 취급하고 타이머만 굴립니다.
+        bool improved = !pathMissing
+                        && m_lastJoinPathDistance >= 0.0f
+                        && m_lastJoinPathDistance - m_pathDistanceToLeader >= m_joinProgressEpsilon;
+
+        if (improved)
+        {
+            ResetJoinRecovery();
+            m_lastJoinPathDistance = m_pathDistanceToLeader;
+            return;
+        }
+
+        // 첫 프레임에는 비교 기준이 없어 진척을 알 수 없습니다. 기준만 세우고 이번은 세지 않습니다.
+        if (!pathMissing && m_lastJoinPathDistance < 0.0f)
+        {
+            m_lastJoinPathDistance = m_pathDistanceToLeader;
+            return;
+        }
+
+        m_joinStallTimer += Time.deltaTime;
+
+        if (m_joinStallTimer < Mathf.Max(0.0f, m_joinStallTime))
+        {
+            return;
+        }
+
+        // 정해진 시간을 넘겼으므로 한 번의 재탐색으로 셉니다. 기준 거리를 지금 값으로 다시 잡아
+        // 다음 구간을 새로 재게 합니다.
+        m_joinStallTimer = 0.0f;
+        m_joinRepathCount++;
+        m_lastJoinPathDistance = pathMissing ? -1.0f : m_pathDistanceToLeader;
+
+        if (m_joinRepathCount <= Mathf.Max(0, m_joinRepathLimit))
+        {
+            // 아직 재탐색 여유가 있습니다. 다음 갱신에서 경로를 다시 계산하므로 여기서 할 일은 없습니다.
+            return;
+        }
+
+        m_joinFailed = true;
+
+        if (!m_repositionOnJoinFailure)
+        {
+            // 토글이 꺼져 있으면 위치를 건드리지 않습니다. 이 경우 팀원은 그 자리에 남습니다.
+            Debug.LogWarning(
+                $"[SquadAIController] {name}: 합류 실패를 확정했지만 재배치가 꺼져 있어 위치를 보정하지 않았습니다. " +
+                $"재탐색 {m_joinRepathCount}회, 경로상 거리 {(pathMissing ? "없음" : m_pathDistanceToLeader.ToString("F2"))}.",
+                this);
+            return;
+        }
+
+        if (TryRepositionNearLeader(leader))
+        {
+            // §17: 재배치 후 거리와 전투 상태를 다시 평가한다. 다음 갱신이 경로상 거리를 새로 재므로
+            // 여기서는 판정 상태만 비웁니다.
+            ResetJoinRecovery();
+            m_joinFailed = false;
+            return;
+        }
+
+        // §17, §18.2: 유효한 재배치 위치가 없으면 강제로 옮기지 않고 경로 재탐색을 계속한다.
+        // 그래서 실패 상태는 유지한 채 재탐색 횟수만 되돌려 다음 주기에 다시 시도하게 합니다.
+        m_joinRepathCount = Mathf.Max(0, m_joinRepathLimit);
+    }
+
+    /// <summary>합류 실패 판정 상태를 비웁니다.</summary>
+    private void ResetJoinRecovery()
+    {
+        m_joinStallTimer = 0.0f;
+        m_joinRepathCount = 0;
+        m_joinFailed = false;
+    }
+
+    /// <summary>
+    /// 플레이어 근처의 유효 위치를 찾아 이 멤버를 재배치합니다(§17).
+    /// </summary>
+    /// <param name="leader">따라갈 플레이어 조작 캐릭터의 Transform입니다.</param>
+    /// <returns>재배치했으면 true입니다. 유효 위치가 없거나 이동할 수 없는 상태면 false입니다.</returns>
+    /// <remarks>
+    /// 실제로 위치를 옮기는 절차는 <see cref="SquadMemberController.TryRepositionTo"/>가 합니다.
+    /// §4.2가 공간 이동 상태를 캐릭터 소유로 두기 때문이며, 여기서는 <b>어디로</b>만 정합니다.
+    /// </remarks>
+    private bool TryRepositionNearLeader(Transform leader)
+    {
+        if (m_memberController == null || leader == null)
+        {
+            return false;
+        }
+
+        if (!TrySelectRepositionPosition(leader, out Vector3 position))
+        {
+            return false;
+        }
+
+        if (!m_memberController.TryRepositionTo(position))
+        {
+            return false;
+        }
+
+        // 옮긴 자리를 그대로 목적지로 두면 다음 갱신까지 옛 목적지로 향합니다. 찜도 함께 놓습니다.
+        ClearFollowDestination();
+        m_isJoining = false;
+
+        Debug.LogWarning(
+            $"[SquadAIController] {name}: 합류 경로를 복구하지 못해 플레이어 근처로 재배치했습니다(§17). " +
+            $"재탐색 {m_joinRepathCount}회.",
+            this);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 플레이어 주변에서 재배치할 유효 위치를 고릅니다(§17).
+    /// </summary>
+    /// <param name="leader">따라갈 플레이어 조작 캐릭터의 Transform입니다.</param>
+    /// <param name="position">고른 자리입니다.</param>
+    /// <returns>유효 위치를 찾았으면 true입니다.</returns>
+    /// <remarks>
+    /// <b>합류 목적지 탐색(<see cref="TrySelectNearestFreePosition"/>)을 재사용할 수 없습니다.</b>
+    /// 그쪽은 후보를 "지금 위치에서 걸어갈 수 있는가"로 걸러내는데, 재배치가 필요한 상황은 정의상
+    /// 걸어갈 수 있는 자리가 없는 상황입니다. 같은 필터를 쓰면 후보가 전부 탈락해 영원히 재배치되지 않습니다.
+    ///
+    /// <para>
+    /// 그래서 남기는 조건은 §17이 정한 두 가지입니다 - 이동 가능한 지면인가(NavMesh 표본), 그리고
+    /// 캐릭터와 겹치지 않는가(<see cref="IsPositionClear"/>). 플레이어 카메라 가시성은 조건으로 쓰지
+    /// 않습니다(§17 명시).
+    /// </para>
+    ///
+    /// <para>
+    /// 플레이어에게 가까운 자리를 먼저 고릅니다. 재배치는 전술 행동이 아니라 예외 복구이므로(§17)
+    /// 좋은 자리를 찾는 것이 아니라 합류 상태로 되돌리는 것이 목적입니다.
+    /// </para>
+    /// </remarks>
+    private bool TrySelectRepositionPosition(Transform leader, out Vector3 position)
+    {
+        position = leader.position;
+
+        int candidateCount = Mathf.Max(1, m_destinationCandidateCount);
+        float radius = Mathf.Max(0.1f, m_joinCompleteDistance * DestinationRadiusRatio);
+        float angleStep = 360.0f / candidateCount;
+
+        // 후보 고리를 멤버 순번으로 엇갈리게 돌립니다. 두 팀원이 동시에 실패하면 같은 자리를 고릅니다.
+        float angleOffset = angleStep * (ResolveMemberOrder() / (float)Mathf.Max(1, ResolveAiMemberCount()));
+
+        bool found = false;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < candidateCount; i++)
+        {
+            float angle = angleOffset + angleStep * i;
+            Vector3 offset = Quaternion.Euler(0.0f, angle, 0.0f) * (Vector3.forward * radius);
+            Vector3 candidate = leader.position + offset;
+
+            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, DestinationSampleRadius, NavMesh.AllAreas))
+            {
+                continue;
+            }
+
+            if (!IsPositionClear(hit.position))
+            {
+                continue;
+            }
+
+            float distance = FlatDistance(hit.position, leader.position);
+            if (distance >= bestDistance)
+            {
+                continue;
+            }
+
+            bestDistance = distance;
+            position = hit.position;
+            found = true;
+        }
+
+        return found;
     }
 
     /// <summary>
@@ -2090,7 +2362,9 @@ public class SquadAIController : MonoBehaviour
     /// </summary>
     private void HandleRotation()
     {
-        if (m_agent == null || m_agent.isStopped)
+        // isStopped는 NavMesh 위에 있는 Agent에서만 읽을 수 있습니다. NavMesh를 벗어난 동안에는
+        // 회전시킬 이동 속도도 없으므로 그대로 빠집니다. 순서를 바꾸면 읽는 순간 에러가 납니다.
+        if (m_agent == null || !m_agent.isOnNavMesh || m_agent.isStopped)
         {
             return;
         }
@@ -2132,7 +2406,11 @@ public class SquadAIController : MonoBehaviour
     /// </summary>
     private void StopAgent()
     {
-        if (m_agent == null || !m_agent.enabled)
+        // NavMesh 위에 없으면 멈출 경로도 없습니다. 그 상태에서 isStopped와 ResetPath를 부르면
+        // Unity가 매 프레임 에러를 냅니다("can only be called on an active agent that has been
+        // placed on a NavMesh"). 개체가 NavMesh를 벗어나는 경로는 실재합니다 - 낙하, 텔레포트,
+        // 런타임 NavMesh 재생성. 그때 콘솔이 에러로 덮이면 정작 원인 로그가 묻힙니다.
+        if (m_agent == null || !m_agent.enabled || !m_agent.isOnNavMesh)
         {
             return;
         }
