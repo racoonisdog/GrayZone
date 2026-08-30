@@ -106,16 +106,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [FormerlySerializedAs("targetLayer")]
     [SerializeField] private LayerMask m_targetLayer;
 
-    [Foldout("Hitscan Aim Options")]
-    [Tooltip("총구와 조준점 사이가 막혔을 때 실제 탄착점에 표시할 마커입니다. 비어 있으면 표시하지 않습니다.")]
-    [FormerlySerializedAs("m_hitscanObstructionMarker")]
-    [SerializeField] private GameObject m_hitscanBlockMarker;
-
-    [Tooltip("차단 마커를 표면에서 띄울 거리(m)입니다. 0이면 표면과 겹쳐 z-파이팅이 생길 수 있습니다.")]
-    [FormerlySerializedAs("m_hitscanObstructionMarkerOffset")]
-    [BalanceField]
-    [SerializeField] private float m_hitscanBlockMarkerOffset = 0.01f;
-
     [Foldout("Hipfire Options")]
     [Tooltip("힙파이어 사격 후 전투 자세를 유지하는 시간(초)입니다. 0이면 사격을 멈추는 즉시 해제합니다.")]
     [BalanceField]
@@ -396,9 +386,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>조준/힙파이어 상태가 아니어도 조준선을 항상 표시할지 여부입니다.</summary>
     public bool ShowAimImageAlways => m_showAimImageAlways;
 
-    /// <summary>총구 히트스캔이 장애물에 막힐 때 마커를 표면에서 띄울 거리입니다.</summary>
-    public float HitscanBlockMarkerOffset => m_hitscanBlockMarkerOffset;
-
     /// <summary>힙파이어 사격 후 전투 자세를 유지하는 시간입니다.</summary>
     public float HipfireHoldDuration => m_hipfireHoldDuration;
 
@@ -413,10 +400,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>현재 히트스캔이 조준 중인 적입니다.</summary>
     public EnemyController CurrentAimEnemy => m_currentAimEnemy;
-
-    /// <summary>총구 기준 히트스캔이 중간 장애물에 막혔을 때 표시할 월드 마커입니다.</summary>
-    public GameObject HitscanBlockMarker => m_hitscanBlockMarker;
-
 
     /// <summary>사격 시 재생할 효과음입니다. 지정하지 않았으면 <c>null</c>입니다.</summary>
     /// <remarks>무기별 사운드는 <see cref="WeaponFeedbackEmitter"/>가 담당하고, 이 값은 캐릭터 쪽 보조 배선입니다.</remarks>
@@ -536,30 +519,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>ADS와 힙파이어 FOV 전환 보간 속도를 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
     public void SetZoomLerpSpeed(float value) => m_zoomLerpSpeed = value;
-
-    /// <summary>
-    /// 총구 기준 히트스캔 장애물 마커 오브젝트를 설정합니다.
-    /// </summary>
-    /// <param name="value">장애물 탄착점에 표시할 월드 오브젝트입니다. <c>null</c>이면 마커 표시를 생략합니다.</param>
-    public void SetHitscanBlockMarker(GameObject value)
-    {
-        if (m_hitscanBlockMarker != null)
-        {
-            m_hitscanBlockMarker.SetActive(false);
-        }
-
-        m_hitscanBlockMarker = value;
-        HideHitscanBlockMarker();
-    }
-
-    /// <summary>
-    /// 장애물 마커가 표면과 겹치지 않도록 충돌 법선 방향으로 띄울 거리를 설정합니다.
-    /// </summary>
-    /// <param name="value">표면 법선 방향 오프셋입니다. 0보다 작은 값은 0으로 보정됩니다.</param>
-    public void SetHitscanBlockMarkerOffset(float value)
-    {
-        m_hitscanBlockMarkerOffset = Mathf.Max(0.0f, value);
-    }
 
     /// <summary>
     /// 조준 중 총구 기준 히트스캔 디버그 레이 표시 여부를 설정합니다.
@@ -1737,7 +1696,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
                 out RaycastHit hit,
                 rayDistance,
                 m_weaponController.HitscanLayerMask,
-                QueryTriggerInteraction.UseGlobal))
+                // 부위 히트박스가 전부 트리거이므로 트리거 포함을 명시합니다. UseGlobal로 두면
+                // Physics.queriesHitTriggers를 끄는 순간 이 경로가 통째로 아무것도 못 봅니다
+                // (Gun.ResolveShotPath 주석에 같은 이유가 적혀 있고 그쪽은 이미 Collide입니다).
+                QueryTriggerInteraction.Collide))
         {
             return shotInfo;
         }
@@ -1752,12 +1714,20 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
-    /// 히트스캔 사격 정보에 중간 장애물이 있으면 월드 마커를 탄착점에 표시합니다.
+    /// 히트스캔 사격 정보에 중간 장애물이 있으면 탄착점 화면 위치에 차단 마커 UI를 표시합니다.
     /// </summary>
     /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
+    /// <remarks>
+    /// 표시는 <see cref="CrosshairController"/>가 소유합니다. 여기서는 "막혔는지"와 "어느 월드 지점인지"만 넘깁니다.
+    /// <para>
+    /// 예전에는 월드 평면(Plane) 오브젝트를 표면 법선에 맞춰 눕히고 오프셋으로 띄웠습니다. 화면 UI로 바꾸면서
+    /// 벽면 스내핑과 법선 오프셋을 없앴습니다. 마커가 벽 기울기에 따라 찌그러지지 않고, 표면과 겹쳐 생기는
+    /// z-파이팅과 얇은 벽 뒷면으로의 관통 문제도 함께 사라집니다.
+    /// </para>
+    /// </remarks>
     private void UpdateHitscanBlockMarker(Gun.HitscanShotInfo shotInfo)
     {
-        if (m_hitscanBlockMarker == null || m_weaponController == null)
+        if (m_crosshairController == null || m_weaponController == null)
         {
             return;
         }
@@ -1768,49 +1738,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        Vector3 markerPosition = shotInfo.EndPoint + shotInfo.Hit.normal * m_hitscanBlockMarkerOffset;
-        Quaternion markerRotation = GetHitscanBlockMarkerRotation(shotInfo.Hit.normal);
-
-        m_hitscanBlockMarker.transform.SetPositionAndRotation(markerPosition, markerRotation);
-        m_hitscanBlockMarker.SetActive(true);
-    }
-
-    private Quaternion GetHitscanBlockMarkerRotation(Vector3 hitNormal)
-    {
-        if (hitNormal.sqrMagnitude <= 0.0001f)
-        {
-            return m_hitscanBlockMarker.transform.rotation;
-        }
-
-        Vector3 surfaceNormal = hitNormal.normalized;
-        Vector3 tangentForward = Vector3.ProjectOnPlane(transform.forward, surfaceNormal);
-
-        if (tangentForward.sqrMagnitude <= 0.0001f && m_aimCamera != null)
-        {
-            tangentForward = Vector3.ProjectOnPlane(m_aimCamera.transform.up, surfaceNormal);
-        }
-
-        if (tangentForward.sqrMagnitude <= 0.0001f)
-        {
-            tangentForward = Vector3.Cross(surfaceNormal, Vector3.right);
-        }
-
-        if (tangentForward.sqrMagnitude <= 0.0001f)
-        {
-            tangentForward = Vector3.Cross(surfaceNormal, Vector3.forward);
-        }
-
-        return Quaternion.LookRotation(tangentForward.normalized, surfaceNormal);
+        m_crosshairController.ShowBlockMarker(shotInfo.EndPoint, m_mainCamera);
     }
 
     /// <summary>
-    /// 히트스캔 장애물 마커를 숨깁니다.
+    /// 히트스캔 장애물 차단 마커 UI를 숨깁니다.
     /// </summary>
     private void HideHitscanBlockMarker()
     {
-        if (m_hitscanBlockMarker != null)
+        if (m_crosshairController != null)
         {
-            m_hitscanBlockMarker.SetActive(false);
+            m_crosshairController.HideBlockMarker();
         }
     }
 
