@@ -63,8 +63,8 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("합류 중 이 시간(초) 동안 경로가 없거나 이동 진척이 없으면 경로를 다시 탐색합니다. 재장전이나 구조처럼 정상적으로 이동하지 못하는 시간은 세지 않습니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_joinStallTime = 1.5f;
 
-    [Tooltip("이 거리(m)만큼도 플레이어에게 가까워지지 못했으면 이동 진척이 없다고 봅니다. 너무 작게 두면 제자리 흔들림을 진척으로 오인합니다. 기획 미확정 - 임시값입니다.")]
-    [SerializeField] private float m_joinProgressEpsilon = 0.3f;
+    [Tooltip("합류 중 이 거리(m)만큼도 스스로 움직이지 못했으면 이동 진척이 없다고 봅니다. 너무 작게 두면 제자리 흔들림을 진척으로 오인합니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_joinProgressEpsilon = 0.5f;
 
     [Tooltip("합류 실패를 확정하기 전에 경로를 다시 탐색할 횟수입니다. 이 횟수를 넘겨도 회복되지 않으면 재배치로 넘어갑니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private int m_joinRepathLimit = 3;
@@ -187,12 +187,27 @@ public class SquadAIController : MonoBehaviour
 
     // §17 합류 실패 판정 상태입니다.
     //
-    // 진척을 "플레이어까지의 경로상 거리가 줄었는가"로 재는 이유: 실제로 걸었는지를 속도로 보면
-    // 벽에 붙어 비비는 동안에도 속도가 남아 진척으로 오인합니다. 목적지에 가까워졌는지로 보면
-    // 목적지 자체가 닿을 수 없는 자리일 때 영원히 진척이 없다고 나옵니다. 문서가 판정 기준으로
-    // 삼는 것은 "합류", 즉 플레이어에게 붙는 것이므로 그 거리를 씁니다.
+    // 진척을 <b>자기가 실제로 움직인 거리</b>로 잽니다. 기준 위치에서 m_joinProgressEpsilon 이상
+    // 벗어나면 진척입니다.
+    //
+    // 처음에는 "플레이어까지의 경로상 거리가 줄었는가"로 뒀다가 뒤집었습니다. 그 방식은
+    // <b>플레이어가 달려서 멀어지는 동안 경로 거리가 줄지 않으므로, 정상적으로 따라가는 중인 AI를
+    // 정체로 셉니다.</b> 그대로 두면 플레이어가 계속 앞서 달릴 때 팀원이 순간이동으로 따라붙는데,
+    // 그것이 바로 §17이 "합류 실패를 복구하는 예외 처리로만 사용한다"며 금지한 빠른 재집결입니다.
+    //
+    // 뒤집기 전 근거였던 "속도로 보면 벽에 비비는 동안에도 진척으로 오인한다"는 이 방식에는
+    // 걸리지 않습니다. 보는 것이 속도가 아니라 <b>기준점 대비 실제 변위</b>라서, 제자리에서 비비면
+    // 속도는 남아도 변위가 쌓이지 않기 때문입니다.
     private float m_joinStallTimer;
-    private float m_lastJoinPathDistance = -1.0f;
+    private Vector3 m_joinProgressPosition;
+    private bool m_hasJoinProgressPosition;
+
+    // 누적 간격을 재기 위한 직전 확인 시각입니다. UpdateJoinRecovery는 매 프레임이 아니라
+    // UpdateJoinState 안에서 m_updateInterval 주기로만 돌므로 Time.deltaTime을 더하면 안 됩니다.
+    // 0.15초에 한 번 호출되면서 한 프레임분(60fps면 약 0.0167초)만 더하면 약 9배 느리게 쌓여,
+    // m_joinStallTime 1.5초가 실제로는 13초가 넘습니다.
+    private float m_lastJoinCheckTime = -1.0f;
+
     private int m_joinRepathCount;
     private bool m_joinFailed;
 
@@ -949,6 +964,13 @@ public class SquadAIController : MonoBehaviour
         m_cachedLeaderTransform = null;
         m_cachedLeaderController = null;
 
+        // 합류 실패 누적도 지웁니다(§17). 남겨 두면 조작 캐릭터로 갔다가 다시 AI가 됐을 때 그 사이
+        // 흐른 시간이 한꺼번에 정체로 얹혀 첫 갱신에 곧바로 재배치합니다. 진척 기준도 옛 자리가
+        // 되므로 시각과 기준을 함께 무효화합니다.
+        ResetJoinRecovery();
+        m_hasJoinProgressPosition = false;
+        m_lastJoinCheckTime = -1.0f;
+
         // 대상 판단도 함께 지웁니다. 이 컴포넌트가 꺼지면 Tick이 멈추므로, 그냥 두면 마지막 판단이
         // 그대로 얼어붙습니다. 다시 AI가 됐을 때 옛 대상을 이미 조준 중인 것처럼 보이고,
         // 그 사이 대상이 죽거나 교전이 끝났어도 "쏠 수 있다"가 남습니다(실측으로 발견).
@@ -1516,6 +1538,13 @@ public class SquadAIController : MonoBehaviour
     /// </remarks>
     private void UpdateJoinRecovery(Transform leader)
     {
+        // 간격은 호출 시각의 차이로 잽니다(m_lastJoinCheckTime 주석 참조). 갱신은 어느 분기로 빠지든
+        // 먼저 해야 합니다 - 이르게 return하는 경로에서 빼먹으면 그 사이 흐른 시간이 다음 호출에
+        // 한꺼번에 얹힙니다.
+        float now = Time.time;
+        float elapsed = m_lastJoinCheckTime < 0.0f ? 0.0f : Mathf.Max(0.0f, now - m_lastJoinCheckTime);
+        m_lastJoinCheckTime = now;
+
         bool pathMissing = m_pathDistanceToLeader < 0.0f;
 
         // 합류할 이유가 없고 경로도 정상이면 판정 대상이 아닙니다.
@@ -1526,7 +1555,7 @@ public class SquadAIController : MonoBehaviour
         }
 
         // 정상적으로 이동하지 못하는 행동 중인 시간은 실패 판정에서 제외합니다(§17).
-        // 기준 거리도 갱신하지 않습니다. 갱신하면 그 구간에 벌어진 거리가 다음 비교의 기준이 되어
+        // 기준 위치도 갱신하지 않습니다. 갱신하면 그 구간에 움직인 만큼이 다음 비교의 기준이 되어
         // 재장전이 끝난 직후 한 번은 무조건 진척으로 잡힙니다.
         bool cannotMoveNormally = m_currentDecision.Kind == SquadAIActionKind.Rescue
                                   || (m_weapon != null && m_weapon.IsReloading);
@@ -1536,38 +1565,38 @@ public class SquadAIController : MonoBehaviour
             return;
         }
 
-        // 진척은 "플레이어에게 이만큼 가까워졌는가"로 봅니다. 경로가 없는 프레임은 비교할 값이 없으므로
-        // 진척 없음으로 취급하고 타이머만 굴립니다.
+        // 기준 위치가 없으면 지금 자리로 세웁니다. 이 상태는 ClearFollowState를 거친 직후에만
+        // 나오고 그때는 m_lastJoinCheckTime도 함께 무효화되어 elapsed가 0이므로, 여기서 따로
+        // 빠져나가지 않아도 이번 회차가 정체로 세어지지 않습니다.
+        if (!m_hasJoinProgressPosition)
+        {
+            m_joinProgressPosition = transform.position;
+            m_hasJoinProgressPosition = true;
+        }
+
+        // 진척은 "스스로 이만큼 움직였는가"로 봅니다(m_joinProgressPosition 주석 참조).
+        // 경로가 없으면 움직였더라도 목적지에 다가가는 것이 아니므로 진척으로 치지 않습니다.
         bool improved = !pathMissing
-                        && m_lastJoinPathDistance >= 0.0f
-                        && m_lastJoinPathDistance - m_pathDistanceToLeader >= m_joinProgressEpsilon;
+                        && FlatDistance(transform.position, m_joinProgressPosition) >= m_joinProgressEpsilon;
 
         if (improved)
         {
             ResetJoinRecovery();
-            m_lastJoinPathDistance = m_pathDistanceToLeader;
             return;
         }
 
-        // 첫 프레임에는 비교 기준이 없어 진척을 알 수 없습니다. 기준만 세우고 이번은 세지 않습니다.
-        if (!pathMissing && m_lastJoinPathDistance < 0.0f)
-        {
-            m_lastJoinPathDistance = m_pathDistanceToLeader;
-            return;
-        }
-
-        m_joinStallTimer += Time.deltaTime;
+        m_joinStallTimer += elapsed;
 
         if (m_joinStallTimer < Mathf.Max(0.0f, m_joinStallTime))
         {
             return;
         }
 
-        // 정해진 시간을 넘겼으므로 한 번의 재탐색으로 셉니다. 기준 거리를 지금 값으로 다시 잡아
+        // 정해진 시간을 넘겼으므로 한 번의 재탐색으로 셉니다. 기준 위치를 지금 자리로 다시 잡아
         // 다음 구간을 새로 재게 합니다.
         m_joinStallTimer = 0.0f;
         m_joinRepathCount++;
-        m_lastJoinPathDistance = pathMissing ? -1.0f : m_pathDistanceToLeader;
+        m_joinProgressPosition = transform.position;
 
         if (m_joinRepathCount <= Mathf.Max(0, m_joinRepathLimit))
         {
@@ -1607,6 +1636,11 @@ public class SquadAIController : MonoBehaviour
         m_joinStallTimer = 0.0f;
         m_joinRepathCount = 0;
         m_joinFailed = false;
+
+        // 진척 기준을 지금 자리로 당겨 둡니다. 옛 자리를 남겨 두면 다음 회차에 그 사이 움직인
+        // 거리가 진척으로 잡혀, 실제로는 막혀 있는데 한 번 통과하게 됩니다.
+        m_joinProgressPosition = transform.position;
+        m_hasJoinProgressPosition = true;
     }
 
     /// <summary>
