@@ -28,10 +28,24 @@ public sealed class NoiseManager : MonoBehaviour
 {
     /// <summary>차폐 레이어를 지정하지 않았을 때 사용할 구조물 레이어 이름입니다.</summary>
     /// <remarks>
-    /// <c>Default</c>를 일부러 뺐습니다. 시야 판정은 <c>Default</c>를 포함하지만, 그 레이어에는 난간·소품처럼
-    /// 시야는 가려도 소리는 거의 막지 않는 것이 섞여 있습니다. 소리와 시야가 같은 집합을 쓰면 화분 뒤에
-    /// 섰다고 총성이 절반으로 줄어듭니다. 구조물 레이어가 정리되기 전까지는 이 기본값에서 차폐가 거의
-    /// 걸리지 않는 것이 정상이며, 그것이 "레이어가 아직 정리되지 않았다"는 신호입니다.
+    /// <para>
+    /// 전용 차폐 레이어 하나를 새로 빼지 않고 <b>여러 구조물 레이어를 묶은 마스크</b>로 둡니다. 새 레이어를
+    /// 만들면 시야 차단 마스크와 사격 마스크까지 함께 고쳐야 하고, 하나를 빠뜨리면 "적이 벽을 뚫고 본다"처럼
+    /// 조용히 드러납니다. 기존 <c>Environment</c>는 시야·접지·사격·차폐 네 마스크에 이미 모두 들어 있어
+    /// 추가 수정이 필요하지 않습니다. 벽과 지형지물의 구분은 레이어가 아니라
+    /// <see cref="SurfaceMaterialTag"/>가 맡습니다.
+    /// </para>
+    /// <para>
+    /// <b><c>Default</c>를 일부러 뺐습니다.</b> 시야 판정은 <c>Default</c>를 포함하지만, 그 레이어에는
+    /// 난간·소품처럼 시야는 가려도 소리는 거의 막지 않는 것이 섞여 있습니다. 소리와 시야가 같은 집합을 쓰면
+    /// 화분 뒤에 섰다고 총성이 줄어듭니다. 레벨 지오메트리는 <c>Environment</c>로 정리했으므로
+    /// <c>Default</c>에 남는 것은 분류되지 않은 잡동사니이며, 그것이 소리를 막아서는 안 됩니다.
+    /// </para>
+    /// <para>
+    /// 여기서 차폐가 거의 걸리지 않으면 그것은 <b>레이어가 아직 정리되지 않았다는 신호</b>이지 버그가
+    /// 아닙니다. <see cref="NoiseOcclusionSO.DefaultOcclusion"/>을 올려서 덮으려 하지 말 것 —
+    /// 그 값은 태그 없는 모든 구조물에 걸리므로, 올리는 순간 이 문단의 화분 문제가 되살아납니다.
+    /// </para>
     /// </remarks>
     private static readonly string[] s_defaultOccluderLayerNames =
     {
@@ -204,8 +218,8 @@ public sealed class NoiseManager : MonoBehaviour
 
         Debug.LogWarning(
             $"[NoiseManager] 소음 차폐 레이어가 비어 있어 기본값({string.Join("/", s_defaultOccluderLayerNames)})을 사용합니다. " +
-            "시야 차단과 달리 Default는 일부러 제외했습니다. 구조물이 Default에 있으면 차폐가 걸리지 않으니 " +
-            "레이어를 정리하거나 인스펙터에서 명시하십시오.",
+            "시야 차단과 달리 Default는 일부러 제외했습니다. 구조물이 Default에 남아 있으면 차폐가 걸리지 않으니 " +
+            "레이어를 Environment로 정리하거나 인스펙터에서 명시하십시오.",
             this);
 
         return fallback;
