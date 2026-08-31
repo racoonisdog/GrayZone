@@ -60,6 +60,42 @@ public class HitboxGroup : MonoBehaviour
         }
     }
 
+    /// <summary>수집된 관리 대상 부위 수입니다. 진단용입니다.</summary>
+    /// <remarks>
+    /// <see cref="CollectHitboxes"/>가 <c>Awake</c>에서 채우므로 에디트 모드에서는 0입니다.
+    /// 0이면 <see cref="SetHitboxesEnabled"/>가 아무것도 켜지 못합니다 - 빈 배열은 <c>null</c>이 아니어서
+    /// 조기 반환에 걸리지 않고 조용히 통과합니다.
+    /// </remarks>
+    public int HitboxCount => m_hitboxes != null ? m_hitboxes.Length : 0;
+
+    /// <summary>지금 실제로 켜져 있는 부위 콜라이더 수입니다. 진단용입니다.</summary>
+    /// <remarks>
+    /// <see cref="SetHitboxesEnabled"/>가 성공했는지를 <b>플래그가 아니라 콜라이더 상태로</b> 확인하기
+    /// 위한 값입니다. 플래그(<c>m_enabled</c>)와 실제 콜라이더가 어긋나면 "켰다고 기록됐는데 맞지 않는"
+    /// 상태가 되고, 그 경우 사격 2차 로그의 대상 수만으로는 원인을 가릴 수 없습니다.
+    /// </remarks>
+    public int EnabledHitboxCount
+    {
+        get
+        {
+            if (m_hitboxes == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            for (int i = 0; i < m_hitboxes.Length; i++)
+            {
+                if (m_hitboxes[i] != null && m_hitboxes[i].enabled)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
+
     /// <summary>관리 대상 중 하나라도 켜져 있는지 확인합니다.</summary>
     private bool HasEnabledHitbox()
     {

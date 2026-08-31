@@ -117,10 +117,6 @@ public sealed class PlayerCommonBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_lookDistance")]
     [SerializeField] private float AimController_m_lookDistance = 20f;
 
-    [Tooltip("차단 마커를 표면에서 띄울 거리(m)입니다. 0이면 표면과 겹쳐 z-파이팅이 생길 수 있습니다.")]
-    [FormerlySerializedAs("m_hitscanBlockMarkerOffset")]
-    [SerializeField] private float AimController_m_hitscanBlockMarkerOffset = 0.01f;
-
     [Tooltip("힙파이어 사격 후 전투 자세를 유지하는 시간(초)입니다. 0이면 사격을 멈추는 즉시 해제합니다. (0 이상)")]
     [FormerlySerializedAs("m_hipfireHoldDuration")]
     [SerializeField] private float AimController_m_hipfireHoldDuration = 2f;

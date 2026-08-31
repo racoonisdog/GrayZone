@@ -860,6 +860,53 @@ public class SquadMemberController : MonoBehaviour
     }
 
     /// <summary>
+    /// 합류 실패 복구를 위해 이 멤버를 지정한 자리에 정지한 지상 상태로 재배치합니다(§17).
+    /// </summary>
+    /// <param name="position">재배치할 자리입니다. NavMesh 지면으로 한 번 더 보정됩니다.</param>
+    /// <returns>재배치했으면 true입니다. 이동할 수 없는 상태여서 거절했으면 false입니다.</returns>
+    /// <remarks>
+    /// <b>위치를 옮기는 주체가 캐릭터인 이유</b>: §4.2가 공간 이동 상태(위치·회전·속도·지상/공중)를
+    /// 캐릭터 소유로 두기 때문입니다. AI는 "어디로 옮겨야 한다"만 판단하고, 실제로 옮기는 절차는
+    /// 여기서 처리합니다. 그 절차가 단순한 대입이 아니라 <see cref="CharacterController"/>와
+    /// <see cref="NavMeshAgent"/>를 껐다 켜는 순서를 지켜야 하므로, 호출부마다 흉내내면 한 곳에서
+    /// 순서를 빠뜨립니다.
+    ///
+    /// <para>
+    /// §17이 요구하는 "정지한 지상 상태"를 만들기 위해 지면 보정에 더해 <b>진행 중이던 경로와 속도를
+    /// 지웁니다</b>. 이것을 빼면 재배치 직후에도 이전 목적지로 향하던 속도가 남아 순간이동한 자리에서
+    /// 미끄러집니다.
+    /// </para>
+    ///
+    /// <para>
+    /// 체력·탄약·재장전 단계 같은 캐릭터 개인 상태는 건드리지 않습니다(§17). 다운이나 구조처럼
+    /// 이동할 수 없는 상태에서는 재배치하지 않고 false를 돌려줍니다.
+    /// </para>
+    /// </remarks>
+    public bool TryRepositionTo(Vector3 position)
+    {
+        // §17: 다운 또는 구조처럼 이동할 수 없는 상태에서는 재배치하지 않는다.
+        if (!m_isAlive || m_isDown)
+        {
+            return false;
+        }
+
+        SnapToNavMeshGround(position);
+
+        if (m_thirdPersonController != null)
+        {
+            m_thirdPersonController.ClearAirborneCarryoverState();
+        }
+
+        if (m_navMeshAgent != null && m_navMeshAgent.enabled && m_navMeshAgent.isOnNavMesh)
+        {
+            m_navMeshAgent.ResetPath();
+            m_navMeshAgent.velocity = Vector3.zero;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// AI 제어로 전환된 멤버를 현재 위치 근처의 NavMesh 지면으로 보정합니다.
     /// </summary>
     /// <param name="referencePosition">지면 보정 기준 위치입니다.</param>
@@ -1192,7 +1239,13 @@ public class SquadMemberController : MonoBehaviour
                 m_navMeshAgent.enabled = true;
             }
 
-            m_navMeshAgent.isStopped = false;
+            // 방금 켠 Agent가 NavMesh 위에 놓이지 못한 경우가 있습니다(지면 보정 실패, 공중에서 전환).
+            // 그 상태에서 isStopped를 만지면 Unity가 에러를 냅니다.
+            if (m_navMeshAgent.isOnNavMesh)
+            {
+                m_navMeshAgent.isStopped = false;
+            }
+
             return;
         }
 
@@ -1201,8 +1254,13 @@ public class SquadMemberController : MonoBehaviour
             return;
         }
 
-        m_navMeshAgent.isStopped = true;
-        m_navMeshAgent.ResetPath();
+        // 끄기 전에 정지시키는 것도 NavMesh 위에 있을 때만 유효합니다. 벗어나 있으면 멈출 경로가 없습니다.
+        if (m_navMeshAgent.isOnNavMesh)
+        {
+            m_navMeshAgent.isStopped = true;
+            m_navMeshAgent.ResetPath();
+        }
+
         m_navMeshAgent.enabled = false;
     }
 

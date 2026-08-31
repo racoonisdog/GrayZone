@@ -1320,9 +1320,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// 조준 관련 표시 설정을 그립니다.
     /// </summary>
     /// <remarks>
-    /// 여기 남은 셋은 <b>기즈모가 아닙니다.</b> 조준선 상시 표시는 UI 설정이고, 지향점 거리는 조준 계산에
-    /// 실제로 쓰이는 값이며, 장애물 마커 오프셋은 마커가 벽에 파묻히지 않게 띄우는 값입니다.
-    /// 셋 다 Debug 구역 소속이 아니라 빌드에서도 의미가 있으므로 트레이너에 남깁니다.
+    /// 여기 남은 둘은 <b>기즈모가 아닙니다.</b> 조준선 상시 표시는 UI 설정이고, 지향점 거리는 조준 계산에
+    /// 실제로 쓰이는 값입니다. 둘 다 Debug 구역 소속이 아니라 빌드에서도 의미가 있으므로 트레이너에 남깁니다.
+    /// 차단 마커는 월드 오브젝트에서 화면 UI로 옮겨가면서 표면 오프셋이 사라졌고, 크기·색은
+    /// <see cref="CrosshairController"/>의 Block Marker 구역이 소유합니다.
     ///
     /// 기즈모 토글(총구→탄착점 레이, 각종 스피어 등)은 <see cref="DebugSectionRegistry"/>가 모아
     /// 아래 디버그 항목 섹션에서 한 번에 다룹니다. 기즈모는 소유 컴포넌트의 Debug 구역에 선언되어 있어
@@ -1335,8 +1336,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
         aimController.SetShowAimImageAlways(
             GUILayout.Toggle(aimController.ShowAimImageAlways, " 조준선을 항상 표시"));
         aimController.SetLookDistance(SliderRow("지향점 거리", aimController.LookDistance, 0f, 500f, "0"));
-        aimController.SetHitscanBlockMarkerOffset(
-            SliderRow("장애물 마커 오프셋", aimController.HitscanBlockMarkerOffset, 0f, 1f));
     }
 
     private void DrawLogicalRecoilSection(PlayerbleUnitData target)
