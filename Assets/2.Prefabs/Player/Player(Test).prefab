@@ -1394,7 +1394,7 @@ MonoBehaviour:
   m_updateInterval: 0.15
   m_destinationCandidateCount: 8
   m_joinStallTime: 1.5
-  m_joinProgressEpsilon: 0.3
+  m_joinProgressEpsilon: 0.5
   m_joinRepathLimit: 3
   m_baseAvoidancePriority: 50
   m_sightRange: 20
