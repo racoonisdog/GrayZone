@@ -110,6 +110,29 @@ public class Melee : MonoBehaviour
     }
 
     /// <summary>
+    /// 지정한 애니메이터 스테이트에 해당하는 넉백 충격량을 돌려줍니다.
+    /// </summary>
+    /// <param name="stateNameHash">현재 재생 중인 공격 스테이트의 짧은 이름 해시입니다.</param>
+    /// <param name="fallbackKnockbackImpulse">밸런스 SO가 없을 때 사용할 충격량(N·s)입니다.</param>
+    /// <returns>해당 공격의 넉백 충격량입니다.</returns>
+    /// <remarks>
+    /// 얼마나 밀릴지는 맞는 쪽이 정합니다. 이 무기는 실어 보낼 세기만 알려 줍니다.
+    /// 기획 문서에 넉백 개념이 없어 기본값은 0이며, 값이 정해지면 이 경로가 그대로 전달합니다.
+    /// </remarks>
+    public float ResolveKnockbackImpulse(int stateNameHash, float fallbackKnockbackImpulse)
+    {
+        if (m_balanceSO == null)
+        {
+            return fallbackKnockbackImpulse;
+        }
+
+        int index = m_balanceSO.FindIndexByStateHash(stateNameHash);
+        return index >= 0
+            ? m_balanceSO.GetKnockbackImpulse(index)
+            : m_balanceSO.FallbackKnockbackImpulse;
+    }
+
+    /// <summary>
     /// 판정 콜라이더에 무언가 들어온 순간 피해를 넘깁니다.
     /// </summary>
     /// <remarks>

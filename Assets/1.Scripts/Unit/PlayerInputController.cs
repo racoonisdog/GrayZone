@@ -5,17 +5,25 @@ using UnityEngine.InputSystem;
 #endif
 
 /// <summary>
-/// 플레이어 입력 상태를 보관하고 Input System 이벤트를 런타임 입력 값으로 변환하는 컴포넌트입니다.
+/// 사람의 조작을 받아 플레이어 조작 캐릭터의 행동 의도로 변환하는 컴포넌트입니다.
 /// </summary>
 /// <remarks>
+/// AI 조작 캐릭터의 <see cref="SquadAIController"/>와 대칭입니다. 이쪽은 Input System에서 사람 입력을 받고
+/// 저쪽은 AI가 스스로 판단하며, 조종 주체만 다르고 아래 계층은 같은 것을 씁니다.
+/// 어느 쪽이 활성인지는 <see cref="SquadMemberController"/>가 정합니다.
+/// AI나 스크립트가 이 컴포넌트에 입력을 밀어넣지 않습니다. 여기는 사람 입력 경로 전용입니다.
+/// (예외: 멤버 전환 인계에서 <see cref="SquadMemberController"/>가 유지 입력을 복원할 때 세터를 씁니다.)
+/// <para>
 /// 이 클래스는 입력 액션 콜백에서 받은 값을 내부 필드에 캐싱하고,
 /// 이동/시점/점프/전력질주/조준/공격/재장전 상태를 다른 시스템에서 읽을 수 있게 제공합니다.
+/// 행동 가능 여부 판정(예: 달리기 중 조준 입력 처리)은 여기가 아니라 소비하는 쪽에 있습니다.
+/// </para>
 /// <para>
 /// 변수 컨벤션은 <c>m_</c> 접두사를 사용하는 private serialized field를 기준으로 하며,
 /// 기존 Starter Assets 스타일의 <c>move</c>, <c>look</c>, <c>jump</c> 접근도 호환용 프로퍼티로 유지합니다.
 /// </para>
 /// </remarks>
-public class PlayerInputs : MonoBehaviour
+public class PlayerInputController : MonoBehaviour
 {
     [Header("Character Input Values")]
     [Tooltip("현재 이동 입력값입니다. x는 좌우, y는 전후 입력을 의미합니다.")]
@@ -46,8 +54,17 @@ public class PlayerInputs : MonoBehaviour
     [FormerlySerializedAs("reload")]
     [SerializeField] private bool m_reload;
 
+    [Tooltip("웅크리기 유지 상태인지 여부입니다. 토글 방식이면 눌린 순간이 아니라 유지된 결과입니다.")]
+    [SerializeField] private bool m_crouch;
+
+    [Tooltip("웅크리기를 토글로 쓸지 여부입니다. 끄면 누르고 있는 동안만 웅크립니다.")]
+    [SerializeField] private bool m_crouchToggle = true;
+
     [Tooltip("상호작용 입력이 눌린 상태(홀드 포함)인지 여부입니다.")]
     [SerializeField] private bool m_interact;
+
+    [Tooltip("인벤토리 열기 입력이 눌린 상태인지 여부입니다. 여닫기 판정은 소비 측에서 처리합니다.")]
+    [SerializeField] private bool m_inventory;
 
     // UI 커서 모드에서는 Input System 콜백이 게임플레이 상태를 다시 채우지 않도록 막습니다.
     private bool m_isInputEnabled = true;
@@ -55,6 +72,7 @@ public class PlayerInputs : MonoBehaviour
 #if ENABLE_INPUT_SYSTEM
     private PlayerInput m_playerInput;
     private InputAction m_interactionAction;
+    private InputAction m_inventoryAction;
 #endif
 
     [Header("Movement Settings")]
@@ -92,6 +110,18 @@ public class PlayerInputs : MonoBehaviour
     /// <summary>재장전 입력 상태입니다.</summary>
     public bool Reload => m_reload;
 
+    /// <summary>웅크리기 유지 상태입니다.</summary>
+    /// <remarks>
+    /// 기본값은 토글입니다. 설계 문서(캐릭터 행동 시스템 §8)가 앉기를 토글로 정의합니다.
+    /// 전력질주와 조준은 홀드이고, 나중에 옵션에서 세 입력의 방식을 각각 고를 수 있게 할 예정이라
+    /// 방식 판단을 이 컴포넌트 안에 두고 밖으로는 "유지 상태" 하나만 내보냅니다.
+    /// 소비 측이 방식을 알아야 하면 같은 판단이 여러 곳에 흩어집니다.
+    /// </remarks>
+    public bool Crouch => m_crouch;
+
+    /// <summary>웅크리기를 토글로 쓰는지 여부입니다.</summary>
+    public bool CrouchToggle => m_crouchToggle;
+
     /// <summary>상호작용 입력이 눌린 상태(홀드 포함)입니다. 탭/홀드 판정은 소비 측(InteractionController)에서 처리합니다.</summary>
     public bool Interact
     {
@@ -104,6 +134,25 @@ public class PlayerInputs : MonoBehaviour
 
             RefreshInteractionInputFromAction();
             return m_interact;
+        }
+    }
+
+    /// <summary>인벤토리 입력이 눌린 상태입니다. 여닫기 전환은 소비 측에서 판정합니다.</summary>
+    /// <remarks>
+    /// <see cref="Interact"/>와 같은 모양으로 둔 이유: 두 입력 모두 콜백만으로는 조작권이 넘어간 순간의
+    /// 상태를 놓칠 수 있어, 소비 측이 읽을 때 액션에서 현재 상태를 다시 확인해야 합니다.
+    /// </remarks>
+    public bool Inventory
+    {
+        get
+        {
+            if (!m_isInputEnabled)
+            {
+                return false;
+            }
+
+            RefreshInventoryInputFromAction();
+            return m_inventory;
         }
     }
 
@@ -309,6 +358,31 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
+    /// 웅크리기 입력 액션 콜백입니다.
+    /// </summary>
+    /// <param name="value">Input System에서 전달된 웅크리기 입력 상태입니다.</param>
+    public void OnCrouch(InputValue value)
+    {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
+        // 토글은 누른 순간에만 뒤집습니다. 떼는 콜백까지 반영하면 한 번 누를 때 두 번 뒤집혀 제자리로 돌아옵니다.
+        if (m_crouchToggle)
+        {
+            if (value.isPressed)
+            {
+                CrouchInput(!m_crouch);
+            }
+
+            return;
+        }
+
+        CrouchInput(value.isPressed);
+    }
+
+    /// <summary>
     /// 상호작용(Interaction) 입력 액션 콜백입니다.
     /// </summary>
     /// <param name="value">Input System에서 전달된 상호작용 입력 상태입니다.</param>
@@ -321,6 +395,20 @@ public class PlayerInputs : MonoBehaviour
         }
 
         InteractInput(value.isPressed);
+    }
+
+    /// <summary>
+    /// 인벤토리(Inventory) 입력 액션 콜백입니다.
+    /// </summary>
+    /// <param name="value">Input System에서 전달된 인벤토리 입력 상태입니다.</param>
+    public void OnInventory(InputValue value)
+    {
+        if (!m_isInputEnabled)
+        {
+            return;
+        }
+
+        InventoryInput(value.isPressed);
     }
 #endif
 
@@ -388,6 +476,15 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
+    /// 웅크리기 입력 상태를 갱신합니다.
+    /// </summary>
+    /// <param name="newCrouchState">새 웅크리기 입력 상태입니다.</param>
+    public void CrouchInput(bool newCrouchState)
+    {
+        m_crouch = newCrouchState;
+    }
+
+    /// <summary>
     /// 상호작용 입력 상태를 갱신합니다.
     /// </summary>
     /// <param name="newInteractState">새 상호작용 입력 상태입니다.</param>
@@ -403,6 +500,26 @@ public class PlayerInputs : MonoBehaviour
         if (action != null)
         {
             m_interact = action.IsPressed();
+        }
+#endif
+    }
+
+    /// <summary>
+    /// 인벤토리 입력 상태를 갱신합니다.
+    /// </summary>
+    /// <param name="newInventoryState">새 인벤토리 입력 상태입니다.</param>
+    public void InventoryInput(bool newInventoryState)
+    {
+        m_inventory = newInventoryState;
+    }
+
+    private void RefreshInventoryInputFromAction()
+    {
+#if ENABLE_INPUT_SYSTEM
+        InputAction action = ResolveInventoryAction();
+        if (action != null)
+        {
+            m_inventory = action.IsPressed();
         }
 #endif
     }
@@ -434,6 +551,24 @@ public class PlayerInputs : MonoBehaviour
 
         return m_interactionAction;
     }
+
+    private InputAction ResolveInventoryAction()
+    {
+        if (m_inventoryAction != null)
+        {
+            return m_inventoryAction;
+        }
+
+        CachePlayerInput();
+        if (m_playerInput == null || m_playerInput.actions == null)
+        {
+            return null;
+        }
+
+        m_inventoryAction = m_playerInput.actions.FindAction("Inventory", false);
+
+        return m_inventoryAction;
+    }
 #endif
 
     /// <summary>
@@ -456,21 +591,66 @@ public class PlayerInputs : MonoBehaviour
     }
 
     /// <summary>
+    /// 커서를 띄워 둔 채로 게임플레이 입력을 받게 합니다. 마우스 시점 회전만 막습니다.
+    /// </summary>
+    /// <param name="enabled">true이면 입력을 받고, false이면 UI 커서 모드처럼 모두 막습니다.</param>
+    /// <remarks>
+    /// 디버그 트레이너처럼 <b>창을 띄운 채로 조작해 봐야 하는</b> 도구를 위한 상태입니다.
+    /// <see cref="SetPlayerCursorMode"/>와 달리 커서를 건드리지 않습니다. 커서는 창을 띄운 쪽이 계속 소유합니다.
+    ///
+    /// 시점 회전만 막는 이유는 커서가 풀려 있기 때문입니다. 창으로 마우스를 옮기는 것만으로 카메라가
+    /// 따라 돌면 값을 만지는 동안 화면이 계속 흔들립니다. 사격·조준 같은 버튼 입력은 그대로 받습니다.
+    /// </remarks>
+    public void SetGameplayInputWithFreeCursor(bool enabled)
+    {
+        m_isInputEnabled = enabled;
+        SetCursorInputForLook(false);
+
+        if (enabled)
+        {
+            // 창을 누르고 있는 동안 눌린 키가 있으면 지금 상태를 장치에서 다시 읽어 맞춥니다.
+            ResyncHeldInputFromDevices();
+            return;
+        }
+
+        ResetInputState();
+    }
+
+    /// <summary>
     /// 필드 플레이어의 TPS 입력과 UI 커서 입력을 전환합니다.
     /// </summary>
     /// <param name="cursorMode">true이면 UI 커서 모드, false이면 TPS 게임플레이 모드입니다.</param>
     /// <remarks>
-    /// 이 메서드는 필드 PlayerInputs 전용입니다. 셸터의 입력 구조는 자체 구현으로 같은 입력 모드 계약을 처리합니다.
+    /// 이 메서드는 필드 PlayerInputController 전용입니다. 셸터의 입력 구조는 자체 구현으로 같은 입력 모드 계약을 처리합니다.
     /// </remarks>
     public void SetPlayerCursorMode(bool cursorMode)
     {
-        m_isInputEnabled = !cursorMode;
-        ResetInputState();
-        SetCursorInputForLook(!cursorMode);
+        SetInputGate(!cursorMode);
         SetCursorLocked(!cursorMode);
         Cursor.visible = cursorMode;
+    }
 
-        if (m_isInputEnabled)
+    /// <summary>
+    /// 이 멤버의 게임플레이 입력 게이트만 여닫습니다. OS 커서는 건드리지 않습니다.
+    /// </summary>
+    /// <param name="enabled">입력을 받으면 true, 막으면 false입니다.</param>
+    /// <remarks>
+    /// <b>조작 중이 아닌 멤버에도 걸기 위한 진입점입니다.</b> 커서는 화면에 하나뿐이라 스쿼드 전체에
+    /// 걸 수 없지만, 이 게이트는 멤버마다 따로 있고 <b>컴포넌트가 꺼져도 값이 남습니다</b>.
+    /// 그래서 조작 멤버에게만 걸면, 걸 때와 풀 때의 조작 멤버가 다를 경우 한쪽이 막힌 채 남습니다.
+    /// 실제로 그 경로로 "전환하면 총이 안 나가고 마우스 시점도 안 먹는" 결함이 보고됐습니다.
+    /// <para>
+    /// 스쿼드 전체 적용은 <see cref="SquadManager"/>가 멤버를 순회하며 이 함수를 부르는 형태로 합니다.
+    /// 커서를 함께 다루는 <see cref="SetPlayerCursorMode"/>는 조작 멤버 하나에만 씁니다.
+    /// </para>
+    /// </remarks>
+    public void SetInputGate(bool enabled)
+    {
+        m_isInputEnabled = enabled;
+        ResetInputState();
+        SetCursorInputForLook(enabled);
+
+        if (enabled)
         {
             ResyncHeldInputFromDevices();
         }
@@ -509,6 +689,12 @@ public class PlayerInputs : MonoBehaviour
         m_aim = IsActionPressed("Aim");
         m_shoot = IsActionPressed("Shoot");
         m_reload = IsActionPressed("Reload");
+
+        // 웅크림은 토글이면 유지 상태이므로 장치에서 다시 읽지 않습니다. 읽으면 키를 떼고 있는 것만으로 풀립니다.
+        if (!m_crouchToggle)
+        {
+            m_crouch = IsActionPressed("Crouch");
+        }
 
         InputAction interaction = ResolveInteractionAction();
         if (interaction != null)
@@ -570,7 +756,46 @@ public class PlayerInputs : MonoBehaviour
         m_aim = false;
         m_shoot = false;
         m_reload = false;
+        m_crouch = false;
         m_interact = false;
+    }
+
+    /// <summary>
+    /// 다운 강제 전환이 끝났을 때 새 조작 캐릭터에 넘길 입력만 인계합니다.
+    /// </summary>
+    /// <remarks>
+    /// 공용 문서 `캐릭터 행동 시스템` §14가 정본입니다. 일반 전환과 다른 규칙을 씁니다.
+    /// <para>
+    /// <b>이동 방향만 넘깁니다</b>("이동 방향 입력만 전환 완료 시점까지 유지되고 있으면 새 조작
+    /// 캐릭터에 적용한다"). 전환 중 계속 앞으로 가고 있었다면 조작권을 받자마자 멈춰 서지 않습니다.
+    /// </para>
+    /// <para>
+    /// <b>달리기·조준·사격은 누르고 있어도 넘기지 않습니다</b>("전환 중 유지되고 있어도 중립 상태로
+    /// 처리한다", "전환 완료 후 입력을 놓았다가 다시 해야 적용한다"). 그래서 <see cref="ResyncHeldInputFromDevices"/>를
+    /// 쓰지 않습니다. 그쪽은 눌린 것을 전부 다시 읽어 오므로 이 규칙과 정반대입니다.
+    /// </para>
+    /// <para>
+    /// 점프·재장전 같은 시점성 입력은 애초에 유지 상태가 아니라 여기서 다룰 것이 없습니다
+    /// ("적용하거나 버퍼링하지 않는다").
+    /// </para>
+    /// </remarks>
+    public void ApplyForcedSwitchInputHandover()
+    {
+        ResetInputState();
+
+#if ENABLE_INPUT_SYSTEM
+        CachePlayerInput();
+        if (m_playerInput == null || m_playerInput.actions == null)
+        {
+            return;
+        }
+
+        InputAction move = m_playerInput.actions.FindAction("Move", false);
+        if (move != null)
+        {
+            m_move = move.ReadValue<Vector2>();
+        }
+#endif
     }
 
     /// <summary>

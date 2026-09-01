@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using VInspector;
 
 /// <summary>
 /// 변이체의 근접 공격 시작 조건과 공간 판정을 처리하는 Module입니다.
@@ -42,6 +43,10 @@ public class EnemyAttack : MonoBehaviour
     [Tooltip("공격 스테이트를 판별할 애니메이터입니다. 비어 있으면 상위에서 찾습니다.")]
     [SerializeField] private Animator m_animator;
 
+    [Foldout("Debug")]
+    [Tooltip("이 개체를 선택했을 때 공격 시작 거리를 Scene 뷰에 원으로 표시합니다. 실제 판정 범위가 아니라 시작 조건입니다.")]
+    [SerializeField] private bool m_debugDrawAttackRange = true;
+
     /// <summary>판정 콜라이더가 현재 켜져 있는지 여부입니다.</summary>
     public bool IsHitboxActive { get; private set; }
 
@@ -70,6 +75,9 @@ public class EnemyAttack : MonoBehaviour
         /// <summary>피해를 입은 캐릭터입니다.</summary>
         public readonly SquadMemberController Member;
 
+        /// <summary>피해를 발생시킨 무기와 피해를 입은 캐릭터를 묶습니다.</summary>
+        /// <param name="source">피해를 발생시킨 근접 무기입니다.</param>
+        /// <param name="member">피해를 입은 캐릭터입니다.</param>
         public SwingHit(Melee source, SquadMemberController member)
         {
             Source = source;
@@ -266,7 +274,12 @@ public class EnemyAttack : MonoBehaviour
         }
 
         // 몇 타째인지는 재생 중인 스테이트가 정하고, 그 타의 피해량은 무기가 정합니다.
-        int damage = source.ResolveDamage(GetCurrentAttackStateHash(), m_attackDamage);
+        int attackStateHash = GetCurrentAttackStateHash();
+        int damage = source.ResolveDamage(attackStateHash, m_attackDamage);
+
+        // 경직력도 타별로 무기에 물어봅니다. 현재 대상인 플레이어·아군은 경직이 없어 이 값은 무시되지만,
+        // 경직을 가진 대상을 때리는 경로가 생기면 분기 없이 그대로 성립합니다.
+        float staggerPower = source.ResolveStaggerPower(attackStateHash, 0);
 
         // 진영 판정과 실제 피해 적용은 공용 경로로 처리합니다.
         // 맞은 쪽이 누구에게 맞았는지 알 수 있도록 이 변이체를 함께 넘깁니다.
@@ -276,20 +289,72 @@ public class EnemyAttack : MonoBehaviour
             // 약점 판정을 쓰는 무기만 Hitbox를 요구하는 경로로 갑니다.
             // 변이체의 공격은 약점 없이 정배수로 확정되어 있어 보통 아래 경로를 씁니다.
             CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
-                other, m_ownerFaction, damage, balance.HeadshotDamageMultiplier, true, gameObject);
+                other, m_ownerFaction, damage, balance.HeadshotDamageMultiplier, true, gameObject, staggerPower);
 
             if (!feedback.Applied)
             {
                 return false;
             }
         }
-        else if (!CombatDamage.TryApplyDamage(other, m_ownerFaction, damage, gameObject))
+        else
         {
-            return false;
+            if (!CombatDamage.TryApplyDamage(other, m_ownerFaction, damage, gameObject))
+            {
+                return false;
+            }
+
+            CombatDamage.TryApplyStagger(other, staggerPower);
         }
+
+        ApplyMeleeKnockback(source, other);
 
         m_swingHits.Add(new SwingHit(source, member));
         return true;
+    }
+
+    /// <summary>
+    /// 적중한 대상에 근접 공격의 넉백을 전달합니다.
+    /// </summary>
+    /// <param name="source">이번 적중을 만든 근접 무기입니다.</param>
+    /// <param name="other">맞은 대상의 콜라이더입니다.</param>
+    /// <remarks>
+    /// 피해가 실제로 들어간 뒤에만 부릅니다. 막히거나 이미 맞은 대상에는 밀어내기도 없어야 합니다.
+    ///
+    /// 방향은 <b>공격자에서 피격 지점으로 향하는 수평 벡터</b>입니다. 총기와 같은 규칙이며, 근접에서는
+    /// "때린 쪽에서 멀어지게 밀린다"는 뜻이 됩니다. 피격 지점은 판정 콜라이더에서 가장 가까운 표면을
+    /// 씁니다. 근접은 히트스캔이 없어 정확한 접점이 없기 때문입니다.
+    ///
+    /// 받는 쪽이 <see cref="IKnockbackReceiver"/>를 구현하지 않았으면 조용히 넘어갑니다.
+    /// 현재 스쿼드 멤버는 구현하지 않아 실제로는 아무 일도 일어나지 않으며, 값도 0이 기본입니다.
+    /// 배선을 미리 이어 두는 이유는 넉백 규칙이 정해질 때 호출부를 다시 찾지 않아도 되게 하기 위해서입니다.
+    /// </remarks>
+    private void ApplyMeleeKnockback(Melee source, Collider other)
+    {
+        IKnockbackReceiver receiver = other.GetComponentInParent<IKnockbackReceiver>();
+        if (receiver == null)
+        {
+            return;
+        }
+
+        MeleeBalanceSO balance = source.Balance;
+        float impulse = source.ResolveKnockbackImpulse(
+            GetCurrentAttackStateHash(),
+            balance != null ? balance.FallbackKnockbackImpulse : 0.0f);
+
+        if (impulse <= 0.0f)
+        {
+            return;
+        }
+
+        Vector3 hitPoint = other.ClosestPoint(transform.position);
+        Vector3 direction = hitPoint - transform.position;
+        if (direction.sqrMagnitude <= Mathf.Epsilon)
+        {
+            // 완전히 겹친 상태입니다. 이 변이체가 보는 방향으로 밀어냅니다.
+            direction = transform.forward;
+        }
+
+        receiver.ApplyKnockback(direction, hitPoint, impulse, other.attachedRigidbody);
     }
 
     /// <summary>
@@ -396,6 +461,11 @@ public class EnemyAttack : MonoBehaviour
     /// </remarks>
     private void OnDrawGizmosSelected()
     {
+        if (!m_debugDrawAttackRange)
+        {
+            return;
+        }
+
         Gizmos.color = new Color(1f, 0.5f, 0f, 0.6f);
         Gizmos.DrawWireSphere(transform.position, m_attackRange);
     }

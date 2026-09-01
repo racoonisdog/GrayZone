@@ -96,7 +96,7 @@ public static class BalanceReverseSync
     private static void RegisterRuntimeHook()
     {
         BalanceReverseSyncHook.Handler = target => Run(target).Summary();
-        BalanceReverseSyncHook.Probe = target => FindBoundBalanceAsset(target) != null;
+        BalanceReverseSyncHook.Probe = target => ResolveEffectiveBalanceAsset(target) != null;
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public static class BalanceReverseSync
 
         foreach (Component component in selected.GetComponentsInChildren<Component>(true))
         {
-            if (component == null || FindBoundBalanceAsset(component) == null)
+            if (component == null || ResolveEffectiveBalanceAsset(component) == null)
             {
                 continue;
             }
@@ -164,7 +164,8 @@ public static class BalanceReverseSync
             return result;
         }
 
-        ScriptableObject source = FindBoundBalanceAsset(target);
+        // 개별 SO가 없으면 엔티티 통합 SO로 올립니다. 통합으로 옮긴 컴포넌트도 값을 승격할 수 있어야 합니다.
+        ScriptableObject source = ResolveEffectiveBalanceAsset(target);
         if (source == null)
         {
             return result;
@@ -183,7 +184,7 @@ public static class BalanceReverseSync
                 continue;
             }
 
-            SerializedProperty sourceProperty = sourceObject.FindProperty(field.Name);
+            SerializedProperty sourceProperty = FindSourceProperty(sourceObject, target.GetType(), field);
             if (sourceProperty == null)
             {
                 result.MissingInSource++;
@@ -225,11 +226,85 @@ public static class BalanceReverseSync
     }
 
     /// <summary>
+    /// 대상 필드에 대응하는 원본 SO 프로퍼티를 찾습니다.
+    /// </summary>
+    /// <param name="source">원본 SO의 SerializedObject입니다.</param>
+    /// <param name="targetType">값을 되돌려 받을 컴포넌트 타입입니다.</param>
+    /// <param name="field">대상 스크립트 필드입니다.</param>
+    /// <returns>어느 후보 이름으로도 찾지 못하면 <c>null</c>입니다.</returns>
+    /// <remarks>
+    /// 이름 후보는 런타임 주입과 같은 <see cref="BindManager.EnumerateSourceFieldNames"/>를 씁니다.
+    /// 규칙이 갈라지면 주입은 되는데 역동기화는 안 되는 상태가 조용히 생깁니다.
+    /// </remarks>
+    private static SerializedProperty FindSourceProperty(
+        SerializedObject source,
+        Type targetType,
+        FieldInfo field)
+    {
+        foreach (string candidate in BindManager.EnumerateSourceFieldNames(
+                     targetType, field.Name, BalanceScaffold.IsShared(field)))
+        {
+            SerializedProperty found = source.FindProperty(candidate);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// 대상이 물고 있는 밸런스 SO를 찾습니다.
     /// </summary>
     /// <remarks>
     /// 필드 이름을 <c>m_balanceSO</c>로 가정하지 않고 <see cref="IBalanceTableData"/>를 구현한
     /// 첫 참조를 찾습니다. 이름 규칙은 컴포넌트마다 어긋날 수 있지만 계약은 어긋나지 않습니다.
+    /// </remarks>
+    /// <summary>
+    /// 대상에 실제로 적용되는 밸런스 SO를 찾습니다. 개별 SO가 없으면 엔티티 통합 SO까지 거슬러 올라갑니다.
+    /// </summary>
+    /// <param name="target">확인할 컴포넌트입니다.</param>
+    /// <returns>적용 중인 SO입니다. 어느 계층에도 없으면 <c>null</c>입니다.</returns>
+    /// <remarks>
+    /// <see cref="FindBoundBalanceAsset"/>는 "개별 슬롯에 뭐가 꽂혔나"만 봅니다. 그 구분은
+    /// 3단 우선순위에서 어느 계층이 이겼는지 판정할 때 필요하므로 그대로 두어야 합니다.
+    /// <para>
+    /// 반면 역동기화는 "지금 이 값이 어느 SO로 올라가야 하나"를 물으므로 통합 SO까지 봐야 합니다.
+    /// 통합으로 옮긴 컴포넌트는 개별 슬롯이 비어 있어서, 이 구분이 없으면 트레이너와 기어 메뉴의
+    /// 역동기화 버튼이 "밸런스 SO가 연결되어 있지 않다"며 조용히 죽습니다.
+    /// </para>
+    /// </remarks>
+    public static ScriptableObject ResolveEffectiveBalanceAsset(Component target)
+    {
+        if (target == null)
+        {
+            return null;
+        }
+
+        ScriptableObject own = FindBoundBalanceAsset(target);
+        if (own != null)
+        {
+            return own;
+        }
+
+        // 가장 가까운 조상 바인더가 이 컴포넌트가 속한 엔티티의 바인더입니다.
+        SOBinder binder = target.GetComponentInParent<SOBinder>(true);
+        return binder != null ? binder.SharedBalance : null;
+    }
+
+    /// <summary>
+    /// 대상이 자기 슬롯에 직접 물고 있는 개별 밸런스 SO를 찾습니다.
+    /// </summary>
+    /// <param name="target">확인할 컴포넌트입니다.</param>
+    /// <returns>개별 슬롯이 비어 있으면 <c>null</c>입니다. 통합 SO까지 보지는 않습니다.</returns>
+    /// <remarks>
+    /// 필드 이름을 <c>m_balanceSO</c>로 가정하지 않고 <see cref="IBalanceTableData"/>를 구현한
+    /// 첫 참조를 찾습니다. 이름 규칙은 컴포넌트마다 어긋날 수 있지만 계약은 어긋나지 않습니다.
+    /// <para>
+    /// 3단 우선순위에서 "개별 계층이 이겼는지"를 판정하는 용도입니다.
+    /// 역동기화처럼 실제 적용 SO가 필요한 곳은 <see cref="ResolveEffectiveBalanceAsset"/>를 쓰십시오.
+    /// </para>
     /// </remarks>
     public static ScriptableObject FindBoundBalanceAsset(Component target)
     {

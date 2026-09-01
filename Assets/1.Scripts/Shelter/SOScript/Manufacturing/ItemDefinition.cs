@@ -25,6 +25,11 @@ public sealed class ItemDefinition : ScriptableObject
     [Tooltip("저장과 레시피 참조에 사용하는 변경되지 않는 고유 ID입니다.")]
     [SerializeField] private string m_itemDefinitionId = string.Empty;
 
+    [Header("Inventory")]
+    [Tooltip("한 슬롯에 쌓을 수 있는 최대 수량입니다. 이 수량을 넘는 분량은 다음 슬롯에 새 스택으로 들어갑니다.")]
+    [Min(1)]
+    [SerializeField] private int m_maxStackQuantity = 99;
+
     [Header("Presentation")]
     [SerializeField] private string m_displayName = string.Empty;
     [TextArea(2, 6)]
@@ -33,6 +38,14 @@ public sealed class ItemDefinition : ScriptableObject
     [SerializeField] private ItemCategory m_category = ItemCategory.Miscellaneous;
 
     public string ItemDefinitionId => m_itemDefinitionId;
+
+    /// <summary>한 슬롯에 쌓을 수 있는 최대 수량입니다. 최소 1을 보장합니다.</summary>
+    /// <remarks>
+    /// 이 값을 정의에 둔 이유는 "아이템별 최대 스택 수량"(공용 `인벤토리 시스템` §17.4)의 정본이 하나여야
+    /// 필드와 셸터가 같은 아이템을 다르게 쌓지 않기 때문입니다. 이 필드가 추가되기 전에 만든 에셋은
+    /// YAML에 키가 없어 C# 초기값 99로 올라옵니다. 값 유실이 아니며, 밸런스 확정 시 각 에셋에서 지정하면 됩니다.
+    /// </remarks>
+    public int MaxStackQuantity => Mathf.Max(1, m_maxStackQuantity);
     public string DisplayName => string.IsNullOrWhiteSpace(m_displayName) ? name : m_displayName;
     public string Info => m_info;
     public Sprite Icon => m_icon;

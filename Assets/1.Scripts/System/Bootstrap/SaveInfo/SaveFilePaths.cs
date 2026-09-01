@@ -8,7 +8,7 @@ public static class SaveFilePaths
     public const string DefaultProfileId = "default";
     public const string SettingsFileName = "settings.json";
 
-    //À©µµ¿ì ±âÁØ »ç¿ëÀÚÀÇ AppData¸¦ ÀúÀå°æ·Î·Î ÇÑ´Ù (exeÆÄÀÏ ±âÁØÀ¸·Îµµ °¡´ÉÇÏÁö¸¸ ±ÇÇÑ¹®Á¦°¡ »ý±æ¼ö ÀÖÀ½ C:)
+    //ìœˆë„ìš° ê¸°ì¤€ ì‚¬ìš©ìžì˜ AppDataë¥¼ ì €ìž¥ê²½ë¡œë¡œ í•œë‹¤ (exeíŒŒì¼ ê¸°ì¤€ìœ¼ë¡œë„ ê°€ëŠ¥í•˜ì§€ë§Œ ê¶Œí•œë¬¸ì œê°€ ìƒê¸¸ìˆ˜ ìžˆìŒ C:)
     public static string SaveDirectoryPath => Path.Combine(Application.persistentDataPath, SaveDirectoryName);
 
     public static void EnsureSaveDirectory()

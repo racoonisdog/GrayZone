@@ -1,14 +1,15 @@
 using UnityEngine;
+using VInspector;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
-    [Header("���� �Ŵ���")]
+    [Header("Managers")]
     [SerializeField] private GameDataManager gameDataManager;
     [SerializeField] private GameSettingManager gameSettingManager;
 
-    [Header("디버그")]
+    [Foldout("Debug")]
     [Tooltip("켜면 디버그·치트 기능을 사용할 수 있는 상태로 게임을 시작합니다. " +
              "실제 활성화는 Editor 또는 Development Build에서만 이루어집니다.")]
     [SerializeField] private bool developMode = true;

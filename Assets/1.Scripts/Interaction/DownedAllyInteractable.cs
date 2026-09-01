@@ -38,6 +38,10 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
     [Tooltip("Health component for this downed member. Auto-filled from the same GameObject when empty.")]
     [SerializeField] private PlayerHealth m_playerHealth;
 
+    [Foldout("Debug")]
+    [Tooltip("이 다운 아군을 선택했을 때 부활 감지 반경을 Scene 뷰에 원으로 표시합니다. InteractionController의 탐지 콘과는 별개 값입니다.")]
+    [SerializeField] private bool m_debugDrawDetectionRadius = false;
+
     private GameObject m_activeInteractor;
     private SquadMemberController m_activeInteractorMember;
     private ThirdPersonController m_activeInteractorThirdPerson;
@@ -51,6 +55,14 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
     public bool IsReviveHoldActive => m_holdActive;
 
     public float ReviveHoldProgress01 => m_holdProgress01;
+
+    /// <summary>지금 이 대상을 구조하고 있는 멤버입니다. 홀드 중이 아니면 <c>null</c>입니다.</summary>
+    /// <remarks>
+    /// AI 자동 구조가 "누가 이미 붙어 있는가"를 보기 위한 값입니다. 공용 문서 `스쿼드 AI 시스템` §16이
+    /// "플레이어가 이미 구조 중이면 AI는 같은 구조를 시도하지 않는다"와 "AI 조작 슬롯 하나만 구조를
+    /// 시작한다"를 규정하므로, 홀드 여부만으로는 부족하고 <b>누구인지</b>가 필요합니다.
+    /// </remarks>
+    public SquadMemberController ActiveInteractorMember => m_holdActive ? m_activeInteractorMember : null;
 
     public PlayerHealth TargetHealth => m_playerHealth;
 
@@ -383,5 +395,29 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         m_activeInteractorThirdPerson = null;
         m_holdActive = false;
         m_holdProgress01 = completed ? 1.0f : 0.0f;
+    }
+
+    /// <summary>
+    /// 선택했을 때 부활 감지 반경을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 이 반경은 <see cref="InteractionController"/>의 탐지 콘과 <b>별개 값</b>입니다. 살리려면 두 조건을
+    /// 모두 만족해야 하는데, 하나는 살리는 쪽이 하나는 쓰러진 쪽이 들고 있어 어느 쪽이 모자란지 알기 어렵습니다.
+    /// 두 기즈모를 같이 켜면 겹치는 영역이 실제로 부활 가능한 자리입니다.
+    ///
+    /// 중심은 로컬 오프셋(<c>m_detectionTriggerCenter</c>)을 적용합니다. 쓰러진 몸의 높이에 맞춰 둔 값이라
+    /// 발밑을 기준으로 그리면 실제 트리거와 어긋나 보입니다.
+    /// </remarks>
+    private void OnDrawGizmosSelected()
+    {
+        if (!m_debugDrawDetectionRadius)
+        {
+            return;
+        }
+
+        Gizmos.color = new Color(0.4f, 0.9f, 1.0f, 0.8f);
+        Gizmos.DrawWireSphere(
+            transform.TransformPoint(m_detectionTriggerCenter),
+            Mathf.Max(0.05f, m_detectionTriggerRadius));
     }
 }

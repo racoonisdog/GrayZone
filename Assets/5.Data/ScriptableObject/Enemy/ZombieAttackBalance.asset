@@ -19,8 +19,11 @@ MonoBehaviour:
   - m_stateName: Attack_Combo1
     m_damage: 1
     m_staggerPower: 1
+    m_knockbackImpulse: 0
   - m_stateName: Attack_Combo2
     m_damage: 2
     m_staggerPower: 2
+    m_knockbackImpulse: 0
   m_fallbackDamage: 1
   m_fallbackStaggerPower: 1
+  m_fallbackKnockbackImpulse: 0

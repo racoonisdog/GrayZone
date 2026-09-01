@@ -8,11 +8,11 @@ using VInspector;
 /// 플레이어의 조준 카메라, 조준 UI, 조준 방향 회전, IK 리그, 사격 및 재장전 입력을 제어하는 컴포넌트입니다.
 /// </summary>
 /// <remarks>
-/// 이 컴포넌트는 <see cref="PlayerInputs"/>, <see cref="ThirdPersonController"/>,
+/// 이 컴포넌트는 <see cref="PlayerInputController"/>, <see cref="ThirdPersonController"/>,
 /// <see cref="Animator"/>, <see cref="AudioSource"/>를 같은 GameObject의 필수 참조로 사용합니다.
 /// 필수 참조는 <c>Awake</c>에서 캐싱하고, 누락 시 컴포넌트를 비활성화하여 런타임 null 참조를 방지합니다.
 /// </remarks>
-[RequireComponent(typeof(PlayerInputs))]
+[RequireComponent(typeof(PlayerInputController))]
 [RequireComponent(typeof(ThirdPersonController))]
 [RequireComponent(typeof(Animator))]
 [RequireComponent(typeof(AudioSource))]
@@ -63,7 +63,7 @@ public class PlayerManager : MonoBehaviour
     [FormerlySerializedAs("reloadSound")]
     [SerializeField] private AudioClip[] m_reloadSounds;
 
-    private PlayerInputs m_input;
+    private PlayerInputController m_input;
     private ThirdPersonController m_controller;
     private Animator m_animator;
     private AudioSource m_weaponAudioSource;
@@ -175,7 +175,7 @@ public class PlayerManager : MonoBehaviour
     /// </summary>
     private void CacheRequiredReferences()
     {
-        m_input = GetComponent<PlayerInputs>();
+        m_input = GetComponent<PlayerInputController>();
         m_controller = GetComponent<ThirdPersonController>();
         m_animator = GetComponent<Animator>();
         m_weaponAudioSource = GetComponent<AudioSource>();
@@ -193,7 +193,7 @@ public class PlayerManager : MonoBehaviour
 
         if (m_input == null)
         {
-            Debug.LogError("[AimController] PlayerInputs 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
+            Debug.LogError("[AimController] PlayerInputController 컴포넌트가 없습니다. 같은 GameObject에 추가하세요.", this);
             isValid = false;
         }
 
@@ -444,7 +444,7 @@ public class PlayerManager : MonoBehaviour
 
         if (m_controller != null)
         {
-            m_controller.SetAimMove(isAiming);
+            m_controller.SetCombatStance(isAiming);
         }
     }
 

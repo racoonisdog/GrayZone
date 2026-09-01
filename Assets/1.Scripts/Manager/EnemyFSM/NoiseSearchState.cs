@@ -37,6 +37,7 @@ public class NoiseSearchState : EnemyStateBase
         m_center = center;
     }
 
+    /// <summary>소음이 났던 자리를 수색 기준점으로 잡고 수색 제한 시간을 시작합니다.</summary>
     public override void Enter()
     {
         Controller.PlayIdleFeedback();
@@ -53,6 +54,8 @@ public class NoiseSearchState : EnemyStateBase
         PickWanderDestination(m_center, Controller.NoiseSearchRadius);
     }
 
+    /// <summary>기준점 주변을 배회하며 캐릭터를 찾고, 제한 시간이 끝나면 배회로 돌아갑니다.</summary>
+    /// <remarks>수색에 실패하면 그 지점이 새 배회 기준점이 됩니다. 배회와 이동 방식만 공유하고 종료 결과는 다릅니다.</remarks>
     public override void Tick()
     {
         EnemyTargetSensor sensor = Controller.Sensor;

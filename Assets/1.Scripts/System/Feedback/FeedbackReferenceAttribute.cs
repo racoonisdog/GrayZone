@@ -22,6 +22,9 @@ public enum FeedbackReferenceKind
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
 public sealed class FeedbackReferenceAttribute : PropertyAttribute
 {
+    /// <summary>참조의 용도와 검사 창에 표시할 이름을 지정합니다.</summary>
+    /// <param name="kind">참조가 담당하는 피드백 종류입니다.</param>
+    /// <param name="displayName">누락 검사 창에 표시할 필드 이름입니다.</param>
     public FeedbackReferenceAttribute(FeedbackReferenceKind kind, string displayName)
     {
         Kind = kind;
