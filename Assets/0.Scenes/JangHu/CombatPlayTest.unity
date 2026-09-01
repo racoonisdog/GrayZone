@@ -56000,6 +56000,14 @@ PrefabInstance:
       propertyPath: m_balanceSO
       value: 
       objectReference: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
+    - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_moveSpeed
+      value: 5.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_sprintSpeed
+      value: 9
+      objectReference: {fileID: 0}
     - target: {fileID: 6881159756398713533, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: pivotNode
       value: 
@@ -75634,7 +75642,7 @@ MonoBehaviour:
     DefaultMode: 2
   DefaultBlend:
     Style: 1
-    Time: 0.5
+    Time: 0.2
     CustomCurve:
       serializedVersion: 2
       m_Curve: []
@@ -90819,6 +90827,14 @@ PrefabInstance:
       propertyPath: m_balanceSO
       value: 
       objectReference: {fileID: 11400000, guid: 9eb8d1c6b58418f4dbbb885a2d34b9ff, type: 2}
+    - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_moveSpeed
+      value: 5.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_sprintSpeed
+      value: 9
+      objectReference: {fileID: 0}
     - target: {fileID: 6881159756398713533, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: pivotNode
       value: 
@@ -93394,7 +93410,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1801956681
 Transform:
   m_ObjectHideFlags: 0
@@ -114045,7 +114061,11 @@ PrefabInstance:
       objectReference: {fileID: 5780016447430108024}
     - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_moveSpeed
-      value: 2
+      value: 5.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_sprintSpeed
+      value: 9
       objectReference: {fileID: 0}
     - target: {fileID: 8366585892774696617, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_balanceSO
@@ -114054,6 +114074,18 @@ PrefabInstance:
     - target: {fileID: 8366585892774696617, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_debugLogSpread
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8366585892774696617, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_recoilFovPunch
+      value: 0.8
+      objectReference: {fileID: 0}
+    - target: {fileID: 8366585892774696617, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_recoilPitchKick
+      value: 0.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8366585892774696617, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_recoilFovPunchAds
+      value: 0.6
       objectReference: {fileID: 0}
     - target: {fileID: 8366585892774696617, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_damageFalloff.m_mode
