@@ -1572,16 +1572,23 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             mask = baseMask & ~(1 << gameObject.layer);
         }
 
-        // 부위 히트박스는 평소 꺼져 있으므로 카메라 조준점도 1차 HitDetectVolume을 볼 수 있어야 합니다.
-        // 그렇지 않으면 조준점이 적 뒤의 먼 지점으로 남아, 카메라와 총구의 시차만큼 실제 레이가 옆으로
-        // 밀립니다. 몸통은 우연히 맞아도 팔·손처럼 작은 부위는 비껴갈 수 있습니다.
+        // 부위 히트박스는 평소 꺼져 있어 카메라 트레이스가 직접 볼 수 없습니다. 그래서 무기가 있으면
+        // 사격과 같은 2단계 규칙(감지 볼륨으로 후보를 찾고 그 부위만 잠깐 켠 뒤 같은 레이를 다시 쏘기)으로
+        // **부위 표면**을 조준점으로 받습니다. 감지 볼륨 표면을 조준점으로 쓰면 안 되는 이유는
+        // Gun.TryTraceAimPoint 주석에 있습니다 - 요약하면 총구선과 카메라선이 조준점에서만 만나므로,
+        // 조준점이 몸보다 앞에 있으면 그 차이가 총구 오프셋 비율로 증폭되어 팔·손·정강이·발이 통째로 빗나갑니다.
+        //
+        // 아군의 몸은 조준점으로 잡지 않습니다(무기의 아군 통과 규칙을 그대로 씁니다). 팀원이 앞을 지나가는
+        // 순간 조준점이 그 등판으로 당겨지면 화면 중앙의 적을 겨누고 있는데도 조준 거리와 차단 표시가 함께 어긋납니다.
         if (m_weaponController != null)
         {
-            mask |= m_weaponController.HitDetectLayerMask.value;
+            return m_weaponController.TryTraceAimPoint(
+                cameraTransform.position, GetAimForward(), aimDistance, mask, out RaycastHit staged)
+                ? staged.point
+                : lookPoint;
         }
 
-        // 아군의 몸은 조준점으로 잡지 않습니다. 팀원이 앞을 지나가는 순간 조준점이 그 등판으로 당겨지면
-        // 화면 중앙의 적을 겨누고 있는데도 조준 거리와 차단 표시가 함께 어긋납니다.
+        // 무기가 없으면 켤 부위도, 마스크를 소유한 주체도 없으므로 단발 트레이스로 돌아갑니다.
         if (TryTraceAim(cameraTransform.position, GetAimForward(), aimDistance, mask, out RaycastHit hit))
         {
             return hit.point;

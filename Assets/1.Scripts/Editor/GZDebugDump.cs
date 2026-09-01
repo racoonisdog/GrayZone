@@ -1112,9 +1112,14 @@ namespace GrayZone.EditorTools
         /// </para>
         ///
         /// <para>
-        /// 재현 절차: 카메라에서 부위 중심으로 레이를 쏴 조준점을 구하고(실제 조준 마스크와 같게 트리거 포함),
-        /// 그 조준점을 향해 총구에서 1차 마스크로 쏘아 <c>HitDetectVolume</c>을 지나는지, 이어서 3차 마스크로
-        /// 쏘아 무엇에 먼저 맞는지 확인합니다.
+        /// 재현 절차: 부위를 켠 뒤 카메라에서 부위 중심으로 레이를 쏴 조준점을 구하고(<see cref="Gun.TryTraceAimPoint"/>와
+        /// 같은 마스크·같은 상태), 그 조준점을 향해 총구에서 1차 마스크로 쏘아 <c>HitDetectVolume</c>을 지나는지,
+        /// 이어서 3차 마스크로 쏘아 무엇에 먼저 맞는지 확인합니다.
+        /// </para>
+        ///
+        /// <para>
+        /// <b>이 진단은 게임의 조준 경로와 같은 규칙을 써야 의미가 있습니다.</b> 조준 마스크에 감지 마스크를
+        /// 섞으면 조준점이 감지 볼륨 앞면에 찍혀, 실제 게임에는 이미 없는 시차를 보고합니다.
         /// </para>
         /// </remarks>
         private static object TestAimParallax(string partFilter)
@@ -1203,8 +1208,12 @@ namespace GrayZone.EditorTools
             Vector3 camOrigin = camera.transform.position;
             Vector3 camDir = (partCenter - camOrigin).normalized;
 
-            // 1) 카메라가 부위를 정확히 겨눈 상태에서 조준점을 구합니다(조준 마스크 = 사격 마스크 | 감지 마스크).
-            int aimMask = hitMask | detMask;
+            // 1) 카메라가 부위를 정확히 겨눈 상태에서 조준점을 구합니다.
+            // 마스크는 감지 마스크를 **섞지 않습니다**. 위에서 이미 부위를 켜고 SyncTransforms까지 했으므로
+            // 이 트레이스는 Gun.TryTraceAimPoint(부위를 켠 뒤 히트스캔 마스크로 재트레이스)와 같은 상태를
+            // 재현합니다. 감지 마스크를 섞으면 조준점이 부위가 아니라 감지 볼륨 앞면에 찍혀, 이 진단이
+            // 게임에 이미 없는 시차를 보고하게 됩니다(옛 조준 공식).
+            int aimMask = hitMask;
             Vector3 aimPoint = camOrigin + camDir * 1000f;
             string aimHitName = "(없음)";
             if (Physics.Raycast(camOrigin, camDir, out RaycastHit aimHit, 1000f, aimMask, QueryTriggerInteraction.Collide))
@@ -1258,8 +1267,12 @@ namespace GrayZone.EditorTools
             float partDistance = Vector3.Distance(muzzle, partCenter);
             float missDistance = Mathf.Tan(angleError * Mathf.Deg2Rad) * partDistance;
 
-            var cap = target as CapsuleCollider;
-            float partRadius = cap != null ? cap.radius : 0f;
+            // 손·머리는 SphereCollider입니다. 캡슐만 보면 반지름이 0으로 나와 판정이 무조건 "빗나감"이 됩니다.
+            float partScale = target.transform.lossyScale.x;
+            float partRadius =
+                target is CapsuleCollider capsulePart ? capsulePart.radius * partScale
+                : target is SphereCollider spherePart ? spherePart.radius * partScale
+                : 0f;
 
             group.SetHitboxesEnabled(false);
 
