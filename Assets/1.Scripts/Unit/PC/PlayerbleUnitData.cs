@@ -61,7 +61,7 @@ public class PlayerbleUnitData : MonoBehaviour
 
     // 아래 디버그 패스스루들은 플레이테스트 트레이너에서도 쓰기 위해 빌드에도 컴파일합니다.
     // 각 플래그의 실제 효과는 소유 컴포넌트에서 GameDevMode.DebugFeaturesEnabled일 때만 동작합니다.
-    [Header("Debug")]
+    [Foldout("Debug")]
     [Tooltip("켜면 예비 탄약(탄창)이 줄어들지 않습니다(무한 탄창). 개발 모드에서만 효과가 있습니다.")]
     [SerializeField] private bool m_debugInfiniteReserveAmmo = false;
 
@@ -209,16 +209,26 @@ public class PlayerbleUnitData : MonoBehaviour
     /// </summary>
     public bool CanDeploy => IsAlive && !IsDown;
 
+    /// <summary>지금 바라보고 있는 구조 가능한 다운 동료입니다. 없으면 <c>null</c>입니다.</summary>
+    /// <remarks>상호작용 대상 전체 중 다운 동료인 것만 걸러 냅니다. 다른 상호작용 대상은 여기 잡히지 않습니다.</remarks>
     public DownedAllyInteractable CurrentReviveInteractionTarget => m_interactionController != null
         ? m_interactionController.Current as DownedAllyInteractable
         : null;
 
+    /// <summary>구조할 수 있는 다운 동료를 바라보고 있는지 여부입니다.</summary>
     public bool HasReviveInteractionTarget => CurrentReviveInteractionTarget != null;
 
+    /// <summary>구조 홀드가 실제로 진행 중인지 여부입니다.</summary>
+    /// <remarks>
+    /// 홀드 진행도는 구조하는 쪽과 구조받는 쪽 양쪽에 있습니다. 한쪽만 보면 입력 맵이 다시 스위치되는 순간
+    /// 진행 중인데도 꺼진 것으로 보이므로 둘 중 하나라도 진행 중이면 진행으로 봅니다.
+    /// </remarks>
     public bool IsReviving => CurrentReviveInteractionTarget != null
         && (m_interactionController.HoldProgress01 > 0.0f
             || CurrentReviveInteractionTarget.IsReviveHoldActive);
 
+    /// <summary>구조 홀드 진행도를 0~1로 돌려줍니다. 대상이 없으면 0입니다.</summary>
+    /// <remarks>양쪽 진행도 중 큰 값을 씁니다. <see cref="IsReviving"/>과 같은 이유입니다.</remarks>
     public float ReviveGaugeAmount => CurrentReviveInteractionTarget != null
         ? Mathf.Clamp01(Mathf.Max(m_interactionController.HoldProgress01, CurrentReviveInteractionTarget.ReviveHoldProgress01))
         : 0.0f;

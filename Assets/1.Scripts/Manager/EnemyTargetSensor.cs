@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using VInspector;
 
 /// <summary>
 /// 변이체가 스쿼드 캐릭터에 대해 무엇을 알고 있는지를 소유하고, 그중 현재 대상을 선정하는 Module입니다.
@@ -43,11 +44,25 @@ public class EnemyTargetSensor : MonoBehaviour
         /// <summary>이 기록이 가리키는 스쿼드 캐릭터입니다.</summary>
         public SquadMemberController Member;
 
-        /// <summary>지금 이 캐릭터의 실시간 위치를 알고 있는지 여부입니다.</summary>
+        /// <summary>직접 인식으로 실시간 위치를 알고 있는지 여부입니다.</summary>
         public bool HasLivePosition;
 
-        /// <summary>실시간 위치를 계속 아는 것이 끝나는 시각입니다.</summary>
+        /// <summary>직접 인식 기반 실시간 위치를 계속 아는 것이 끝나는 시각입니다.</summary>
         public float TrackingExpireTime;
+
+        /// <summary>하울링으로 실시간 위치를 제공받고 있는지 여부입니다.</summary>
+        /// <remarks>
+        /// 직접 인식과 따로 둡니다. 한 필드로 묶으면 시야 유지 시간이 끝날 때 하울링 정보도 같이 끊깁니다.
+        ///
+        /// <b>이 값은 시간으로 만료되지 않습니다.</b> 교전이 끝날 때만 지워집니다(기획 확정 2026-08-04).
+        /// 공용 문서 §5.5.5는 하울링에 별도 유지 시간을 규정하지만, 그러면 하울링으로 합류한 개체가
+        /// 플레이어에게 닿기 전에 시간이 끝나 돌아서므로 하울링 자체가 무의미해집니다.
+        /// 대신 유효 대상이 모두 사라질 때 교전이 끝나면서 함께 초기화됩니다(§5.8.4).
+        /// </remarks>
+        public bool HasHowlPosition;
+
+        /// <summary>직접 인식이든 하울링이든 지금 실시간 위치를 아는지 여부입니다.</summary>
+        public bool HasAnyLivePosition => HasLivePosition || HasHowlPosition;
 
         /// <summary>마지막으로 위치를 확인한 지점입니다. 대상이 움직여도 따라가지 않습니다.</summary>
         public Vector3 LastKnownPosition;
@@ -63,6 +78,7 @@ public class EnemyTargetSensor : MonoBehaviour
         {
             HasLivePosition = false;
             TrackingExpireTime = 0f;
+            HasHowlPosition = false;
             LastKnownPosition = Vector3.zero;
             LastKnownTime = 0f;
             Source = InfoSource.None;
@@ -102,16 +118,24 @@ public class EnemyTargetSensor : MonoBehaviour
     [Tooltip("소음 인지 게이지가 초당 줄어드는 양입니다. 소음이 끊기면 이 속도로 빠져 결국 경계를 풉니다. 걷기 소음의 초당 증가량보다 크면 걸어서는 절대 들키지 않습니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_noiseAwarenessDecayPerSecond = 0.15f;
 
-    [Header("Noise Debug")]
-    [Tooltip("소음 인지 게이지를 Scene 뷰에 막대로 표시합니다. 게이지가 0보다 클 때만 그려집니다.")]
-    [SerializeField] private bool m_debugDrawNoiseGauge = true;
-
     [Header("Target Selection")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기입니다.")]
     [SerializeField] private float m_reevaluateInterval = 1f;
 
     [Tooltip("새 후보가 현재 대상보다 이만큼 더 가까워야 대상을 바꿉니다.")]
     [SerializeField] private float m_switchPathDistanceDelta = 2f;
+
+    // Debug 구역은 직렬화 필드의 맨 끝에 둡니다. Foldout은 다음 Foldout이나 EndFoldout이 나올 때까지 이어지므로,
+    // 중간에 두면 뒤따르는 필드가 전부 Debug 구역으로 딸려 들어갑니다.
+    // 영역이 여럿이면 폴드아웃 안에서 Header로 나눕니다.
+    [Foldout("Debug")]
+    [Header("Sight")]
+    [Tooltip("이 개체를 선택했을 때 시야 반경과 시야각 경계를 Scene 뷰에 표시합니다.")]
+    [SerializeField] private bool m_debugDrawSight = true;
+
+    [Header("Noise")]
+    [Tooltip("소음 인지 게이지를 Scene 뷰에 막대로 표시합니다. 게이지가 0보다 클 때만 그려집니다.")]
+    [SerializeField] private bool m_debugDrawNoiseGauge = true;
 
     /// <summary>스쿼드 캐릭터별 기록입니다. 인원수만큼만 만들고 재사용합니다.</summary>
     private readonly List<TargetInfo> m_infos = new List<TargetInfo>();
@@ -130,6 +154,9 @@ public class EnemyTargetSensor : MonoBehaviour
 
     /// <summary>현재 선택된 대상입니다.</summary>
     private SquadMemberController m_currentTarget;
+
+    /// <summary>방금 유효 대상에서 제외된 캐릭터입니다. 교전 수색이 이 캐릭터의 마지막 확인 위치를 우선합니다(§5.8.2).</summary>
+    private SquadMemberController m_lastLostTarget;
 
     /// <summary>이 변이체가 교전 상태인지 여부입니다. 비전투 감지 보호 판단에 사용합니다.</summary>
     private bool m_isEngaged;
@@ -159,6 +186,15 @@ public class EnemyTargetSensor : MonoBehaviour
     private bool m_noiseUpdated;
 
     /// <summary>
+    /// 마지막으로 판정한 소음 차폐의 통과 비율입니다. 진단용이며 판단에는 쓰지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 차폐는 들리지 않게 된 소음까지 포함해 계산되므로, 이 값만으로는 지금 추적 중인 소음의 차폐인지
+    /// 알 수 없습니다. "직전에 판정한 소음이 얼마나 막혀 있었나"를 보는 용도입니다.
+    /// </remarks>
+    private float m_lastNoiseTransmission = 1f;
+
+    /// <summary>
     /// 소음 인지 게이지입니다. 소음을 들을 때마다 그 강도만큼 쌓이고 시간이 지나면 줄어듭니다.
     /// </summary>
     /// <remarks>
@@ -181,6 +217,21 @@ public class EnemyTargetSensor : MonoBehaviour
     /// 매 프레임 다시 판정할 대상이 아닙니다.
     /// </remarks>
     private bool m_noiseAwarenessReached;
+
+    // =========================
+    // 하울링
+    // =========================
+
+    /// <summary>이 교전에서 하울링 위치 정보를 이미 적용했는지 여부입니다.</summary>
+    /// <remarks>추가 하울링을 무시하는 근거입니다(§5.5.4). 교전 종료 시 초기화합니다(§5.8.4).</remarks>
+    private bool m_hasAppliedHowl;
+
+    /// <summary>이 교전에서 하울링을 수신한 적이 있는지 여부입니다.</summary>
+    /// <remarks>§5.8.4의 "하울링 수신 기록"입니다.</remarks>
+    private bool m_hasReceivedHowl;
+
+    /// <summary>하울링 전파 대상 목록을 만들 때 재사용하는 버퍼입니다.</summary>
+    private readonly List<SquadMemberController> m_howlMemberBuffer = new List<SquadMemberController>();
 
     /// <summary>실제로 사용할 시야 차단 레이어입니다. 지정이 없으면 기본값으로 채웁니다.</summary>
     private int m_resolvedObstacleMask;
@@ -254,12 +305,24 @@ public class EnemyTargetSensor : MonoBehaviour
     private void OnEnable()
     {
         NoiseSystem.Register(this);
+        HowlSystem.Register(this);
     }
 
-    /// <summary>소음 수신 목록에서 빠집니다.</summary>
+    /// <summary>소음·하울링 수신 목록에서 빠집니다.</summary>
+    /// <remarks>
+    /// 스쿼드 전투 상태에서도 함께 빠집니다. 사망·파괴로 <see cref="SetEngaged"/>(false)를 거치지 않고
+    /// 사라지는 경로가 있으면 교전 카운트가 남아 비전투로 복귀하지 못하기 때문입니다.
+    /// </remarks>
     private void OnDisable()
     {
         NoiseSystem.Unregister(this);
+        HowlSystem.Unregister(this);
+
+        if (m_isEngaged)
+        {
+            m_isEngaged = false;
+            SyncSquadEngagement(false);
+        }
     }
 
     /// <summary>
@@ -270,10 +333,43 @@ public class EnemyTargetSensor : MonoBehaviour
     /// 비교전 상태에서는 AI가 조작하는 캐릭터를 시야로 먼저 감지하지 않습니다(§5.6).
     /// 플레이어의 의도와 무관한 동료의 움직임 때문에 새 변이체가 끌려오는 것을 막기 위한 규칙입니다.
     /// 교전이 끝나면 보호를 다시 적용해야 하므로 상태 종료 시 false로 되돌립니다.
+    /// <para>
+    /// 여기서 스쿼드 전투 상태에도 이 개체를 등록·해제합니다(공용 문서 `스쿼드 AI 시스템` §4.2).
+    /// 진입·이탈 지점이 이 한 쌍뿐이라 다른 곳에 손대지 않아도 짝이 맞습니다.
+    /// 반대 방향(스쿼드 전투 상태 -> 이 개체의 감지 판정)으로는 절대 연결하지 않습니다. §5.6이 금지합니다.
+    /// </para>
     /// </remarks>
     public void SetEngaged(bool engaged)
     {
+        if (m_isEngaged == engaged)
+        {
+            return;
+        }
+
         m_isEngaged = engaged;
+        SyncSquadEngagement(engaged);
+    }
+
+    /// <summary>
+    /// 이 개체의 교전 여부를 스쿼드 전투 상태에 반영합니다.
+    /// </summary>
+    /// <param name="engaged">교전 중이면 true입니다.</param>
+    private void SyncSquadEngagement(bool engaged)
+    {
+        SquadEngagement engagement = m_squadManager != null ? m_squadManager.Engagement : null;
+        if (engagement == null)
+        {
+            return;
+        }
+
+        if (engaged)
+        {
+            engagement.RegisterEngagedEnemy(this);
+        }
+        else
+        {
+            engagement.UnregisterEngagedEnemy(this);
+        }
     }
 
     /// <summary>
@@ -373,6 +469,13 @@ public class EnemyTargetSensor : MonoBehaviour
 
         if (best == null)
         {
+            // 방금 대상에서 제외된 캐릭터를 기억합니다. 교전 수색은 그 캐릭터의 마지막 확인 위치를
+            // 우선하도록 정해져 있습니다(§5.8.2).
+            if (m_currentTarget != null)
+            {
+                m_lastLostTarget = m_currentTarget;
+            }
+
             m_currentTarget = null;
             return;
         }
@@ -391,6 +494,64 @@ public class EnemyTargetSensor : MonoBehaviour
     }
 
     /// <summary>
+    /// 교전 수색을 시작할 마지막 확인 위치를 고릅니다.
+    /// </summary>
+    /// <param name="position">수색을 시작할 지점입니다.</param>
+    /// <returns>쓸 수 있는 마지막 확인 위치가 있으면 true입니다.</returns>
+    /// <remarks>
+    /// 우선순위는 공용 문서 §5.8.2를 따릅니다. <b>방금 대상에서 제외된 캐릭터</b>의 마지막 확인 위치가 먼저이고,
+    /// 그것을 쓸 수 없으면 <b>가장 최근에 기록된</b> 다른 캐릭터의 위치를 씁니다.
+    ///
+    /// 실시간 위치를 아는 캐릭터는 후보가 아닙니다. 그런 캐릭터가 있으면 애초에 수색이 아니라 추격을 해야 합니다.
+    ///
+    /// 이 함수는 고르기만 합니다. "한 번만 선택한다"(§5.8.2)는 규칙은 수색 상태가 진입 시점에 한 번 부르는 것으로
+    /// 지킵니다. 여기서 상태를 들고 있으면 교전이 끝나도 남아 다음 수색이 옛 지점을 씁니다.
+    /// </remarks>
+    public bool TryGetSearchPosition(out Vector3 position)
+    {
+        position = Vector3.zero;
+
+        TargetInfo preferred = FindInfo(m_lastLostTarget);
+        if (HasUsableLastKnown(preferred))
+        {
+            position = preferred.LastKnownPosition;
+            return true;
+        }
+
+        TargetInfo latest = null;
+        for (int i = 0; i < m_infos.Count; i++)
+        {
+            TargetInfo info = m_infos[i];
+            if (!HasUsableLastKnown(info))
+            {
+                continue;
+            }
+
+            if (latest == null || info.LastKnownTime > latest.LastKnownTime)
+            {
+                latest = info;
+            }
+        }
+
+        if (latest == null)
+        {
+            return false;
+        }
+
+        position = latest.LastKnownPosition;
+        return true;
+    }
+
+    /// <summary>이 기록에 수색 기준으로 쓸 만한 마지막 확인 위치가 있는지 확인합니다.</summary>
+    /// <remarks>다운된 캐릭터의 기록은 <see cref="ExpireTracking"/>이 지우므로 여기서 따로 걸러내지 않습니다.</remarks>
+    private static bool HasUsableLastKnown(TargetInfo info)
+    {
+        return info != null
+            && info.Source != InfoSource.None
+            && !info.HasAnyLivePosition;
+    }
+
+    /// <summary>
     /// 현재 대상의 추적 목적지를 반환합니다.
     /// </summary>
     /// <param name="position">실시간 위치를 아는 동안에는 최신 위치, 아니면 마지막 확인 위치입니다.</param>
@@ -405,7 +566,8 @@ public class EnemyTargetSensor : MonoBehaviour
             return false;
         }
 
-        if (info.HasLivePosition && info.Member != null)
+        // 하울링으로 받은 위치도 실시간입니다. 시야와 장애물을 무시하고 갱신됩니다(§5.5.5).
+        if (info.HasAnyLivePosition && info.Member != null)
         {
             position = info.Member.transform.position;
             return true;
@@ -475,6 +637,37 @@ public class EnemyTargetSensor : MonoBehaviour
     }
 
     /// <summary>
+    /// 실시간 위치를 알고 있는 대상의 추적 만료 시각을 지정한 시간만큼 미룹니다.
+    /// </summary>
+    /// <param name="seconds">미룰 시간(초)입니다. 0 이하면 아무것도 하지 않습니다.</param>
+    /// <remarks>
+    /// 경직처럼 <b>행동이 잠긴 동안 만료 시계를 세우기 위한</b> 것입니다. 잠금 시간이 추적 유지 시간보다 길면,
+    /// 잠긴 사이에 대상이 조용히 만료되어 풀리는 순간 "아무도 없다"가 됩니다. 등 뒤에서 맞아 대상을 볼 수 없는
+    /// 각도라면 감지로도 갱신되지 않으므로, 맞고 쓰러졌다 일어난 개체가 공격자를 잊는 결과가 됩니다.
+    ///
+    /// 시작 시점에 한 번 미루는 것으로 잠금 구간만큼 시계를 세운 것과 같아집니다. 매 프레임 상태를 들고 다닐
+    /// 필요가 없어 잠금이 비정상 종료되어도 남는 것이 없습니다.
+    ///
+    /// 마지막 확인 위치(<c>LastKnownPosition</c>)는 시간으로 만료하지 않으므로 건드리지 않습니다.
+    /// </remarks>
+    public void ExtendTrackingHold(float seconds)
+    {
+        if (seconds <= 0.0f)
+        {
+            return;
+        }
+
+        for (int i = 0; i < m_infos.Count; i++)
+        {
+            TargetInfo info = m_infos[i];
+            if (info.HasLivePosition)
+            {
+                info.TrackingExpireTime += seconds;
+            }
+        }
+    }
+
+    /// <summary>
     /// 소음을 감지했을 때 추적할 위치를 받습니다.
     /// </summary>
     /// <param name="noise">발생한 소음 이벤트입니다.</param>
@@ -486,10 +679,12 @@ public class EnemyTargetSensor : MonoBehaviour
     /// 우선순위는 이 순간에만 평가합니다. 매 프레임 모든 소음을 비교하지 않습니다(§5.4.4).
     /// 그래서 "지금 추적 중인 소음" 하나만 들고 있으면 충분하며 이벤트 목록을 쌓지 않습니다.
     ///
-    /// 판정 순서에 이유가 있습니다. 가청 -> 비전투 감지 보호 -> 교전 중 무시 -> 우선순위입니다.
-    /// 가청을 먼저 보는 것은 못 들은 소음에 다른 규칙을 적용할 필요가 없기 때문입니다.
+    /// 판정 순서에 이유가 있습니다. 가청 -> 비전투 감지 보호 -> 교전 중 무시 -> 차폐 -> 우선순위입니다.
+    /// 가청을 먼저 보는 것은 못 들은 소음에 다른 규칙을 적용할 필요가 없기 때문이고, 차폐를 뒤에 두는 것은
+    /// 거기서 Raycast가 돌기 때문입니다. <see cref="CanSee"/>와 같이 싼 검사부터 하는 순서입니다.
     ///
-    /// 강도는 가청 여부를 정하지 않고 우선순위 비교에만 씁니다. 도달 거리가 곧 들리는 거리입니다.
+    /// 강도는 가청 여부를 정하지 않고 우선순위 비교와 인지 게이지에만 씁니다. 도달 거리가 곧 들리는 거리입니다.
+    /// 차폐는 그 강도를 깎으며, 완전히 막힌 경우(남는 비율 0)에만 예외적으로 가청을 취소합니다.
     /// </remarks>
     public void NotifyNoise(in NoiseEvent noise)
     {
@@ -506,13 +701,23 @@ public class EnemyTargetSensor : MonoBehaviour
         }
 
         // 유효 대상을 쫓거나 공격 중이면 관련 없는 소음으로 교전을 중단하지 않습니다(§5.4.4).
-        // 교전 수색(유효 대상이 없는 교전 상태)은 아직 없으므로 그 분기는 두지 않았습니다.
+        // 반대로 교전 수색 중(교전 상태인데 유효 대상이 없음)에는 이 조건이 성립하지 않아 소음을 받아들입니다.
+        // 그 소음으로 수색 지점을 옮기는 것은 CombatSearchState가 처리합니다(§5.8.3).
         if (m_isEngaged && HasAnyValidTarget)
         {
             return;
         }
 
-        float intensity = noise.GetIntensityAt(transform.position);
+        // 경로에 있는 구조물의 재질별 차폐율만큼 소음을 깎습니다. 완전히 막혔으면 듣지 못한 것으로 둡니다.
+        float transmission = ResolveNoiseTransmission(noise.Position);
+        m_lastNoiseTransmission = transmission;
+
+        if (transmission <= 0f)
+        {
+            return;
+        }
+
+        float intensity = noise.GetIntensityAt(transform.position) * transmission;
         if (!ShouldReplaceTrackedNoise(noise, intensity))
         {
             return;
@@ -536,6 +741,38 @@ public class EnemyTargetSensor : MonoBehaviour
     }
 
     /// <summary>
+    /// 소음이 이 변이체까지 오며 남는 비율을 구합니다.
+    /// </summary>
+    /// <param name="noisePosition">소음이 발생한 위치입니다.</param>
+    /// <returns>1이면 아무것도 막지 않았고, 0이면 완전히 막혔습니다.</returns>
+    /// <remarks>
+    /// 재질별 차폐율도, 무엇이 소리를 막는지도 필드의 성질이므로 <see cref="NoiseManager"/>가 소유합니다.
+    /// 여기서 넘기는 것은 "어디서 듣는지"(귀 위치)뿐입니다.
+    ///
+    /// 장애물 레이어를 시야 판정과 공유하지 않습니다. 시야 마스크에는 난간·소품처럼 시야는 가려도 소리는
+    /// 거의 막지 않는 것이 섞여 있어, 같은 집합을 쓰면 화분 뒤에 섰다고 총성이 절반으로 줄어듭니다.
+    ///
+    /// 귀 위치로 <see cref="GetEyePosition"/>을 씁니다. 발밑에서 쏘면 바닥 턱이나 경사에 막혀 실제보다
+    /// 자주 차폐로 판정됩니다. 가청 판정이 <c>transform.position</c>을 쓰는 것과 다른데, 그쪽은 거리만
+    /// 보므로 1.5m 차이가 문제되지 않고 이쪽은 무엇에 맞는지가 바뀝니다.
+    ///
+    /// 매니저가 없으면 차폐를 적용하지 않습니다. 값을 코드에 따로 두면 인스펙터와 코드 두 곳이 기본
+    /// 차폐율을 갖게 되어, 인스펙터를 고쳐도 안 바뀌는 상태가 생깁니다. 없다는 사실은
+    /// <see cref="FieldManager"/>가 시작할 때 경고로 알립니다.
+    /// </remarks>
+    private float ResolveNoiseTransmission(Vector3 noisePosition)
+    {
+        NoiseManager noiseManager = FieldManager.Instance != null ? FieldManager.Instance.NoiseManager : null;
+
+        if (noiseManager == null)
+        {
+            return 1f;
+        }
+
+        return noiseManager.GetTransmission(GetEyePosition(), noisePosition);
+    }
+
+    /// <summary>
     /// 소음 인지 게이지를 시간에 따라 줄입니다.
     /// </summary>
     /// <remarks>
@@ -555,6 +792,9 @@ public class EnemyTargetSensor : MonoBehaviour
 
     /// <summary>소음 인지 게이지의 현재 값입니다.</summary>
     public float NoiseAwareness => m_noiseAwareness;
+
+    /// <summary>마지막으로 판정한 소음 차폐의 통과 비율입니다. 진단용입니다.</summary>
+    public float LastNoiseTransmission => m_lastNoiseTransmission;
 
     /// <summary>소음 인지 게이지의 진행도입니다. 0이면 평온, 1이면 한계 도달입니다.</summary>
     /// <remarks>두리번 강도를 애니메이터로 넘길 때 씁니다.</remarks>
@@ -664,13 +904,134 @@ public class EnemyTargetSensor : MonoBehaviour
     /// 하울링을 수신해 스쿼드 캐릭터들의 실시간 위치를 제공받습니다.
     /// </summary>
     /// <param name="members">위치를 제공받을 캐릭터 목록입니다.</param>
+    /// <returns>이번 하울링을 실제로 적용했으면 true입니다.</returns>
     /// <remarks>
-    /// 슬라이스 3에서 구현합니다. 하울링 위치 정보는 시야와 장애물을 무시하며,
-    /// 유지 시간이 직접 인식과 별도로 설정됩니다(§5.5.5).
+    /// 하울링 위치 정보는 시야와 장애물을 무시하며, 직접 인식과 별도로 보관합니다(§5.5.5).
+    /// 시간으로 만료하지 않고 교전이 끝날 때만 지웁니다 - 하울링으로 합류한 개체가 플레이어에게
+    /// 닿기 전에 돌아서면 하울링이 무의미해지기 때문입니다(기획 확정 2026-08-04).
+    ///
+    /// <b>한 교전에서 처음 적용한 하울링만 씁니다</b>(§5.5.4). 그래서 만료가 없어도 문제가 되지 않습니다 -
+    /// 두 번째 하울링은 애초에 적용되지 않으므로 개체가 많아도 상태가 겹쳐 쌓이지 않습니다.
+    ///
+    /// 이미 독립적으로 교전 중인 변이체도 정보는 받습니다. 현재 행동을 취소하지 않는 것은 상태 쪽 규칙입니다(§5.5.6).
     /// </remarks>
-    public void NotifyHowl(IReadOnlyList<SquadMemberController> members)
+    public bool NotifyHowl(IReadOnlyList<SquadMemberController> members)
     {
-        // TODO(슬라이스 3): 하울링 전용 유지 시간으로 실시간 위치 정보 부여.
+        return ApplyHowl(members, fromOther: true);
+    }
+
+    /// <summary>
+    /// 자신이 수행한 하울링의 위치 정보를 스스로에게 적용합니다.
+    /// </summary>
+    /// <param name="members">위치를 제공받을 캐릭터 목록입니다.</param>
+    /// <returns>적용했으면 true입니다.</returns>
+    /// <remarks>
+    /// 공용 문서 §5.5.5는 "하울링 <b>송신자와</b> 하울링 수신자만 해당 실시간 위치 정보를 얻는다"고 정합니다.
+    /// 송신자를 빼면 자기가 부른 결과를 자기만 못 받아, 시야가 끊기는 순간 교전을 놓치고
+    /// 비교전 속도로 걸어가며 잠시 뒤 같은 교전을 새로 시작해 하울링을 다시 합니다.
+    ///
+    /// <see cref="NotifyHowl"/>과 갈라 둔 이유는 "남의 하울링을 받았다"는 기록을 세우지 않기 위해서입니다.
+    /// 그 기록은 맞하울링을 막는 판단(§5.5.1)에 쓰이므로, 자기 하울링으로 세우면
+    /// 이후 재교전에서 자신의 하울링 시도가 부당하게 막힙니다.
+    /// </remarks>
+    public bool ApplyOwnHowl(IReadOnlyList<SquadMemberController> members)
+    {
+        return ApplyHowl(members, fromOther: false);
+    }
+
+    /// <summary>하울링 위치 정보를 적용하는 공통 경로입니다.</summary>
+    /// <param name="members">위치를 제공받을 캐릭터 목록입니다.</param>
+    /// <param name="fromOther">다른 변이체의 하울링이면 true, 자신이 수행한 것이면 false입니다.</param>
+    private bool ApplyHowl(IReadOnlyList<SquadMemberController> members, bool fromOther)
+    {
+        if (members == null || m_hasAppliedHowl)
+        {
+            return false;
+        }
+
+        SyncSquadMembers();
+
+        int granted = 0;
+
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController member = members[i];
+
+            // 다운·전투 이탈 캐릭터는 위치 제공 대상에서 제외합니다(§5.5.5).
+            if (!IsAliveMember(member))
+            {
+                continue;
+            }
+
+            TargetInfo info = FindInfo(member);
+            if (info == null)
+            {
+                continue;
+            }
+
+            info.HasHowlPosition = true;
+            info.LastKnownPosition = member.transform.position;
+            info.LastKnownTime = Time.time;
+
+            // 직접 인식으로 이미 알고 있던 캐릭터의 출처는 덮지 않습니다.
+            // 출처는 어떻게 알게 됐는지를 남기는 값이고, 직접 인식이 하울링보다 확실한 정보입니다.
+            if (info.Source == InfoSource.None)
+            {
+                info.Source = InfoSource.Howl;
+            }
+
+            granted++;
+        }
+
+        if (granted == 0)
+        {
+            return false;
+        }
+
+        m_hasAppliedHowl = true;
+
+        // 남의 하울링을 받은 것만 기록합니다. 자기 하울링은 맞하울링 판단 대상이 아닙니다(§5.5.1).
+        if (fromOther)
+        {
+            m_hasReceivedHowl = true;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 이 교전에서 하울링을 수신한 적이 있는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 하울링을 수신해 합류한 변이체는 자신의 하울링을 시도하지 않습니다(§5.5.1).
+    /// 다만 이미 독립적으로 교전에 진입해 있었다면 자신의 시도를 유지하므로, 이 값만으로 결정하지 않습니다.
+    /// </remarks>
+    public bool HasReceivedHowl => m_hasReceivedHowl;
+
+    /// <summary>
+    /// 하울링으로 제공할 스쿼드 캐릭터 목록을 만듭니다.
+    /// </summary>
+    /// <returns>현재 출전 중이며 다운·전투 이탈이 아닌 캐릭터 목록입니다.</returns>
+    /// <remarks>
+    /// 플레이어가 조작하는 한 명이 아니라 조건을 만족하는 전원입니다(§5.5.5).
+    /// 하울링 전에 직접 인식하지 않았던 AI 조작 캐릭터도 포함합니다.
+    /// 목록을 매번 새로 만들지 않고 버퍼를 재사용합니다.
+    /// </remarks>
+    public IReadOnlyList<SquadMemberController> BuildHowlMemberList()
+    {
+        SyncSquadMembers();
+
+        m_howlMemberBuffer.Clear();
+        for (int i = 0; i < m_infos.Count; i++)
+        {
+            SquadMemberController member = m_infos[i].Member;
+            if (IsAliveMember(member))
+            {
+                m_howlMemberBuffer.Add(member);
+            }
+        }
+
+        return m_howlMemberBuffer;
     }
 
     /// <summary>
@@ -682,6 +1043,9 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <b>소음 기록은 지우지 않습니다.</b> §5.8.4의 초기화 목록에 소음이 없고, 교전이 끝난 직후에도
     /// 방금 들린 소리를 향해 갈 수 있어야 하기 때문입니다. 소음은 소음 수색이 끝날 때
     /// <see cref="ClearNoise"/>로 따로 지웁니다.
+    ///
+    /// 하울링 기록은 여기서 지웁니다. 하울링 위치 정보에 만료가 없으므로 <b>이 지점이 유일한 해제 경로</b>이며,
+    /// 지우지 않으면 그 개체는 다시는 하울링을 적용받지 못합니다.
     /// </remarks>
     public void ClearAllInfo()
     {
@@ -691,7 +1055,12 @@ public class EnemyTargetSensor : MonoBehaviour
         }
 
         m_currentTarget = null;
+        m_lastLostTarget = null;
         m_nextReevaluateTime = 0f;
+
+        // 하울링 수신·적용 기록 초기화(§5.8.4).
+        m_hasAppliedHowl = false;
+        m_hasReceivedHowl = false;
     }
 
     /// <summary>
@@ -756,22 +1125,26 @@ public class EnemyTargetSensor : MonoBehaviour
         for (int i = 0; i < m_infos.Count; i++)
         {
             TargetInfo info = m_infos[i];
-            if (!info.HasLivePosition)
+            if (!info.HasAnyLivePosition)
             {
                 continue;
             }
 
             if (!IsAliveMember(info.Member))
             {
+                // 다운되면 실시간 위치와 마지막 확인 위치를 즉시 제거합니다(§5.5.5).
                 info.Clear();
                 continue;
             }
 
-            if (now >= info.TrackingExpireTime)
+            if (info.HasLivePosition && now >= info.TrackingExpireTime)
             {
                 // 마지막으로 갱신된 위치를 마지막 확인 위치로 남깁니다(§5.4.3).
                 info.HasLivePosition = false;
             }
+
+            // 하울링 위치는 시간으로 만료하지 않습니다. 교전 종료 시 ClearAllInfo가 지웁니다.
+            // 만료를 두면 하울링으로 합류한 개체가 플레이어에게 닿기 전에 돌아섭니다(기획 확정 2026-08-04).
         }
     }
 
@@ -862,10 +1235,11 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <remarks>
     /// 실시간 위치를 아는 캐릭터만 유효 대상이 됩니다.
     /// 마지막 확인 위치만 남은 캐릭터는 수색의 기준일 뿐 공격 대상이 아닙니다(§5.7.2).
+    /// 하울링으로 받은 위치도 실시간이므로 그것만으로도 유효 대상이 됩니다(§5.5.5).
     /// </remarks>
     private static bool IsValidTarget(TargetInfo info)
     {
-        return info != null && info.HasLivePosition && IsAliveMember(info.Member);
+        return info != null && info.HasAnyLivePosition && IsAliveMember(info.Member);
     }
 
     /// <summary>대상으로 삼을 수 있는 살아 있는 스쿼드 캐릭터인지 확인합니다.</summary>
@@ -885,6 +1259,11 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <summary>선택된 변이체의 시야 범위를 Scene 뷰에서 확인하기 위한 Gizmo입니다.</summary>
     private void OnDrawGizmosSelected()
     {
+        if (!m_debugDrawSight)
+        {
+            return;
+        }
+
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, m_sightRange);
 

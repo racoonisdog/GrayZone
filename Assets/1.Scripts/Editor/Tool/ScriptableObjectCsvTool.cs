@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -73,6 +73,10 @@ public class ScriptableObjectCsvWindow : EditorWindow
 
     [SerializeField]
     private int m_tab;
+
+    // 탭1에서 만들 SO 종류입니다. 밸런스와 피드백이 같은 생성 절차를 공유합니다.
+    [SerializeField]
+    private BalanceScaffold.SoKind m_soKind = BalanceScaffold.SoKind.Balance;
 
     // 탭1: 변환 대상 스크립트들과, 초기값을 가져올 프리팹입니다.
     // 밸런스 SO는 엔티티 단위라, 한 엔티티가 여러 컴포넌트로 나뉘면 그 스크립트를 모두 넣어 한 SO로 만듭니다.
@@ -166,7 +170,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
             {
                 List<Type> types = ScriptTypes;
                 string wanted = string.IsNullOrWhiteSpace(m_soTypeName)
-                    ? (types.Count > 0 ? BalanceScaffold.GetSoTypeName(types[0]) : null)
+                    ? (types.Count > 0 ? BalanceScaffold.GetSoTypeName(types[0], m_soKind) : null)
                     : m_soTypeName;
                 m_soTypeCache = BalanceScaffold.FindSoTypeByName(wanted);
                 m_soTypeCacheKey = key;
@@ -178,10 +182,16 @@ public class ScriptableObjectCsvWindow : EditorWindow
         }
     }
 
+    /// <summary>타입 선택 목록에 표시할 밸런스 SO 타입 한 항목입니다.</summary>
     private struct TypeEntry
     {
+        /// <summary>내보낼 대상 ScriptableObject 타입입니다.</summary>
         public Type type;
+
+        /// <summary>검색 범위 안에 존재하는 그 타입의 에셋 수입니다. 0개여도 헤더만 뽑을 수 있습니다.</summary>
         public int count;
+
+        /// <summary>드롭다운에 그대로 표시할 문구입니다.</summary>
         public string label;
     }
 
@@ -240,17 +250,31 @@ public class ScriptableObjectCsvWindow : EditorWindow
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("1. 대상 선택", EditorStyles.boldLabel);
 
+        using (EditorGUI.ChangeCheckScope check = new EditorGUI.ChangeCheckScope())
+        {
+            m_soKind = (BalanceScaffold.SoKind)EditorGUILayout.EnumPopup("만들 SO 종류", m_soKind);
+            if (check.changed)
+            {
+                // 종류가 바뀌면 유도되는 이름과 경로가 달라집니다.
+                m_soTypeName = null;
+                m_soAssetName = null;
+                m_generateTargetPath = null;
+            }
+        }
+
         DrawScriptList();
 
         m_seedPrefab = (GameObject)EditorGUILayout.ObjectField(
             "프리팹 (선택)", m_seedPrefab, typeof(GameObject), false);
 
+        string markerLabel = $"[{BalanceScaffold.GetMarkerAttributeType(m_soKind).Name.Replace("Attribute", string.Empty)}]";
+
         List<Type> types = ScriptTypes;
         if (m_scriptAssets.Count == 0)
         {
             EditorGUILayout.HelpBox(
-                "[BalanceField]가 선언된 스크립트를 넣어주세요. 한 엔티티가 여러 컴포넌트로 나뉘어 있으면 모두 넣으면 됩니다. " +
-                "프리팹을 넣으면 그 프리팹에 튜닝된 값으로 초기값을 채웁니다.",
+                $"{markerLabel}가 선언된 스크립트를 넣어주세요. 한 엔티티가 여러 컴포넌트로 나뉘어 있으면 모두 넣으면 됩니다. " +
+                "프리팹을 넣으면 그 프리팹에 배선된 값으로 초기값을 채웁니다.",
                 MessageType.Info);
             return;
         }
@@ -263,7 +287,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
             return;
         }
 
-        List<BalanceScaffold.FieldBlock> blocks = BalanceScaffold.CollectBlocks(types, out List<string> duplicates);
+        List<BalanceScaffold.FieldBlock> blocks = BalanceScaffold.CollectBlocks(types, m_soKind, out List<string> duplicates);
         int fieldCount = 0;
         foreach (BalanceScaffold.FieldBlock block in blocks)
         {
@@ -273,12 +297,12 @@ public class ScriptableObjectCsvWindow : EditorWindow
         if (fieldCount == 0)
         {
             EditorGUILayout.HelpBox(
-                "넣은 스크립트에 [BalanceField] 필드가 없습니다. 밸런스로 뽑을 필드에 특성을 먼저 붙여주세요.",
+                $"넣은 스크립트에 {markerLabel} 필드가 없습니다. SO로 뽑을 필드에 특성을 먼저 붙여주세요.",
                 MessageType.Warning);
             return;
         }
 
-        EditorGUILayout.LabelField($"[BalanceField] 필드: {fieldCount}개 (스크립트 {blocks.Count}개)");
+        EditorGUILayout.LabelField($"{markerLabel} 필드: {fieldCount}개 (스크립트 {blocks.Count}개)");
 
         if (duplicates.Count > 0)
         {
@@ -288,7 +312,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
                 MessageType.Warning);
         }
 
-        string defaultTypeName = BalanceScaffold.GetSoTypeName(types[0]);
+        string defaultTypeName = BalanceScaffold.GetSoTypeName(types[0], m_soKind);
         m_soTypeName = DrawNameRow("SO 클래스 이름", m_soTypeName, defaultTypeName);
         if (!BalanceScaffold.IsValidTypeName(m_soTypeName))
         {
@@ -379,7 +403,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
         EditorGUILayout.LabelField("생성", EditorStyles.boldLabel);
 
         List<Type> types = ScriptTypes;
-        bool ready = types.Count > 0 && BalanceScaffold.CollectBlocks(types, out _).Count > 0;
+        bool ready = types.Count > 0 && BalanceScaffold.CollectBlocks(types, m_soKind, out _).Count > 0;
         Type soType = ready ? CachedSoType : null;
 
         DrawGenerateTargetPath(types, ready);
@@ -568,7 +592,13 @@ public class ScriptableObjectCsvWindow : EditorWindow
         }
 
         EditorGUILayout.LabelField(
-            $"{CsvFolder} 안의 CSV가 바뀌면 자동으로도 반영됩니다. 이 버튼은 다른 위치의 파일을 직접 고를 때 씁니다.",
+            BalanceTableSettings.AutoImportCsv
+                ? $"{CsvFolder} 안의 CSV가 바뀌면 자동으로도 반영됩니다. 이 버튼은 다른 위치의 파일을 직접 고를 때 씁니다."
+                : "자동 가져오기는 꺼져 있습니다. CSV는 내보낸 스냅샷이며, 되돌려 넣을 때만 이 버튼을 씁니다.",
+            EditorStyles.miniLabel);
+
+        EditorGUILayout.LabelField(
+            "필드 구성이 다른 낡은 시트는 일부만 반영하지 않고 파일 단위로 거부합니다.",
             EditorStyles.miniLabel);
     }
 
@@ -650,7 +680,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
         List<Component> targets = new List<Component>();
         foreach (Component component in selectedObject.GetComponentsInChildren<Component>(true))
         {
-            if (component != null && BalanceReverseSync.FindBoundBalanceAsset(component) != null)
+            if (component != null && BalanceReverseSync.ResolveEffectiveBalanceAsset(component) != null)
             {
                 targets.Add(component);
             }
@@ -665,7 +695,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
 
         foreach (Component target in targets)
         {
-            ScriptableObject asset = BalanceReverseSync.FindBoundBalanceAsset(target);
+            ScriptableObject asset = BalanceReverseSync.ResolveEffectiveBalanceAsset(target);
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.LabelField($"{target.GetType().Name} → {asset.name}");
@@ -692,7 +722,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
             : ScriptFolder;
 
         if (!BalanceScaffold.GenerateSoScript(
-                ScriptTypes, m_soTypeName, seed, target, out string path, out string message))
+                ScriptTypes, m_soTypeName, seed, target, m_soKind, out string path, out string message))
         {
             EditorUtility.DisplayDialog("SO 코드 생성", message, "확인");
             return;
@@ -709,7 +739,7 @@ public class ScriptableObjectCsvWindow : EditorWindow
     {
         GameObject seed = ResolveSeedPrefab();
         if (!BalanceScaffold.CreateSoAsset(
-                ScriptTypes, soType, m_soAssetName, seed, NewAssetFolder, out string path, out string message))
+                ScriptTypes, soType, m_soAssetName, seed, NewAssetFolder, m_soKind, out string path, out string message))
         {
             EditorUtility.DisplayDialog("SO 데이터 생성", message, "확인");
             return;
@@ -818,7 +848,9 @@ public class ScriptableObjectCsvWindow : EditorWindow
             }
 
             EditorGUILayout.HelpBox(
-                "CSV 폴더는 자동 가져오기가 감시하는 폴더이기도 합니다. 폴더를 바꾸면 이전 폴더의 CSV는 더 이상 자동 반영되지 않습니다. 설정은 이 PC에만 저장됩니다.",
+                "위 두 폴더는 개인 취향이라 이 PC에만 저장됩니다.\n" +
+                $"반면 시트에 들어갈 SO를 찾는 범위와 자동 가져오기 여부는 팀 공통이라 코드에 있습니다({nameof(BalanceTableSettings)}).\n" +
+                BalanceTableSettings.DescribeExportScope(),
                 MessageType.None);
         }
     }
@@ -987,6 +1019,139 @@ public class ScriptableObjectCsvWindow : EditorWindow
 
         error = string.Empty;
         return true;
+    }
+
+    /// <summary>
+    /// 시트의 필드 행 집합이 현재 SO 스키마와 호환되는지 확인합니다.
+    /// </summary>
+    /// <param name="type">대상 ScriptableObject 타입입니다.</param>
+    /// <param name="sheetFields">시트에 있는 필드 이름들입니다. <c>__</c>로 시작하는 메타는 무시합니다.</param>
+    /// <param name="error">호환되지 않을 때 사람이 읽을 수 있는 사유입니다.</param>
+    /// <returns>양쪽 필드 집합이 정확히 같으면 <c>true</c>입니다.</returns>
+    /// <remarks>
+    /// 행 단위로 조용히 건너뛰지 않고 <b>파일 단위로 거부</b>합니다. 개수가 어긋난 시트는
+    /// 스크립트가 바뀐 뒤 다시 내보내지 않은 낡은 스냅샷이라, 남은 행만 반영하면
+    /// "일부는 새 값, 일부는 옛 값"이라는 가장 찾기 어려운 상태가 만들어지기 때문입니다.
+    /// <para>
+    /// 정본이 SO인 동안에는 고치는 방법이 항상 같습니다. 다시 내보내고 그 시트를 고치면 됩니다.
+    /// </para>
+    /// </remarks>
+    private static bool TryValidateSheetSchema(Type type, IEnumerable<string> sheetFields, out string error)
+    {
+        HashSet<string> current = new HashSet<string>(CollectSchemaFields(type), StringComparer.Ordinal);
+        HashSet<string> incoming = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (string name in sheetFields)
+        {
+            if (!string.IsNullOrEmpty(name) && !name.StartsWith("__", StringComparison.Ordinal))
+            {
+                incoming.Add(name);
+            }
+        }
+
+        List<string> unknown = new List<string>();
+        foreach (string name in incoming)
+        {
+            if (!current.Contains(name))
+            {
+                unknown.Add(name);
+            }
+        }
+
+        List<string> missing = new List<string>();
+        foreach (string name in current)
+        {
+            if (!incoming.Contains(name))
+            {
+                missing.Add(name);
+            }
+        }
+
+        if (unknown.Count == 0 && missing.Count == 0)
+        {
+            error = string.Empty;
+            return true;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.Append($"'{type.Name}' 스키마와 시트가 맞지 않습니다.");
+        if (unknown.Count > 0)
+        {
+            sb.Append($" SO에 없는 행 {unknown.Count}개({DescribeNames(unknown)}).");
+        }
+
+        if (missing.Count > 0)
+        {
+            sb.Append($" 시트에 없는 필드 {missing.Count}개({DescribeNames(missing)}).");
+        }
+
+        sb.Append(" 스크립트가 바뀐 뒤 시트를 다시 내보내지 않은 상태로 보입니다. 내보내기로 갱신한 뒤 값을 옮겨 적으세요.");
+        error = sb.ToString();
+        return false;
+    }
+
+    /// <summary>타입별 스키마 검사 결과를 재사용하며 호환 여부를 확인합니다.</summary>
+    /// <param name="type">대상 ScriptableObject 타입입니다.</param>
+    /// <param name="sheetFields">시트에 있는 필드 이름들입니다.</param>
+    /// <param name="cache">이번 파일에서 이미 검사한 타입의 결과입니다.</param>
+    /// <param name="filePath">로그에 표시할 파일 경로입니다.</param>
+    /// <returns>호환되면 <c>true</c>입니다.</returns>
+    /// <remarks>한 시트의 모든 열이 같은 행 집합을 공유하므로 타입당 한 번만 검사하면 됩니다.</remarks>
+    private static bool IsSchemaCompatible(
+        Type type,
+        IEnumerable<string> sheetFields,
+        Dictionary<Type, bool> cache,
+        string filePath)
+    {
+        if (cache.TryGetValue(type, out bool cached))
+        {
+            return cached;
+        }
+
+        bool compatible = TryValidateSheetSchema(type, sheetFields, out string error);
+        if (!compatible)
+        {
+            Debug.LogWarning($"[SoCsv] '{Path.GetFileName(filePath)}' 반영을 건너뜁니다: {error}");
+        }
+
+        cache[type] = compatible;
+        return compatible;
+    }
+
+    /// <summary>타입의 현재 직렬화 필드 이름을 모읍니다.</summary>
+    /// <param name="type">검사할 ScriptableObject 타입입니다.</param>
+    /// <returns>내보내기가 행으로 쓰는 것과 같은 필드 목록입니다.</returns>
+    /// <remarks>임시 인스턴스를 만들어 읽습니다. 에셋이 하나도 없는 타입도 검사할 수 있어야 하기 때문입니다.</remarks>
+    private static List<string> CollectSchemaFields(Type type)
+    {
+        List<string> ordered = new List<string>();
+        HashSet<string> seen = new HashSet<string>();
+
+        ScriptableObject probe = ScriptableObject.CreateInstance(type);
+        try
+        {
+            CollectColumns(probe, ordered, seen);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(probe);
+        }
+
+        return ordered;
+    }
+
+    /// <summary>이름 목록을 로그 한 줄에 들어갈 길이로 줄입니다.</summary>
+    /// <param name="names">표시할 이름들입니다.</param>
+    /// <returns>앞의 몇 개와 남은 개수를 담은 문자열입니다.</returns>
+    private static string DescribeNames(List<string> names)
+    {
+        const int shown = 3;
+        if (names.Count <= shown)
+        {
+            return string.Join(", ", names);
+        }
+
+        return string.Join(", ", names.GetRange(0, shown)) + $" 외 {names.Count - shown}개";
     }
 
     private static string FindUnityObjectReferenceInSerializedFields(Type type, string path, HashSet<Type> visited)
@@ -1354,6 +1519,8 @@ public class ScriptableObjectCsvWindow : EditorWindow
             return (updated, created, skipped);
         }
 
+        Dictionary<Type, bool> schemaCache = new Dictionary<Type, bool>();
+
         AssetDatabase.StartAssetEditing();
         try
         {
@@ -1379,6 +1546,13 @@ public class ScriptableObjectCsvWindow : EditorWindow
                 if (!TryValidateBalanceType(type, out string validationError))
                 {
                     Debug.LogWarning($"[SoCsv] {i + 1}번째 행을 건너뜁니다: {validationError}");
+                    skipped++;
+                    continue;
+                }
+
+                // 세로형과 같은 이유로 낡은 시트는 부분 반영하지 않고 통째로 건너뜁니다.
+                if (!IsSchemaCompatible(type, col.Keys, schemaCache, filePath))
+                {
                     skipped++;
                     continue;
                 }
@@ -1444,6 +1618,8 @@ public class ScriptableObjectCsvWindow : EditorWindow
             return (updated, created, skipped);
         }
 
+        Dictionary<Type, bool> schemaCache = new Dictionary<Type, bool>();
+
         AssetDatabase.StartAssetEditing();
         try
         {
@@ -1466,6 +1642,13 @@ public class ScriptableObjectCsvWindow : EditorWindow
                 if (!TryValidateBalanceType(type, out string validationError))
                 {
                     Debug.LogWarning($"[SoCsv] {c + 1}번째 에셋 열을 건너뜁니다: {validationError}");
+                    skipped++;
+                    continue;
+                }
+
+                // 낡은 시트가 일부 필드만 되돌려 놓는 상태를 막기 위해 스키마가 어긋나면 통째로 건너뜁니다.
+                if (!IsSchemaCompatible(type, byField.Keys, schemaCache, filePath))
+                {
                     skipped++;
                     continue;
                 }
@@ -1645,10 +1828,22 @@ public class ScriptableObjectCsvWindow : EditorWindow
             : name + "CSV";
     }
 
+    /// <summary>시트에 들어갈 대상 에셋을 모읍니다.</summary>
+    /// <param name="type">찾을 ScriptableObject 타입입니다.</param>
+    /// <returns>경로 순으로 정렬된 에셋 목록입니다.</returns>
+    /// <remarks>
+    /// 검색 범위는 <see cref="BalanceTableSettings.ExportSearchFolders"/>로 제한합니다.
+    /// 바꿔 끼워 보려고 만든 임시 SO가 최종 시트에 섞여 들어가는 것을 막기 위해서입니다.
+    /// </remarks>
     private static List<ScriptableObject> LoadAllOfType(Type type)
     {
         List<ScriptableObject> list = new List<ScriptableObject>();
-        foreach (string guid in AssetDatabase.FindAssets($"t:{type.Name}"))
+        string[] folders = BalanceTableSettings.GetExportSearchFolders();
+        string[] guids = folders == null
+            ? AssetDatabase.FindAssets($"t:{type.Name}")
+            : AssetDatabase.FindAssets($"t:{type.Name}", folders);
+
+        foreach (string guid in guids)
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
             ScriptableObject so = AssetDatabase.LoadAssetAtPath(path, type) as ScriptableObject;
@@ -1707,7 +1902,10 @@ public class ScriptableObjectCsvWindow : EditorWindow
 /// </remarks>
 internal static class SoCsvSettings
 {
+    /// <summary>CSV 내보내기 폴더를 저장하는 설정 키입니다.</summary>
     public const string CsvFolderKey = "CsvFolder";
+
+    /// <summary>새 .asset 생성 폴더를 저장하는 설정 키입니다.</summary>
     public const string NewAssetFolderKey = "NewAssetFolder";
 
     private static string s_prefix;
@@ -1773,6 +1971,9 @@ internal static class SoCsvSettings
 /// <summary>Encodes/decodes a single SerializedProperty to/from a CSV cell.</summary>
 internal static class SoCsvCodec
 {
+    /// <summary>프로퍼티 하나를 CSV 셀 문자열로 바꿉니다.</summary>
+    /// <param name="p">인코딩할 프로퍼티입니다.</param>
+    /// <returns>사람이 읽고 고칠 수 있는 셀 값입니다. 복잡한 타입은 JSON 한 칸으로 접어 넣습니다.</returns>
     public static string EncodeCell(SerializedProperty p)
     {
         switch (p.propertyType)
@@ -1799,6 +2000,10 @@ internal static class SoCsvCodec
         }
     }
 
+    /// <summary>CSV 셀 문자열을 프로퍼티에 씁니다.</summary>
+    /// <param name="p">값을 받을 프로퍼티입니다.</param>
+    /// <param name="cell">시트에서 읽은 셀 값입니다.</param>
+    /// <param name="context">해석 실패를 알릴 때 표시할 "타입.필드" 식별자입니다.</param>
     public static void DecodeCell(SerializedProperty p, string cell, string context)
     {
         cell ??= string.Empty;
@@ -1831,6 +2036,10 @@ internal static class SoCsvCodec
 
     // ----- object references stored as "guid:localId" -----
 
+    /// <summary>Unity 오브젝트 참조를 셀에 적을 문자열로 바꿉니다.</summary>
+    /// <param name="obj">인코딩할 참조입니다.</param>
+    /// <returns>비어 있으면 빈 문자열입니다.</returns>
+    /// <remarks>밸런스 SO는 참조를 담지 않으므로 이 경로는 예외 상황 대비입니다.</remarks>
     public static string EncodeObjectRef(UnityEngine.Object obj)
     {
         if (obj == null)
@@ -1840,6 +2049,9 @@ internal static class SoCsvCodec
         return string.Empty;
     }
 
+    /// <summary>셀 문자열에서 Unity 오브젝트 참조를 복원합니다.</summary>
+    /// <param name="value">인코딩된 참조 문자열입니다.</param>
+    /// <returns>찾지 못하면 <c>null</c>입니다.</returns>
     public static UnityEngine.Object DecodeObjectRef(string value)
     {
         value = (value ?? string.Empty).Trim();
@@ -1882,6 +2094,10 @@ internal static class SoCsvCodec
             : p.intValue.ToString(CultureInfo.InvariantCulture);
     }
 
+    /// <summary>enum 프로퍼티를 멤버 이름으로 지정합니다.</summary>
+    /// <param name="p">값을 받을 enum 프로퍼티입니다.</param>
+    /// <param name="name">지정할 멤버 이름입니다.</param>
+    /// <remarks>이름으로 쓰는 이유는 멤버 순서가 바뀌어도 시트가 계속 맞기 때문입니다.</remarks>
     public static void SetEnumByName(SerializedProperty p, string name)
     {
         int idx = Array.IndexOf(p.enumNames, name);
@@ -1907,9 +2123,15 @@ internal static class SoCsvCodec
         return result;
     }
 
+    /// <summary>셀 문자열을 정수로 해석합니다. 해석할 수 없으면 0입니다.</summary>
+    /// <remarks>고정 문화권으로 읽습니다. 엑셀의 지역 설정이 달라도 시트가 같게 해석되어야 하기 때문입니다.</remarks>
     public static long ParseLong(string s) => long.TryParse((s ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long v) ? v : 0;
+
+    /// <summary>셀 문자열을 실수로 해석합니다. 해석할 수 없으면 0입니다.</summary>
+    /// <remarks>고정 문화권으로 읽으므로 소수점은 항상 점입니다. 쉼표를 쓰는 지역 설정에서도 값이 흔들리지 않습니다.</remarks>
     public static double ParseDouble(string s) => double.TryParse((s ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : 0;
 
+    /// <summary>셀 문자열을 bool로 해석합니다. 해석할 수 없으면 <c>false</c>입니다.</summary>
     public static bool ParseBool(string s)
     {
         s = (s ?? string.Empty).Trim();
@@ -1926,6 +2148,9 @@ internal static class SoCsvCodec
 /// </summary>
 internal static class SoCsvTree
 {
+    /// <summary>프로퍼티 값을 JSON으로 직렬화할 수 있는 형태로 읽어 냅니다.</summary>
+    /// <param name="p">읽을 프로퍼티입니다.</param>
+    /// <returns>중첩 구조는 사전과 목록으로 펼친 결과입니다.</returns>
     public static object Read(SerializedProperty p)
     {
         if (p.isArray && p.propertyType == SerializedPropertyType.Generic)
@@ -1965,6 +2190,9 @@ internal static class SoCsvTree
         }
     }
 
+    /// <summary>JSON에서 읽어 낸 값을 프로퍼티 구조에 맞춰 씁니다.</summary>
+    /// <param name="p">값을 받을 프로퍼티입니다.</param>
+    /// <param name="value">사전·목록·스칼라 중 하나입니다.</param>
     public static void Write(SerializedProperty p, object value)
     {
         if (p.isArray && p.propertyType == SerializedPropertyType.Generic)
@@ -2028,6 +2256,10 @@ internal static class SoTypeResolver
 {
     private static Dictionary<string, Type> s_cache;
 
+    /// <summary>시트의 <c>__Type</c> 행에 적힌 이름으로 실제 타입을 찾습니다.</summary>
+    /// <param name="fullName">내보낼 때 기록한 타입 전체 이름입니다.</param>
+    /// <returns>찾지 못하면 <c>null</c>입니다.</returns>
+    /// <remarks>파일명이 아니라 이 행으로 타입을 정하므로 시트 이름을 바꿔도 왕복이 유지됩니다.</remarks>
     public static Type Resolve(string fullName)
     {
         if (string.IsNullOrEmpty(fullName))
@@ -2051,6 +2283,7 @@ internal static class SoTypeResolver
 
 internal static class SoCsvText
 {
+    /// <summary>쉼표·따옴표·줄바꿈이 든 값을 CSV 규칙에 맞게 감쌉니다.</summary>
     public static string Escape(string value)
     {
         value ??= string.Empty;
@@ -2058,6 +2291,9 @@ internal static class SoCsvText
         return quote ? "\"" + value.Replace("\"", "\"\"") + "\"" : value;
     }
 
+    /// <summary>머리말 행에서 컬럼 이름과 위치의 대응을 만듭니다.</summary>
+    /// <param name="header">첫 행의 셀 목록입니다.</param>
+    /// <returns>컬럼 이름으로 인덱스를 찾는 사전입니다.</returns>
     public static Dictionary<string, int> BuildColumnMap(List<string> header)
     {
         Dictionary<string, int> map = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -2070,11 +2306,20 @@ internal static class SoCsvText
         return map;
     }
 
+    /// <summary>컬럼 이름으로 한 행에서 셀 값을 꺼냅니다.</summary>
+    /// <param name="row">대상 행입니다.</param>
+    /// <param name="columns">컬럼 이름과 위치의 대응입니다.</param>
+    /// <param name="name">꺼낼 컬럼 이름입니다.</param>
+    /// <returns>컬럼이나 셀이 없으면 빈 문자열입니다.</returns>
     public static string Cell(List<string> row, Dictionary<string, int> columns, string name)
     {
         return columns.TryGetValue(name, out int i) && i < row.Count ? row[i] : string.Empty;
     }
 
+    /// <summary>CSV 텍스트 전체를 행과 셀로 나눕니다.</summary>
+    /// <param name="text">파일에서 읽은 원본 텍스트입니다.</param>
+    /// <returns>행마다 셀 목록을 담은 결과입니다.</returns>
+    /// <remarks>따옴표로 감싼 셀 안의 쉼표와 줄바꿈을 값으로 취급합니다.</remarks>
     public static List<List<string>> ParseCsv(string text)
     {
         List<List<string>> rows = new List<List<string>>();
@@ -2148,6 +2393,9 @@ internal static class SoCsvText
 /// <summary>Minimal JSON serializer/parser for the tree types used by SoCsvTree.</summary>
 internal static class MiniJson
 {
+    /// <summary>사전·목록·스칼라 구조를 JSON 문자열로 만듭니다.</summary>
+    /// <param name="value">직렬화할 값입니다.</param>
+    /// <returns>셀 한 칸에 넣을 JSON 문자열입니다.</returns>
     public static string Serialize(object value)
     {
         StringBuilder sb = new StringBuilder();
@@ -2215,6 +2463,9 @@ internal static class MiniJson
         sb.Append('"');
     }
 
+    /// <summary>JSON 문자열을 사전·목록·스칼라 구조로 되돌립니다.</summary>
+    /// <param name="json">셀에 들어 있던 JSON 문자열입니다.</param>
+    /// <returns>해석에 실패하면 <c>null</c>입니다.</returns>
     public static object Deserialize(string json)
     {
         if (string.IsNullOrWhiteSpace(json))

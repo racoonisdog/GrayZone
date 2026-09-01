@@ -38,6 +38,10 @@ public sealed class MeleeBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("공격 정보에서 현재 공격을 찾지 못했을 때 사용할 경직력입니다.")]
     [SerializeField] private int m_fallbackStaggerPower = 1;
 
+    [Tooltip("공격 정보에서 현재 공격을 찾지 못했을 때 사용할 넉백 충격량(N·s)입니다. 기본값 0은 밀지 않음입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_fallbackKnockbackImpulse;
+
     /// <summary>근접 무기를 식별하는 고정 ID입니다.</summary>
     public string MeleeId => m_meleeId;
 
@@ -55,6 +59,25 @@ public sealed class MeleeBalanceSO : ScriptableObject, IBalanceTableData
 
     /// <summary>공격 정보를 찾지 못했을 때 쓰는 기본 경직력입니다.</summary>
     public int FallbackStaggerPower => Mathf.Max(0, m_fallbackStaggerPower);
+
+    /// <summary>공격 정보를 찾지 못했을 때 쓰는 기본 넉백 충격량(N·s)입니다.</summary>
+    public float FallbackKnockbackImpulse => Mathf.Max(0.0f, m_fallbackKnockbackImpulse);
+
+    /// <summary>
+    /// 지정한 순번의 넉백 충격량을 돌려줍니다.
+    /// </summary>
+    /// <param name="index">연타 순번입니다.</param>
+    /// <returns>해당 순번의 충격량이며, 범위를 벗어나면 <see cref="FallbackKnockbackImpulse"/>입니다.</returns>
+    /// <remarks>피해·경직과 같은 조회 규칙을 씁니다. 값은 피해량과 독립입니다.</remarks>
+    public float GetKnockbackImpulse(int index)
+    {
+        if (m_combo == null || index < 0 || index >= m_combo.Count)
+        {
+            return FallbackKnockbackImpulse;
+        }
+
+        return m_combo[index].KnockbackImpulse;
+    }
 
     /// <summary>
     /// 지정한 순번의 피해량을 돌려줍니다.
@@ -138,6 +161,10 @@ public struct MeleeComboStep
     [Tooltip("이 공격이 적중했을 때 피격자의 경직 누적치에 더할 값입니다. 피해량과 별개입니다.")]
     [SerializeField] private int m_staggerPower;
 
+    [Tooltip("이 공격이 적중했을 때 피격자를 밀어내는 충격량(N·s)입니다. 기획 문서에 넉백 개념이 없어 기본값은 0(밀지 않음)이며, 배선만 이어 둡니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_knockbackImpulse;
+
     /// <summary>이 공격에 대응하는 애니메이터 스테이트 이름입니다.</summary>
     public string StateName => m_stateName;
 
@@ -146,6 +173,9 @@ public struct MeleeComboStep
 
     /// <summary>이 공격이 피격자의 경직 누적치에 더할 값입니다.</summary>
     public int StaggerPower => m_staggerPower;
+
+    /// <summary>이 공격이 피격자를 밀어내는 충격량(N·s)입니다.</summary>
+    public float KnockbackImpulse => Mathf.Max(0.0f, m_knockbackImpulse);
 
     /// <summary>지정한 스테이트 이름 해시가 이 공격에 해당하는지 확인합니다.</summary>
     /// <param name="stateNameHash">비교할 스테이트의 짧은 이름 해시입니다.</param>

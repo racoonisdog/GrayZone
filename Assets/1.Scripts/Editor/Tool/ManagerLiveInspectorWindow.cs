@@ -8,18 +8,21 @@ using UnityEngine;
 using Object = UnityEngine.Object;
 
 /// <summary>
-/// Real-time, read-only watch window for the data a Manager holds.
-///
-/// Drag any GameObject from the Hierarchy into the window; the tool reflects over
-/// every MonoBehaviour on it and renders the values it EXPOSES — public instance
-/// properties (e.g. OwnedCharacterCount / ShelterStability / ResourceAmounts / OwnedCharacters) and,
-/// optionally, [SerializeField] private fields. Nothing is hard-coded per manager:
-/// whatever a component exposes is shown automatically. Dictionaries and lists are
-/// expanded, complex objects (e.g. NPCRuntimeData) recurse a couple of levels, and
-/// values that change are briefly highlighted.
-///
-/// Editor-only and never mutates anything. Live in Play mode, current values in Edit mode.
+/// 매니저가 들고 있는 데이터를 실시간으로 들여다보는 읽기 전용 감시 창입니다.
 /// </summary>
+/// <remarks>
+/// Hierarchy에서 GameObject를 창에 끌어다 놓으면, 거기 붙은 모든 MonoBehaviour를 리플렉션으로 훑어
+/// <b>그 컴포넌트가 노출한 값</b>을 그립니다. public 인스턴스 프로퍼티가 대상이고,
+/// 옵션으로 <c>[SerializeField]</c> private 필드까지 포함할 수 있습니다.
+/// <para>
+/// 매니저별로 무엇을 보여줄지 코드에 박아 두지 않습니다. 노출된 것이 자동으로 나오므로
+/// 매니저가 늘어나도 이 창을 고칠 필요가 없습니다. 사전과 목록은 펼쳐서 보여주고,
+/// 복합 객체는 몇 단계까지 재귀로 내려가며, 값이 바뀐 항목은 잠시 강조됩니다.
+/// </para>
+/// <para>
+/// 에디터 전용이며 <b>아무것도 바꾸지 않습니다.</b> Play Mode에서는 실시간 값을, Edit Mode에서는 현재 값을 봅니다.
+/// </para>
+/// </remarks>
 public class ManagerLiveInspectorWindow : EditorWindow
 {
     private const float HighlightSeconds = 1.0f;
@@ -296,9 +299,13 @@ public class ManagerLiveInspectorWindow : EditorWindow
     // -------------------------------------------------------------- value model
 
     /// <summary>
-    /// Decides whether a value should be drawn as an expandable node (dictionary,
-    /// list, or nested object) and, if so, yields its labelled children.
+    /// 값을 펼칠 수 있는 노드(사전·목록·중첩 객체)로 그릴지 판단하고, 그렇다면 이름 붙인 자식들을 돌려줍니다.
     /// </summary>
+    /// <param name="value">검사할 값입니다.</param>
+    /// <param name="depth">현재 재귀 깊이입니다. 너무 깊이 내려가지 않게 제한하는 기준입니다.</param>
+    /// <param name="children">펼칠 수 있으면 이름과 값의 쌍 목록입니다. 아니면 <c>null</c>입니다.</param>
+    /// <param name="headerSuffix">머리말 옆에 덧붙일 요약(항목 수 등)입니다.</param>
+    /// <returns>펼칠 수 있으면 <c>true</c>입니다.</returns>
     private bool TryGetExpandable(object value, int depth, out IList<KeyValuePair<string, object>> children, out string headerSuffix)
     {
         children = null;

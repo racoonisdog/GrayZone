@@ -34,8 +34,8 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("추적 상태의 이동 속도(m/s)입니다.")]
     [SerializeField] private float m_chaseSpeed = 3.2f;
 
-    [Tooltip("대상 방향으로 회전할 때 사용하는 보간 속도입니다.")]
-    [SerializeField] private float m_rotationSpeed = 8f;
+    [Tooltip("대상을 향해 몸을 돌리는 최대 각속도(도/초)입니다. 200이면 180도 도는 데 약 0.9초가 걸립니다. 값이 클수록 고개가 튕기듯 돌아갑니다.")]
+    [SerializeField] private float m_rotationSpeed = 200f;
 
     [Header("Idle Variation")]
     [Tooltip("대기 동작 혼합 비율의 최솟값입니다. 개체마다 이 범위에서 한 번 뽑아 고정합니다.")]
@@ -86,6 +86,16 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("소음 수색 중 배회할 반경(m)입니다. 기획 미확정 - 임시값입니다.")]
     [SerializeField] private float m_noiseSearchRadius = 5f;
 
+    [Header("Howl")]
+    [Tooltip("하울링이 전달되는 고정 반경(m)입니다. 벽이나 엄폐물은 판정에 쓰지 않습니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_howlRadius = 25f;
+
+    [Tooltip("하울링 시작 후 실제로 전파가 확정되는 시점(초)입니다. 이 시점 전에 사망하면 전파가 취소됩니다. 클립 이벤트가 오면 그쪽이 우선합니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_howlBroadcastTime = 1.2f;
+
+    [Tooltip("하울링 행동 전체 길이(초)입니다. 끝나면 다음 행동을 고릅니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_howlDuration = 3f;
+
     [Header("Target Selection")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기(초)입니다. 이 주기 자체가 대상의 최소 유지 시간이 됩니다.")]
     [SerializeField] private float m_targetReevaluateInterval = 1f;
@@ -93,12 +103,26 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("새 후보가 현재 대상보다 이만큼(m) 더 가까워야 대상을 바꿉니다. 경계에서 대상이 떨리는 것을 막습니다.")]
     [SerializeField] private float m_targetSwitchPathDistanceDelta = 2f;
 
-    [Header("Hit Reaction")]
-    [Tooltip("피격 상태에서 이동과 상태 전환을 잠그는 시간(초)입니다.")]
-    [SerializeField] private float m_hitStunDuration = 0.35f;
+    [Header("Combat Search")]
+    [Tooltip("마지막 확인 위치에 도착한 뒤 그 주변을 훑는 시간(초)입니다. 이 시간 안에 대상을 다시 못 찾으면 교전이 끝나고 배회로 돌아갑니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_combatSearchDuration = 6f;
 
-    [Tooltip("연속 피격 시 피격 상태를 다시 시작할 수 있는 최소 간격(초)입니다.")]
+    [Tooltip("교전 수색 중 배회할 반경(m)입니다. 마지막 확인 위치가 기준입니다. 기획 미확정 - 임시값입니다.")]
+    [SerializeField] private float m_combatSearchRadius = 6f;
+
+    [Header("Hit Reaction")]
+    [Tooltip("경직 상태에서 이동·회전·상태 전환을 모두 잠그는 시간(초)입니다. 경직 클립(Stagger_Large01)의 길이 3초와 맞춘 값이며, " +
+             "이보다 짧으면 클립이 중간에 끊겨 뒤로 밀리다 만 자세로 복귀합니다.")]
+    [SerializeField] private float m_hitStunDuration = 3.0f;
+
+    [Tooltip("경직이 끝난 뒤 다시 경직될 수 있기까지의 최소 간격(초)입니다. 연속 피격으로 경직이 무한히 이어지는 것을 막습니다.")]
     [SerializeField] private float m_hitStunCooldown = 0.2f;
+
+    [Tooltip("경직력 누적치가 이 값에 닿으면 경직이 발동합니다. 낮을수록 쉽게 경직됩니다. 무기의 저지력이 여기에 누적됩니다.")]
+    [SerializeField] private float m_staggerThreshold = 3.0f;
+
+    [Tooltip("경직력 누적치가 초당 줄어드는 양입니다. 사격이 끊기면 이 속도로 빠집니다. 무기 연사의 초당 저지력보다 크면 그 무기로는 경직시킬 수 없습니다.")]
+    [SerializeField] private float m_staggerDecayPerSecond = 1.0f;
 
     [Header("Attack")]
     [Tooltip("공격을 시작할 수 있는 대상과의 최대 거리(m)입니다. 실제 판정 범위와는 별개의 시작 조건입니다.")]
@@ -181,6 +205,15 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     /// <summary>소음 수색 중 배회할 반경(m)입니다.</summary>
     public float NoiseSearchRadius => Mathf.Max(0.1f, m_noiseSearchRadius);
 
+    /// <summary>하울링이 전달되는 고정 반경(m)입니다.</summary>
+    public float HowlRadius => Mathf.Max(0f, m_howlRadius);
+
+    /// <summary>하울링 전파가 확정되는 시점(초)입니다.</summary>
+    public float HowlBroadcastTime => Mathf.Max(0f, m_howlBroadcastTime);
+
+    /// <summary>하울링 행동 전체 길이(초)입니다. 전파 시점보다 짧아지지 않습니다.</summary>
+    public float HowlDuration => Mathf.Max(HowlBroadcastTime, m_howlDuration);
+
     /// <summary>시야 감지 거리(m)입니다.</summary>
     public float SightRange => Mathf.Max(0f, m_sightRange);
 
@@ -193,11 +226,24 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     /// <summary>시야에서 벗어난 뒤 실시간 위치를 계속 아는 시간(초)입니다.</summary>
     public float LoseSightDelay => Mathf.Max(0f, m_loseSightDelay);
 
-    /// <summary>피격 상태 유지 시간(초)입니다.</summary>
+    /// <summary>경직 상태 유지 시간(초)입니다.</summary>
     public float HitStunDuration => Mathf.Max(0f, m_hitStunDuration);
 
-    /// <summary>피격 상태 재진입 최소 간격(초)입니다.</summary>
+    /// <summary>경직 종료 후 재경직 최소 간격(초)입니다.</summary>
     public float HitStunCooldown => Mathf.Max(0f, m_hitStunCooldown);
+
+    /// <summary>교전 수색 시간(초)입니다.</summary>
+    public float CombatSearchDuration => Mathf.Max(0f, m_combatSearchDuration);
+
+    /// <summary>교전 수색 반경(m)입니다.</summary>
+    public float CombatSearchRadius => Mathf.Max(0.1f, m_combatSearchRadius);
+
+    /// <summary>경직이 발동하는 경직력 누적 한계치입니다.</summary>
+    /// <remarks>0이면 한 대만 맞아도 경직되므로 하한을 둡니다.</remarks>
+    public float StaggerThreshold => Mathf.Max(0.01f, m_staggerThreshold);
+
+    /// <summary>경직력 누적치의 초당 감소량입니다.</summary>
+    public float StaggerDecayPerSecond => Mathf.Max(0f, m_staggerDecayPerSecond);
 
     /// <summary>공격 시작 거리(m)입니다.</summary>
     public float AttackRange => Mathf.Max(0f, m_attackRange);

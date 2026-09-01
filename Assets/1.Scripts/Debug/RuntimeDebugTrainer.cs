@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.InputSystem;
@@ -114,8 +115,54 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <remarks>되돌릴 수 없는 조작이라 한 번 누르면 실행하지 않고 확인을 먼저 받습니다.</remarks>
     private bool m_confirmForceGameOver;
 
+    /// <summary>
+    /// 최상위 탭 이름입니다. 순서가 곧 화면에 놓이는 순서입니다.
+    /// </summary>
+    /// <remarks>
+    /// 조절하는 대상이 가까운 것끼리 묶고, 자주 만지는 것을 앞에 둡니다.
+    /// 캐릭터·애니메이션·무기·조준은 지금 조작 중인 유닛을 만지는 탭이고, 필드·디버그는 그 바깥입니다.
+    /// </remarks>
+    private static readonly string[] MainTabNames =
+    {
+        "캐릭터",
+        "애니메이션",
+        "무기",
+        "조준·반동",
+        "필드",
+        "디버그",
+    };
+
+    /// <summary>지금 보고 있는 최상위 탭입니다.</summary>
+    private int m_mainTabIndex;
+
+    /// <summary>트레이너 창이 지금 선택(하이라이트)되어 있는지 여부입니다.</summary>
+    /// <remarks>창 안을 누르면 참, 배경을 누르면 거짓이 됩니다. 창을 막 열었을 때는 창을 보고 있다고 봅니다.</remarks>
+    private bool m_windowFocused = true;
+
+    /// <summary>배경을 눌러 키보드를 게임에 넘겨 준 상태인지 여부입니다.</summary>
+    private bool m_keyboardPassthrough;
+
+    /// <summary>
+    /// 배경 조작을 켜면서 이쪽이 직접 활성화한 입력 컴포넌트들입니다.
+    /// </summary>
+    /// <remarks>
+    /// 되돌릴 때 이 목록만 다시 끕니다. 원래 켜져 있던 것까지 끄면 트레이너를 닫은 뒤 조작이 죽습니다.
+    /// 씬에 따라 입력을 끄는 방식이 달라(계약 방식 / 컴포넌트 비활성) 무엇을 건드렸는지 기억해야 합니다.
+    /// </remarks>
+    private readonly List<PlayerInput> m_passthroughActivatedInputs = new List<PlayerInput>();
+
+    /// <summary>
+    /// 배경 조작을 넘겨 준 동안에도 막아 둘 액션 이름입니다.
+    /// </summary>
+    /// <remarks>
+    /// 트레이너가 열려 있으면 커서가 풀려 있어야 슬라이더를 만질 수 있습니다. 그 상태에서 시점 회전이
+    /// 살아 있으면 창으로 마우스를 옮기는 것만으로 카메라가 따라 돌아 값을 만지는 내내 화면이 흔들립니다.
+    /// 그래서 시점만 막습니다. 사격·조준 같은 버튼 입력은 그대로 받습니다.
+    /// </remarks>
+    private static readonly string[] BlockedActionNames = { "Look" };
+
     // IMGUI 런타임 창은 기본 리사이즈 핸들이 없으므로 우하단 그립으로 크기를 바꿉니다.
-    private Rect m_windowRect = new Rect(10f, 10f, 500f, 720f);
+    private Rect m_windowRect = new Rect(10f, 10f, 560f, 720f);
     private Vector2 m_resizeStartMouse;
     private Vector2 m_resizeStartSize;
     private bool m_isResizing;
@@ -156,6 +203,11 @@ public class RuntimeDebugTrainer : MonoBehaviour
     // 스폰 원본(씬의 기존 좀비를 비활성 복제로 보관해 두어 원본이 죽어도 계속 스폰 가능).
     private GameObject m_enemyTemplate;
     private GameObject m_enemyTemplateHolder;
+
+    // 스폰 원본 후보입니다. 씬에 여러 종류의 적이 있으면 어느 것을 복제할지 직접 고를 수 있게 합니다.
+    // 고르지 않았거나 고른 대상이 사라졌으면 종전대로 씬에서 가장 먼저 찾은 적을 씁니다.
+    private readonly List<EnemyController> m_enemyTemplateChoices = new List<EnemyController>();
+    private int m_enemyTemplateIndex = -1;
 
     private GUIStyle m_titleStyle;
     private GUIStyle m_headerStyle;
@@ -231,6 +283,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
             m_enemyTemplate = null;
         }
 
+        // 후보는 씬의 오브젝트를 가리키므로 씬과 함께 사라집니다. 참조를 남기지 않도록 같이 비웁니다.
+        m_enemyTemplateChoices.Clear();
+        m_enemyTemplateIndex = -1;
+
         m_sceneInputModeController = null;
         m_usesSceneInputModeController = false;
     }
@@ -273,14 +329,125 @@ public class RuntimeDebugTrainer : MonoBehaviour
             SetMenuOpen(!m_open);
         }
 
+        if (!m_open)
+        {
+            return;
+        }
+
+        // 창을 눌러 두었으면 키보드는 트레이너 것이고, 배경을 눌렀으면 게임이 받습니다.
+        // 마우스는 어느 쪽이든 커서로 남습니다(슬라이더를 만져야 하므로).
+        SetKeyboardPassthrough(!m_windowFocused);
+
         // 씬이 입력 모드 계약을 제공하면 그 구현이 커서·플레이어 입력을 소유합니다.
         // 계약이 없는 레거시/독립 테스트 씬만 아래 범용 안전장치를 사용합니다.
-        if (m_open && !m_usesSceneInputModeController)
+        if (m_usesSceneInputModeController)
         {
-            // 메뉴가 열려 있는 동안에는 커서를 항상 풀고, 조작 캐릭터의 입력이 다시 켜졌으면(캐릭터 전환 등) 다시 끕니다.
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            return;
+        }
+
+        // 메뉴가 열려 있는 동안에는 커서를 항상 풀어 둡니다.
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        // 조작 캐릭터의 입력이 다시 켜졌으면(캐릭터 전환 등) 다시 끕니다.
+        // 키보드를 넘겨 준 동안에는 켜져 있는 것이 정상이므로 건드리지 않습니다.
+        if (!m_keyboardPassthrough)
+        {
             SuppressActivePlayerInput();
+        }
+    }
+
+    /// <summary>
+    /// 창이 선택되지 않은 동안 키보드 입력만 게임으로 넘깁니다.
+    /// </summary>
+    /// <param name="allow">넘길지 여부입니다. 창을 누르면 거짓이 됩니다.</param>
+    /// <remarks>
+    /// 트레이너를 열어 둔 채로 걷거나 앉아 보면서 값을 만질 수 있게 하는 장치입니다.
+    /// 시점 회전만 막습니다(<see cref="BlockedActionNames"/> 참고).
+    ///
+    /// 막는 지점이 두 군데인 이유는 씬마다 입력을 끄는 방식이 다르기 때문입니다.
+    /// 필드 씬은 <see cref="IInputModeController"/> 계약으로 <see cref="PlayerInputController"/>의
+    /// 입력 플래그를 내리고, 계약이 없는 테스트 씬은 <see cref="PlayerInput"/> 자체를 비활성화합니다.
+    /// 한쪽만 풀면 다른 씬에서 조용히 아무 일도 일어나지 않습니다.
+    ///
+    /// 끌 때 액션을 먼저 되살린 뒤 입력을 내리는 순서가 중요합니다. 반대로 하면 개별 액션이
+    /// 꺼진 채로 맵이 비활성화되어, 트레이너를 닫고 입력을 되살려도 시점 회전이 돌아오지 않습니다.
+    /// </remarks>
+    private void SetKeyboardPassthrough(bool allow)
+    {
+        if (m_keyboardPassthrough == allow)
+        {
+            return;
+        }
+
+        m_keyboardPassthrough = allow;
+
+        if (allow)
+        {
+            m_passthroughActivatedInputs.Clear();
+
+            foreach (PlayerInput playerInput in FindObjectsByType<PlayerInput>(FindObjectsSortMode.None))
+            {
+                if (!playerInput.inputIsActive)
+                {
+                    playerInput.ActivateInput();
+                    m_passthroughActivatedInputs.Add(playerInput);
+                }
+
+                SetBlockedActionsEnabled(playerInput, false);
+
+                // 필드 씬은 PlayerInput이 켜져 있어도 이 플래그가 내려가 있으면 아무 입력도 받지 않습니다.
+                playerInput.GetComponent<PlayerInputController>()?.SetGameplayInputWithFreeCursor(true);
+            }
+
+            return;
+        }
+
+        foreach (PlayerInput playerInput in FindObjectsByType<PlayerInput>(FindObjectsSortMode.None))
+        {
+            SetBlockedActionsEnabled(playerInput, true);
+            playerInput.GetComponent<PlayerInputController>()?.SetGameplayInputWithFreeCursor(false);
+        }
+
+        // 이쪽이 켠 것만 되돌립니다.
+        for (int i = 0; i < m_passthroughActivatedInputs.Count; i++)
+        {
+            PlayerInput playerInput = m_passthroughActivatedInputs[i];
+            if (playerInput != null && playerInput.inputIsActive)
+            {
+                playerInput.DeactivateInput();
+            }
+        }
+
+        m_passthroughActivatedInputs.Clear();
+    }
+
+    /// <summary>배경 조작 중 막아 둘 액션만 켜거나 끕니다.</summary>
+    /// <param name="playerInput">대상 입력 컴포넌트입니다.</param>
+    /// <param name="enabled">켤지 여부입니다.</param>
+    private static void SetBlockedActionsEnabled(PlayerInput playerInput, bool enabled)
+    {
+        if (playerInput == null || playerInput.actions == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < BlockedActionNames.Length; i++)
+        {
+            InputAction action = playerInput.actions.FindAction(BlockedActionNames[i], false);
+            if (action == null)
+            {
+                continue;
+            }
+
+            if (enabled)
+            {
+                action.Enable();
+            }
+            else
+            {
+                action.Disable();
+            }
         }
     }
 
@@ -310,11 +477,17 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         if (m_open)
         {
+            // 막 연 창은 선택된 상태로 봅니다. 열자마자 키보드가 게임으로 새면 F9를 누른 손이 그대로 조작이 됩니다.
+            m_windowFocused = true;
+            m_keyboardPassthrough = false;
+
             LockControls();
             PrefillSpawnCoordsFromPlayer();
         }
         else
         {
+            // 넘겨 준 키보드를 먼저 회수해야 마우스 액션이 꺼진 채로 남지 않습니다.
+            SetKeyboardPassthrough(false);
             UnlockControls();
         }
     }
@@ -339,7 +512,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         foreach (PlayerInput playerInput in FindObjectsByType<PlayerInput>(FindObjectsSortMode.None))
         {
-            playerInput.GetComponent<PlayerInputs>()?.ResetInputState();
+            playerInput.GetComponent<PlayerInputController>()?.ResetInputState();
 
             if (playerInput.inputIsActive)
             {
@@ -396,6 +569,16 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         SquadManager squadManager = FindFirstObjectByType<SquadManager>();
         SquadMemberController player = squadManager != null ? squadManager.PlayerSquadMember : null;
+
+        // 입력 플래그는 스쿼드 전원에게 되돌립니다. PlayerInput만 켜면 컴포넌트 쪽 게이트가 내려간 채로
+        // 남아 조작이 통째로 죽습니다(배경 조작을 쓰다 닫은 경우가 그렇습니다). 그리고 배경 조작은
+        // 전원에게 걸리므로 복구도 전원에게 가야 합니다. 조작 멤버 하나만 되돌리면 나머지는 내려간 채
+        // 남고, 나중에 그 멤버로 전환했을 때 입력이 죽어 있습니다.
+        if (squadManager != null)
+        {
+            squadManager.ApplyInputModeToSquad(true);
+        }
+
         if (player != null)
         {
             PlayerInput playerInput = player.GetComponent<PlayerInput>();
@@ -404,6 +587,9 @@ public class RuntimeDebugTrainer : MonoBehaviour
                 playerInput.ActivateInput();
                 playerInput.SwitchCurrentActionMap("Player");
             }
+
+            // 커서는 화면에 하나뿐이라 조작 멤버 쪽에서 한 번만 다룹니다.
+            player.GetComponent<PlayerInputController>()?.SetPlayerCursorMode(false);
         }
 
         foreach (CameraLook cameraLook in FindObjectsByType<CameraLook>(FindObjectsSortMode.None))
@@ -483,6 +669,23 @@ public class RuntimeDebugTrainer : MonoBehaviour
     }
 
     /// <summary>메뉴가 열린 동안 현재 조작 캐릭터의 입력이 다시 활성화됐으면(전환 등) 즉시 비활성화합니다.</summary>
+    /// <summary>
+    /// 이번 프레임의 마우스 누름 위치로 창이 선택됐는지 판정합니다.
+    /// </summary>
+    /// <remarks>
+    /// IMGUI에는 "이 창이 선택됐는가"를 묻는 API가 없어 누른 지점이 창 안인지로 대신합니다.
+    /// 리사이즈 그립과 제목줄도 창 사각형 안이라 함께 선택으로 잡힙니다.
+    /// </remarks>
+    private void UpdateWindowFocus()
+    {
+        if (Event.current == null || Event.current.type != EventType.MouseDown)
+        {
+            return;
+        }
+
+        m_windowFocused = m_windowRect.Contains(Event.current.mousePosition);
+    }
+
     private void SuppressActivePlayerInput()
     {
         SquadManager squadManager = FindFirstObjectByType<SquadManager>();
@@ -495,7 +698,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         PlayerInput playerInput = player.GetComponent<PlayerInput>();
         if (playerInput != null && playerInput.inputIsActive)
         {
-            player.GetComponent<PlayerInputs>()?.ResetInputState();
+            player.GetComponent<PlayerInputController>()?.ResetInputState();
             playerInput.DeactivateInput();
         }
     }
@@ -523,6 +726,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         ClampWindowRectToScreen();
+        UpdateWindowFocus();
 
         try
         {
@@ -539,6 +743,9 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private void DrawWindow(int windowId)
     {
         GUILayout.Label($"{m_toggleKey} 또는 아래 버튼으로 게임플레이 복귀. (개발 모드에서만 표시)");
+        GUILayout.Label(m_keyboardPassthrough
+            ? "조작: 게임 (창을 누르면 트레이너로 돌아옵니다. 시점 회전만 잠금)"
+            : "조작: 트레이너 (배경을 누르면 이동·사격이 살아납니다. 시점 회전은 잠금)");
 
         SquadManager squadManager = FindFirstObjectByType<SquadManager>();
         if (squadManager == null)
@@ -553,30 +760,65 @@ public class RuntimeDebugTrainer : MonoBehaviour
             return;
         }
 
+        // 캐릭터 선택과 탭 줄은 스크롤 밖에 둡니다. 어느 탭에 있든 "지금 누구를 보고 있는지"와
+        // "어디로 갈 수 있는지"는 늘 보여야 합니다.
+        DrawTargetPicker(squadManager);
+        GUILayout.Space(4);
+
+        int previousTab = m_mainTabIndex;
+        m_mainTabIndex = GUILayout.Toolbar(
+            Mathf.Clamp(m_mainTabIndex, 0, MainTabNames.Length - 1), MainTabNames);
+
+        // 탭을 옮기면 스크롤을 처음으로 되돌립니다. 그대로 두면 짧은 탭에서 빈 화면이 나옵니다.
+        if (m_mainTabIndex != previousTab)
+        {
+            m_scroll = Vector2.zero;
+        }
+
+        GUILayout.Space(4);
+
         m_scroll = GUILayout.BeginScrollView(m_scroll);
 
-        DrawTargetPicker(squadManager);
-        GUILayout.Space(6);
-
         PlayerbleUnitData target = ResolveTarget(squadManager);
-        if (target == null)
+        bool needsTarget = m_mainTabIndex <= 3;
+
+        if (needsTarget && target == null)
         {
             GUILayout.Label("대상 캐릭터 데이터를 찾을 수 없습니다.");
         }
         else
         {
-            DrawCharacterSection(target);
-            GUILayout.Space(6);
-            DrawWeaponSection(target);
-            GUILayout.Space(6);
-            DrawCombatFeedbackSection(target);
+            switch (m_mainTabIndex)
+            {
+                case 0:
+                    DrawCharacterSection(target);
+                    break;
+
+                case 1:
+                    DrawPlayerAnimationSection(target);
+                    break;
+
+                case 2:
+                    DrawWeaponSection(target);
+                    break;
+
+                case 3:
+                    DrawCombatFeedbackSection(target);
+                    break;
+
+                case 4:
+                    DrawEnemySpawnSection();
+                    GUILayout.Space(6);
+                    DrawSquadAiControlSection();
+                    GUILayout.Space(6);
+                    DrawFieldControlSection();
+                    break;
+
+                default:
+                    DrawDebugFieldSection();
+                    break;
+            }
         }
-
-        GUILayout.Space(6);
-        DrawEnemySpawnSection();
-
-        GUILayout.Space(6);
-        DrawFieldControlSection();
 
         GUILayout.EndScrollView();
 
@@ -835,6 +1077,63 @@ public class RuntimeDebugTrainer : MonoBehaviour
     // 무기 섹션
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 플레이어 애니메이션 블렌드 시간을 조절하는 구역입니다.
+    /// </summary>
+    /// <remarks>
+    /// 값을 레이어별로 묶어 둡니다. 어느 레이어를 만지는지가 곧 "무엇이 바뀌는지"이기 때문입니다.
+    /// 하체는 Base Layer의 블렌드 트리 파라미터라 걷기 자체의 이음새를 정하고,
+    /// 상체는 재장전·반동 레이어의 weight라 그 동작이 들고 나는 속도를 정합니다.
+    ///
+    /// 여기서 바꾼 값은 Play Mode를 벗어나면 사라집니다. 마음에 드는 값이 나오면 인스펙터에 옮겨야 합니다.
+    /// </remarks>
+    private void DrawPlayerAnimationSection(PlayerbleUnitData target)
+    {
+        GUILayout.Label("■ 플레이어 애니메이션", m_headerStyle);
+
+        ThirdPersonController controller = target.GetComponent<ThirdPersonController>();
+        AimController aimController = target.GetComponent<AimController>();
+
+        if (controller == null && aimController == null)
+        {
+            GUILayout.Label("ThirdPersonController와 AimController를 찾을 수 없습니다.");
+            return;
+        }
+
+        if (controller != null)
+        {
+            GUILayout.Label("하체 이동 보간 (Base 레이어)", m_headerStyle);
+            controller.SetMoveStartStopDuration(
+                SliderRow("정지↔이동", controller.MoveStartStopDuration, 0f, 0.6f));
+            controller.SetMoveDirectionDamp(
+                SliderRow("방향 조정", controller.MoveDirectionDamp, 0f, 0.6f));
+            controller.SetMoveDirectionFlipDuration(
+                SliderRow("방향 교체(좌우 반전)", controller.MoveDirectionFlipDuration, 0f, 0.4f));
+            controller.SetMoveDirectionSnapAngle(
+                SliderRow("교체 판정 각도", controller.MoveDirectionSnapAngle, 0f, 180f));
+            controller.SetMoveStateBlendDuration(
+                SliderRow("웅크림/걷기/달리기", controller.MoveStateBlendDuration, 0f, 0.8f));
+        }
+        else
+        {
+            GUILayout.Label("ThirdPersonController를 찾을 수 없습니다(하체 보간 조절 불가).");
+        }
+
+        if (aimController != null)
+        {
+            GUILayout.Space(3);
+            GUILayout.Label("상체 레이어", m_headerStyle);
+            aimController.SetStanceBlendDuration(
+                SliderRow("재장전 페이드", aimController.StanceBlendDuration, 0f, 1f));
+            aimController.SetRecoilAnimationWeight(
+                SliderRow("반동 동작 세기", aimController.RecoilAnimationWeight, 0f, 1f));
+        }
+        else
+        {
+            GUILayout.Label("AimController를 찾을 수 없습니다(상체 레이어 조절 불가).");
+        }
+    }
+
     private void DrawWeaponSection(PlayerbleUnitData target)
     {
         GUILayout.Label($"■ 무기: {target.CurrentWeaponName}", m_headerStyle);
@@ -942,7 +1241,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         if (!BalanceReverseSyncHook.CanRun(target))
         {
-            GUILayout.Label($"{label}에 밸런스 SO가 연결되어 있지 않아 갱신할 수 없습니다.");
+            GUILayout.Label($"{label}에 개별 SO도, 엔티티 통합 SO도 없어 갱신할 수 없습니다.");
             return;
         }
 
@@ -1017,33 +1316,26 @@ public class RuntimeDebugTrainer : MonoBehaviour
         aimController.SetZoomLerpSpeed(SliderRow("FOV 전환 속도", aimController.ZoomLerpSpeed, 0f, 40f));
     }
 
+    /// <summary>
+    /// 조준 관련 표시 설정을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 여기 남은 둘은 <b>기즈모가 아닙니다.</b> 조준선 상시 표시는 UI 설정이고, 지향점 거리는 조준 계산에
+    /// 실제로 쓰이는 값입니다. 둘 다 Debug 구역 소속이 아니라 빌드에서도 의미가 있으므로 트레이너에 남깁니다.
+    /// 차단 마커는 월드 오브젝트에서 화면 UI로 옮겨가면서 표면 오프셋이 사라졌고, 크기·색은
+    /// <see cref="CrosshairController"/>의 Block Marker 구역이 소유합니다.
+    ///
+    /// 기즈모 토글(총구→탄착점 레이, 각종 스피어 등)은 <see cref="DebugSectionRegistry"/>가 모아
+    /// 아래 디버그 항목 섹션에서 한 번에 다룹니다. 기즈모는 소유 컴포넌트의 Debug 구역에 선언되어 있어
+    /// 여기에 손으로 다시 나열하면 필드가 늘 때마다 두 곳을 고쳐야 하고, 빠뜨리면 조용히 누락됩니다.
+    /// </remarks>
     private void DrawAimDebugSection(AimController aimController)
     {
         GUILayout.Space(3);
-        GUILayout.Label("조준 디버그 (에디터 Gizmo)", m_headerStyle);
+        GUILayout.Label("조준 표시", m_headerStyle);
         aimController.SetShowAimImageAlways(
             GUILayout.Toggle(aimController.ShowAimImageAlways, " 조준선을 항상 표시"));
         aimController.SetLookDistance(SliderRow("지향점 거리", aimController.LookDistance, 0f, 500f, "0"));
-        aimController.SetHitscanBlockMarkerOffset(
-            SliderRow("장애물 마커 오프셋", aimController.HitscanBlockMarkerOffset, 0f, 1f));
-        aimController.SetDrawHitscanDebugRay(
-            GUILayout.Toggle(aimController.HitscanDebugRayEnabled, " 총구→탄착점 레이"));
-        aimController.SetDrawAimTraceLine(
-            GUILayout.Toggle(aimController.DrawAimTraceLine, " 카메라→조준점 레이"));
-        aimController.SetDrawCameraForwardRay(
-            GUILayout.Toggle(aimController.DrawCameraForwardRay, " 논리 조준/카메라 비교 레이"));
-        aimController.SetDrawLookPointSphere(
-            GUILayout.Toggle(aimController.DrawLookPointSphere, " 지향점 스피어"));
-        aimController.SetDrawAimPointSphere(
-            GUILayout.Toggle(aimController.DrawAimPointSphere, " 카메라 조준점 스피어"));
-        aimController.SetDrawImpactPointSphere(
-            GUILayout.Toggle(aimController.DrawImpactPointSphere, " 총구 탄착점 스피어"));
-
-        if (aimController.DrawLookPointSphere || aimController.DrawAimPointSphere || aimController.DrawImpactPointSphere)
-        {
-            aimController.SetDebugSphereRadius(
-                SliderRow("디버그 스피어 반지름", aimController.DebugSphereRadius, 0.01f, 3f));
-        }
     }
 
     private void DrawLogicalRecoilSection(PlayerbleUnitData target)
@@ -1312,6 +1604,248 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <see cref="EscapeSystem.ForceEscape"/>를 통해 실제 탈출과 같은 경로를 타므로 결과가 달라지지 않습니다.
     /// 전멸 게임오버도 같은 원칙으로, 스쿼드원을 실제 전투 이탈시켜 정상 감지 경로를 타게 합니다.
     /// </remarks>
+    // =========================
+    // 디버그 항목 (DebugSectionRegistry 공용 수집)
+    // =========================
+
+    /// <summary>디버그 항목 서브탭에서 지금 보고 있는 탭입니다.</summary>
+    private int m_debugTabIndex;
+
+    /// <summary>수집한 디버그 항목입니다. 매 프레임 훑지 않도록 들고 있습니다.</summary>
+    private List<DebugFieldEntry> m_debugEntries = new List<DebugFieldEntry>();
+
+    /// <summary>다음으로 목록을 다시 훑을 시각입니다.</summary>
+    private float m_nextDebugScanTime;
+
+    /// <summary>디버그 항목 목록을 다시 훑는 주기(초)입니다.</summary>
+    /// <remarks>
+    /// 스폰으로 대상이 늘어나므로 한 번만 훑으면 새 개체가 목록에 없습니다.
+    /// 반대로 매 프레임 훑으면 씬 전체 리플렉션이라 트레이너를 여는 동안 프레임이 눈에 띄게 떨어집니다.
+    /// </remarks>
+    private const float DebugScanInterval = 2.0f;
+
+    /// <summary>
+    /// 각 컴포넌트의 Debug 구역 필드를 탭으로 모아 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 목록을 손으로 나열하지 않고 <see cref="DebugSectionRegistry"/>가 수집한 것을 그대로 씁니다.
+    /// 에디터 창(<c>Tools/GrayZone/Debug Toggles</c>)과 같은 수집기라 두 화면의 목록이 어긋나지 않고,
+    /// 새 디버그 필드를 Debug 구역에 선언하면 양쪽에 자동으로 나타납니다.
+    ///
+    /// <b>기즈모 항목은 빌드에서 아무것도 그리지 않습니다.</b> 그래도 목록에 남기는 이유는, 에디터 Play 중에는
+    /// Scene 뷰에 그려져 쓸모가 있고, 빌드에서만 숨기면 같은 화면이 환경에 따라 달라져 더 헷갈리기 때문입니다.
+    /// </remarks>
+    private void DrawDebugFieldSection()
+    {
+        GUILayout.Label("■ 디버그 항목", m_headerStyle);
+
+        if (Time.unscaledTime >= m_nextDebugScanTime)
+        {
+            m_nextDebugScanTime = Time.unscaledTime + DebugScanInterval;
+            m_debugEntries = DebugSectionRegistry.Collect(
+                FindObjectsByType<Component>(FindObjectsInactive.Include, FindObjectsSortMode.None));
+        }
+
+        string[] tabNames = DebugSectionRegistry.TabNames;
+        m_debugTabIndex = GUILayout.Toolbar(Mathf.Clamp(m_debugTabIndex, 0, tabNames.Length - 1), tabNames);
+
+        string activeTab = tabNames[Mathf.Clamp(m_debugTabIndex, 0, tabNames.Length - 1)];
+        Component currentOwner = null;
+        int drawn = 0;
+
+        foreach (DebugFieldEntry entry in m_debugEntries)
+        {
+            if (entry.Owner == null || entry.TabName != activeTab)
+            {
+                continue;
+            }
+
+            if (entry.Owner != currentOwner)
+            {
+                currentOwner = entry.Owner;
+                GUILayout.Space(3);
+                GUILayout.Label($"{currentOwner.gameObject.name} · {currentOwner.GetType().Name}");
+            }
+
+            DrawDebugFieldRow(entry);
+            drawn++;
+        }
+
+        if (drawn == 0)
+        {
+            GUILayout.Label("이 탭에 표시할 디버그 항목이 없습니다.");
+        }
+    }
+
+    /// <summary>
+    /// 디버그 항목 하나를 타입에 맞는 위젯으로 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 런타임이라 <c>SerializedObject</c>를 쓸 수 없어 리플렉션으로 직접 읽고 씁니다.
+    /// 그래서 인스펙터처럼 모든 타입을 다루지는 않습니다. bool·float·int·enum만 편집하고
+    /// 나머지(프리팹 참조, 배열 등)는 값만 보여 줍니다. 편집할 수 없는 것을 편집할 수 있는 것처럼
+    /// 그리면 눌러도 반응이 없어 고장으로 보입니다.
+    /// </remarks>
+    private void DrawDebugFieldRow(DebugFieldEntry entry)
+    {
+        object value = entry.Field.GetValue(entry.Owner);
+        Type fieldType = entry.Field.FieldType;
+
+        if (fieldType == typeof(bool))
+        {
+            bool current = (bool)value;
+            bool next = GUILayout.Toggle(current, $" {entry.DisplayName}");
+
+            if (next != current)
+            {
+                entry.Field.SetValue(entry.Owner, next);
+            }
+
+            return;
+        }
+
+        if (fieldType == typeof(float))
+        {
+            float current = (float)value;
+            float next = SliderRow(entry.DisplayName, current, 0f, Mathf.Max(1f, current * 4f));
+
+            if (!Mathf.Approximately(next, current))
+            {
+                entry.Field.SetValue(entry.Owner, next);
+            }
+
+            return;
+        }
+
+        if (fieldType == typeof(int))
+        {
+            int current = (int)value;
+
+            using (new GUILayout.HorizontalScope())
+            {
+                GUILayout.Label(entry.DisplayName, GUILayout.Width(200));
+                string text = GUILayout.TextField(current.ToString(), GUILayout.Width(70));
+
+                if (int.TryParse(text, out int parsed) && parsed != current)
+                {
+                    entry.Field.SetValue(entry.Owner, parsed);
+                }
+            }
+
+            return;
+        }
+
+        if (fieldType.IsEnum)
+        {
+            using (new GUILayout.HorizontalScope())
+            {
+                GUILayout.Label(entry.DisplayName, GUILayout.Width(200));
+
+                if (GUILayout.Button(value != null ? value.ToString() : "(null)", GUILayout.Width(140)))
+                {
+                    CycleEnumValue(entry, fieldType, value);
+                }
+            }
+
+            return;
+        }
+
+        using (new GUILayout.HorizontalScope())
+        {
+            GUILayout.Label(entry.DisplayName, GUILayout.Width(200));
+            GUILayout.Label(value != null ? value.ToString() : "(없음)");
+        }
+    }
+
+    /// <summary>enum 값을 다음 항목으로 넘깁니다.</summary>
+    /// <remarks>런타임 IMGUI에는 드롭다운이 없어 눌러서 순환시키는 방식으로 둡니다.</remarks>
+    private static void CycleEnumValue(DebugFieldEntry entry, Type fieldType, object value)
+    {
+        Array values = Enum.GetValues(fieldType);
+        int index = Array.IndexOf(values, value);
+        entry.Field.SetValue(entry.Owner, values.GetValue((index + 1) % values.Length));
+    }
+
+    /// <summary>
+    /// 팀 AI의 사격 허용 여부와 팀원 간격을 조절합니다.
+    /// </summary>
+    /// <remarks>
+    /// <b>이 탭의 값은 스쿼드 전체 설정입니다.</b> 지금 어떤 캐릭터를 조작 중인지와 무관하게 걸리고,
+    /// 조작 캐릭터를 전환해도 그대로 유지됩니다. 값을 <see cref="SquadManager"/>가 소유하므로
+    /// 여기서는 그 하나를 읽고 쓰기만 합니다. 멤버를 순회하며 각자에게 복사해 넣던 방식은
+    /// 전환이나 구조 복귀로 멤버 구성이 바뀔 때 일부만 옛 값을 쥐게 됩니다.
+    /// <para>
+    /// 사격 허용을 꺼도 <b>조작 중인 캐릭터는 그대로 쏠 수 있습니다</b>. 이 값은
+    /// <see cref="SquadAIController"/>만 읽고 그 컴포넌트는 조작 멤버에서 꺼져 있기 때문입니다.
+    /// </para>
+    /// </remarks>
+    private void DrawSquadAiControlSection()
+    {
+        GUILayout.Label("■ 팀 AI 제어 (스쿼드 전체 · 전환과 무관)", m_headerStyle);
+
+        SquadManager squadManager = SquadManager.Instance;
+        if (squadManager == null || squadManager.SquadMembers == null)
+        {
+            GUILayout.Label("SquadManager를 찾을 수 없습니다.");
+            return;
+        }
+
+        bool requested = GUILayout.Toggle(
+            squadManager.AiFiringAllowed,
+            " 팀 AI 사격 허용 (끄면 조준만 하고 쏘지 않음 / 조작 캐릭터는 영향 없음)");
+        if (requested != squadManager.AiFiringAllowed)
+        {
+            squadManager.AiFiringAllowed = requested;
+        }
+
+        DrawSquadAiSpacingSlider(squadManager);
+
+        foreach (SquadMemberController member in squadManager.SquadMembers)
+        {
+            if (member == null)
+            {
+                continue;
+            }
+
+            SquadAIController ai = member.GetComponent<SquadAIController>();
+            if (ai == null)
+            {
+                continue;
+            }
+
+            string role = member.IsPlayerSquadMember ? "조작중" : "AI";
+            string targetName = ai.Targeting != null && ai.Targeting.CurrentTarget != null
+                ? ai.Targeting.CurrentTarget.name
+                : "없음";
+
+            GUILayout.Label($"  {ai.name} [{role}]  대상={targetName}");
+        }
+    }
+
+    /// <summary>
+    /// AI 팀원끼리 유지할 간격을 조절합니다(§6.1).
+    /// </summary>
+    /// <param name="squadManager">값을 소유한 스쿼드 매니저입니다.</param>
+    /// <remarks>
+    /// 캡슐 반지름이 0.3이라 실제 몸 사이 여유는 이 값에서 0.6을 뺀 만큼입니다. 값을 너무 키우면
+    /// 합류 완료 반경 안에 두 자리가 다 들어가지 못해 AI가 자리를 못 찾고 제자리에 섭니다.
+    /// </remarks>
+    private void DrawSquadAiSpacingSlider(SquadManager squadManager)
+    {
+        float spacing = squadManager.AiMemberSpacing;
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Label($"AI 팀원 간격  {spacing:F2}m  (몸 사이 여유 {Mathf.Max(0.0f, spacing - 0.6f):F2}m)",
+            GUILayout.Width(300));
+        float next = GUILayout.HorizontalSlider(spacing, 0.0f, 4.0f);
+        GUILayout.EndHorizontal();
+
+        if (!Mathf.Approximately(next, spacing))
+        {
+            squadManager.AiMemberSpacing = next;
+        }
+    }
+
     private void DrawFieldControlSection()
     {
         GUILayout.Label("■ 필드 제어", m_headerStyle);
@@ -1446,6 +1980,23 @@ public class RuntimeDebugTrainer : MonoBehaviour
         GUILayout.Label($"■ 좀비 스폰 (현재 적 {enemyCount}마리)", m_headerStyle);
 
         GUILayout.BeginHorizontal();
+        GUILayout.Label("원본", GUILayout.Width(40));
+        if (GUILayout.Button("◀", GUILayout.Width(30)))
+        {
+            CycleEnemyTemplateChoice(-1);
+        }
+        GUILayout.Label(DescribeSelectedEnemyTemplate(), GUILayout.Width(230));
+        if (GUILayout.Button("▶", GUILayout.Width(30)))
+        {
+            CycleEnemyTemplateChoice(1);
+        }
+        if (GUILayout.Button("목록 갱신", GUILayout.Width(90)))
+        {
+            RefreshEnemyTemplateChoices();
+        }
+        GUILayout.EndHorizontal();
+
+        GUILayout.BeginHorizontal();
         GUILayout.Label("좌표", GUILayout.Width(40));
         GUILayout.Label("X", GUILayout.Width(14));
         m_spawnX = GUILayout.TextField(m_spawnX, GUILayout.Width(90));
@@ -1568,7 +2119,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         // 한 번 원본 확보를 시도했고 실패했더라도, 이후 씬에 좀비가 생겼을 수 있으니 매번 재시도합니다.
-        EnemyController source = FindFirstObjectByType<EnemyController>(FindObjectsInactive.Include);
+        EnemyController source = ResolveSelectedEnemySource();
         if (source == null)
         {
             return null;
@@ -1586,6 +2137,110 @@ public class RuntimeDebugTrainer : MonoBehaviour
         m_enemyTemplate = Instantiate(source.gameObject, m_enemyTemplateHolder.transform);
         m_enemyTemplate.name = "EnemyTemplate(Trainer)";
         return m_enemyTemplate;
+    }
+
+    /// <summary>고른 스폰 원본을 돌려줍니다. 고르지 않았거나 고른 대상이 사라졌으면 씬에서 가장 먼저 찾은 적으로 되돌립니다.</summary>
+    private EnemyController ResolveSelectedEnemySource()
+    {
+        if (m_enemyTemplateIndex >= 0 && m_enemyTemplateIndex < m_enemyTemplateChoices.Count)
+        {
+            EnemyController selected = m_enemyTemplateChoices[m_enemyTemplateIndex];
+            if (selected != null)
+            {
+                return selected;
+            }
+        }
+
+        return FindFirstObjectByType<EnemyController>(FindObjectsInactive.Include);
+    }
+
+    /// <summary>씬의 적을 훑어 스폰 원본 후보 목록을 다시 만듭니다. 트레이너가 만든 사본은 후보에서 제외합니다.</summary>
+    private void RefreshEnemyTemplateChoices()
+    {
+        EnemyController previous = null;
+        if (m_enemyTemplateIndex >= 0 && m_enemyTemplateIndex < m_enemyTemplateChoices.Count)
+        {
+            previous = m_enemyTemplateChoices[m_enemyTemplateIndex];
+        }
+
+        m_enemyTemplateChoices.Clear();
+        foreach (EnemyController enemy in FindObjectsByType<EnemyController>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (enemy == null)
+            {
+                continue;
+            }
+
+            // 트레이너가 보관 중인 원본 사본과 스폰 결과물은 후보에서 뺍니다. 사본의 사본이 쌓이는 걸 막기 위함입니다.
+            string name = enemy.gameObject.name;
+            if (name.StartsWith("Enemy(Trainer)", StringComparison.Ordinal)
+                || name.StartsWith("EnemyTemplate(Trainer)", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            m_enemyTemplateChoices.Add(enemy);
+        }
+
+        m_enemyTemplateChoices.Sort((a, b) => string.CompareOrdinal(a.gameObject.name, b.gameObject.name));
+        m_enemyTemplateIndex = previous != null ? m_enemyTemplateChoices.IndexOf(previous) : -1;
+    }
+
+    /// <summary>원본 선택을 앞뒤로 옮깁니다. 목록 양 끝을 넘어가면 자동(씬에서 첫 적)으로 돌아옵니다.</summary>
+    private void CycleEnemyTemplateChoice(int step)
+    {
+        if (m_enemyTemplateChoices.Count == 0)
+        {
+            RefreshEnemyTemplateChoices();
+        }
+
+        if (m_enemyTemplateChoices.Count == 0)
+        {
+            m_enemyTemplateIndex = -1;
+            return;
+        }
+
+        int count = m_enemyTemplateChoices.Count;
+        int next = m_enemyTemplateIndex + step;
+        if (next < -1)
+        {
+            next = count - 1;
+        }
+        else if (next >= count)
+        {
+            next = -1;
+        }
+
+        if (next == m_enemyTemplateIndex)
+        {
+            return;
+        }
+
+        m_enemyTemplateIndex = next;
+
+        // 원본이 바뀌었으니 보관 중이던 사본은 버리고, 다음 스폰 때 새 원본으로 다시 복제하게 합니다.
+        if (m_enemyTemplate != null)
+        {
+            Destroy(m_enemyTemplate);
+            m_enemyTemplate = null;
+        }
+    }
+
+    /// <summary>현재 선택을 창에 표시할 문구로 만듭니다.</summary>
+    private string DescribeSelectedEnemyTemplate()
+    {
+        if (m_enemyTemplateIndex < 0 || m_enemyTemplateIndex >= m_enemyTemplateChoices.Count)
+        {
+            return "자동 (씬에서 첫 적)";
+        }
+
+        EnemyController selected = m_enemyTemplateChoices[m_enemyTemplateIndex];
+        if (selected == null)
+        {
+            return "자동 (고른 적이 사라짐)";
+        }
+
+        return $"{m_enemyTemplateIndex + 1}/{m_enemyTemplateChoices.Count}  {selected.gameObject.name}";
     }
 
     private void KillAllEnemies()
@@ -1655,7 +2310,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
     {
         if (m_scaledSkin == null || !Mathf.Approximately(scale, m_scaledSkinScale))
         {
-            m_scaledSkin = Object.Instantiate(GUI.skin);
+            // `using System;`이 들어오면서 Object가 모호해져 UnityEngine 쪽으로 한정합니다.
+            m_scaledSkin = UnityEngine.Object.Instantiate(GUI.skin);
             m_scaledSkinScale = scale;
 
             int baseSize = Mathf.RoundToInt(12f * scale);

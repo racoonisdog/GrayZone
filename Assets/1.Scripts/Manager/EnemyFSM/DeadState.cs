@@ -2,12 +2,22 @@ using UnityEngine;
 using UnityEngine.AI;
 
 /// <summary>
-/// 처치 상태입니다. 이동과 피격 판정을 즉시 걷어내고 사망 연출 후 오브젝트를 제거합니다.
+/// 처치 상태입니다. 이동과 피격 판정을 즉시 걷어내고 래그돌로 넘긴 뒤 시체를 제거합니다.
 /// </summary>
 /// <remarks>
 /// 충돌 제거를 연출보다 먼저, 즉시 하는 것이 중요합니다.
 /// 사체가 길을 막으면 다른 변이체의 길찾기가 막히고, 피격 콜라이더가 남으면 시체가 총알을 먹습니다(§5.10.4).
-/// 사망 애니메이션이나 래그돌은 이동을 막지 않는 시각 요소로만 남깁니다.
+///
+/// 정상 경로에서는 사망 애니메이션을 쓰지 않습니다. 사망 판정과 동시에 래그돌로 넘기고, 쓰러지는 모양은
+/// 그때까지의 자세와 속도, 그리고 죽인 타격의 임펄스가 결정합니다. 사망 클립을 쓰면 클립 수만큼의 정해진
+/// 방향으로만 쓰러져 모두 똑같이 죽는 문제가 있었고, 클립을 여러 개 넣어도 그 n가지로 뻔해지는 것은 같습니다.
+///
+/// 다만 래그돌을 쓸 수 없는 개체는 사망 클립으로 대체합니다. 그러지 않으면 마지막 자세 그대로 굳어
+/// 죽은 것으로 보이지 않습니다. 물리 골격이 없는 경우는 프리팹 구성 누락이므로 경고도 함께 남깁니다.
+///
+/// 그래서 이 상태는 대기 단계가 없습니다. <see cref="Enter"/>에서 전환을 끝내고 <see cref="Tick"/>은
+/// 삭제 시점만 셉니다. 사망 처리가 같은 프레임에 끝나므로, 죽인 쪽은 <see cref="Enter"/>가 반환된 뒤
+/// 이미 활성화된 래그돌에 임펄스를 줄 수 있습니다.
 /// 설계 근거: 공용 `적 시스템` v0.2 §5.10.4(사망 처리).
 /// </remarks>
 public class DeadState : EnemyStateBase
@@ -21,25 +31,41 @@ public class DeadState : EnemyStateBase
     /// <summary>처치 상태를 생성합니다.</summary>
     public DeadState(EnemyController controller) : base(controller) { }
 
+    /// <summary>이동과 피격 판정을 즉시 걷어내고 래그돌로 넘긴 뒤 시체 제거 시각을 잡습니다.</summary>
+    /// <remarks>
+    /// 충돌 제거를 연출보다 먼저 하는 것이 중요합니다. 사체가 길을 막으면 다른 변이체의 길찾기가 막히고,
+    /// 피격 콜라이더가 남으면 시체가 총알을 먹습니다. 사망 처리가 이 안에서 같은 프레임에 끝납니다.
+    /// </remarks>
     public override void Enter()
     {
         Controller.PlayDeathFeedback();
 
-        EnemyCorpseSettings settings = FieldManager.Instance != null
-            ? FieldManager.Instance.EnemyCorpseSettings
+        EnemyManager settings = FieldManager.Instance != null
+            ? FieldManager.Instance.EnemyManager
             : null;
+
+        bool useRagdoll;
 
         if (settings == null)
         {
             m_destroyCorpse = false;
+            m_destroyTime = 0.0f;
+            useRagdoll = false;
             Debug.LogError(
-                "[DeadState] FieldManager의 EnemyCorpseSettings를 찾지 못했습니다. 시체 공통 정책을 적용할 수 없습니다.",
+                "[DeadState] FieldManager의 EnemyCorpseSettings를 찾지 못했습니다. 시체 처리 설정을 적용할 수 없습니다.",
                 Controller);
         }
         else
         {
-            m_destroyCorpse = settings.DestroyCorpse;
-            m_destroyTime = Time.time + settings.CorpseLifetime;
+            // 이 개체의 종류에 해당하는 슬롯을 고릅니다.
+            EnemyManager.Entry entry = settings.Resolve(Controller.EnemyType);
+
+            m_destroyCorpse = entry.DestroyCorpse;
+            m_destroyTime = Time.time + entry.CorpseLifetime;
+            useRagdoll = entry.UseRagdoll;
+
+            // 사망 연출 세기는 맞는 쪽 정책입니다. 임펄스는 쏜 쪽이 곧 보내므로 값만 먼저 넣어 둡니다.
+            Controller.SetRagdollMinimumHitImpulse(entry.DeathKnockbackImpulse);
         }
 
         DisableNavigation();
@@ -51,15 +77,34 @@ public class DeadState : EnemyStateBase
         Controller.Sensor?.ClearAllInfo();
         Controller.Sensor?.SetEngaged(false);
 
-        // FieldManager 공통 설정이 래그돌을 허용하고 물리 골격도 준비된 개체만 래그돌로 전환합니다.
-        // 설정을 찾지 못했거나 래그돌을 끈 경우에는 기존 사망 애니메이션 경로를 유지합니다.
-        if (settings == null || !settings.UseRagdoll || !Controller.TryActivateRagdoll())
+        // 래그돌로 넘어가면 게임플레이 콜라이더 정리는 그쪽이 함께 처리합니다.
+        if (useRagdoll && Controller.TryActivateRagdoll())
+        {
+            return;
+        }
+
+        // 여기부터는 래그돌을 쓰지 못하는 경로입니다. 콜라이더를 직접 걷어내고 사망 클립으로 대체합니다.
+        // 클립까지 없으면 마지막 자세 그대로 굳어 죽은 것으로 보이지 않습니다.
+        if (!Controller.TryDisableGameplayColliders())
         {
             DisableColliders();
-            Controller.PlayDeathAnimation();
         }
+
+        // 설정에서 끈 것은 의도된 선택이므로 조용히 넘어가고, 골격이 없는 것만 알립니다.
+        // 프리팹에 Joint 골격을 넣지 않았다는 뜻이라 구성 누락에 해당합니다.
+        if (useRagdoll && !Controller.HasRagdollSkeleton)
+        {
+            Debug.LogWarning(
+                $"[DeadState] '{Controller.name}'에 래그돌 물리 골격이 없어 사망 클립으로 대체합니다. " +
+                "프리팹에 Joint 골격과 RagdollController가 있는지 확인하십시오.",
+                Controller);
+        }
+
+        Controller.PlayDeathAnimation();
     }
 
+    /// <summary>시체 제거 시각까지 남은 시간만 셉니다.</summary>
+    /// <remarks>이 상태에는 대기 단계가 없습니다. 전환은 <see cref="Enter"/>에서 이미 끝나 있습니다.</remarks>
     public override void Tick()
     {
         if (m_destroyCorpse && Time.time >= m_destroyTime)
@@ -98,7 +143,8 @@ public class DeadState : EnemyStateBase
     /// <remarks>
     /// 피격 판정과 이동 충돌을 한 번에 걷어냅니다.
     /// 사망 이후 발사된 탄환이 사체에 막히지 않고 뒤의 살아 있는 대상까지 가야 하기 때문입니다.
-    /// 래그돌을 쓰게 되면 여기서 래그돌용 콜라이더는 남기도록 나눠야 합니다.
+    /// 래그돌 골격이 없는 개체 전용 경로입니다. 골격이 있으면
+    /// <see cref="EnemyController.TryDisableGameplayColliders"/>가 래그돌용 콜라이더를 남기고 처리합니다.
     /// </remarks>
     private void DisableColliders()
     {

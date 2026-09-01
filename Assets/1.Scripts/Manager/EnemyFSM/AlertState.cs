@@ -19,6 +19,8 @@ public class AlertState : EnemyStateBase
     /// <summary>소음 경계 상태를 생성합니다.</summary>
     public AlertState(EnemyController controller) : base(controller) { }
 
+    /// <summary>제자리에서 살피는 자세로 들어가고 경계 피드백을 재생합니다.</summary>
+    /// <remarks>소리가 난 방향을 모르는 구간이므로 목적지를 잡지 않습니다.</remarks>
     public override void Enter()
     {
         Controller.PlayAlertFeedback();
@@ -29,6 +31,8 @@ public class AlertState : EnemyStateBase
         Controller.SetAlertAnimation(true);
     }
 
+    /// <summary>소음 인지 게이지를 지켜보며 세 갈래 중 하나로 전이합니다.</summary>
+    /// <remarks>게이지가 차면 소음 추적, 빠지면 배회, 캐릭터를 직접 인식하면 교전으로 갑니다.</remarks>
     public override void Tick()
     {
         EnemyTargetSensor sensor = Controller.Sensor;
@@ -62,6 +66,7 @@ public class AlertState : EnemyStateBase
         }
     }
 
+    /// <summary>경계 자세를 풀고 살피는 연출을 정리합니다.</summary>
     public override void Exit()
     {
         Controller.SetAlertAnimation(false);

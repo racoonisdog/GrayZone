@@ -133,6 +133,18 @@ internal static class FeedbackPlaybackUtility
             return null;
         }
 
+        ConfigureTracer(instance, start, end);
+        return instance;
+    }
+
+    /// <summary>재사용한 트레이서 인스턴스에 이번 발사 구간을 적용합니다.</summary>
+    internal static void ConfigureTracer(GameObject instance, Vector3 start, Vector3 end)
+    {
+        if (instance == null)
+        {
+            return;
+        }
+
         LineRenderer line = instance.GetComponentInChildren<LineRenderer>(true);
         if (line != null)
         {
@@ -142,6 +154,34 @@ internal static class FeedbackPlaybackUtility
             line.SetPosition(1, end);
         }
 
-        return instance;
+    }
+
+    /// <summary>풀에서 꺼낸 시각 인스턴스의 파티클·트레일·물리 상태를 새 재생용으로 초기화합니다.</summary>
+    internal static void RestartPlayback(GameObject instance)
+    {
+        if (instance == null)
+        {
+            return;
+        }
+
+        ParticleSystem[] particles = instance.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particles.Length; i++)
+        {
+            particles[i].Clear(true);
+            particles[i].Play(true);
+        }
+
+        TrailRenderer[] trails = instance.GetComponentsInChildren<TrailRenderer>(true);
+        for (int i = 0; i < trails.Length; i++)
+        {
+            trails[i].Clear();
+        }
+
+        Rigidbody[] rigidbodies = instance.GetComponentsInChildren<Rigidbody>(true);
+        for (int i = 0; i < rigidbodies.Length; i++)
+        {
+            rigidbodies[i].linearVelocity = Vector3.zero;
+            rigidbodies[i].angularVelocity = Vector3.zero;
+        }
     }
 }

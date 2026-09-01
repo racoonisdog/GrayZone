@@ -1,0 +1,11 @@
+﻿__Field,__Tooltip,ZombieAttackBalance
+__Type,,MeleeBalanceSO
+__Guid,,315861973b1477348be351444a62a951
+__Path,,Assets/5.Data/ScriptableObject/Enemy/ZombieAttackBalance.asset
+m_meleeId,테이블과 런타임에서 근접 무기를 식별하는 고정 ID입니다. 에셋 이름과 별도로 유지합니다.,melee.zombie.claw
+m_allowHeadshot,약점 판정을 사용할지 여부입니다. 변이체의 공격은 약점 없이 항상 정배수로 확정되어 있어 기본값은 꺼짐입니다.,FALSE
+m_headshotDamageMultiplier,약점에 적중했을 때 곱할 피해 배율입니다. 약점 판정을 쓰지 않으면 의미가 없습니다.,2
+m_combo,이 무기가 가진 공격들입니다. 각 공격은 대응하는 애니메이터 스테이트와 자기 수치를 가집니다.,"[{""m_stateName"":""Attack_Combo1"",""m_damage"":1,""m_staggerPower"":1,""m_knockbackImpulse"":0},{""m_stateName"":""Attack_Combo2"",""m_damage"":2,""m_staggerPower"":2,""m_knockbackImpulse"":0}]"
+m_fallbackDamage,공격 정보에서 현재 공격을 찾지 못했을 때 사용할 피해량입니다.,1
+m_fallbackStaggerPower,공격 정보에서 현재 공격을 찾지 못했을 때 사용할 경직력입니다.,1
+m_fallbackKnockbackImpulse,공격 정보에서 현재 공격을 찾지 못했을 때 사용할 넉백 충격량(N·s)입니다. 기본값 0은 밀지 않음입니다.,0

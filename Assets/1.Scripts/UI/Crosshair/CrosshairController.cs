@@ -364,6 +364,22 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("해골이 사라지기까지 걸리는 페이드아웃 시간(초)입니다.")]
     [SerializeField] private float m_killSkullFadeDuration = 0.6f;
 
+    [Foldout("Block Marker")]
+    [Tooltip("켜면 총구와 조준점 사이가 막혔을 때(아군·장애물 길막) 실제 탄착점 화면 위치에 차단 마커를 표시합니다.")]
+    [SerializeField] private bool m_showBlockMarker = true;
+
+    [Tooltip("차단 마커 원(링)의 지름(픽셀)입니다.")]
+    [SerializeField] private float m_blockMarkerRingSizePixels = 24.0f;
+
+    [Tooltip("차단 마커 원(링)의 선 두께(픽셀)입니다. 0이면 링을 그리지 않습니다.")]
+    [SerializeField] private float m_blockMarkerRingThicknessPixels = 2.0f;
+
+    [Tooltip("차단 마커 가운데 점의 지름(픽셀)입니다. 0이면 점을 그리지 않습니다.")]
+    [SerializeField] private float m_blockMarkerDotSizePixels = 4.0f;
+
+    [Tooltip("차단 마커 색상입니다. 임시 UI라 링과 가운데 점이 같은 색을 씁니다.")]
+    [SerializeField] private Color m_blockMarkerColor = new Color32(226, 59, 59, 255);
+
     [Foldout("Debug")]
     [Tooltip("(디버그) 켜면 에디트 모드(비플레이)에서도 조준선을 미리 렌더링합니다. 프리뷰 전용이며 게임 로직엔 영향이 없습니다. [ExecuteAlways]와 함께 동작합니다.")]
     [SerializeField] private bool m_editModePreview = false;
@@ -418,7 +434,9 @@ public class CrosshairController : MonoBehaviour
     private VisualElement m_ammoGaugeElement;
     private VisualElement m_hitMarkerElement;
     private VisualElement m_killSkullElement;
+    private VisualElement m_blockMarkerElement;
     private bool m_isReloading;
+    private bool m_blockMarkerVisible;
     private float m_ammoGaugeFill = 1.0f;
     private Color m_hitMarkerActiveColor;
     private float m_hitMarkerTimer;
@@ -1185,6 +1203,121 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
+    /// 총구 히트스캔이 중간 장애물에 막혔을 때, 실제 탄착점의 화면 위치에 차단 마커를 표시합니다.
+    /// </summary>
+    /// <param name="worldPosition">표시할 탄착점의 월드 좌표입니다.</param>
+    /// <param name="camera">월드 좌표를 화면으로 투영할 렌더 카메라입니다. <c>null</c>이면 마커를 숨깁니다.</param>
+    /// <remarks>
+    /// 표면 법선에 맞춰 벽에 눕히던 월드 마커를 대신합니다. 화면 UI라 벽 방향·기울기·z-파이팅과 무관하며,
+    /// 벽·바닥·적 몸통 어디에 걸려도 같은 크기와 같은 모양으로 보입니다.
+    /// <para>
+    /// <see cref="AimController"/>가 조준 중 매 프레임 호출합니다. 막힘이 풀리면 <see cref="HideBlockMarker"/>를 부르는
+    /// 쪽이 호출자이며, 여기서는 카메라 뒤로 넘어간 지점만 스스로 숨깁니다.
+    /// </para>
+    /// </remarks>
+    public void ShowBlockMarker(Vector3 worldPosition, Camera camera)
+    {
+        if (!m_showBlockMarker || camera == null)
+        {
+            HideBlockMarker();
+            return;
+        }
+
+        if (!CacheVisualElements() || m_blockMarkerElement == null)
+        {
+            return;
+        }
+
+        IPanel panel = m_blockMarkerElement.panel;
+        if (panel == null)
+        {
+            return;
+        }
+
+        // 카메라 뒤쪽 지점은 투영이 반대편으로 되접혀 엉뚱한 위치에 그려지므로 표시하지 않습니다.
+        if (camera.WorldToViewportPoint(worldPosition).z <= 0.0f)
+        {
+            HideBlockMarker();
+            return;
+        }
+
+        float size = Mathf.Max(m_blockMarkerRingSizePixels, m_blockMarkerDotSizePixels);
+        if (size <= 0.0f)
+        {
+            HideBlockMarker();
+            return;
+        }
+
+        // 패널 스케일 모드까지 반영해 월드 좌표를 패널 좌표로 변환합니다(화면 픽셀 직접 계산은 스케일에서 어긋납니다).
+        Vector2 panelPosition = RuntimePanelUtils.CameraTransformWorldToPanel(panel, worldPosition, camera);
+
+        m_blockMarkerElement.style.display = DisplayStyle.Flex;
+        m_blockMarkerElement.style.width = size;
+        m_blockMarkerElement.style.height = size;
+        m_blockMarkerElement.style.left = panelPosition.x - size * 0.5f;
+        m_blockMarkerElement.style.top = panelPosition.y - size * 0.5f;
+
+        if (!m_blockMarkerVisible)
+        {
+            m_blockMarkerVisible = true;
+            m_blockMarkerElement.MarkDirtyRepaint();
+        }
+    }
+
+    /// <summary>
+    /// 차단 마커를 숨깁니다. 막힘이 풀렸거나 조준·전투 자세가 끝났을 때 호출합니다.
+    /// </summary>
+    public void HideBlockMarker()
+    {
+        m_blockMarkerVisible = false;
+        HideElement(m_blockMarkerElement);
+    }
+
+    /// <summary>
+    /// 차단 마커를 Painter2D로 그립니다. 임시 UI로 원(링) 하나와 가운데 점 하나만 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 링 스트로크는 중심선을 따라 그려지므로 반지름을 (지름 − 두께)/2로 잡아 두께가 요소 안쪽에 들어오게 합니다.
+    /// 텍스처 대신 프로시저럴로 그려 크기를 바꿔도 선명하고, 최종 아트로 교체할 때 이 함수만 걷어내면 됩니다.
+    /// </remarks>
+    private void OnGenerateBlockMarker(MeshGenerationContext context)
+    {
+        VisualElement element = context.visualElement;
+        float size = Mathf.Min(element.resolvedStyle.width, element.resolvedStyle.height);
+        if (size <= 0.0f)
+        {
+            return;
+        }
+
+        Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
+        Painter2D painter = context.painter2D;
+
+        float ringSize = Mathf.Min(m_blockMarkerRingSizePixels, size);
+        float ringThickness = Mathf.Clamp(m_blockMarkerRingThicknessPixels, 0.0f, ringSize * 0.5f);
+        float ringRadius = (ringSize - ringThickness) * 0.5f;
+        if (ringThickness > 0.0f && ringRadius > 0.0f)
+        {
+            painter.lineCap = LineCap.Butt;
+            painter.lineWidth = ringThickness;
+            painter.strokeColor = m_blockMarkerColor;
+            painter.BeginPath();
+            painter.Arc(center, ringRadius, 0.0f, 360.0f);
+            painter.ClosePath();
+            painter.Stroke();
+        }
+
+        float dotRadius = Mathf.Min(m_blockMarkerDotSizePixels, size) * 0.5f;
+        if (dotRadius > 0.0f)
+        {
+            painter.fillColor = m_blockMarkerColor;
+            painter.BeginPath();
+            painter.Arc(center, dotRadius, 0.0f, 360.0f);
+            painter.ClosePath();
+            painter.Fill();
+        }
+    }
+
+    /// <summary>
     /// 조준선 UXML을 표시하는 <see cref="UIDocument"/> 참조가 비어 있으면 같은 GameObject에서 찾아 캐싱합니다.
     /// </summary>
     private void CacheDocument()
@@ -1256,6 +1389,23 @@ public class CrosshairController : MonoBehaviour
         }
 
         m_killSkullElement = FindOrCreateChild(m_crosshairElement, "KillSkull");
+
+        // 차단 마커는 화면 중앙이 아니라 탄착점 위치에 놓이므로 0×0 앵커(크로스헤어) 밖, 패널 전체를 덮는 루트에 붙입니다.
+        m_blockMarkerElement = FindOrCreateChild(m_rootElement, "BlockMarker");
+        if (m_blockMarkerElement != null)
+        {
+            // 절대배치가 아니면 루트의 flex 중앙정렬에 참여해 크로스헤어 앵커를 밀어냅니다.
+            m_blockMarkerElement.pickingMode = PickingMode.Ignore;
+            m_blockMarkerElement.style.position = Position.Absolute;
+            if (!m_blockMarkerVisible)
+            {
+                HideElement(m_blockMarkerElement);
+            }
+
+            // 같은 요소가 재캐싱될 수 있어 중복 구독을 막기 위해 해제 후 구독합니다.
+            m_blockMarkerElement.generateVisualContent -= OnGenerateBlockMarker;
+            m_blockMarkerElement.generateVisualContent += OnGenerateBlockMarker;
+        }
 
         return m_rootElement != null
             && m_crosshairElement != null
@@ -1344,6 +1494,9 @@ public class CrosshairController : MonoBehaviour
         m_subRingThicknessPixels = Mathf.Max(0.0f, m_subRingThicknessPixels);
         m_subStrokeThicknessPixels = Mathf.Max(0.0f, m_subStrokeThicknessPixels);
         m_cornerRadiusPixels = Mathf.Max(0.0f, m_cornerRadiusPixels);
+        m_blockMarkerRingSizePixels = Mathf.Max(0.0f, m_blockMarkerRingSizePixels);
+        m_blockMarkerRingThicknessPixels = Mathf.Max(0.0f, m_blockMarkerRingThicknessPixels);
+        m_blockMarkerDotSizePixels = Mathf.Max(0.0f, m_blockMarkerDotSizePixels);
     }
 
     /// <summary>

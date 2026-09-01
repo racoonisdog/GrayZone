@@ -77,9 +77,10 @@ crashlytics-build.properties
 /Assets/3.Resources.meta
 /Assets/4.ThirdParty
 /Assets/4.ThirdParty.meta
-# RealToon은 규칙상 4.ThirdParty에 있어야 하지만 예외로 Assets 바로 아래에 둔다.
-# 셰이더 인스펙터(RealToonShaderGUI_URP_SRP.cs)가 "Assets/RealToon/..." 절대경로로
-# .shader 소스를 직접 고쳐 쓰기 때문에(하드코딩 310건/48파일) 폴더를 옮기면 기능이 깨진다.
+# RealToon은 SVN의 "5. Projects/RealToon" 전용 라인에서 관리한다(r151~).
+# 회사 권장 위치 기준으로 원본 무수정 에셋을 Assets/RealToon에 그대로 받는다.
+# 옮기면 안 된다: 셰이더 GUI가 "Assets/RealToon/..." 절대경로를 하드코딩하고,
+# 아웃라인 등 옵션을 .shader 소스 직접 재작성으로 구현해서 조용히 무동작한다.
 /Assets/RealToon
 /Assets/RealToon.meta
 Packages/com.youngwoocho02.unity-cli-connector/

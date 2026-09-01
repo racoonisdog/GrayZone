@@ -17,7 +17,7 @@ namespace GrayZone.EditorTools
         [MenuItem("Tools/GrayZone/Interaction/Setup Test In Open Scene")]
         public static void Setup()
         {
-            var inputs = Object.FindObjectsByType<PlayerInputs>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var inputs = Object.FindObjectsByType<PlayerInputController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
             int added = 0;
             foreach (var pi in inputs)

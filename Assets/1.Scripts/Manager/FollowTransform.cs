@@ -25,7 +25,7 @@ public class FollowTransform : MonoBehaviour
         localOffset = offset;
         followRotation = rotFollow;
 
-        // Áï½Ã ½º³À(Ã¹ ÇÁ·¹ÀÓ Æ¦ ¹æÁö)
+        // ì¦‰ì‹œ ìŠ¤ëƒ…(ì²« í”„ë ˆì„ íŠ ë°©ì§€)
         if (target != null)
         {
             transform.position = target.TransformPoint(localOffset);

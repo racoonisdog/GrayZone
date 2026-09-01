@@ -241,7 +241,7 @@ public class CrosshairDebugInspector : MonoBehaviour
 
         foreach (PlayerInput playerInput in FindObjectsByType<PlayerInput>(FindObjectsSortMode.None))
         {
-            playerInput.GetComponent<PlayerInputs>()?.ResetInputState();
+            playerInput.GetComponent<PlayerInputController>()?.ResetInputState();
 
             if (playerInput.inputIsActive)
             {

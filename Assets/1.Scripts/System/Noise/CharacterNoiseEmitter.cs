@@ -1,4 +1,5 @@
 using UnityEngine;
+using VInspector;
 
 /// <summary>
 /// 스쿼드 캐릭터 한 명이 내는 소음을 모아 발신하는 컴포넌트입니다.
@@ -76,6 +77,10 @@ public class CharacterNoiseEmitter : MonoBehaviour
 
     [Tooltip("상호작용 소음을 반복해 낼 간격(초)입니다. 홀드가 유지되는 동안 이 간격으로 냅니다.")]
     [SerializeField] private float m_interactionNoiseInterval = 0.5f;
+
+    [Foldout("Debug")]
+    [Tooltip("이 캐릭터를 선택했을 때 걷기·뛰기·상호작용 소음의 도달 반경을 Scene 뷰에 원으로 표시합니다. 실제 발신 여부와 무관하게 설정값을 그립니다.")]
+    [SerializeField] private bool m_debugDrawNoiseRanges = false;
 
     /// <summary>직전 프레임의 위치입니다. 속력을 재는 데 씁니다.</summary>
     private Vector3 m_lastPosition;
@@ -226,5 +231,36 @@ public class CharacterNoiseEmitter : MonoBehaviour
     {
         // 인스턴스 ID에 행동 종류를 섞습니다. 곱셈 상수는 서로 다른 조합이 같은 값으로 겹치지 않게 하기 위한 것입니다.
         return GetInstanceID() * 31 + (int)behaviorType;
+    }
+
+    /// <summary>
+    /// 선택했을 때 행동별 소음 도달 반경을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 잠입은 "어디까지 들리는가"가 전부인데 그 거리가 숫자로만 있어 배치와 대조할 방법이 없었습니다.
+    /// 변이체의 소음 인지 게이지(<see cref="EnemyTargetSensor"/>)는 이미 머리 위에 표시되므로,
+    /// 이 원과 함께 보면 "왜 저 개체의 게이지가 차는지"를 한 화면에서 확인할 수 있습니다.
+    ///
+    /// 실제 발신 여부와 무관하게 설정값을 그립니다. 발신 순간에만 그리면 사람이 눈으로 잡기에는 너무 짧습니다.
+    /// 도달 거리는 감쇠 이전의 최대 거리이며, 실제로 들리는지는 듣는 쪽의 청각 배수도 함께 봅니다.
+    /// </remarks>
+    private void OnDrawGizmosSelected()
+    {
+        if (!m_debugDrawNoiseRanges)
+        {
+            return;
+        }
+
+        Vector3 origin = transform.position;
+
+        // 걷기(가장 조용함) -> 상호작용 -> 뛰기(가장 시끄러움) 순으로 색을 진하게 둡니다.
+        Gizmos.color = new Color(0.4f, 1.0f, 0.5f, 0.6f);
+        Gizmos.DrawWireSphere(origin, m_walkNoiseRange);
+
+        Gizmos.color = new Color(1.0f, 0.9f, 0.3f, 0.6f);
+        Gizmos.DrawWireSphere(origin, m_interactionNoiseRange);
+
+        Gizmos.color = new Color(1.0f, 0.35f, 0.3f, 0.7f);
+        Gizmos.DrawWireSphere(origin, m_runNoiseRange);
     }
 }
