@@ -1,18 +1,13 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 public class MainSceneSaveManager : MonoBehaviour
 {
     public static MainSceneSaveManager Instance { get; private set; }
 
-    [Header("New Game Defaults")]
-    [SerializeField] private string defaultProfileId = SaveFilePaths.DefaultProfileId;
-    [SerializeField] private int newGameStartDay = 1;
-    [SerializeField] private string newGameStartStageId = string.Empty;
-    [FormerlySerializedAs("startingNpcChars")]
-    [SerializeField] private PlayerbleCharacterDefinition[] startingCharacterDefinitions;
-    [SerializeField] private FacilityDefinition[] startingFacilityDefinitions;
+    [Header("New Game")]
+    [SerializeField] private DefaultSaveData defaultSaveData;
+
+    public DefaultSaveData DefaultSaveData => defaultSaveData;
 
     private void Awake()
     {
@@ -50,6 +45,11 @@ public class MainSceneSaveManager : MonoBehaviour
         }
 
         SaveData newGameSaveData = CreateNewGameSaveData();
+        if (newGameSaveData == null)
+        {
+            return false;
+        }
+
         GameDataManager.Instance.ApplySaveData(newGameSaveData);
 
         // Temporary test-scene sync. Scene managers should copy from GameDataManager on scene load later.
@@ -68,83 +68,13 @@ public class MainSceneSaveManager : MonoBehaviour
 
     public SaveData CreateNewGameSaveData()
     {
-        SaveData saveData = new SaveData
+        if (defaultSaveData == null)
         {
-            schemaVersion = SaveData.CurrentSchemaVersion,
-            profileId = ResolveProfileId(defaultProfileId),
-            shared = new SaveData.SharedSaveData
-            {
-                lastStageId = newGameStartStageId ?? string.Empty
-            },
-            shelter = new SaveData.ShelterSaveData
-            {
-                currentDay = Mathf.Max(1, newGameStartDay)
-            }
-        };
-
-        // Temporary test resources. Remove when new-game resource defaults are designed.
-        for (int i = 0; i < ResourceIds.All.Count; i++)
-        {
-            saveData.shared.resources.Add(new SaveData.ResourceAmountData
-            {
-                resourceId = ResourceIds.All[i],
-                amount = 9999
-            });
+            Debug.LogWarning("[MainSceneSaveManager] DefaultSaveData is not assigned.", this);
+            return null;
         }
 
-        AddStartingCharacters(saveData.shared);
-        AddStartingFacilities(saveData.shelter);
-        return saveData;
-    }
-
-    private void AddStartingCharacters(SaveData.SharedSaveData sharedSaveData)
-    {
-        if (sharedSaveData == null || startingCharacterDefinitions == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < startingCharacterDefinitions.Length; i++)
-        {
-            PlayerbleCharacterDefinition definition = startingCharacterDefinitions[i];
-            if (definition == null)
-            {
-                continue;
-            }
-
-            sharedSaveData.characters.Add(definition.CreateSnapshot());
-        }
-
-    }
-
-    private void AddStartingFacilities(SaveData.ShelterSaveData shelterSaveData)
-    {
-        if (shelterSaveData == null || startingFacilityDefinitions == null)
-        {
-            return;
-        }
-
-        HashSet<string> addedFacilityIds = new HashSet<string>();
-        foreach (FacilityDefinition definition in startingFacilityDefinitions)
-        {
-            SaveData.FacilitySaveData facilitySaveData = FacilitySaveDataMapper.FromDefinition(definition);
-            if (facilitySaveData == null)
-            {
-                continue;
-            }
-
-            if (!addedFacilityIds.Add(facilitySaveData.facilityId))
-            {
-                continue;
-            }
-
-            shelterSaveData.facilities.Add(facilitySaveData);
-        }
-    }
-
-    private string ResolveProfileId(string profileId)
-    {
-        return string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId;
+        return defaultSaveData.CreateSaveData();
     }
 
     private bool TryRejectDuplicate()

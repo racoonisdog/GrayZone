@@ -17,6 +17,7 @@ public class PlayerMove : MonoBehaviour
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 4.5f;
+    [SerializeField] private float sprintSpeed = 6f;
     [SerializeField] private float rotationSmoothTime = 0.12f;
     [SerializeField] private float inputDeadZone = 0.01f;
     [SerializeField] private float animationSpeedChangeRate = 10f;
@@ -234,6 +235,21 @@ public class PlayerMove : MonoBehaviour
         return direction;
     }
 
+    private bool IsSprintPressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed)
+            return true;
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKey(KeyCode.LeftShift))
+            return true;
+#endif
+
+        return false;
+    }
+
     private void RotateOnlyWhileMoving(Vector3 moveDirection)
     {
         if (moveDirection.sqrMagnitude <= inputDeadZone * inputDeadZone)
@@ -292,7 +308,8 @@ public class PlayerMove : MonoBehaviour
 
     private void MoveCharacter(Vector3 moveDirection)
     {
-        Vector3 horizontalMove = moveDirection * moveSpeed;
+        float currentSpeed = IsSprintPressed() ? sprintSpeed : moveSpeed;
+        Vector3 horizontalMove = moveDirection * currentSpeed;
         Vector3 verticalMove = Vector3.up * verticalVelocity;
 
         characterController.Move((horizontalMove + verticalMove) * Time.deltaTime);
@@ -302,7 +319,8 @@ public class PlayerMove : MonoBehaviour
     {
         if (modelAnimator == null) return;
 
-        float targetSpeed = HasMoveInput ? moveSpeed : 0f;
+        float currentSpeed = IsSprintPressed() ? sprintSpeed : moveSpeed;
+        float targetSpeed = HasMoveInput ? currentSpeed : 0f;
         animationBlend = Mathf.Lerp(animationBlend, targetSpeed, Time.deltaTime * animationSpeedChangeRate);
 
         if (animationBlend < 0.01f)
