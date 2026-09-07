@@ -47,10 +47,10 @@ public readonly struct ManufacturingMaterialQuoteLine
 /// 제조 작업과 창고 상태는 각각 <see cref="ShelterSceneDataManager.Manufacturing"/>과
 /// <see cref="ShelterSceneDataManager.Storage"/>를 직접 사용하며 이 컴포넌트가 복제본을 소유하지 않습니다.
 /// </remarks>
-public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
+public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortageAffected
 {
     private const int MaxLevelIndex = 3;
-    private const int TotalCraftingSlotCount = 4;
+    private const int TotalCraftingSlotCount = ManufacturingRuntimeData.SlotCount;
     private const int TotalHelperSlotCount = 2;
 
     private static readonly ManufacturingJobRuntimeData[] EmptyJobs =
@@ -82,6 +82,8 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
     [SerializeField] private int baseProductivity = 5;
     [Min(0)]
     [SerializeField] private int level3ProductivityBonus = 5;
+    [Min(0)]
+    [SerializeField] private int fuelShortageEfficiencyDecrease = 2;
     [SerializeField] private HelperProductivityBonus[] helperProductivityBonuses =
     {
         new HelperProductivityBonus { type = NPCType.Tanker, bonus = 2 },
@@ -95,6 +97,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
     [SerializeField] private int secondHelperSlotUnlockLevel = 3;
 
     private bool m_isUnlocked = true;
+    private bool m_isFuelShortageActive;
 
     /// <summary>작업 생성, 진행, 취소 또는 시설 상태가 바뀌었을 때 발생합니다.</summary>
     public event Action StateChanged;
@@ -152,6 +155,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
         maxOrderQuantity = Mathf.Max(1, maxOrderQuantity);
         baseProductivity = Mathf.Max(1, baseProductivity);
         level3ProductivityBonus = Mathf.Max(0, level3ProductivityBonus);
+        fuelShortageEfficiencyDecrease = Mathf.Max(0, fuelShortageEfficiencyDecrease);
         secondHelperSlotUnlockLevel = Mathf.Clamp(secondHelperSlotUnlockLevel, 1, 4);
         recipes ??= Array.Empty<ManufacturingRecipeDefinition>();
         helperProductivityBonuses ??= Array.Empty<HelperProductivityBonus>();
@@ -193,6 +197,16 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
         m_isUnlocked = isUnlocked;
         RefreshLevelVisuals();
         NotifyStateChanged();
+    }
+
+    public void ApplyFuelShortageState(bool isActive)
+    {
+        if (m_isFuelShortageActive == isActive)
+            return;
+
+        m_isFuelShortageActive = isActive;
+        HelpersChanged?.Invoke();
+        StateChanged?.Invoke();
     }
 
     public CostBundle GetUpgradeCost(int currentLevel)
@@ -683,14 +697,17 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable
     private int CalculateFinalProductivity()
     {
         int total = baseProductivity + LevelProductivityBonus(CurrentLevel);
-        if (!TryGetCharacterManager(out CharacterManager manager))
-            return Mathf.Max(1, total);
-
-        foreach (ShelterMemberRuntimeData character in manager.Characters)
+        if (TryGetCharacterManager(out CharacterManager manager))
         {
-            if (IsAssignedHelper(character))
-                total += GetHelperProductivityBonus(character.Type);
+            foreach (ShelterMemberRuntimeData character in manager.Characters)
+            {
+                if (IsAssignedHelper(character))
+                    total += GetHelperProductivityBonus(character.Type);
+            }
         }
+
+        if (m_isFuelShortageActive)
+            total -= fuelShortageEfficiencyDecrease;
 
         return Mathf.Max(1, total);
     }
