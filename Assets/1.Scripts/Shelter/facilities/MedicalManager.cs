@@ -11,6 +11,7 @@ using System.Collections.Generic;
 public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortageAffected
 {
     private const int MaxLevelIndex = 3; // 레벨 4단계 (인덱스 0,1,2,3)
+    private const int TotalPatientSlotCount = MaxLevelIndex + 1;
 
     [Header("Facility")]
     [SerializeField] private FacilityDefinition definition;
@@ -41,6 +42,8 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     private readonly List<MedicalTreatment> patientTreatments = new List<MedicalTreatment>();
     private readonly List<PatientStatus> patientStatuses = new List<PatientStatus>();
     private readonly List<ShelterMemberRuntimeData> helpers = new List<ShelterMemberRuntimeData>();
+    // 임시 빌드 전용: 슬롯별 1회 사용 상태. 세이브하지 않으며 방어전 귀환 연결점에서 재충전한다.
+    private readonly bool[] m_patientSlotAvailable = new bool[TotalPatientSlotCount];
     private bool m_isUnlocked = true; // FacilityManager가 세이브 기준으로 덮어씀(의료시설 기본 해금)
     private bool m_isFuelShortageActive;
 
@@ -102,6 +105,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     private void Awake()
     {
         CacheCharacterManager();
+        RechargeAllPatientSlots();
     }
 
     private void OnValidate()
@@ -112,8 +116,11 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
 
     private void Start()
     {
+        // 방어전을 위한 로직 변경
+        /*
         if (GameDateManager.Instance != null)
             GameDateManager.Instance.DayAdvanced += OnDayAdvanced;
+        */
 
         // 등록 즉시 FacilityManager가 세이브 기준 해금/레벨을 이 시설에 반영한다.
         FacilityManager.Instance?.Register(this);
@@ -121,8 +128,11 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
 
     private void OnDestroy()
     {
+        // 방어전을 위한 로직 변경
+        /*
         if (GameDateManager.Instance != null)
             GameDateManager.Instance.DayAdvanced -= OnDayAdvanced;
+        */
 
         FacilityManager.Instance?.Unregister(this);
     }
@@ -279,6 +289,10 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         if (character == null)
             return false;
 
+        // 임시 빌드에서는 치료 배치 목록을 만들지 않고 HP가 감소한 생존자만 즉시 치료 후보로 사용한다.
+        return !character.IsDead && character.CurrentHp < character.MaxHp;
+
+        /* 날짜 기반 치료를 다시 사용할 때 복구할 기존 후보 조건.
         if (patientTreatments.Count >= PatientCapacity)
             return false;
 
@@ -293,6 +307,50 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
             return false;
 
         return !character.IsAssignedToFacility;
+        */
+    }
+
+    /// <summary>임시 빌드 전용: 지정 환자 슬롯의 1회 사용 가능 상태를 반환합니다.</summary>
+    public bool IsPatientSlotAvailable(int slotIndex)
+    {
+        return slotIndex >= 0
+            && slotIndex < m_patientSlotAvailable.Length
+            && m_patientSlotAvailable[slotIndex];
+    }
+
+    /// <summary>
+    /// 임시 빌드 전용: 환자를 즉시 완전 회복시키고 성공한 슬롯을 사용 완료 상태로 전환합니다.
+    /// 의료 의뢰 비용은 이 임시 흐름에서 0입니다.
+    /// </summary>
+    public bool TryUsePatientSlot(int slotIndex, string runtimeId)
+    {
+        if (!IsPatientSlotAvailable(slotIndex)
+            || slotIndex >= PatientCapacity
+            || string.IsNullOrWhiteSpace(runtimeId)
+            || !TryGetCharacterManager(out CharacterManager manager)
+            || !manager.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData target)
+            || !CanAssignPatient(target))
+        {
+            return false;
+        }
+
+        if (!manager.TryCompleteRecovery(runtimeId, out _))
+            return false;
+
+        m_patientSlotAvailable[slotIndex] = false;
+        NotifyPatientSlotsChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// 임시 빌드 전용 방어전 귀환 연결점입니다. 방어전 결과 확정 후 셸터 진입 시 호출합니다.
+    /// </summary>
+    public void RechargeAllPatientSlots()
+    {
+        for (int i = 0; i < m_patientSlotAvailable.Length; i++)
+            m_patientSlotAvailable[i] = true;
+
+        NotifyPatientSlotsChanged();
     }
 
     /// <summary>
@@ -478,6 +536,8 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         return -1;
     }
 
+    // 방어전을 위한 로직 변경
+    /*
     private void OnDayAdvanced(int prev, int next)
     {
         if (patientTreatments.Count == 0)
@@ -505,6 +565,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         if (changed)
             NotifyPatientSlotsChanged();
     }
+    */
 
     private void CompleteHealing(int slotIndex)
     {
