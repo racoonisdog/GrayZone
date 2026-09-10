@@ -28,22 +28,30 @@ namespace GrayZone.EditorTools
     /// Play Mode에서 <c>exec</c>이 컴파일 지연으로 멈춰 검증 진입점이 필요해 여기에 두었습니다.
     /// </remarks>
     [UnityCliTool(Name = "gz_dump", Group = "GrayZone",
-        Description = "GrayZone 런타임/씬 상태를 한 번에 덤프합니다. what: combat | sceneui | go | revive | anim | ragdoll | killenemy | noise | squad.")]
+        Description = "GrayZone 런타임/씬 상태를 한 번에 덤프합니다. what: combat | sceneui | go | revive | anim | ragdoll | killenemy | noise | squad | inspectenemyrig | runtimeenemyrig | forcelod.")]
     public static class GZDebugDump
     {
         public class Parameters
         {
-            [ToolParameter("덤프 종류: combat | sceneui | go | revive | anim | ragdoll | killenemy | noise | squad", Required = true)]
+            [ToolParameter("덤프 종류: combat | sceneui | go | revive | anim | ragdoll | killenemy | noise | squad | inspectenemyrig | runtimeenemyrig | forcelod", Required = true)]
             public string What { get; set; }
 
             [ToolParameter("what=go 일 때 조회할 GameObject 이름(부분 일치). what=anim 에서는 대상 필터로 쓰입니다.")]
             public string Name { get; set; }
+
+            [ToolParameter("what=forcelod일 때 강제로 표시할 LOD 번호입니다. -1은 자동 선택으로 복귀합니다.")]
+            public int Lod { get; set; }
+
+            [ToolParameter("what=killenemy일 때 true면 시체를 풀에 반환하지 않고 Play Mode 동안 유지합니다.")]
+            public bool Hold { get; set; }
         }
 
         public static object HandleCommand(JObject @params)
         {
             var p = new ToolParams(@params ?? new JObject());
             string what = p.Get("what", "").ToLowerInvariant();
+            int lod = int.TryParse(p.Get("lod", "-1"), out int parsedLod) ? parsedLod : -1;
+            bool hold = bool.TryParse(p.Get("hold", "false"), out bool parsedHold) && parsedHold;
 
             switch (what)
             {
@@ -53,18 +61,255 @@ namespace GrayZone.EditorTools
                 case "revive": return DumpRevive();
                 case "anim": return DumpAnimator(p.Get("name", ""));
                 case "ragdoll": return DumpRagdoll(p.Get("name", ""));
-                case "killenemy": return KillEnemy(p.Get("name", ""));
+                case "killenemy": return KillEnemy(p.Get("name", ""), hold);
                 case "noise": return DumpNoise(p.Get("name", ""));
                 case "squad": return DumpSquad();
                 case "strandai": return StrandAiMember(p.Get("name", ""));
                 case "freezeai": return FreezeAiMember(p.Get("name", ""));
                 case "testshot": return TestShotAtPart(p.Get("name", ""));
                 case "testaim": return TestAimParallax(p.Get("name", ""));
+                case "inspectenemyrig": return InspectEnemyRigAssets();
+                case "runtimeenemyrig": return DumpRuntimeEnemyRig(p.Get("name", ""));
+                case "forcelod": return ForceEnemyLod(p.Get("name", ""), lod);
                 default:
                     return new ErrorResponse(
-                        "what 파라미터가 필요합니다: combat | sceneui | go | revive | anim | ragdoll | killenemy | noise | squad | strandai | freezeai");
+                        "what 파라미터가 필요합니다: combat | sceneui | go | revive | anim | ragdoll | killenemy | noise | squad | strandai | freezeai | inspectenemyrig | runtimeenemyrig | forcelod");
             }
         }
+
+        /// <summary>Enemy 모델 폴더의 모든 리그에 대해 메시·본·Avatar 연결 정보를 덤프합니다.</summary>
+        /// <remarks>
+        /// 모델을 인스턴스화하거나 씬을 변경하지 않고, AssetDatabase에서 읽은 서브 에셋만 조사합니다.
+        /// 모델 파일명을 하드코딩하지 않고 폴더를 훑으므로, 아티스트가 FBX를 교체·개명해도 그대로 동작합니다.
+        /// 백업 폴더는 제외합니다.
+        /// </remarks>
+        private static object InspectEnemyRigAssets()
+        {
+            const string EnemyModelFolder = "Assets/3.Resources/Model/Enemy";
+            string[] modelPaths = UnityEditor.AssetDatabase
+                .FindAssets("t:Model", new[] { EnemyModelFolder })
+                .Select(UnityEditor.AssetDatabase.GUIDToAssetPath)
+                .Where(path => !path.Contains("_BackUp/"))
+                .Distinct()
+                .OrderBy(path => path)
+                .ToArray();
+
+            if (modelPaths.Length == 0)
+            {
+                return new ErrorResponse($"Enemy 모델을 찾지 못했습니다: {EnemyModelFolder}");
+            }
+
+            var results = new List<object>();
+            for (int modelIndex = 0; modelIndex < modelPaths.Length; modelIndex++)
+            {
+                string modelPath = modelPaths[modelIndex];
+                GameObject model = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+                UnityEditor.ModelImporter importer = UnityEditor.AssetImporter.GetAtPath(modelPath)
+                    as UnityEditor.ModelImporter;
+                Avatar avatar = UnityEditor.AssetDatabase.LoadAllAssetsAtPath(modelPath)
+                    .OfType<Avatar>()
+                    .FirstOrDefault();
+
+                if (model == null)
+                {
+                    results.Add(new { path = modelPath, error = "GameObject 모델 서브에셋을 찾지 못했습니다." });
+                    continue;
+                }
+
+                SkinnedMeshRenderer[] renderers = model.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                var rendererResults = new List<object>();
+                for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
+                {
+                    SkinnedMeshRenderer renderer = renderers[rendererIndex];
+                    Transform[] bones = renderer.bones;
+                    int nullBones = bones.Count(bone => bone == null);
+                    rendererResults.Add(new
+                    {
+                        path = GetRelativeTransformPath(renderer.transform, model.transform),
+                        mesh = renderer.sharedMesh != null ? renderer.sharedMesh.name : null,
+                        bindposeCount = renderer.sharedMesh != null ? renderer.sharedMesh.bindposes.Length : 0,
+                        boneCount = bones.Length,
+                        nullBoneCount = nullBones,
+                        rootBone = renderer.rootBone != null ? renderer.rootBone.name : null,
+                        firstBones = bones.Where(bone => bone != null).Take(8).Select(bone => bone.name).ToArray(),
+                    });
+                }
+
+                results.Add(new
+                {
+                    path = modelPath,
+                    animationType = importer != null ? importer.animationType.ToString() : null,
+                    avatarSetup = importer != null ? importer.avatarSetup.ToString() : null,
+                    avatarIsHuman = avatar != null && avatar.isHuman,
+                    avatarIsValid = avatar != null && avatar.isValid,
+                    rendererCount = renderers.Length,
+                    renderers = rendererResults,
+                });
+            }
+
+            return new SuccessResponse("Enemy 모델 폴더의 SkinnedMeshRenderer 본 연결을 읽었습니다.", results);
+        }
+
+        /// <summary>플레이 중 Enemy 프리팹 인스턴스가 실제로 물고 있는 메시와 본 배열을 조사합니다.</summary>
+        /// <remarks>래그돌 상태가 아닌 생존 개체만 보며, Transform이나 렌더러 상태를 변경하지 않습니다.</remarks>
+        private static object DumpRuntimeEnemyRig(string nameFilter)
+        {
+            if (!Application.isPlaying)
+            {
+                return new ErrorResponse("runtimeenemyrig는 실제 프리팹 인스턴스를 보기 위해 Play Mode에서 실행해야 합니다.");
+            }
+
+            bool useFilter = !string.IsNullOrWhiteSpace(nameFilter);
+            var results = new List<object>();
+            foreach (EnemyController controller in Object.FindObjectsByType<EnemyController>(
+                         FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (useFilter && !controller.name.Contains(nameFilter))
+                {
+                    continue;
+                }
+
+                RagdollController ragdoll = controller.GetComponent<RagdollController>();
+                if (ragdoll != null && ragdoll.IsRagdollActive)
+                {
+                    continue;
+                }
+
+                Animator animator = controller.Animator;
+                SkinnedMeshRenderer[] renderers = controller.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                var rendererResults = new List<object>();
+                for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
+                {
+                    SkinnedMeshRenderer renderer = renderers[rendererIndex];
+                    Transform[] bones = renderer.bones;
+                    float maxParentDistance = 0.0f;
+                    float maxLossyScale = 0.0f;
+                    int outsideControllerHierarchy = 0;
+
+                    for (int boneIndex = 0; boneIndex < bones.Length; boneIndex++)
+                    {
+                        Transform bone = bones[boneIndex];
+                        if (bone == null)
+                        {
+                            continue;
+                        }
+
+                        if (!bone.IsChildOf(controller.transform))
+                        {
+                            outsideControllerHierarchy++;
+                        }
+
+                        if (bone.parent != null)
+                        {
+                            maxParentDistance = Mathf.Max(maxParentDistance, Vector3.Distance(bone.position, bone.parent.position));
+                        }
+
+                        maxLossyScale = Mathf.Max(
+                            maxLossyScale,
+                            Mathf.Max(bone.lossyScale.x, Mathf.Max(bone.lossyScale.y, bone.lossyScale.z)));
+                    }
+
+                    rendererResults.Add(new
+                    {
+                        path = GetRelativeTransformPath(renderer.transform, controller.transform),
+                        mesh = renderer.sharedMesh != null ? renderer.sharedMesh.name : null,
+                        bindposeCount = renderer.sharedMesh != null ? renderer.sharedMesh.bindposes.Length : 0,
+                        boneCount = bones.Length,
+                        nullBoneCount = bones.Count(bone => bone == null),
+                        outsideControllerHierarchy,
+                        rootBone = renderer.rootBone != null
+                            ? GetRelativeTransformPath(renderer.rootBone, controller.transform)
+                            : null,
+                        maxParentDistance,
+                        maxLossyScale,
+                        firstBones = bones.Where(bone => bone != null)
+                            .Take(8)
+                            .Select(bone => GetRelativeTransformPath(bone, controller.transform))
+                            .ToArray(),
+                    });
+                }
+
+                results.Add(new
+                {
+                    go = controller.name,
+                    animatorAvatar = animator != null && animator.avatar != null ? animator.avatar.name : null,
+                    animatorAvatarIsHuman = animator != null && animator.avatar != null && animator.avatar.isHuman,
+                    hips = animator != null && animator.isHuman && animator.GetBoneTransform(HumanBodyBones.Hips) != null
+                        ? GetRelativeTransformPath(animator.GetBoneTransform(HumanBodyBones.Hips), controller.transform)
+                        : null,
+                    renderers = rendererResults,
+                });
+            }
+
+            return new SuccessResponse($"runtimeenemyrig: {results.Count} enemy(s).", results);
+        }
+
+        /// <summary>플레이 중 Enemy 하나의 LOD를 고정하거나 자동 선택으로 되돌립니다.</summary>
+        private static object ForceEnemyLod(string nameFilter, int lodIndex)
+        {
+            if (!Application.isPlaying)
+            {
+                return new ErrorResponse("forcelod는 실제 렌더링을 확인하기 위해 Play Mode에서 실행해야 합니다.");
+            }
+
+            foreach (EnemyController controller in Object.FindObjectsByType<EnemyController>(
+                         FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (!string.IsNullOrWhiteSpace(nameFilter) && !controller.name.Contains(nameFilter))
+                {
+                    continue;
+                }
+
+                LODGroup group = controller.GetComponentInChildren<LODGroup>(true);
+                if (group == null)
+                {
+                    continue;
+                }
+
+                if (lodIndex < -1 || lodIndex >= group.lodCount)
+                {
+                    return new ErrorResponse($"LOD 번호가 범위를 벗어났습니다: {lodIndex} (허용: -1~{group.lodCount - 1})");
+                }
+
+                group.ForceLOD(lodIndex);
+                LOD[] lods = group.GetLODs();
+                string[] rendererNames = lodIndex >= 0
+                    ? lods[lodIndex].renderers.Where(renderer => renderer != null).Select(renderer => renderer.name).ToArray()
+                    : new string[0];
+
+                return new SuccessResponse(
+                    lodIndex < 0
+                        ? $"'{controller.name}'의 LOD를 자동 선택으로 되돌렸습니다."
+                        : $"'{controller.name}'의 LOD를 {lodIndex}로 고정했습니다.",
+                    new
+                    {
+                        enemy = controller.name,
+                        forcedLod = lodIndex,
+                        lodCount = group.lodCount,
+                        renderers = rendererNames,
+                    });
+            }
+
+            return new ErrorResponse("조건에 맞는 활성 Enemy와 LODGroup을 찾지 못했습니다.");
+        }
+
+        /// <summary>에셋 루트를 기준으로 Transform 경로를 만듭니다.</summary>
+        private static string GetRelativeTransformPath(Transform target, Transform root)
+        {
+            var segments = new List<string>();
+            for (Transform current = target; current != null; current = current.parent)
+            {
+                segments.Add(current.name);
+                if (current == root)
+                {
+                    break;
+                }
+            }
+
+            segments.Reverse();
+            return string.Join("/", segments);
+        }
+
 
         // ── combat ───────────────────────────────────────────────────────────
         private static object DumpCombat()
@@ -425,8 +670,10 @@ namespace GrayZone.EditorTools
                 }
 
                 var ragdoll = controller.GetComponent<RagdollController>();
-                var animator = controller.GetComponentInChildren<Animator>(true);
+                var animator = controller.Animator;
                 var bodies = controller.GetComponentsInChildren<Rigidbody>(true);
+                var settings = FieldManager.Instance != null ? FieldManager.Instance.EnemyManager : null;
+                var corpseSettings = settings != null ? settings.Resolve(controller.EnemyType) : null;
                 bool visible = controller.GetComponentsInChildren<Renderer>(true).Any(r => r.isVisible);
 
                 int kinematic = 0;
@@ -461,6 +708,9 @@ namespace GrayZone.EditorTools
                     maxBoneAngularSpeed = maxAngular,
                     measuredMaxBoneSpeed = ragdoll != null ? ragdoll.MeasuredMaxBoneSpeed : 0.0f,
                     measuredMaxBoneAngularSpeed = ragdoll != null ? ragdoll.MeasuredMaxBoneAngularSpeed : 0.0f,
+                    destroyCorpse = corpseSettings != null && corpseSettings.DestroyCorpse,
+                    corpseLifetime = corpseSettings != null ? corpseSettings.CorpseLifetime : -1.0f,
+                    useRagdoll = corpseSettings != null && corpseSettings.UseRagdoll,
                     rootY = controller.transform.position.y,
                 });
             }
@@ -538,7 +788,7 @@ namespace GrayZone.EditorTools
         /// 정상 피해 경로(<c>TakeDamage</c>)를 그대로 타므로 사망 이벤트 체인이 실제와 같습니다.
         /// Play Mode에서 <c>exec</c>이 컴파일 지연으로 멈추기 때문에 검증용 진입점을 여기에 둡니다.
         /// </remarks>
-        private static object KillEnemy(string nameFilter)
+        private static object KillEnemy(string nameFilter, bool holdCorpse)
         {
             bool useFilter = !string.IsNullOrWhiteSpace(nameFilter);
 
@@ -556,7 +806,60 @@ namespace GrayZone.EditorTools
                     continue;
                 }
 
+                if (holdCorpse)
+                {
+                    controller.OnCorpseLifetimeElapsed += KeepCorpseForDebug;
+
+                    Renderer focusRenderer = controller.GetComponentsInChildren<Renderer>(true)
+                        .FirstOrDefault(renderer => renderer.bounds.size.sqrMagnitude > 0.0f);
+                    if (focusRenderer != null && UnityEditor.SceneView.lastActiveSceneView != null)
+                    {
+                        UnityEditor.SceneView.lastActiveSceneView.LookAt(
+                            focusRenderer.bounds.center,
+                            Quaternion.Euler(10.0f, 180.0f, 0.0f),
+                            3.0f,
+                            false);
+                    }
+                }
+
                 health.TakeDamage(int.MaxValue);
+                var ragdoll = controller.GetComponent<RagdollController>();
+                var animator = controller.Animator;
+                var bodies = controller.GetComponentsInChildren<Rigidbody>(true);
+                var joints = controller.GetComponentsInChildren<CharacterJoint>(true);
+                int kinematicBodies = 0;
+                float maximumLinearSpeed = 0.0f;
+                float maximumAngularSpeed = 0.0f;
+                float maximumAngularVelocityLimit = 0.0f;
+                int preprocessingEnabled = 0;
+                int projectionEnabled = 0;
+
+                foreach (var body in bodies)
+                {
+                    if (body.isKinematic)
+                    {
+                        kinematicBodies++;
+                        continue;
+                    }
+
+                    maximumLinearSpeed = Mathf.Max(maximumLinearSpeed, body.linearVelocity.magnitude);
+                    maximumAngularSpeed = Mathf.Max(maximumAngularSpeed, body.angularVelocity.magnitude);
+                    maximumAngularVelocityLimit = Mathf.Max(maximumAngularVelocityLimit, body.maxAngularVelocity);
+                }
+
+                foreach (var joint in joints)
+                {
+                    if (joint.enablePreprocessing)
+                    {
+                        preprocessingEnabled++;
+                    }
+
+                    if (joint.enableProjection)
+                    {
+                        projectionEnabled++;
+                    }
+                }
+
                 return new SuccessResponse(
                     $"killenemy: '{controller.name}' 처치 요청 완료.",
                     new
@@ -564,10 +867,28 @@ namespace GrayZone.EditorTools
                         go = controller.name,
                         hp = controller.CurrentHP,
                         state = controller.Current != null ? controller.Current.GetType().Name : null,
+                        ragdollActive = ragdoll != null && ragdoll.IsRagdollActive,
+                        animatorEnabled = animator != null && animator.enabled,
+                        boneCount = bodies.Length,
+                        kinematicBones = kinematicBodies,
+                        maxBoneSpeed = maximumLinearSpeed,
+                        maxBoneAngularSpeed = maximumAngularSpeed,
+                        maxAngularVelocityLimit = maximumAngularVelocityLimit,
+                        characterJointCount = joints.Length,
+                        preprocessingEnabled = preprocessingEnabled,
+                        projectionEnabled = projectionEnabled,
+                        holdCorpse,
+                        timeScale = Time.timeScale,
                     });
             }
 
             return new ErrorResponse("처치할 생존 변이체를 찾지 못했습니다.");
+        }
+
+        /// <summary>래그돌을 오래 관찰하는 디버그 요청에서 풀 반환 처리를 소비합니다.</summary>
+        private static bool KeepCorpseForDebug()
+        {
+            return true;
         }
 
         /// <summary>스테이트 해시를 사람이 읽을 이름으로 바꿉니다. 표에 없으면 해시를 그대로 씁니다.</summary>

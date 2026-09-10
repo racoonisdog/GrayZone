@@ -4,6 +4,25 @@ using UnityEngine.Serialization;
 using VInspector;
 
 /// <summary>
+/// 방어전에서 적이 어떤 대상군을 우선시할지 나타냅니다.
+/// </summary>
+/// <remarks>
+/// 현재는 스폰 시점의 성향 값을 보관하는 용도입니다. 대상 탐색과 공격 로직은 아직 이 값을 읽지 않으므로,
+/// <see cref="PlayerPriority"/>와 <see cref="ObjectivePriority"/>는 후속 방어전 AI 구현에서 연결합니다.
+/// </remarks>
+public enum EnemyDefenseDisposition
+{
+    /// <summary>기존 적 탐색 규칙을 그대로 사용합니다.</summary>
+    Default,
+
+    /// <summary>플레이어를 우선 대상으로 삼도록 의도된 성향입니다.</summary>
+    PlayerPriority,
+
+    /// <summary>방어 목표물을 우선 대상으로 삼도록 의도된 성향입니다.</summary>
+    ObjectivePriority,
+}
+
+/// <summary>
 /// Enemy 행동을 엄브렐라 HFSM으로 오케스트레이션하는 호스트입니다.
 /// </summary>
 /// <remarks>
@@ -21,6 +40,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Header("Identity")]
     [Tooltip("이 감염체의 종류입니다. 시체 처리처럼 종류별로 다른 설정을 고를 때의 키로 씁니다. 밸런스 수치와는 무관합니다.")]
     [SerializeField] private EnemyType m_enemyType = EnemyType.Howler;
+
+    [Header("Defense Disposition")]
+    [Tooltip("방어전에서 우선시할 대상 성향입니다. 현재는 스폰 설정을 보관만 하며 대상 탐색·공격 로직에는 아직 연결하지 않습니다.")]
+    [SerializeField] private EnemyDefenseDisposition m_defenseDisposition = EnemyDefenseDisposition.Default;
 
     [Header("Balance Data")]
     [Tooltip("선택 사항인 적 밸런스 데이터입니다. 지정하면 아래 레거시 기본값보다 우선 적용됩니다.")]
@@ -195,8 +218,21 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>현재 활성 상태입니다.</summary>
     private EnemyStateBase m_current;
 
+    // Start가 한 번 실행된 뒤에만 풀 재사용 시 초기 상태 전이를 직접 수행합니다.
+    private bool m_hasStarted;
+
     /// <summary>현재 활성 상태입니다.</summary>
     public EnemyStateBase Current => m_current;
+
+    /// <summary>
+    /// 종류별 시체 유지 시간이 끝났을 때 풀 소유자가 개체를 회수할 기회를 받는 콜백입니다.
+    /// </summary>
+    /// <remarks>
+    /// 반환값이 true인 콜백이 하나라도 있으면 해당 소유자가 개체를 처리한 것으로 보고
+    /// <see cref="EnemyFSM.DeadState"/>는 <see cref="Object.Destroy(Object)"/>를 호출하지 않습니다.
+    /// 일반 배치 적처럼 등록한 소유자가 없으면 기존 파괴 경로를 그대로 사용합니다.
+    /// </remarks>
+    public event System.Func<bool> OnCorpseLifetimeElapsed;
 
     // =========================
     // 상태가 읽어 쓰는 접근자 (튜닝 수치는 컨트롤러가 소유, 상태는 읽기만)
@@ -233,6 +269,34 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 골격이 없는 것은 프리팹 구성 누락이라 경고할 일이고, 나머지는 정상 경로입니다.
     /// </remarks>
     public bool HasRagdollSkeleton => ragdollController != null && ragdollController.IsConfigured;
+
+    /// <summary>
+    /// 시체 유지 시간이 끝났을 때 등록된 풀 소유자에게 회수 처리를 요청합니다.
+    /// </summary>
+    /// <returns>어느 한 소유자라도 개체 회수를 처리했으면 true입니다.</returns>
+    /// <remarks>
+    /// 콜백을 단순 알림으로 두지 않고 처리 여부를 반환하게 해, 풀링하지 않는 적의 기존
+    /// <see cref="Object.Destroy(Object)"/> 흐름과 풀링 적의 비활성 반환 흐름을 함께 유지합니다.
+    /// </remarks>
+    public bool TryHandleCorpseLifetimeElapsed()
+    {
+        System.Func<bool> handlers = OnCorpseLifetimeElapsed;
+        if (handlers == null)
+        {
+            return false;
+        }
+
+        System.Delegate[] invocationList = handlers.GetInvocationList();
+        for (int i = 0; i < invocationList.Length; i++)
+        {
+            if (invocationList[i] is System.Func<bool> handler && handler.Invoke())
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// 이 개체가 피격으로 밀려날 때 적용할 충격량 하한을 래그돌에 알립니다.
@@ -413,6 +477,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>이 감염체의 종류입니다. 종류별 설정을 고를 때의 키입니다.</summary>
     public EnemyType EnemyType => m_enemyType;
 
+    /// <summary>이 감염체가 방어전에서 우선시할 대상 성향입니다.</summary>
+    /// <remarks>현재 대상 탐색과 공격 로직은 이 값을 읽지 않습니다.</remarks>
+    public EnemyDefenseDisposition DefenseDisposition => m_defenseDisposition;
+
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
     public EnemyBalanceSO Balance => m_balanceSO;
 
@@ -481,6 +549,48 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         enemyHealth?.ApplyBalance(balance);
     }
 
+    /// <summary>
+    /// 풀에서 다시 꺼낼 적의 런타임 상태를 초기화합니다.
+    /// </summary>
+    /// <remarks>
+    /// 비활성화 시점에 해제된 이벤트 구독은 <see cref="OnEnable"/>에서 다시 연결됩니다.
+    /// 첫 활성화에서는 <see cref="Start"/>가 초기 상태 진입을 담당하고, 재사용 인스턴스만 여기서 배회 상태로 되돌립니다.
+    /// </remarks>
+    public void ResetForSpawn()
+    {
+        CacheReferences();
+
+        m_knockbackVelocity = Vector3.zero;
+        m_isStaggered = false;
+        RestoreAgentPositionOwnership();
+
+        ragdollController?.ResetForReuse();
+        enemyAttack?.SetHitboxActive(false);
+
+        targetSensor?.ClearAllInfo();
+        targetSensor?.ClearNoise();
+        targetSensor?.SetEngaged(false);
+
+        enemyHealth?.RestoreFull();
+        enemyHealth?.ResetStagger();
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.isStopped = false;
+            agent.ResetPath();
+        }
+
+        ResetAnimation();
+
+        if (!m_hasStarted)
+        {
+            return;
+        }
+
+        RollIdleType();
+        TransitionTo(Wander);
+    }
+
     /// <summary>활성화될 때 체력 이벤트를 구독합니다.</summary>
     private void OnEnable()
     {
@@ -517,6 +627,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>초기 상태로 진입합니다.</summary>
     private void Start()
     {
+        m_hasStarted = true;
         RollIdleType();
 
         // TODO(슬라이스 2): 휴면/배회 배치 구분, 스폰 기준점 기록.
@@ -841,7 +952,19 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private void OnAnimatorMove()
     {
-        if (!m_staggerRootMotionActive || animator == null)
+        // 기존처럼 Enemy 루트 자체에 Animator가 있는 프리팹도 지원합니다.
+        // 모델 자식 Animator를 쓰는 경우에는 같은 GameObject의 Relay가 이 메서드 대신 전달합니다.
+        if (animator != null && animator.gameObject == gameObject)
+        {
+            ApplyAnimatorRootMotion(animator);
+        }
+    }
+
+    /// <summary>현재 Enemy Animator가 만든 루트 모션을 경직 구간에만 소비합니다.</summary>
+    /// <param name="sourceAnimator">이번 프레임의 루트 모션을 계산한 Animator입니다.</param>
+    internal void ApplyAnimatorRootMotion(Animator sourceAnimator)
+    {
+        if (!m_staggerRootMotionActive || sourceAnimator == null || sourceAnimator != animator)
         {
             return;
         }
@@ -851,7 +974,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         // 절대 위치(rootPosition)가 아니라 변위(deltaPosition)를 쓰는 이유는, 아바타 루트와 GameObject
         // 피벗이 어긋나 있으면 절대 위치 대입이 매 프레임 그 차이만큼 튀기 때문입니다.
         // 변위는 그 차이와 무관하게 "이번 프레임에 얼마나 움직였는가"만 담습니다.
-        Vector3 target = transform.position + animator.deltaPosition;
+        Vector3 target = transform.position + sourceAnimator.deltaPosition;
 
         // NavMesh 밖으로 한 발이라도 나가면 그 지점에서 출발하는 경로 계산이 전부 실패하고
         // (EnemyTargetSensor.GetPathDistance가 PathComplete만 인정) 유효 대상이 사라집니다.
@@ -1366,7 +1489,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         if (animator == null)
         {
-            animator = GetComponent<Animator>();
+            animator = ResolveAnimator();
         }
 
         if (enemyHealth == null)
@@ -1389,10 +1512,92 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             ragdollController = GetComponent<RagdollController>();
         }
 
+        enemyAttack?.SetAnimator(animator);
+        ragdollController?.SetAnimator(animator);
+
         if (m_feedback != null)
         {
             EnsureFeedbackEmitter();
         }
+    }
+
+    /// <summary>
+    /// 실제 FBX 골격 루트에 붙은 Animator를 선택하고 Enemy 루트 Animator의 설정을 넘깁니다.
+    /// </summary>
+    /// <remarks>
+    /// FBX에서 생성한 Humanoid Avatar는 FBX 루트 기준의 골격 경로를 사용합니다. 프리팹 최상위 Enemy에
+    /// 같은 Avatar를 연결하면 모델 래퍼 Transform이 경로 앞에 추가되어 스킨 bind pose와 애니메이션 골격이
+    /// 어긋날 수 있습니다. 따라서 SkinnedMeshRenderer를 소유한 모델 자식 Animator를 우선 사용합니다.
+    /// </remarks>
+    private Animator ResolveAnimator()
+    {
+        Animator rootAnimator = GetComponent<Animator>();
+        Animator modelAnimator = FindModelAnimator();
+
+        if (modelAnimator == null)
+        {
+            return rootAnimator;
+        }
+
+        if (rootAnimator != null && rootAnimator != modelAnimator)
+        {
+            bool shouldEnableModelAnimator = rootAnimator.enabled;
+
+            modelAnimator.runtimeAnimatorController = rootAnimator.runtimeAnimatorController;
+            if (modelAnimator.avatar == null && rootAnimator.avatar != null)
+            {
+                modelAnimator.avatar = rootAnimator.avatar;
+            }
+
+            modelAnimator.applyRootMotion = rootAnimator.applyRootMotion;
+            modelAnimator.updateMode = rootAnimator.updateMode;
+            modelAnimator.cullingMode = rootAnimator.cullingMode;
+            modelAnimator.speed = rootAnimator.speed;
+
+            rootAnimator.enabled = false;
+            modelAnimator.enabled = shouldEnableModelAnimator;
+        }
+
+        EnemyAnimatorRootMotionRelay relay = modelAnimator.GetComponent<EnemyAnimatorRootMotionRelay>();
+        if (relay == null)
+        {
+            relay = modelAnimator.gameObject.AddComponent<EnemyAnimatorRootMotionRelay>();
+        }
+
+        relay.Initialize(this, modelAnimator);
+
+        // 애니메이션 이벤트는 Animator가 붙은 GameObject의 컴포넌트에만 전달됩니다. 재생을 모델 자식으로
+        // 옮긴 이상 루트의 이 클래스는 공격 클립 이벤트를 받지 못하므로, 같은 방식의 전달 계층을 붙입니다.
+        // 없으면 OnAttackHitboxOn이 오지 않아 판정 콜라이더가 켜지지 않고 근접 공격이 무피해가 됩니다.
+        EnemyAnimatorEventRelay eventRelay = modelAnimator.GetComponent<EnemyAnimatorEventRelay>();
+        if (eventRelay == null)
+        {
+            eventRelay = modelAnimator.gameObject.AddComponent<EnemyAnimatorEventRelay>();
+        }
+
+        eventRelay.Initialize(this);
+        return modelAnimator;
+    }
+
+    /// <summary>SkinnedMeshRenderer 골격을 직접 포함하는 모델 자식 Animator를 찾습니다.</summary>
+    private Animator FindModelAnimator()
+    {
+        Animator[] candidates = GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            Animator candidate = candidates[i];
+            if (candidate.transform == transform)
+            {
+                continue;
+            }
+
+            if (candidate.GetComponentInChildren<SkinnedMeshRenderer>(true) != null)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Feedback SO가 있을 때만 감염체 피드백 emitter를 런타임에 준비합니다.</summary>
