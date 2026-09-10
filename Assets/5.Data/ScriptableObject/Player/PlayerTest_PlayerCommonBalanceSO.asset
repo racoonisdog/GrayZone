@@ -42,8 +42,8 @@ MonoBehaviour:
   m_visualKickRecoverShots: 1
   m_visualKickMaxRoll: 3
   m_visualKickMaxFovPunch: 0
-  m_pitchRecoilEnvelopeDuration: 0.5
-  m_yawRecoilEnvelopeDuration: 0.45
+  m_pitchRecoilEnvelopeDuration: 0.32
+  m_yawRecoilEnvelopeDuration: 0.3
   m_rollKickEnvelopeDuration: 0.35
   m_hipfireFovPunchEnvelopeDuration: 0.25
   m_adsFovPunchEnvelopeDuration: 0.22

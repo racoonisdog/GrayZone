@@ -145,6 +145,10 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_crouchTransitionDuration = 0.2f;
 
+    [Tooltip("공중에서 웅크리기를 선입력한 뒤 착지할 때 지상 웅크림 블렌드로 넘어가는 시간입니다. 단위는 초입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_crouchLandingTransitionDuration = 0.08f;
+
     [Tooltip("MoveState 한 단계(웅크림↔걷기, 걷기↔달리기) 전환에 걸리는 시간입니다. 웅크림 높이 전환 시간과 맞추면 자세와 콜라이더가 같이 움직입니다.")]
     [Clamp(Min = 0)]
     [SerializeField] private float m_moveStateBlendDuration = 0.2f;
@@ -155,6 +159,14 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [BalanceField]
     [Clamp(Min = 0, Max = 0.3)]
     [SerializeField] private float m_rotationSmoothTime = 0.12f;
+
+    [Tooltip("실제 이동 벡터가 새 입력 방향으로 회전하는 최대 각속도입니다. W→WD처럼 입력이 바뀔 때 궤적이 한 프레임에 45° 꺾이지 않게 합니다. 단위는 °/s이며 0이면 즉시 전환합니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_movementDirectionTurnSpeed = 360.0f;
+
+    [Tooltip("일반적인 실제 이동 방향 보간을 적용할 최대 각도 차입니다. WA→WD처럼 서로 이웃한 대각선 입력끼리 바뀌는 경우에는 90°까지 예외적으로 보간합니다. A→D 같은 정반대 전환은 즉시 바뀝니다. 단위는 °입니다.")]
+    [Range(0.0f, 180.0f)]
+    [SerializeField] private float m_movementDirectionSmoothMaxAngle = 60.0f;
 
     [Tooltip("가속과 감속 반응 속도입니다.")]
     [FormerlySerializedAs("SpeedChangeRate")]
@@ -245,7 +257,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_recoilRecoverySpeed = 8.0f;
 
-    [Tooltip("마지막 발사 이후 이 시간(초)이 지나야 반동 회복을 시작합니다. 사격 중에는 오프셋을 유지하고, 멈춘 뒤에야 복귀시키기 위한 지연입니다. 무기 풀오토 사격 간격(ShootDelay)보다 커야 연사 중 반동이 유지·누적됩니다.")]
+    [Tooltip("발사 입력을 놓은 뒤 반동 회복을 시작하기까지의 유예 시간(초)입니다. 입력을 유지하는 동안에는 발수·누적량과 무관하게 회복하지 않습니다. 0이면 버튼을 놓은 직후부터 복귀합니다.")]
     [FormerlySerializedAs("m_cameraKickRecoveryDelay")]
     [BalanceField]
     [Clamp(Min = 0)]
@@ -298,11 +310,11 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("세로 반동 곡선 하나의 길이(초)입니다. 정규화 시간 0~1을 재는 기준이 됩니다. 연사 간격보다 길면 발끼리 겹쳐 누적됩니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
-    [SerializeField] private float m_pitchRecoilEnvelopeDuration = 0.35f;
+    [SerializeField] private float m_pitchRecoilEnvelopeDuration = 0.32f;
 
     [Tooltip("세로 반동 곡선입니다. x는 정규화 시간(0~1), y는 반동 세기 배율입니다. y가 가장 큰 x가 피크 위치이고, y를 1보다 크게 두면 목표를 넘어섰다 돌아옵니다.")]
     [SerializeField]
-    private AnimationCurve m_pitchRecoilEnvelopeCurve = ImpulseEnvelope.BuildCurve(0.25f, 1.0f, 1.0f);
+    private AnimationCurve m_pitchRecoilEnvelopeCurve = ImpulseEnvelope.BuildFastAttackConstantReleaseCurve(0.10f, 1.0f, 0.75f);
 
     [Tooltip("켜면 좌우 반동의 상승과 회복을 곡선 하나로 처리합니다. 상하와 따로 켤 수 있어 한쪽만 바꿔 비교할 수 있습니다.")]
     [SerializeField] private bool m_useYawRecoilEnvelope = false;
@@ -310,11 +322,11 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("좌우 반동 곡선 하나의 길이(초)입니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
-    [SerializeField] private float m_yawRecoilEnvelopeDuration = 0.35f;
+    [SerializeField] private float m_yawRecoilEnvelopeDuration = 0.30f;
 
     [Tooltip("좌우 반동 곡선입니다. x는 정규화 시간(0~1), y는 반동 세기 배율입니다.")]
     [SerializeField]
-    private AnimationCurve m_yawRecoilEnvelopeCurve = ImpulseEnvelope.BuildCurve(0.25f, 1.0f, 1.0f);
+    private AnimationCurve m_yawRecoilEnvelopeCurve = ImpulseEnvelope.BuildFastAttackConstantReleaseCurve(0.12f, 1.0f, 0.85f);
 
     /// <summary>세로 반동 엔벨로프의 런타임 상태입니다.</summary>
     private readonly ImpulseEnvelope m_pitchRecoilEnvelope = new ImpulseEnvelope();
@@ -401,7 +413,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>좌우(요) 반동 목표값입니다. AddRecoil이 즉시 누적하고 지연 후 0으로 회복하며, 소비 오프셋이 이 값을 추종합니다.</summary>
     private float m_recoilYawTarget;
 
-    /// <summary>마지막으로 반동이 가해진 시각입니다. 회복 시작 지연 판정에 사용합니다.</summary>
+    /// <summary>마지막으로 반동이 가해진 시각입니다. 발사 입력을 놓은 뒤 회복 시작 유예 판정에 사용합니다.</summary>
     private float m_lastRecoilTime = float.NegativeInfinity;
 
     /// <summary>현재 프레임 이동에 사용할 수평 속도입니다.</summary>
@@ -411,6 +423,9 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     private float m_animationBlend;
     /// <summary>캐릭터가 바라봐야 할 목표 Y축 회전각입니다.</summary>
     private float m_targetRotation = 0.0f;
+
+    /// <summary>대각선 입력끼리의 전환을 판정하기 위한 직전 프레임 이동 입력입니다.</summary>
+    private Vector2 m_previousMoveInput;
 
     /// <summary><see cref="Mathf.SmoothDampAngle"/>에서 사용하는 회전 속도 참조값입니다.</summary>
     private float m_rotationVelocity;
@@ -484,6 +499,12 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>이동 방향을 유효한 방향으로 볼 최소 수평 속력입니다.</summary>
     private const float MoveDirectionThreshold = 0.01f;
 
+    /// <summary>이웃한 대각선 입력끼리 보간할 수 있는 최대 입력 각도입니다.</summary>
+    private const float DiagonalTransitionMaxAngle = 90.0f;
+
+    /// <summary>정규화된 입력을 대각선 영역으로 판정할 때 각 축에 필요한 최소 절댓값입니다.</summary>
+    private const float DiagonalInputAxisThreshold = 0.5f;
+
     /// <summary>
     /// 애니메이터에 넣는 몸 기준 이동 방향입니다. 이동 중에는 크기가 1로 유지됩니다.
     /// </summary>
@@ -554,6 +575,12 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>현재 캐릭터가 지면에 닿아 있는지 여부입니다.</summary>
     private bool m_grounded = true;
 
+    /// <summary>직전 프레임의 접지 상태입니다. 이번 프레임의 착지 순간을 판정합니다.</summary>
+    private bool m_wasGrounded = true;
+
+    /// <summary>직전 프레임의 전력질주 입력 상태입니다. 웅크림을 취소할 새 전력질주 입력만 구분합니다.</summary>
+    private bool m_previousSprintInput;
+
     /// <summary>전투 자세(조준/사격/사격 잔류) 여부입니다. AimController가 통지합니다.</summary>
     /// <remarks>전투 자세는 설정과 무관하게 백뷰로 고정되고, 전력질주가 잠깁니다.</remarks>
     private bool m_isCombatStance;
@@ -593,6 +620,10 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     public float CrouchSpeed => m_crouchSpeed;
     /// <summary>이동 방향을 바라보는 회전 보간 시간입니다.</summary>
     public float RotationSmoothTime => m_rotationSmoothTime;
+    /// <summary>실제 이동 벡터가 새 입력 방향을 향해 회전하는 최대 각속도(°/s)입니다.</summary>
+    public float MovementDirectionTurnSpeed => m_movementDirectionTurnSpeed;
+    /// <summary>실제 이동 방향 보간을 적용할 최대 각도 차(°)입니다.</summary>
+    public float MovementDirectionSmoothMaxAngle => m_movementDirectionSmoothMaxAngle;
     /// <summary>가속과 감속 반응 속도입니다.</summary>
     /// <summary>이동 방향을 애니메이터에 넣을 때의 감쇠 시간(초)입니다.</summary>
     public float MoveDirectionDamp => m_moveDirectionDamp;
@@ -689,6 +720,13 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
     public void SetRotationSmoothTime(float value) => m_rotationSmoothTime = Mathf.Clamp(value, 0.0f, 0.3f);
+    /// <summary>실제 이동 방향의 최대 회전 각속도를 설정합니다.</summary>
+    /// <param name="value">새 각속도(°/s)입니다. 음수는 0으로 보정합니다.</param>
+    public void SetMovementDirectionTurnSpeed(float value) => m_movementDirectionTurnSpeed = Mathf.Max(0.0f, value);
+    /// <summary>실제 이동 방향 보간을 적용할 최대 각도 차를 설정합니다.</summary>
+    /// <param name="value">새 임계 각도(°)입니다. 0~180°로 제한합니다.</param>
+    public void SetMovementDirectionSmoothMaxAngle(float value) =>
+        m_movementDirectionSmoothMaxAngle = Mathf.Clamp(value, 0.0f, 180.0f);
     /// <summary>
     /// 가속과 감속 반응 속도를 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
@@ -926,7 +964,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>반동 오프셋이 0으로 복귀하는 속도입니다. 시각 킥(AimController)이 회복 속도를 이 값에 맞춰 이질감을 줄일 때 읽습니다.</summary>
     public float RecoilRecoverySpeed => m_recoilRecoverySpeed;
 
-    /// <summary>마지막 발사 후 논리 반동 회복을 시작하기까지의 지연 시간입니다.</summary>
+    /// <summary>발사 입력을 놓은 후 논리 반동 회복을 시작하기까지의 유예 시간입니다.</summary>
     public float RecoilRecoveryDelay => m_recoilRecoveryDelay;
 
     /// <summary>논리 반동 온셋을 보간할지 여부입니다.</summary>
@@ -966,7 +1004,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <param name="value">음수는 0으로 보정됩니다.</param>
     public void SetRecoilRecoverySpeed(float value) => m_recoilRecoverySpeed = value;
 
-    /// <summary>마지막 발사 후 논리 반동 회복을 시작하기까지의 지연 시간을 설정합니다.</summary>
+    /// <summary>발사 입력을 놓은 후 논리 반동 회복을 시작하기까지의 유예 시간을 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
     public void SetRecoilRecoveryDelay(float value) => m_recoilRecoveryDelay = value;
 
@@ -1237,10 +1275,12 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         m_jumpTimeoutDelta = m_jumpTimeout;
         m_fallTimeoutDelta = m_fallTimeout;
         m_grounded = true;
+        m_wasGrounded = true;
 
         if (m_input != null)
         {
             m_input.jump = false;
+            m_previousSprintInput = m_input.sprint;
         }
 
         if (m_animator == null)
@@ -1373,6 +1413,8 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
         m_jumpTimeoutDelta = m_jumpTimeout;
         m_fallTimeoutDelta = m_fallTimeout;
+        m_wasGrounded = m_grounded;
+        m_previousSprintInput = m_input.sprint;
     }
 
     /// <summary>
@@ -1416,12 +1458,17 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         // 읽어, 착지하는 프레임에 IsGrounded와 IsFreeFall이 한 프레임 동안 함께 켜집니다.
         // 그 한 프레임 때문에 착지 직후 재점프가 도약 동작을 건너뛰고 낙하 상태로 새는 일이 있었습니다.
         GroundedCheck();
+        bool landedThisFrame = m_grounded && !m_wasGrounded;
         JumpAndGravity();
         // 캡슐 높이를 이동보다 먼저 맞춥니다. 이동 뒤에 바꾸면 이번 프레임 충돌 판정과 높이가 한 프레임 어긋납니다.
         UpdateCrouch();
+        UpdateCrouchLandingTransition(landedThisFrame);
         // 시점 판정을 이동보다 먼저 합니다. Move가 이번 프레임의 시점 모드로 몸을 돌리기 때문입니다.
         UpdateViewMode();
         Move();
+
+        m_wasGrounded = m_grounded;
+        m_previousSprintInput = m_input.sprint;
     }
 
     /// <summary>
@@ -1436,9 +1483,11 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        // 앉은 상태에서 달리기 입력이 들어오면 일어나 달리기를 시작합니다(캐릭터 행동 시스템 §6).
-        // 토글이라 입력을 직접 내려 줘야 합니다. 여기서 풀지 않으면 웅크림이 전력질주를 계속 삼킵니다.
-        if (m_input.Crouch && m_input.sprint)
+        // 앉은 뒤 새로 전력질주를 누르면 일어나 달리기를 시작합니다(캐릭터 행동 시스템 §6).
+        // 이미 전력질주를 홀드한 상태에서 공중 웅크리기를 선입력한 경우까지 취소하면, 착지 웅크림이
+        // 영영 성립하지 않습니다. 그래서 "현재 홀드 중"이 아니라 "이번 프레임에 새로 눌림"만 소비합니다.
+        bool sprintPressedThisFrame = m_input.sprint && !m_previousSprintInput;
+        if (m_input.Crouch && sprintPressedThisFrame)
         {
             m_input.CrouchInput(false);
         }
@@ -1459,6 +1508,35 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             : Mathf.MoveTowards(m_crouchBlend, target, Time.deltaTime / m_crouchTransitionDuration);
 
         ApplyCrouchBlend();
+    }
+
+    /// <summary>
+    /// 공중에서 유지한 웅크리기 입력으로 착지했을 때, 긴 JumpLand 상태를 기다리지 않고 지상 웅크림 블렌드로 부드럽게 넘깁니다.
+    /// </summary>
+    private void UpdateCrouchLandingTransition(bool landedThisFrame)
+    {
+        if (!landedThisFrame || !m_input.Crouch || !m_hasAnimator)
+        {
+            return;
+        }
+
+        if (!m_animator.HasState(0, GroundedLocomotionStateHash))
+        {
+            Debug.LogWarning(
+                $"[ThirdPersonController] 애니메이터에 '{GroundedLocomotionStatePath}' 상태가 없습니다. " +
+                "착지 웅크림 전환을 건너뜁니다.",
+                this);
+            return;
+        }
+
+        // 이 프레임에 목표 블렌드도 함께 맞춰야 CrossFade 첫 프레임이 걷기 자세로 튀지 않습니다.
+        m_moveState = MoveStateCrouch;
+        m_animator.SetBool(m_animIDCrouch, true);
+        m_animator.SetFloat(m_animIDMoveState, MoveStateCrouch);
+        m_animator.CrossFadeInFixedTime(
+            GroundedLocomotionStateHash,
+            m_crouchLandingTransitionDuration,
+            0);
     }
 
     /// <summary>
@@ -1708,19 +1786,23 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         bool legacyPitch = !m_usePitchRecoilEnvelope;
         bool legacyYaw = !m_useYawRecoilEnvelope;
 
-        // 기존 방식 축의 목표값 회복. 사격 중에는 유지·누적하고 지연이 지난 뒤에만 0으로 되돌립니다.
-        if ((legacyPitch || legacyYaw) && Time.time - m_lastRecoilTime > m_recoilRecoveryDelay)
+        // 발사 입력을 유지하는 순간부터 회복을 막습니다. 따라서 초반 연사 구간도 발사 간격/프레임 순서에
+        // 따라 오르내리지 않습니다. 클릭은 입력을 놓는 즉시 일반적인 마지막 발 기준 유예·복귀 경로를 탑니다.
+        bool shootHeld = m_input != null && m_input.Shoot;
+        if ((legacyPitch || legacyYaw) && !shootHeld && Time.time - m_lastRecoilTime > m_recoilRecoveryDelay)
         {
-            float recoveryFactor = Mathf.Clamp01(Time.deltaTime * m_recoilRecoverySpeed);
+            // 회복은 항상 같은 각속도로 진행합니다. Lerp로 처리하면 초반에는 빠르고 끝에서 느려져,
+            // 연사 중 상한에 멈춘 반동이 풀릴 때 감속·버벅임처럼 보입니다.
+            float recoveryStep = Mathf.Max(0.0f, m_recoilRecoverySpeed) * Time.deltaTime;
 
             if (legacyPitch)
             {
-                m_recoilPitchTarget = Mathf.Lerp(m_recoilPitchTarget, 0.0f, recoveryFactor);
+                m_recoilPitchTarget = Mathf.MoveTowards(m_recoilPitchTarget, 0.0f, recoveryStep);
             }
 
             if (legacyYaw)
             {
-                m_recoilYawTarget = Mathf.Lerp(m_recoilYawTarget, 0.0f, recoveryFactor);
+                m_recoilYawTarget = Mathf.MoveTowards(m_recoilYawTarget, 0.0f, recoveryStep);
             }
         }
 
@@ -1935,12 +2017,39 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     {
         Vector3 inputDirection = new Vector3(m_input.move.x, 0.0f, m_input.move.y).normalized;
 
-        // 목표 회전각을 속도보다 먼저 구합니다. 전력질주 판정이 이 값과 몸 방향의 차이를 보기 때문입니다.
+        float currentHorizontalSpeed = new Vector3(
+            m_controller.velocity.x,
+            0.0f,
+            m_controller.velocity.z).magnitude;
+
+        // 정지 출발은 입력 방향을 즉시 잡고, 이미 이동 중일 때만 최대 각속도로 회전합니다.
+        // 그렇지 않으면 오래 멈춘 뒤 다른 방향으로 출발할 때도 예전 헤딩에서 휘어 나갑니다.
+        // m_targetRotation이 실제 이동 헤딩을 소유하므로 몸 회전, 전력질주 판정, CharacterController 이동이
+        // 동일한 보간 결과를 소비합니다.
         if (m_input.move != Vector2.zero)
         {
-            m_targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg +
-                               m_mainCamera.transform.eulerAngles.y;
+            float desiredRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg +
+                                    m_mainCamera.transform.eulerAngles.y;
+
+            bool alreadyMoving = currentHorizontalSpeed > MoveDirectionThreshold ||
+                                 m_speed > MoveDirectionThreshold;
+
+            float directionDelta = Mathf.Abs(Mathf.DeltaAngle(m_targetRotation, desiredRotation));
+            bool diagonalToDiagonal = IsNeighboringDiagonalTransition(m_previousMoveInput, m_input.move);
+            bool smoothDirectionChange = alreadyMoving &&
+                                         m_movementDirectionTurnSpeed > 0.0f &&
+                                         (directionDelta <= m_movementDirectionSmoothMaxAngle ||
+                                          diagonalToDiagonal);
+
+            m_targetRotation = smoothDirectionChange
+                ? Mathf.MoveTowardsAngle(
+                    m_targetRotation,
+                    desiredRotation,
+                    m_movementDirectionTurnSpeed * Time.deltaTime)
+                : desiredRotation;
         }
+
+        m_previousMoveInput = m_input.move;
 
         // 전력질주 방향 판정은 프레임당 한 번만 합니다. 이 판정이 히스테리시스 상태를 들고 있어
         // 여러 번 부르면 같은 프레임 안에서 경계가 두 번 움직입니다.
@@ -1973,8 +2082,6 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         {
             targetSpeed = 0.0f;
         }
-
-        float currentHorizontalSpeed = new Vector3(m_controller.velocity.x, 0.0f, m_controller.velocity.z).magnitude;
 
         // 전환 직후 몇 프레임은 밀려난 속도를 이동 입력으로 오해하지 않도록 잘라 냅니다.
         // CharacterController를 다른 콜라이더와 겹친 자리에서 켜면 유니티가 겹침을 푸느라 크게 밀어내는데,
@@ -2010,6 +2117,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         m_animationBlend = Mathf.Lerp(m_animationBlend, targetSpeed, Time.deltaTime * m_speedChangeRate);
+
         if (m_animationBlend < 0.01f)
         {
             m_animationBlend = 0f;
@@ -2031,6 +2139,38 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         UpdateLocomotionAnimator();
+    }
+
+    /// <summary>
+    /// WA→WD처럼 서로 이웃한 대각선 입력끼리의 전환인지 판정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 양쪽 입력이 모두 대각선이어도 WA→SD처럼 정반대인 경우는 제외합니다. 이 예외를 현재 헤딩이 아니라
+    /// 원시 입력으로 판정해야 90° 회전의 중간 지점에서도 보간이 끊기지 않습니다.
+    /// </remarks>
+    private static bool IsNeighboringDiagonalTransition(Vector2 previousInput, Vector2 currentInput)
+    {
+        if (!IsDiagonalMoveInput(previousInput) || !IsDiagonalMoveInput(currentInput))
+        {
+            return false;
+        }
+
+        float previousAngle = Mathf.Atan2(previousInput.x, previousInput.y) * Mathf.Rad2Deg;
+        float currentAngle = Mathf.Atan2(currentInput.x, currentInput.y) * Mathf.Rad2Deg;
+        return Mathf.Abs(Mathf.DeltaAngle(previousAngle, currentAngle)) <= DiagonalTransitionMaxAngle;
+    }
+
+    /// <summary>이동 입력이 8방향 기준의 대각선 영역에 있는지 판정합니다.</summary>
+    private static bool IsDiagonalMoveInput(Vector2 input)
+    {
+        if (input.sqrMagnitude <= MoveDirectionThreshold * MoveDirectionThreshold)
+        {
+            return false;
+        }
+
+        Vector2 direction = input.normalized;
+        return Mathf.Abs(direction.x) >= DiagonalInputAxisThreshold &&
+               Mathf.Abs(direction.y) >= DiagonalInputAxisThreshold;
     }
 
     /// <summary>

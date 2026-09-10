@@ -152,4 +152,33 @@ public sealed class ImpulseEnvelope
 
         return new AnimationCurve(start, middle, end);
     }
+
+    /// <summary>
+    /// 빠르게 가속해 피크에 도달한 뒤 일정한 속도로 복귀하는 엔벨로프 곡선을 만듭니다.
+    /// </summary>
+    /// <param name="peakRatio">피크가 오는 정규화 시간 위치입니다(0~1).</param>
+    /// <param name="peakValue">피크에서의 세기 배율입니다.</param>
+    /// <param name="attackEasePower">상승 구간의 이징입니다. 1이면 선형, 작을수록 초반에 더 빠르게 가속합니다.</param>
+    /// <returns>빠른 상승과 선형 복귀를 갖는 3키 곡선입니다.</returns>
+    /// <remarks>
+    /// 피크의 outgoing tangent와 끝 키의 incoming tangent를 같은 하강 할선으로 둡니다.
+    /// 두 키 사이가 정확히 직선이므로, 피크에서 멈췄다가 중간에 가속하는 복귀감이 생기지 않습니다.
+    /// 피크의 incoming tangent는 0으로 유지해 상승 끝이 과하게 꺾이거나 미리 떨어지지 않게 합니다.
+    /// </remarks>
+    public static AnimationCurve BuildFastAttackConstantReleaseCurve(
+        float peakRatio,
+        float peakValue,
+        float attackEasePower)
+    {
+        float peak = Mathf.Clamp(peakRatio, 0.001f, 0.999f);
+        float attackPower = Mathf.Max(0.01f, attackEasePower);
+        float attackSlope = peakValue / peak;
+        float releaseSlope = -peakValue / (1.0f - peak);
+
+        Keyframe start = new Keyframe(0.0f, 0.0f, 0.0f, attackSlope / attackPower);
+        Keyframe middle = new Keyframe(peak, peakValue, 0.0f, releaseSlope);
+        Keyframe end = new Keyframe(1.0f, 0.0f, releaseSlope, 0.0f);
+
+        return new AnimationCurve(start, middle, end);
+    }
 }

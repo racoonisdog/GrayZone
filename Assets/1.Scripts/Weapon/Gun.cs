@@ -81,7 +81,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_shootDelay = 0.12f;
 
-    [Tooltip("재장전에 필요한 시간입니다. 현재 스크립트에서는 상태값 용도로 보관하며, 실제 완료 타이밍은 애니메이션 이벤트에서 처리할 수 있습니다.")]
+    [Tooltip("재장전에 걸리는 시간(초)입니다. 이 값이 정본이며 탄약 충전·조준선 게이지·재장전 애니메이션 배속이 모두 여기에 맞춰집니다. 애니메이션은 완료 이벤트가 이 시간에 오도록 자동으로 배속됩니다(예: 1배속 클립이 2.67초면 1.33을 넣으면 2배속). 줄이면 빨라지고 늘리면 느려집니다.")]
     [FormerlySerializedAs("reloadTime")]
     [BalanceField]
     [Clamp(Min = 0)]
@@ -229,7 +229,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireSpreadRecoveryPerSecond = 8.0f;
 
-    [Tooltip("힙파이어 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다.")]
+    [Tooltip("발사 입력을 놓은 뒤 이 시간(초)이 지나면 힙파이어 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다.")]
     [FormerlySerializedAs("m_spreadResetTime")]
     [FormerlySerializedAs("m_spreadRecoveryDelay")]
     [BalanceField]
@@ -266,7 +266,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_adsSpreadRecoveryPerSecond = 8.0f;
 
-    [Tooltip("ADS 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다.")]
+    [Tooltip("발사 입력을 놓은 뒤 이 시간(초)이 지나면 ADS 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_adsSpreadRecoveryDelay = 0.3f;
@@ -425,6 +425,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     private WeaponFeedbackEmitter m_feedbackEmitter;
     private float m_hipfireCurrentSpreadAdd;
     private float m_adsCurrentSpreadAdd;
+
+    /// <summary>발사 입력 홀드로 spread 회복을 막을 마지막 프레임입니다. AimController가 매 프레임 연장합니다.</summary>
+    private int m_spreadRecoveryBlockUntilFrame = -1;
     private int m_hipfireShotsInBurst;
     private int m_adsShotsInBurst;
     private float m_hipfireLastShotTime;
@@ -580,7 +583,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>힙파이어 연사 시 발마다 누적하는 탄퍼짐 각도입니다.</summary>
     public float HipfireSpreadIncreasePerShot => m_hipfireSpreadIncreasePerShot;
 
-    /// <summary>힙파이어 사격 중단 후 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
+    /// <summary>발사 입력을 놓은 뒤 힙파이어 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
     public float HipfireSpreadRecoveryDelay => m_hipfireSpreadRecoveryDelay;
 
     /// <summary>힙파이어 탄퍼짐의 초당 회복량입니다.</summary>
@@ -592,11 +595,25 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>ADS 연사 시 발마다 누적하는 탄퍼짐 각도입니다.</summary>
     public float AdsSpreadIncreasePerShot => m_adsSpreadIncreasePerShot;
 
-    /// <summary>ADS 사격 중단 후 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
+    /// <summary>발사 입력을 놓은 뒤 ADS 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
     public float AdsSpreadRecoveryDelay => m_adsSpreadRecoveryDelay;
 
     /// <summary>ADS 탄퍼짐의 초당 회복량입니다.</summary>
     public float AdsSpreadRecoveryPerSecond => m_adsSpreadRecoveryPerSecond;
+
+    /// <summary>
+    /// 현재 무기의 spread 회복을 발사 입력 홀드로 막을지 통지합니다.
+    /// </summary>
+    /// <remarks>
+    /// 입력은 무기가 아닌 <see cref="AimController"/>가 소유합니다. 호출 순서가 Gun.Update보다 늦어도
+    /// 다음 프레임까지 막도록 한 프레임의 여유를 둡니다. 짧은 클릭은 버튼을 놓은 직후 이 차단이 해제되어
+    /// 기존 유예 시간 뒤 일반 회복으로 이어집니다.
+    /// </remarks>
+    /// <param name="fireInputHeld">발사 입력을 계속 누르고 있으면 <c>true</c>입니다.</param>
+    public void SetSpreadRecoveryBlockedByHeldFireInput(bool fireInputHeld)
+    {
+        m_spreadRecoveryBlockUntilFrame = fireInputHeld ? Time.frameCount + 1 : -1;
+    }
 
     /// <summary>
     /// 컴포넌트 참조를 캐싱하고 필수 참조를 검증합니다.
@@ -666,8 +683,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </summary>
     private void Update()
     {
-        RecoverSpread(ref m_hipfireCurrentSpreadAdd, m_hipfireLastShotTime, m_hipfireSpreadRecoveryDelay, m_hipfireSpreadRecoveryPerSecond);
-        RecoverSpread(ref m_adsCurrentSpreadAdd, m_adsLastShotTime, m_adsSpreadRecoveryDelay, m_adsSpreadRecoveryPerSecond);
+        // AimController가 발사 입력을 유지하는 프레임을 통지하면 spread 회복을 건너뜁니다.
+        // 한 프레임 앞까지 유지하는 것은 Gun.Update와 AimController.Update 실행 순서가 바뀌어도 홀드 중
+        // 한 프레임만 회복됐다 다시 벌어지는 현상을 막기 위함입니다.
+        if (Time.frameCount > m_spreadRecoveryBlockUntilFrame)
+        {
+            RecoverSpread(ref m_hipfireCurrentSpreadAdd, m_hipfireLastShotTime, m_hipfireSpreadRecoveryDelay, m_hipfireSpreadRecoveryPerSecond);
+            RecoverSpread(ref m_adsCurrentSpreadAdd, m_adsLastShotTime, m_adsSpreadRecoveryDelay, m_adsSpreadRecoveryPerSecond);
+        }
         UpdateCurrentSpreadInspectorFields();
     }
 

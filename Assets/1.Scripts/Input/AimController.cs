@@ -51,6 +51,28 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private static readonly int AnimIDIsReload = Animator.StringToHash("IsReload");
 
+    /// <summary>
+    /// 재장전 스테이트의 재생 배속 파라미터(Speed Multiplier)입니다.
+    /// </summary>
+    /// <remarks>
+    /// 재장전 소요 시간의 정본은 <see cref="Gun.ReloadTime"/>이고, 애니메이션이 그 시간에 맞춰 배속됩니다.
+    /// 애니메이터 컨트롤러의 재장전 스테이트가 이 파라미터를 Speed Multiplier로 물고 있어야 하며,
+    /// 물려 있지 않으면 배속이 적용되지 않고 애니메이션만 1배속으로 남습니다(게이지는 여전히 정본을 따릅니다).
+    /// </remarks>
+    private static readonly int AnimIDReloadSpeed = Animator.StringToHash("ReloadSpeed");
+
+    /// <summary>1배속 클립에서 재장전 완료 이벤트가 오는 시점(초)입니다. 아직 조회하지 않았으면 음수입니다.</summary>
+    private float m_reloadEventTimeAtUnitSpeed = -1.0f;
+
+    /// <summary>
+    /// 총을 드는 동안 사격을 막는 구간이 끝나는 시각(<see cref="Time.time"/> 기준)입니다.
+    /// </summary>
+    /// <remarks>
+    /// 자유 시점에서 전투 자세로 들어갈 때만 갱신합니다. 전투 자세를 유지한 채 힙파이어와 ADS를 오갈 때는
+    /// 총이 이미 올라와 있으므로 건드리지 않습니다.
+    /// </remarks>
+    private float m_weaponRaiseReadyTime;
+
     /// <summary>전투 시점 상태입니다. 조준선 디버그 캡처를 이 상태의 전환 시점에만 수행합니다.</summary>
     private enum CombatStance
     {
@@ -413,6 +435,15 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     public float RecoilAnimationWeight => m_recoilAnimationWeight;
 
     public bool AimRecoilEnabled => m_enableAimRecoil;
+
+    /// <summary>
+    /// 총을 드는 중이라 사격이 막혀 있는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 자유 시점에서 전투 자세로 들어간 직후 ADS 줌인 시간만큼 <c>true</c>입니다. 이 동안에는 발사도,
+    /// 탄약·탄퍼짐 누적·발수 카운트도 진행되지 않습니다. 전투 자세 안에서의 힙파이어↔ADS 전환은 해당하지 않습니다.
+    /// </remarks>
+    public bool IsRaisingWeapon => Time.time < m_weaponRaiseReadyTime;
 
     /// <summary>카메라 롤과 FOV 펀치로 구성된 시각 킥 적용 여부입니다.</summary>
     public bool VisualKickEnabled => m_enableVisualKick;
@@ -825,9 +856,20 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>
     /// 히트스캔 피격 피드백을 조준선 UI로 전달합니다(히트마커 색상 구분 + 킬 시 해골 표시).
     /// </summary>
-    /// <param name="feedback">헤드샷·킬 여부를 담은 피격 피드백입니다.</param>
+    /// <param name="feedback">헤드샷·킬 여부와 최종 피해량을 담은 피격 피드백입니다.</param>
+    /// <remarks>
+    /// 직접 조작 중인 대원의 사격만 조준선에 반영합니다. 조준선은 스쿼드 전체가 <b>한 개를 공유</b>하고,
+    /// C# 이벤트는 컴포넌트를 꺼도 해제되지 않습니다. 그래서 막지 않으면 AI가 모는 팀원이 적을 맞힐 때마다
+    /// 플레이어 화면에 히트마커와 처치 표시가 떠서, 내가 맞힌 것처럼 보입니다.
+    /// 직접 조작 여부는 <see cref="SquadMemberController"/>가 이 컴포넌트의 활성 상태로 표시합니다.
+    /// </remarks>
     private void OnWeaponHitFeedback(CombatDamage.HitFeedback feedback)
     {
+        if (!isActiveAndEnabled)
+        {
+            return;
+        }
+
         LogHitMarkerFeedback();
 
         if (m_crosshairController == null)
@@ -835,7 +877,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        m_crosshairController.ShowHitMarker(feedback.Headshot);
+        // 피해량을 함께 넘겨 히트마커 길이가 타격 크기를 반영하게 합니다.
+        m_crosshairController.ShowHitMarker(feedback.Headshot, feedback.Damage);
 
         if (feedback.Killed)
         {
@@ -864,8 +907,25 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
+        // Gun은 입력 소유자가 아니므로, 조준 컨트롤러가 홀드 여부를 전달해 실제 탄퍼짐/크로스헤어 회복도
+        // 논리 반동과 같은 입력 기준으로 멈춥니다.
+        if (m_weaponController != null)
+        {
+            m_weaponController.SetSpreadRecoveryBlockedByHeldFireInput(m_input != null && m_input.Shoot);
+        }
+
+        if (m_crosshairController != null)
+        {
+            m_crosshairController.SetShotRecoilPulseHoldByFireInput(m_input != null && m_input.Shoot);
+        }
+
         UpdateStanceArbitration();
         UpdateAimAndWeapon();
+
+        // 전투 자세를 나가면 UpdateCombat이 돌지 않아 조준선 갱신이 멈춥니다. 최소 방사각은 자유 시점에도
+        // 유효하므로, 그 상태의 기준 벌어짐은 여기서 따로 유지합니다.
+        UpdateRestingCrosshair();
+
         UpdateStanceWeights();
         UpdateCrosshairDebugOnStanceChange();
         UpdateReloadCrosshair();
@@ -1213,6 +1273,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_animator.SetBool(AnimIDShoot, false);
         SetWeaponLayerWeight(1.0f);
 
+        // 애니메이션 배속은 재장전 시간에서 역산합니다. 스테이트에 들어가기 전에 세워야 첫 프레임부터 적용됩니다.
+        ApplyReloadAnimationSpeed();
+
         // 트리거와 bool을 함께 세웁니다. 애니메이터 진입 조건이 둘의 AND입니다.
         m_animator.SetBool(AnimIDIsReload, true);
         m_animator.SetTrigger(AnimIDReload);
@@ -1225,6 +1288,115 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// 총을 드는 동안 사격을 막는 구간을 시작합니다.
+    /// </summary>
+    /// <remarks>
+    /// 길이는 ADS 줌인이 완전히 끝나는 시간과 같게 잡습니다. 총을 드는 연출과 조준 확대가 같은 타이밍에
+    /// 마무리되어야 "다 들고 나서 쏜다"가 화면과 일치하기 때문입니다.
+    /// <para>
+    /// 다만 남은 거상량에 비례해 줄입니다. <see cref="m_hipfireHoldDuration"/>이 0이면 사격을 뗄 때마다 전투
+    /// 자세를 나가므로, 고정 길이로 걸면 탭 사격의 매 발이 지연됩니다. 총이 아직 내려가지 않았다면
+    /// (<see cref="m_rigWeight"/>가 1에 가까움) 남은 시간이 0에 수렴해 연속 탭이 그대로 유지됩니다.
+    /// </para>
+    /// </remarks>
+    private void BeginWeaponRaiseGate()
+    {
+        float remaining = ResolveWeaponRaiseDuration() * Mathf.Clamp01(1.0f - m_rigWeight);
+        m_weaponRaiseReadyTime = Time.time + remaining;
+    }
+
+    /// <summary>
+    /// 완전히 내려간 상태에서 총을 다 들 때까지 걸리는 시간(초)입니다.
+    /// </summary>
+    /// <returns>ADS 줌인 시간입니다. 줌 엔벨로프를 쓰지 않으면 지수 보간이 약 95%에 도달하는 시간으로 환산합니다.</returns>
+    private float ResolveWeaponRaiseDuration()
+    {
+        if (m_useZoomEnvelope)
+        {
+            return ZoomInDuration;
+        }
+
+        // 지수 보간(Lerp with dt·speed)에는 고정 길이가 없어, e^(-speed·T)=0.05가 되는 T=3/speed로 환산합니다.
+        return m_zoomLerpSpeed > 0.0f ? 3.0f / m_zoomLerpSpeed : 0.0f;
+    }
+
+    /// <summary>
+    /// 재장전 애니메이션 배속을 무기의 재장전 시간에 맞춰 계산해 애니메이터에 전달합니다.
+    /// </summary>
+    /// <remarks>
+    /// 정본은 <see cref="Gun.ReloadTime"/>입니다. 게이지(<see cref="Gun.ReloadProgress"/>)와 탄약 충전 예약이
+    /// 이미 그 값을 쓰므로, 애니메이션도 같은 값에 맞추면 세 가지가 한 숫자로 묶입니다. 예전에는 애니메이션이
+    /// 항상 1배속이고 재장전 시간만 따로 적혀 있어, 게이지가 꽉 찬 뒤에도 조작이 잠긴 구간이 생겼습니다.
+    /// <para>
+    /// 기준 시점은 클립에 하드코딩된 숫자가 아니라 <see cref="Reload"/> 이벤트의 실제 시각에서 읽습니다.
+    /// 애니메이션이 교체되거나 이벤트가 옮겨져도 배속이 따라오게 하려는 것입니다.
+    /// </para>
+    /// </remarks>
+    private void ApplyReloadAnimationSpeed()
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        float reloadTime = m_weaponController != null ? m_weaponController.ReloadTime : 0.0f;
+        float eventTime = ResolveReloadEventTimeAtUnitSpeed();
+
+        // 어느 한쪽이라도 알 수 없으면 배속을 건드리지 않습니다(1배속 유지).
+        float speed = reloadTime > 0.0f && eventTime > 0.0f ? eventTime / reloadTime : 1.0f;
+        m_animator.SetFloat(AnimIDReloadSpeed, speed);
+    }
+
+    /// <summary>
+    /// 1배속 클립에서 재장전 완료 이벤트가 오는 시점(초)을 반환합니다. 최초 1회만 조회하고 캐싱합니다.
+    /// </summary>
+    /// <returns>완료 이벤트 시각(초)입니다. 이벤트를 찾지 못하면 0입니다.</returns>
+    /// <remarks>
+    /// 클립 이름이 아니라 <see cref="Reload"/> 이벤트를 담고 있는 클립을 찾습니다. 재장전을 끝내는 유일한 경로가
+    /// 그 이벤트이므로, 이름 규칙이 바뀌어도 기준을 놓치지 않습니다.
+    /// </remarks>
+    private float ResolveReloadEventTimeAtUnitSpeed()
+    {
+        if (m_reloadEventTimeAtUnitSpeed >= 0.0f)
+        {
+            return m_reloadEventTimeAtUnitSpeed;
+        }
+
+        // 못 찾은 경우에도 0으로 캐싱해 매 재장전마다 전체 클립을 훑지 않게 합니다.
+        m_reloadEventTimeAtUnitSpeed = 0.0f;
+
+        RuntimeAnimatorController controller = m_animator != null ? m_animator.runtimeAnimatorController : null;
+        if (controller == null)
+        {
+            return m_reloadEventTimeAtUnitSpeed;
+        }
+
+        foreach (AnimationClip clip in controller.animationClips)
+        {
+            if (clip == null)
+            {
+                continue;
+            }
+
+            foreach (AnimationEvent animationEvent in clip.events)
+            {
+                if (animationEvent.functionName == nameof(Reload))
+                {
+                    m_reloadEventTimeAtUnitSpeed = animationEvent.time;
+                    return m_reloadEventTimeAtUnitSpeed;
+                }
+            }
+        }
+
+        Debug.LogWarning(
+            $"[AimController] 재장전 완료 이벤트({nameof(Reload)})를 애니메이터 클립에서 찾지 못했습니다. " +
+            "재장전 애니메이션 배속을 1로 유지합니다.",
+            this);
+
+        return m_reloadEventTimeAtUnitSpeed;
+    }
+
+    /// <summary>
     /// 전투 자세(백뷰)에 진입합니다. 조준(ADS)과 힙파이어가 공유하며, ads로 줌 여부만 구분합니다.
     /// </summary>
     /// <param name="ads">조준(ADS)이면 true, 힙파이어면 false입니다.</param>
@@ -1234,6 +1406,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         if (!m_inCombatStance)
         {
+            // 총을 다 들기 전에는 사격을 막습니다. 자유 시점에서 들어오는 이 분기에서만 걸고,
+            // 전투 자세 안에서 힙파이어와 ADS를 오갈 때는 총이 이미 올라와 있으므로 걸지 않습니다.
+            BeginWeaponRaiseGate();
+
             // 새 교전 진입이므로 좌우 킥 번갈이 패턴을 첫 발부터 시작합니다.
             m_kickShotIndex = 0;
 
@@ -1242,7 +1418,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             ApplyCombatStanceState(true, false, 0.0f);
             // 자유 카메라에서 백뷰로 막 진입한 프레임은 목표 FOV로 즉시 스냅(줌 점프 방지).
             ApplyCombatZoom(true);
-            UpdateCrosshair(true);
+
+            // 조준선은 스냅하지 않습니다. 자유 시점에서도 최소 방사각만큼 벌어져 있고(UpdateRestingCrosshair)
+            // 자세별 기준 벌어짐 차이는 FOV 차이에서만 오므로, 진입·해제 모두 보간으로 이어지는 편이 자연스럽습니다.
+            // ADS 진입/해제 중에는 ApplyCombatZoom이 m_baseFov를 줌 곡선으로 옮기고 조준선이 그 값을 매 프레임
+            // 읽으므로, 줌 전환도 같은 보간에 실립니다.
+            UpdateCrosshair(false);
         }
     }
 
@@ -1424,13 +1605,74 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         float spreadDegrees = m_weaponController != null ? m_weaponController.GetCurrentSpread(m_isAds) : 0.0f;
+
+        // 시각 FOV 펀치가 아니라 기준 FOV를 써서, 크로스헤어가 발사 juice에 따라 숨쉬지 않게 합니다.
+        PushCrosshairSpread(spreadDegrees, m_baseFov, snap);
+    }
+
+    /// <summary>
+    /// 전투 자세가 아닐 때 조준선을 현재 무기의 최소 방사각 상태로 유지합니다.
+    /// </summary>
+    /// <remarks>
+    /// 전투 자세에서는 <see cref="UpdateCombat"/>이 매 프레임 <see cref="UpdateCrosshair"/>를 호출하지만
+    /// 자유 시점에서는 그 경로가 돌지 않습니다. 예전에는 자세를 나갈 때 조준선을 방사각 0으로 되돌려,
+    /// 무기에 최소 방사각이 있어도 완전히 닫힌 조준선이 보였습니다. 그래서 첫 발에 최소 방사각만큼의
+    /// 벌어짐이 한꺼번에 나타났습니다. 최소 방사각은 조준하지 않아도 무기가 항상 갖는 값이므로
+    /// 휴지 상태에도 그만큼 벌어져 있어야 합니다.
+    /// <para>
+    /// 매 프레임 통지하므로 무기 교체나 런타임 수치 변경도 자동으로 따라갑니다. 자유 시점은 전투 카메라가
+    /// 꺼져 있어 화면이 메인 카메라 FOV이므로, 각도를 픽셀로 옮길 때도 그 FOV를 씁니다.
+    /// </para>
+    /// </remarks>
+    private void UpdateRestingCrosshair()
+    {
+        if (m_inCombatStance || m_crosshairController == null)
+        {
+            return;
+        }
+
+        float fovDegrees = m_mainCamera != null ? m_mainCamera.fieldOfView : 60.0f;
+        PushCrosshairSpread(ResolveRestingSpreadDegrees(), fovDegrees, false);
+    }
+
+    /// <summary>
+    /// 전투 자세가 아닐 때 조준선이 유지할 기준 방사각(도)을 반환합니다.
+    /// </summary>
+    /// <returns>현재 무기의 힙파이어 최소 방사각입니다. 무기가 없으면 0입니다.</returns>
+    /// <remarks>자유 시점은 조준 상태가 아니므로 ADS가 아니라 힙파이어 범위를 기준으로 삼습니다.</remarks>
+    private float ResolveRestingSpreadDegrees()
+    {
+        if (m_weaponController == null)
+        {
+            return 0.0f;
+        }
+
+        m_weaponController.GetSpreadRange(false, out float minSpread, out _);
+        return minSpread;
+    }
+
+    /// <summary>
+    /// 조준선에 이번 프레임의 방사각·분포·FOV와 발당 펄스 기여 비율을 함께 전달합니다.
+    /// </summary>
+    /// <param name="spreadDegrees">조준선에 표시할 방사각(도)입니다.</param>
+    /// <param name="fovDegrees">각도를 화면 픽셀로 투영할 때 쓸 세로 FOV(도)입니다.</param>
+    /// <param name="snap"><c>true</c>면 조준선 간격을 즉시 반영합니다.</param>
+    /// <remarks>
+    /// 전투 중(<see cref="UpdateCrosshair"/>)과 휴지 중(<see cref="UpdateRestingCrosshair"/>)이 같은 본문을
+    /// 쓰게 해서, 두 경로에서 분포·집중도나 펄스 비율 통지가 빠지는 일이 없게 합니다.
+    /// </remarks>
+    private void PushCrosshairSpread(float spreadDegrees, float fovDegrees, bool snap)
+    {
         SpreadDistribution distribution = m_weaponController != null
             ? m_weaponController.Distribution
             : SpreadDistribution.Gaussian;
         float concentration = m_weaponController != null ? m_weaponController.SpreadConcentration : 3.0f;
-        // 시각 FOV 펀치가 아니라 기준 FOV를 써서, 크로스헤어가 발사 juice에 따라 숨쉬지 않게 합니다.
-        float fovDegrees = m_baseFov;
+
         m_crosshairController.SetSpread(spreadDegrees, distribution, concentration, fovDegrees, snap);
+
+        // 탄퍼짐이 상한에 가까워질수록 발당 펄스 기여를 같은 비율로 줄입니다. 상한 gap의 들썩임을 막는
+        // 목적은 예전 상한 판정과 같지만, 한 프레임에 펄스를 버리지 않으므로 총 gap이 도중에 줄어들지 않습니다.
+        m_crosshairController.SetShotRecoilPulseSpreadScale(1.0f - GetCurrentSpreadProgress01());
     }
 
     /// <summary>
@@ -1477,22 +1719,28 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
                 break;
 
             default:
+                // 자유 시점도 힙파이어 최소 방사각을 유지하므로(UpdateRestingCrosshair) 0이 아니라 그 값을 읽습니다.
                 m_crosshairController.BindSpreadDebug(
                     "Free",
-                    () => 0.0f,
+                    () => ResolveRestingSpreadDegrees(),
                     () => m_mainCamera != null ? m_mainCamera.fieldOfView : 60.0f);
                 break;
         }
     }
 
     /// <summary>
-    /// 조준선 UI를 기본 간격 상태로 되돌립니다.
+    /// 전투 자세를 나갈 때 조준선의 발사 피드백만 즉시 정리합니다.
     /// </summary>
+    /// <remarks>
+    /// 벌어짐 자체는 0으로 되돌리지 않습니다. 무기의 최소 방사각은 자유 시점에서도 유효하므로
+    /// <see cref="UpdateRestingCrosshair"/>가 그 값을 목표로 잡고 조준선의 보간이 부드럽게 접근합니다.
+    /// 여기서 지우는 것은 그 프레임까지 남아 있던 발당 반동 펄스뿐입니다.
+    /// </remarks>
     private void ResetCrosshair()
     {
         if (m_crosshairController != null)
         {
-            m_crosshairController.ResetSpread();
+            m_crosshairController.ClearShotRecoilPulse();
         }
     }
 
@@ -1936,6 +2184,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 상체 레이어를 사격·재장전에만 올립니다. 조준 포즈는 Base Layer 몫이라 여기서 관여하지 않습니다.
         RefreshWeaponLayerWeight();
 
+        // 총을 다 들기 전에는 발사도, 사격 포즈도 내보내지 않습니다. 포즈만 먼저 나가면 총을 드는 도중에
+        // 사격 자세로 튀어 "다 들고 나서 쏜다"가 무너집니다.
+        if (m_input.Shoot && IsRaisingWeapon)
+        {
+            m_animator.SetBool(AnimIDShoot, false);
+            return;
+        }
+
         if (m_input.Shoot)
         {
             m_animator.SetBool(AnimIDShoot, true);
@@ -1991,6 +2247,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_controller.AddRecoil(m_weaponController.RecoilPitchKick, yawSigned);
         }
 
+        // 실제 탄퍼짐은 초반 정밀탄에서 0일 수 있으므로, 발사 성공 자체를 기준으로 UI 반동 펄스를 별도로 준다.
+        // 상한 근처에서의 들썩임 억제는 펄스를 버리는 대신 UpdateCrosshair가 매 프레임 통지하는
+        // 비례 감쇠(SetShotRecoilPulseSpreadScale)가 담당한다. 그래서 여기서는 분기 없이 항상 펄스를 준다.
+        if (m_crosshairController != null)
+        {
+            m_crosshairController.TriggerShotRecoilPulse();
+        }
+
         // (2) 시각 킥 — 롤·FOV 펀치 누적(조준/탄 무영향, 상한 클램프).
         if (m_enableVisualKick)
         {
@@ -2024,6 +2288,32 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
                 m_visualKickFovPunch = Mathf.Clamp(m_visualKickFovPunch + fovPunch, 0.0f, m_visualKickMaxFovPunch);
             }
         }
+    }
+
+    /// <summary>
+    /// 현재 자세의 무기 탄퍼짐이 최소값에서 상한까지 얼마나 진행했는지 0~1로 반환합니다.
+    /// </summary>
+    /// <returns>최소 방사각에서 0, 상한에서 1입니다. 무기가 없거나 동적 벌어짐이 없으면 0입니다.</returns>
+    /// <remarks>
+    /// 발당 UI 펄스의 기여 비율을 정하는 데 씁니다. 상한에서 1이 되어 펄스 기여가 0으로 맞물리므로,
+    /// 예전 상한 판정처럼 최대 gap에서의 들썩임을 막으면서도 벌어짐의 단조증가가 유지됩니다.
+    /// 최소값과 최대값이 같은 정밀 무기는 동적 벌어짐 자체가 없으므로 0을 돌려주어 발당 UI 피드백을 온전히 보존합니다.
+    /// </remarks>
+    private float GetCurrentSpreadProgress01()
+    {
+        if (m_weaponController == null)
+        {
+            return 0.0f;
+        }
+
+        m_weaponController.GetSpreadRange(m_isAds, out float minSpread, out float maxSpread);
+        float range = maxSpread - minSpread;
+        if (range <= 0.001f)
+        {
+            return 0.0f;
+        }
+
+        return Mathf.Clamp01((m_weaponController.GetCurrentSpread(m_isAds) - minSpread) / range);
     }
 
     /// <summary>

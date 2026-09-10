@@ -4,24 +4,24 @@ __Guid,,79421e9565ae4bfbae970dbcb5176c96
 __Path,,Assets/5.Data/ScriptableObject/Weapon/Rifle1WeaponBalance.asset
 Gun_m_maxBullet,최대 탄약 수입니다. (0 이상),30
 Gun_m_shootDelay,사격 후 다음 사격이 가능해질 때까지의 지연 시간입니다. (0 이상),0.12
-Gun_m_reloadTime,"재장전에 필요한 시간입니다. 현재 스크립트에서는 상태값 용도로 보관하며, 실제 완료 타이밍은 애니메이션 이벤트에서 처리할 수 있습니다. (0 이상)",1.5
+Gun_m_reloadTime,"재장전에 걸리는 시간(초)입니다. 이 값이 정본이며 탄약 충전·조준선 게이지·재장전 애니메이션 배속이 모두 여기에 맞춰집니다. 애니메이션은 완료 이벤트가 이 시간에 오도록 자동으로 배속됩니다(예: 1배속 클립이 2.67초면 1.33을 넣으면 2배속). (0 이상)",1.3335
 Gun_m_hitscanDamage,명중 한 발이 주는 기본 피해량입니다. 약점 배율과 거리 감쇠는 여기에 곱해집니다. (0 이상),1
 Gun_m_allowHeadshot,이 무기가 약점 판정을 사용하는지 여부입니다. 끄면 약점 부위를 맞혀도 일반 피해로 처리하고 약점 표시도 뜨지 않습니다.,TRUE
 Gun_m_headshotDamageMultiplier,약점 부위를 맞혔을 때 곱하는 피해 배율입니다. 약점 판정이 꺼져 있으면 사용하지 않습니다. (0 이상),2
 Gun_m_hitscanRange,탄이 도달하는 최대 사거리(m)입니다. 이 거리를 넘어가면 아무것도 맞히지 않습니다. (0 이상),100
 Gun_m_knockbackImpulse,명중 시 대상을 밀어내는 넉백 충격량(N·s)입니다. 사망한 대상은 래그돌이 이 힘을 받습니다. 0이면 피격 대상이 정한 최소치만 적용됩니다. (0 이상),0
-Gun_m_hipfireMinSpread,힙파이어(비조준) 시 최소 방사각(도). (0 이상),0
+Gun_m_hipfireMinSpread,힙파이어(비조준) 시 최소 방사각(도). (0 이상),1
 Gun_m_hipfireMaxSpread,힙파이어(비조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),3
-Gun_m_hipfireMinSpreadShotCount,힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상),3
-Gun_m_hipfireSpreadIncreasePerShot,힙파이어 발사마다 누적되는 방사각 증가량(도). (0 이상),0.5
+Gun_m_hipfireMinSpreadShotCount,힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상),0
+Gun_m_hipfireSpreadIncreasePerShot,힙파이어 발사마다 누적되는 방사각 증가량(도). (0 이상),0.25
 Gun_m_hipfireSpreadRecoveryPerSecond,힙파이어 사격을 멈춘 뒤 초당 회복(감소)하는 방사각(도/초). (0 이상),8
-Gun_m_hipfireSpreadRecoveryDelay,힙파이어 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. (0 이상),0.3
+Gun_m_hipfireSpreadRecoveryDelay,발사 입력을 놓은 뒤 이 시간(초)이 지나면 힙파이어 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다. (0 이상),0.15
 Gun_m_adsMinSpread,ADS(조준) 시 최소 방사각(도). 0이면 정밀 사격입니다. (0 이상),0
 Gun_m_adsMaxSpread,ADS(조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),1
-Gun_m_adsMinSpreadShotCount,ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상),3
-Gun_m_adsSpreadIncreasePerShot,ADS 발사마다 누적되는 방사각 증가량(도). (0 이상),0.4
+Gun_m_adsMinSpreadShotCount,ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상),0
+Gun_m_adsSpreadIncreasePerShot,ADS 발사마다 누적되는 방사각 증가량(도). (0 이상),0.125
 Gun_m_adsSpreadRecoveryPerSecond,ADS 사격을 멈춘 뒤 초당 회복(감소)하는 방사각(도/초). (0 이상),8
-Gun_m_adsSpreadRecoveryDelay,ADS 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. (0 이상),0.3
+Gun_m_adsSpreadRecoveryDelay,발사 입력을 놓은 뒤 이 시간(초)이 지나면 ADS 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다. (0 이상),0.15
 Gun_m_spreadDistribution,"탄퍼짐 분포 방식입니다. Uniform=원판 전체 균일, Gaussian=중심 가중 정규분포(기본). 샷건(콘 3분할) 등은 추후 추가 예정입니다.",Gaussian
 Gun_m_spreadConcentration,"Gaussian 분포의 중심 집중도입니다. 콘 반각(최대 방사각)을 몇 σ로 볼지 정합니다. 값이 클수록 탄이 중심에 더 몰립니다(기본 3 = 약 99%가 콘 안, 평균 편향은 반각의 약 0.42배). 낮출수록 가장자리로 퍼집니다. Uniform에는 영향이 없습니다. (1 이상)",3
 Gun_m_shotNoiseLevel,"사격 1회의 기본 소음량입니다. 가청 여부가 아니라, 변이체가 여러 소음 중 어느 것을 추적할지 비교할 때만 쓰입니다. 기획 미확정 - 임시값입니다. (0 이상)",1

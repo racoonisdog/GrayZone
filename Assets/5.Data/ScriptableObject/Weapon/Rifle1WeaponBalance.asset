@@ -14,24 +14,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GunBalanceSO
   Gun_m_maxBullet: 30
   Gun_m_shootDelay: 0.12
-  Gun_m_reloadTime: 1.5
+  Gun_m_reloadTime: 1.3335
   Gun_m_hitscanDamage: 1
   Gun_m_allowHeadshot: 1
   Gun_m_headshotDamageMultiplier: 2
   Gun_m_hitscanRange: 100
   Gun_m_knockbackImpulse: 0
-  Gun_m_hipfireMinSpread: 0
+  Gun_m_hipfireMinSpread: 1
   Gun_m_hipfireMaxSpread: 3
-  Gun_m_hipfireMinSpreadShotCount: 3
-  Gun_m_hipfireSpreadIncreasePerShot: 0.5
+  Gun_m_hipfireMinSpreadShotCount: 0
+  Gun_m_hipfireSpreadIncreasePerShot: 0.25
   Gun_m_hipfireSpreadRecoveryPerSecond: 8
-  Gun_m_hipfireSpreadRecoveryDelay: 0.3
+  Gun_m_hipfireSpreadRecoveryDelay: 0.15
   Gun_m_adsMinSpread: 0
   Gun_m_adsMaxSpread: 1
-  Gun_m_adsMinSpreadShotCount: 3
-  Gun_m_adsSpreadIncreasePerShot: 0.4
+  Gun_m_adsMinSpreadShotCount: 0
+  Gun_m_adsSpreadIncreasePerShot: 0.125
   Gun_m_adsSpreadRecoveryPerSecond: 8
-  Gun_m_adsSpreadRecoveryDelay: 0.3
+  Gun_m_adsSpreadRecoveryDelay: 0.15
   Gun_m_spreadDistribution: 1
   Gun_m_spreadConcentration: 3
   Gun_m_shotNoiseLevel: 1

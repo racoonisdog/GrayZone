@@ -1063,6 +1063,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
         {
             controller.SetMoveSpeed(SliderRow("이동 속도", controller.MoveSpeed, 0f, 15f));
             controller.SetSprintSpeed(SliderRow("질주 속도", controller.SprintSpeed, 0f, 20f));
+            controller.SetMovementDirectionTurnSpeed(
+                SliderRow("이동 방향 각속도", controller.MovementDirectionTurnSpeed, 0f, 1080f));
+            controller.SetMovementDirectionSmoothMaxAngle(
+                SliderRow("일반 방향 보간 최대 각도", controller.MovementDirectionSmoothMaxAngle, 0f, 180f));
             controller.SetJumpHeight(SliderRow("점프 높이", controller.JumpHeight, 0f, 5f));
 
             DrawReverseSyncButton(controller, "이동/반동");
@@ -1406,6 +1410,30 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         crosshairController.SetSpreadLerpSpeed(SliderRow("간격 보간 속도", crosshairController.SpreadLerpSpeed, 0f, 50f));
+
+        crosshairController.HitMarkerRandomRollEnabled =
+            GUILayout.Toggle(crosshairController.HitMarkerRandomRollEnabled, " 히트마커 발당 무작위 회전");
+        crosshairController.HitMarkerRollBaseDegrees =
+            SliderRow("히트마커 기준 각도", crosshairController.HitMarkerRollBaseDegrees, -180f, 180f);
+        if (crosshairController.HitMarkerRandomRollEnabled)
+        {
+            crosshairController.HitMarkerRollRandomRangeDegrees =
+                SliderRow("히트마커 흔들림 범위(±)", crosshairController.HitMarkerRollRandomRangeDegrees, 0f, 180f);
+        }
+
+        crosshairController.HitMarkerDamageScaleEnabled =
+            GUILayout.Toggle(crosshairController.HitMarkerDamageScaleEnabled, " 히트마커 길이 딜량 비례");
+        if (crosshairController.HitMarkerDamageScaleEnabled)
+        {
+            crosshairController.HitMarkerMinDamage =
+                SliderRow("비례 최소 딜량", crosshairController.HitMarkerMinDamage, 0f, 50f);
+            crosshairController.HitMarkerMaxDamage =
+                SliderRow("비례 최대 딜량", crosshairController.HitMarkerMaxDamage, 0f, 50f);
+            crosshairController.HitMarkerLengthAtMinDamagePixels =
+                SliderRow("최소 딜량 길이(px)", crosshairController.HitMarkerLengthAtMinDamagePixels, 0f, 120f);
+            crosshairController.HitMarkerLengthAtMaxDamagePixels =
+                SliderRow("최대 딜량 길이(px)", crosshairController.HitMarkerLengthAtMaxDamagePixels, 0f, 120f);
+        }
     }
 
     /// <summary>
