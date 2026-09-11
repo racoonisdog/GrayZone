@@ -257,6 +257,21 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>지난 프레임의 조준 상태입니다. 바뀐 프레임에 전환을 새로 시작하기 위한 것입니다.</summary>
     private bool m_zoomWasAds;
 
+    /// <summary>
+    /// 이 대원을 지금 플레이어가 직접 조작하고 있는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 예전에는 이 컴포넌트의 활성 여부가 그 표시를 겸했습니다. 조작하지 않는 대원은 컴포넌트를 껐습니다.
+    /// 그런데 이 컴포넌트는 조작 전용(입력·조준 카메라·조준선)과 캐릭터 전용(리그 weight·애니메이터 레이어)을
+    /// 함께 들고 있어서, 조작 전용을 끄려고 컴포넌트를 끄면 캐릭터 쪽 몫까지 같이 죽었습니다. 꺼진 동안의
+    /// 몫을 AI 경로가 따로 구현하면서 같은 규칙이 두 벌이 됐고, 꺼진 컴포넌트에는 애니메이션 이벤트도
+    /// 배달되지 않아 재장전 종료 신호가 유실됐습니다.
+    ///
+    /// 그래서 컴포넌트는 항상 켜 두고 조작 여부만 이 값으로 표시합니다.
+    /// <see cref="SquadMemberController"/>가 <see cref="SetPlayerControlled"/>로 설정합니다.
+    /// </remarks>
+    private bool m_isPlayerControlled;
+
     /// <summary>상체 조준(허리) 리그 weight의 목표값입니다.</summary>
     private float m_rigWeightTarget;
 
@@ -905,14 +920,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     /// <param name="feedback">헤드샷·킬 여부와 최종 피해량을 담은 피격 피드백입니다.</param>
     /// <remarks>
-    /// 직접 조작 중인 대원의 사격만 조준선에 반영합니다. 조준선은 스쿼드 전체가 <b>한 개를 공유</b>하고,
-    /// C# 이벤트는 컴포넌트를 꺼도 해제되지 않습니다. 그래서 막지 않으면 AI가 모는 팀원이 적을 맞힐 때마다
-    /// 플레이어 화면에 히트마커와 처치 표시가 떠서, 내가 맞힌 것처럼 보입니다.
-    /// 직접 조작 여부는 <see cref="SquadMemberController"/>가 이 컴포넌트의 활성 상태로 표시합니다.
+    /// 직접 조작 중인 대원의 사격만 조준선에 반영합니다. 조준선은 스쿼드 전체가 <b>한 개를 공유</b>하므로,
+    /// 막지 않으면 AI가 모는 팀원이 적을 맞힐 때마다 플레이어 화면에 히트마커와 처치 표시가 떠서,
+    /// 내가 맞힌 것처럼 보입니다.
     /// </remarks>
     private void OnWeaponHitFeedback(CombatDamage.HitFeedback feedback)
     {
-        if (!isActiveAndEnabled)
+        if (!m_isPlayerControlled)
         {
             return;
         }
@@ -957,6 +971,30 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 사격 차단을 푸는 것이 이 프레임의 조준·사격 처리보다 먼저입니다.
         ReconcileReloadState();
 
+        if (m_isPlayerControlled)
+        {
+            UpdatePlayerControlledFrame();
+        }
+
+        // 리그·레이어 보간은 조작 여부와 무관하게 돌아야 합니다. AI가 모는 대원도 자세가 바뀌고,
+        // 여기서 멈추면 그 대원의 가중치가 중간값에 얼어붙습니다.
+        UpdateStanceWeights();
+    }
+
+    /// <summary>
+    /// 직접 조작 중인 대원에서만 도는 입력·조준·조준선 처리입니다.
+    /// </summary>
+    /// <remarks>
+    /// 여기 있는 것들은 전부 플레이어가 조작할 때만 의미가 있습니다. 입력을 읽거나, 스쿼드가 하나만
+    /// 공유하는 조준 카메라·조준선을 건드리는 것들입니다. AI가 모는 대원에서 돌면 세 대원이 같은
+    /// 카메라와 조준선을 두고 다툽니다.
+    ///
+    /// 반대로 리그 weight와 애니메이터 레이어는 누가 몰든 그 대원에게 계속 필요하므로 <see cref="Update"/>
+    /// 쪽에 둡니다. 이 컴포넌트가 두 종류를 함께 들고 있어서, 예전에는 조작 전용을 끄려고 컴포넌트를
+    /// 통째로 꺼야 했고 그때마다 캐릭터 쪽 몫이 같이 죽었습니다.
+    /// </remarks>
+    private void UpdatePlayerControlledFrame()
+    {
         // Gun은 입력 소유자가 아니므로, 조준 컨트롤러가 홀드 여부를 전달해 실제 탄퍼짐/크로스헤어 회복도
         // 논리 반동과 같은 입력 기준으로 멈춥니다.
         if (m_weaponController != null)
@@ -976,7 +1014,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 유효하므로, 그 상태의 기준 벌어짐은 여기서 따로 유지합니다.
         UpdateRestingCrosshair();
 
-        UpdateStanceWeights();
         UpdateCrosshairDebugOnStanceChange();
         UpdateReloadCrosshair();
     }
@@ -2706,27 +2743,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     {
         m_rigWeightTarget = weight;
         m_handRigWeightTarget = weight;
-        SnapStanceWeightsIfNotBlending();
-    }
-
-    /// <summary>
-    /// 가중치를 매 프레임 보간할 수 없는 상태이면 즉시 목표로 맞춥니다.
-    /// </summary>
-    /// <remarks>
-    /// 스쿼드 전환으로 조작권을 잃으면 이 컴포넌트가 꺼지고 <see cref="UpdateStanceWeights"/>가 멈춥니다.
-    /// 그 뒤에 목표만 바뀌면 실제 가중치는 그 자리에 얼어붙습니다. 재장전 도중 전환한 대원이 장전을 끝내도
-    /// 상체 레이어가 중간값(실측 0.25)으로 남아 자세가 어색해지던 원인이 이것입니다.
-    /// 보간할 수 없을 때는 부드러움을 포기하고 즉시 반영하는 편이 맞습니다. 어차피 화면 밖 대원이거나
-    /// 조작하지 않는 대원이라 끊김이 보이지 않습니다.
-    /// </remarks>
-    private void SnapStanceWeightsIfNotBlending()
-    {
-        if (isActiveAndEnabled)
-        {
-            return;
-        }
-
-        SnapStanceWeights();
     }
 
     /// <summary>
@@ -2741,7 +2757,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     {
         m_rigWeightTarget = aimWeight;
         m_handRigWeightTarget = handWeight;
-        SnapStanceWeightsIfNotBlending();
     }
 
     /// <summary>
@@ -2751,7 +2766,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private void SetWeaponLayerWeight(float weight)
     {
         m_weaponLayerTarget = weight;
-        SnapStanceWeightsIfNotBlending();
     }
 
     /// <summary>
@@ -2844,6 +2858,23 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <see cref="SquadAIController"/>가 다른 이동 파라미터와 함께 직접 채웁니다.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// 이 대원을 플레이어가 직접 조작하는지 설정합니다.
+    /// </summary>
+    /// <param name="value">직접 조작 중이면 true입니다.</param>
+    /// <remarks>
+    /// <see cref="SquadMemberController"/>가 조작권을 옮길 때 부릅니다. 컴포넌트를 끄는 대신 이 값만
+    /// 내려야 합니다. 끄면 <see cref="Update"/>가 멈춰 리그 weight 보간이 그 자리에 얼어붙고,
+    /// 애니메이션 이벤트도 배달되지 않습니다.
+    /// </remarks>
+    public void SetPlayerControlled(bool value)
+    {
+        m_isPlayerControlled = value;
+    }
+
+    /// <summary>지금 플레이어가 직접 조작 중인지 여부입니다.</summary>
+    public bool IsPlayerControlled => m_isPlayerControlled;
+
     public void ApplyAiCombatStance(bool inCombat, bool shooting)
     {
         if (m_animator == null)
@@ -2865,7 +2896,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (IsReloadInProgress)
         {
             ApplyReloadVisualState();
-            UpdateStanceWeights();
             return;
         }
 
@@ -2892,8 +2922,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         {
             m_animator.SetBool(AnimIDShoot, inCombat && shooting);
         }
-
-        UpdateStanceWeights();
     }
 
     /// <summary>지금 값을 리그와 애니메이터 레이어에 반영합니다.</summary>
