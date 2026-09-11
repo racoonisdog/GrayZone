@@ -445,6 +445,29 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     public bool IsRaisingWeapon => Time.time < m_weaponRaiseReadyTime;
 
+    /// <summary>
+    /// 완전히 내려간 상태에서 총을 다 들 때까지 걸리는 시간(초)입니다. 사격 차단 구간의 최대 길이와 같습니다.
+    /// </summary>
+    /// <remarks>줌 방식(곡선/속도)에 따라 근거가 달라지므로 계산된 결과를 그대로 노출합니다. 디버그 표시용입니다.</remarks>
+    public float WeaponRaiseDuration => ResolveWeaponRaiseDuration();
+
+    /// <summary>
+    /// 현재 재장전 시간에 맞춰 계산된 재장전 애니메이션 배속입니다.
+    /// </summary>
+    /// <remarks>
+    /// 1이면 클립 원래 속도입니다. 재장전 시간을 바꾸면 이 값이 따라 움직이므로, 조정 결과를 눈으로 확인하는 데 씁니다.
+    /// 완료 이벤트를 찾지 못했거나 재장전 시간이 0이면 1을 반환합니다.
+    /// </remarks>
+    public float ReloadAnimationSpeed
+    {
+        get
+        {
+            float reloadTime = m_weaponController != null ? m_weaponController.ReloadTime : 0.0f;
+            float eventTime = ResolveReloadEventTimeAtUnitSpeed();
+            return reloadTime > 0.0f && eventTime > 0.0f ? eventTime / reloadTime : 1.0f;
+        }
+    }
+
     /// <summary>카메라 롤과 FOV 펀치로 구성된 시각 킥 적용 여부입니다.</summary>
     public bool VisualKickEnabled => m_enableVisualKick;
 
