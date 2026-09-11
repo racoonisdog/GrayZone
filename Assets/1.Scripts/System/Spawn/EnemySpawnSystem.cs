@@ -73,6 +73,32 @@ public sealed class EnemySpawnSystem : MonoBehaviour
 #endif
     }
 
+    /// <summary>템플릿 값과 Defense 경로 기능을 가진 자식 스폰 포인트를 생성합니다.</summary>
+    /// <remarks>공통 생산 기능은 EnemySpawnPoint에서 상속하며 Defense 웨이포인트와 목표는 새 자식에서 개별 설정합니다.</remarks>
+    [Foldout("Spawn Point Template")]
+    [Button("Add Defense Spawn Point")]
+    private void AddDefenseSpawnPointChild()
+    {
+#if UNITY_EDITOR
+        if (Application.isPlaying)
+        {
+            Debug.LogWarning("[EnemySpawnSystem] Play Mode에서는 자식 Defense 스폰 포인트를 만들지 않습니다.", this);
+            return;
+        }
+
+        GameObject child = new GameObject("Enemy Defense Spawn Point");
+        Undo.RegisterCreatedObjectUndo(child, "Add Enemy Defense Spawn Point");
+        child.transform.SetParent(transform, false);
+
+        EnemyDefenseSpawnPoint point = Undo.AddComponent<EnemyDefenseSpawnPoint>(child);
+        Undo.RecordObject(point, "Configure Enemy Defense Spawn Point");
+        ApplyTemplate(point);
+        EditorUtility.SetDirty(point);
+        EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        Selection.activeGameObject = child;
+#endif
+    }
+
     /// <summary>현재 매니저 아래의 모든 자식 스폰 포인트에 템플릿 Inspector 값을 복사합니다.</summary>
     /// <remarks>실행 전 개별 자식 값은 유지되고, 버튼을 눌렀을 때만 덮어씁니다. 비활성 자식도 함께 적용합니다.</remarks>
     [Foldout("Spawn Point Template")]
