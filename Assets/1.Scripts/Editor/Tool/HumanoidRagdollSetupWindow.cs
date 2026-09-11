@@ -14,7 +14,7 @@ using UnityEngine;
 /// </remarks>
 public sealed class HumanoidRagdollSetupWindow : EditorWindow
 {
-    private const string DefaultTargetPath = "Assets/2.Prefabs/Enemy/Enemy(Test).prefab";
+    private const string DefaultTargetPath = "Assets/2.Prefabs/Enemy/Howler.prefab";
 
     private readonly List<string> m_log = new List<string>();
 
