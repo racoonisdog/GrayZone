@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
 /// <summary>
@@ -13,6 +14,52 @@ using UnityEngine;
 /// </remarks>
 public static class HumanoidRagdollBuilder
 {
+    private const string HowlerPrefabPath = "Assets/2.Prefabs/Enemy/Howler.prefab";
+    private const string DefenceHowlerPrefabPath = "Assets/2.Prefabs/Enemy/Defence/Howler(Defence_A).prefab";
+
+    /// <summary>현재 Howler 프리팹을 새 Humanoid 골격 기준으로 다시 구성합니다.</summary>
+    [MenuItem("GrayZone/Enemy/Howler 래그돌 재구성")]
+    public static void RebuildHowlerPrefab()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            Debug.LogWarning("Play Mode를 종료한 뒤 Howler 래그돌을 재구성하십시오.");
+            return;
+        }
+
+        RebuildPrefab(HowlerPrefabPath);
+        RebuildPrefab(DefenceHowlerPrefabPath);
+    }
+
+    /// <summary>지정한 프리팹 하나의 래그돌을 현재 Humanoid Avatar에 맞춰 저장합니다.</summary>
+    public static bool RebuildPrefab(string prefabPath)
+    {
+        GameObject root = PrefabUtility.LoadPrefabContents(prefabPath);
+        if (root == null)
+        {
+            Debug.LogError($"Howler 프리팹을 열지 못했습니다: {prefabPath}");
+            return false;
+        }
+
+        List<string> log = new List<string>();
+        try
+        {
+            if (!Build(root, log))
+            {
+                Debug.LogError("[Howler Ragdoll] 구성 실패\n" + string.Join("\n", log));
+                return false;
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[Howler Ragdoll] 구성 완료: {prefabPath}\n" + string.Join("\n", log));
+            return true;
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(root);
+        }
+    }
     /// <summary>
     /// 래그돌 뼈 Collider를 올려 둘 레이어 이름입니다.
     /// </summary>
@@ -331,6 +378,11 @@ public static class HumanoidRagdollBuilder
         body.collisionDetectionMode = CollisionDetectionMode.Discrete;
         body.linearDamping = 0.05f;
         body.angularDamping = 0.05f;
+        // CharacterJoint 래그돌은 기본 반복 수로는 긴 팔·다리 체인에서 제약이 한 프레임에 다 풀리지
+        // 않아 늘어날 수 있습니다. RagdollController도 런타임에 다시 보정하므로 기존 프리팹에도 적용됩니다.
+        body.solverIterations = 12;
+        body.solverVelocityIterations = 4;
+        body.maxAngularVelocity = 12.0f;
 
         bodies.Add(boneType, new BoneBody(bone, body));
         return mass;
@@ -725,7 +777,12 @@ public static class HumanoidRagdollBuilder
         joint.connectedBody = parent.Body;
         joint.autoConfigureConnectedAnchor = true;
         joint.enableCollision = false;
-        joint.enablePreprocessing = false;
+        // 표준 트리형 래그돌은 전처리를 켜야 PhysX가 풀기 어려운 관절 제약을 사전에 정리합니다.
+        // 끈 상태는 특별한 폐루프 관절에는 쓸 수 있지만, 이 구조에서는 회전 속도 누적과 관절 늘어짐을 키웁니다.
+        joint.enablePreprocessing = true;
+        joint.enableProjection = true;
+        joint.projectionDistance = 0.02f;
+        joint.projectionAngle = 5.0f;
         return joint;
     }
 

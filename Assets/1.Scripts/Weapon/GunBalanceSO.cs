@@ -26,7 +26,7 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_shootDelay")]
     [SerializeField] private float Gun_m_shootDelay = 0.12f;
 
-    [Tooltip("재장전에 필요한 시간입니다. 현재 스크립트에서는 상태값 용도로 보관하며, 실제 완료 타이밍은 애니메이션 이벤트에서 처리할 수 있습니다. (0 이상)")]
+    [Tooltip("재장전에 걸리는 시간(초)입니다. 이 값이 정본이며 탄약 충전·조준선 게이지·재장전 애니메이션 배속이 모두 여기에 맞춰집니다. 애니메이션은 완료 이벤트가 이 시간에 오도록 자동으로 배속됩니다(예: 1배속 클립이 2.67초면 1.33을 넣으면 2배속). (0 이상)")]
     [FormerlySerializedAs("m_reloadTime")]
     [SerializeField] private float Gun_m_reloadTime = 1.5f;
 
@@ -70,7 +70,7 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_hipfireSpreadRecoveryPerSecond")]
     [SerializeField] private float Gun_m_hipfireSpreadRecoveryPerSecond = 8f;
 
-    [Tooltip("힙파이어 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. (0 이상)")]
+    [Tooltip("발사 입력을 놓은 뒤 이 시간(초)이 지나면 힙파이어 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다. (0 이상)")]
     [FormerlySerializedAs("m_hipfireSpreadRecoveryDelay")]
     [SerializeField] private float Gun_m_hipfireSpreadRecoveryDelay = 0.3f;
 
@@ -94,7 +94,7 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_adsSpreadRecoveryPerSecond")]
     [SerializeField] private float Gun_m_adsSpreadRecoveryPerSecond = 8f;
 
-    [Tooltip("ADS 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. (0 이상)")]
+    [Tooltip("발사 입력을 놓은 뒤 이 시간(초)이 지나면 ADS 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다. (0 이상)")]
     [FormerlySerializedAs("m_adsSpreadRecoveryDelay")]
     [SerializeField] private float Gun_m_adsSpreadRecoveryDelay = 0.3f;
 

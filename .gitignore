@@ -98,3 +98,13 @@ Packages/unity-cli/
 # Syncthing sync metadata
 .stfolder/
 /Assets/ProgrammerResource
+# Unity 씬 복구 백업. 에디터가 프로젝트를 열 때 미저장 씬 스냅샷을 여기에 써넣으므로
+# 사람마다 다른 파일이 생기고 커밋될 때마다 add/add로 충돌한다. 실제로 2026-09-01 하루에만
+# Develop과 JangHu 양쪽에서 서로 다른 "0 (1).unity"가 올라와 충돌했다.
+# 빌드 세팅에 등록되지 않고 참조하는 에셋도 없다(GUID 전수 확인). 지워도 에디터가 다시 만든다.
+/Assets/_Recovery
+/Assets/_Recovery.meta
+
+# unity-cli 스크린샷 출력. `unity-cli screenshot`의 기본 출력 위치라 검증할 때마다 쌓이고,
+# 코드/에셋과 무관한 사람별 산출물이다. 참조하는 에셋도 빌드 대상도 아니다.
+/Screenshots

@@ -19,19 +19,29 @@ public static class CombatDamage
         /// <summary>이 명중으로 대상이 죽었는지 여부입니다.</summary>
         public readonly bool Killed;
 
-        /// <summary>한 번의 명중 결과를 세 가지 판정으로 묶습니다.</summary>
+        /// <summary>
+        /// 이 명중으로 실제로 들어간 피해량입니다. 약점 배율과 거리 감쇠가 모두 반영된 최종값입니다.
+        /// </summary>
+        /// <remarks>
+        /// 피해가 성립하지 않았으면 0입니다. 크로스헤어 히트마커가 타격 크기를 표현하는 데 씁니다.
+        /// </remarks>
+        public readonly int Damage;
+
+        /// <summary>한 번의 명중 결과를 묶습니다.</summary>
         /// <param name="applied">피해가 실제로 들어갔는지 여부입니다.</param>
         /// <param name="headshot">약점 히트박스에 맞았는지 여부입니다.</param>
         /// <param name="killed">이 명중으로 대상이 죽었는지 여부입니다.</param>
-        public HitFeedback(bool applied, bool headshot, bool killed)
+        /// <param name="damage">실제로 들어간 최종 피해량입니다. 피해가 없으면 0입니다.</param>
+        public HitFeedback(bool applied, bool headshot, bool killed, int damage = 0)
         {
             Applied = applied;
             Headshot = headshot;
             Killed = killed;
+            Damage = damage;
         }
 
         /// <summary>피해가 들어가지 않았을 때 쓰는 빈 결과입니다.</summary>
-        public static HitFeedback None => new HitFeedback(false, false, false);
+        public static HitFeedback None => new HitFeedback(false, false, false, 0);
     }
 
     /// <summary>
@@ -234,7 +244,7 @@ public static class CombatDamage
 
         LogHitPart(hitbox, target, damage, headshot);
 
-        return new HitFeedback(true, headshot, target.IsDead);
+        return new HitFeedback(true, headshot, target.IsDead, damage);
     }
 
     /// <summary>
