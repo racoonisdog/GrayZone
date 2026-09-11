@@ -564,6 +564,22 @@ public class PlayerbleUnitData : MonoBehaviour
     }
 
     /// <summary>
+    /// 이 캐릭터가 실제로 들고 있는 총기를 찾습니다. 활성 오브젝트를 우선합니다.
+    /// </summary>
+    /// <returns>활성 총기가 있으면 그것을, 없으면 비활성 포함 첫 총기를, 하나도 없으면 <c>null</c>을 반환합니다.</returns>
+    /// <remarks>
+    /// 모델을 교체하면 예전 모델의 손 본 아래에 쓰지 않는 총기가 비활성으로 남곤 합니다.
+    /// 비활성까지 한 번에 훑으면 계층 순서상 그 잔재가 먼저 잡혀, 조준·사격은 새 총기를 쓰는데
+    /// 이 컴포넌트만 옛 총기를 관찰하는 상태가 됩니다. 그러면 탄약 표시와 피격 집계가 조용히 어긋납니다.
+    /// 그래서 활성 총기를 먼저 찾고, 없을 때만 비활성까지 허용합니다.
+    /// </remarks>
+    private Gun FindOwnedGun()
+    {
+        Gun active = GetComponentInChildren<Gun>(false);
+        return active != null ? active : GetComponentInChildren<Gun>(true);
+    }
+
+    /// <summary>
     /// 관찰할 총기를 설정합니다.
     /// </summary>
     /// <param name="gun">새로 관찰할 총기입니다.</param>
@@ -659,7 +675,7 @@ public class PlayerbleUnitData : MonoBehaviour
 
         if (m_weaponController == null)
         {
-            m_weaponController = GetComponentInChildren<Gun>(true);
+            m_weaponController = FindOwnedGun();
         }
 
         if (m_publicTarget == null && m_squadMember != null)
