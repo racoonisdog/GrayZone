@@ -25520,9 +25520,17 @@ MonoBehaviour:
   m_hitMarkerColorBody: {r: 0.8509804, g: 0.8509804, b: 0.8509804, a: 1}
   m_hitMarkerColorHead: {r: 0.8862745, g: 0.23137255, b: 0.23137255, a: 1}
   m_hitMarkerLengthPixels: 16
+  m_enableHitMarkerDamageScale: 1
+  m_hitMarkerMinDamage: 1
+  m_hitMarkerMaxDamage: 10
+  m_hitMarkerLengthAtMinDamagePixels: 16
+  m_hitMarkerLengthAtMaxDamagePixels: 40
   m_hitMarkerCenterGapPixels: 8
   m_hitMarkerBaseLengthPixels: 5.5
   m_hitMarkerFadeDuration: 0.25
+  m_hitMarkerRollBaseDegrees: 0
+  m_enableHitMarkerRandomRoll: 1
+  m_hitMarkerRollRandomRangeDegrees: 10
   m_showKillSkull: 1
   m_killSkullTexture: {fileID: 2800000, guid: 7a6209cfe005b9346ad8ff7738e9f147, type: 3}
   m_killSkullTint: {r: 1, g: 1, b: 1, a: 1}
@@ -32474,7 +32482,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: -8.81}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1763799555}
   m_Father: {fileID: 2059310868}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &652192407
@@ -32493,6 +32502,9 @@ MonoBehaviour:
   - {fileID: 11400000, guid: aa048d67670743341b6ab12913a669c4, type: 2}
   m_spawnAreaSize: {x: 10, y: 10}
   m_minimumSpawnDistance: 1.5
+  m_waypoints:
+  - {fileID: 1763799555}
+  m_targetPosition: {fileID: 5780016447430107978}
   m_spawnEnabled: 1
 --- !u!1 &652223980
 GameObject:
@@ -50035,6 +50047,7 @@ MonoBehaviour:
   wanderInterval: 3
   wanderSpeed: 1.2
   chaseSpeed: 3.2
+  m_alwaysRun: 0
   rotationSpeed: 8
   idleTypeMin: 0
   idleTypeMax: 1
@@ -88868,6 +88881,37 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1762054720}
   m_Mesh: {fileID: -7186170387018577933, guid: 13fdd73d6786d2f48b185d685b944f61, type: 3}
+--- !u!1 &1763799554
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1763799555}
+  m_Layer: 0
+  m_Name: Waypoint 1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1763799555
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1763799554}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 23.04, y: 0, z: -12.32}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 652192406}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1764708941
 GameObject:
   m_ObjectHideFlags: 0
@@ -114968,6 +115012,34 @@ PrefabInstance:
     - target: {fileID: 4526457136588419995, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.57734615
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.559505
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.022803247
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.18995675
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.09624478
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.6664486
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.7144927
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -162418,7 +162490,7 @@ MonoBehaviour:
   m_recoilOnsetInterp: 1
   m_recoilOnsetSpeed: 35
   m_recoilCompensationAbsorb: 1
-  m_usePitchOffsetCap: 1
+  m_usePitchOffsetCap: 0
   m_recoilMaxPitch: 4
   m_useYawOffsetCap: 1
   m_recoilMaxYaw: 3
@@ -162553,7 +162625,7 @@ MonoBehaviour:
   m_recoilOnsetInterp: 1
   m_recoilOnsetSpeed: 35
   m_recoilCompensationAbsorb: 1
-  m_usePitchOffsetCap: 1
+  m_usePitchOffsetCap: 0
   m_recoilMaxPitch: 4
   m_useYawOffsetCap: 1
   m_recoilMaxYaw: 3
