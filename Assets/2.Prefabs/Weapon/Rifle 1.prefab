@@ -5882,14 +5882,14 @@ MonoBehaviour:
   m_hipfireMinSpreadShotCount: 3
   m_hipfireSpreadIncreasePerShot: 0.5
   m_hipfireSpreadRecoveryPerSecond: 8
-  m_hipfireSpreadRecoveryDelay: 0.3
+  m_hipfireSpreadRecoveryDelay: 0.15
   m_adsMinSpread: 0
   m_adsMaxSpread: 1
   m_adsCurrentSpread: 0
   m_adsMinSpreadShotCount: 3
   m_adsSpreadIncreasePerShot: 0.4
   m_adsSpreadRecoveryPerSecond: 8
-  m_adsSpreadRecoveryDelay: 0.3
+  m_adsSpreadRecoveryDelay: 0.15
   m_spreadDistribution: 1
   m_spreadConcentration: 3
   m_shotNoiseLevel: 1
