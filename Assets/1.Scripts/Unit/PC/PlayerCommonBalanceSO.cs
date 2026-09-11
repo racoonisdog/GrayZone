@@ -74,7 +74,7 @@ public sealed class PlayerCommonBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_recoilRecoverySpeed")]
     [SerializeField] private float ThirdPersonController_m_recoilRecoverySpeed = 8f;
 
-    [Tooltip("마지막 발사 이후 이 시간(초)이 지나야 반동 회복을 시작합니다. 사격 중에는 오프셋을 유지하고, 멈춘 뒤에야 복귀시키기 위한 지연입니다. 무기 풀오토 사격 간격(ShootDelay)보다 커야 연사 중 반동이 유지·누적됩니다. (0 이상)")]
+    [Tooltip("발사 입력을 놓은 뒤 반동 회복을 시작하기까지의 유예 시간입니다. 입력을 유지하는 동안에는 발수·누적량과 무관하게 회복하지 않습니다. 0이면 버튼을 놓은 직후부터 복귀합니다. (0 이상)")]
     [FormerlySerializedAs("m_recoilRecoveryDelay")]
     [SerializeField] private float ThirdPersonController_m_recoilRecoveryDelay = 0.15f;
 

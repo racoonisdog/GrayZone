@@ -1063,6 +1063,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
         {
             controller.SetMoveSpeed(SliderRow("이동 속도", controller.MoveSpeed, 0f, 15f));
             controller.SetSprintSpeed(SliderRow("질주 속도", controller.SprintSpeed, 0f, 20f));
+            controller.SetMovementDirectionTurnSpeed(
+                SliderRow("이동 방향 각속도", controller.MovementDirectionTurnSpeed, 0f, 1080f));
+            controller.SetMovementDirectionSmoothMaxAngle(
+                SliderRow("일반 방향 보간 최대 각도", controller.MovementDirectionSmoothMaxAngle, 0f, 180f));
             controller.SetJumpHeight(SliderRow("점프 높이", controller.JumpHeight, 0f, 5f));
 
             DrawReverseSyncButton(controller, "이동/반동");
@@ -1123,8 +1127,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
         {
             GUILayout.Space(3);
             GUILayout.Label("상체 레이어", m_headerStyle);
+            // 이 값은 재장전이 아니라 전투 자세 전환(리그·상체 레이어 가중치) 블렌드 시간입니다.
+            // 총을 들고 내리는 속도를 정하고, 그래서 "총 드는 중 사격 차단"이 풀리는 체감에도 영향을 줍니다.
             aimController.SetStanceBlendDuration(
-                SliderRow("재장전 페이드", aimController.StanceBlendDuration, 0f, 1f));
+                SliderRow("전투 자세 전환(총 들기/내리기)", aimController.StanceBlendDuration, 0f, 1f));
             aimController.SetRecoilAnimationWeight(
                 SliderRow("반동 동작 세기", aimController.RecoilAnimationWeight, 0f, 1f));
         }
@@ -1172,6 +1178,12 @@ public class RuntimeDebugTrainer : MonoBehaviour
         weapon.SetHeadshotDamageMultiplier(SliderRow("헤드샷 배율", weapon.HeadshotDamageMultiplier, 1f, 5f));
         weapon.SetShootDelay(SliderRow("사격 딜레이(초)", weapon.ShootDelay, 0.02f, 1f));
         weapon.SetReloadTime(SliderRow("재장전(초)", weapon.ReloadTime, 0f, 5f));
+        // 재장전 시간이 정본이고 애니메이션 배속이 거기에 맞춰 역산됩니다. 조정 결과를 바로 볼 수 있게 함께 표시합니다.
+        AimController reloadAim = target.GetComponent<AimController>();
+        if (reloadAim != null)
+        {
+            GUILayout.Label($"   └ 재장전 애니메이션 배속: {reloadAim.ReloadAnimationSpeed:0.##}배 (1 = 클립 원래 속도)");
+        }
         weapon.SetHitscanRange(SliderRow("사거리", weapon.HitscanRange, 10f, 300f, "0"));
         weapon.SetHitscanLayerMask(DrawLayerMaskRow("무기 명중 레이어", weapon.HitscanLayerMask, ref m_showWeaponHitscanLayers));
 
@@ -1180,7 +1192,9 @@ public class RuntimeDebugTrainer : MonoBehaviour
         weapon.SetYawKickPattern(DrawKickSidePattern("좌우 반동 패턴", weapon.YawKickPattern));
         weapon.SetRecoilRoll(SliderRow("카메라 롤 킥", weapon.RecoilRoll, 0f, 5f));
         weapon.SetRollKickPattern(DrawKickSidePattern("카메라 롤 패턴", weapon.RollKickPattern));
-        weapon.SetRecoilFovPunch(SliderRow("카메라 FOV 펀치", weapon.RecoilFovPunch, 0f, 10f));
+        weapon.SetRecoilFovPunch(SliderRow("카메라 FOV 펀치(힙)", weapon.RecoilFovPunch, 0f, 10f));
+        // 조준 중에는 화면이 확대돼 같은 값도 더 크게 보이므로 무기가 자세별로 따로 들고 있습니다.
+        weapon.SetRecoilFovPunchAds(SliderRow("카메라 FOV 펀치(ADS)", weapon.RecoilFovPunchAds, 0f, 10f));
 
         float hipMin = SliderRow("힙 탄퍼짐 최소", weapon.HipfireMinSpread, 0f, 20f);
         float hipMax = SliderRow("힙 탄퍼짐 최대", weapon.HipfireMaxSpread, 0f, 20f);
@@ -1313,7 +1327,20 @@ public class RuntimeDebugTrainer : MonoBehaviour
         aimController.SetHipfireHoldDuration(SliderRow("힙파이어 자세 유지", aimController.HipfireHoldDuration, 0f, 5f));
         aimController.SetAdsFov(SliderRow("ADS FOV", aimController.AdsFov, 1f, 90f));
         aimController.SetHipfireFov(SliderRow("힙파이어 FOV", aimController.HipfireFov, 1f, 120f));
-        aimController.SetZoomLerpSpeed(SliderRow("FOV 전환 속도", aimController.ZoomLerpSpeed, 0f, 40f));
+        // 이 속도는 줌 곡선을 끈 경우에만 쓰입니다. 곡선을 쓰는 동안 슬라이더를 보여 주면
+        // 움직여도 아무 변화가 없어 "고장난 값"처럼 보입니다.
+        if (aimController.UseZoomEnvelope)
+        {
+            GUILayout.Label("FOV 전환 속도: 미사용 (ADS 확대·축소 곡선 사용 중)");
+        }
+        else
+        {
+            aimController.SetZoomLerpSpeed(SliderRow("FOV 전환 속도", aimController.ZoomLerpSpeed, 0f, 40f));
+        }
+
+        GUILayout.Label(
+            $"총 드는 중 사격 차단: {(aimController.IsRaisingWeapon ? "차단 중" : "해제")} " +
+            $"(최대 {aimController.WeaponRaiseDuration:0.###}초)");
     }
 
     /// <summary>
@@ -1368,12 +1395,14 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         controller.SetUseYawOffsetCap(GUILayout.Toggle(controller.UseYawOffsetCap, " 요 반동 상한 사용"));
-
-        DrawRecoilEnvelopeSection(controller);
         if (controller.UseYawOffsetCap)
         {
             controller.SetRecoilMaxYaw(SliderRow("요 반동 상한", controller.RecoilMaxYaw, 0f, 30f));
         }
+
+        // 엔벨로프 섹션은 상한 토글·슬라이더 쌍을 모두 그린 뒤에 옵니다.
+        // 사이에 끼어 있으면 "요 반동 상한" 슬라이더가 자기 토글과 떨어져 다른 항목처럼 보입니다.
+        DrawRecoilEnvelopeSection(controller);
 
         GUILayout.Label($"현재 반동 오프셋: Pitch {controller.CurrentRecoilPitchOffset:0.##} / Yaw {controller.CurrentRecoilYawOffset:0.##}");
         if (GUILayout.Button("현재 자동 반동 오프셋 제거"))
@@ -1406,6 +1435,30 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         crosshairController.SetSpreadLerpSpeed(SliderRow("간격 보간 속도", crosshairController.SpreadLerpSpeed, 0f, 50f));
+
+        crosshairController.HitMarkerRandomRollEnabled =
+            GUILayout.Toggle(crosshairController.HitMarkerRandomRollEnabled, " 히트마커 발당 무작위 회전");
+        crosshairController.HitMarkerRollBaseDegrees =
+            SliderRow("히트마커 기준 각도", crosshairController.HitMarkerRollBaseDegrees, -180f, 180f);
+        if (crosshairController.HitMarkerRandomRollEnabled)
+        {
+            crosshairController.HitMarkerRollRandomRangeDegrees =
+                SliderRow("히트마커 흔들림 범위(±)", crosshairController.HitMarkerRollRandomRangeDegrees, 0f, 180f);
+        }
+
+        crosshairController.HitMarkerDamageScaleEnabled =
+            GUILayout.Toggle(crosshairController.HitMarkerDamageScaleEnabled, " 히트마커 길이 딜량 비례");
+        if (crosshairController.HitMarkerDamageScaleEnabled)
+        {
+            crosshairController.HitMarkerMinDamage =
+                SliderRow("비례 최소 딜량", crosshairController.HitMarkerMinDamage, 0f, 50f);
+            crosshairController.HitMarkerMaxDamage =
+                SliderRow("비례 최대 딜량", crosshairController.HitMarkerMaxDamage, 0f, 50f);
+            crosshairController.HitMarkerLengthAtMinDamagePixels =
+                SliderRow("최소 딜량 길이(px)", crosshairController.HitMarkerLengthAtMinDamagePixels, 0f, 120f);
+            crosshairController.HitMarkerLengthAtMaxDamagePixels =
+                SliderRow("최대 딜량 길이(px)", crosshairController.HitMarkerLengthAtMaxDamagePixels, 0f, 120f);
+        }
     }
 
     /// <summary>

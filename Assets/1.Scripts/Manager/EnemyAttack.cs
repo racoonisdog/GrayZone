@@ -112,6 +112,16 @@ public class EnemyAttack : MonoBehaviour
         m_attackMaxTargets = balance.AttackMaxTargets;
     }
 
+    /// <summary>공격 상태 판정에 사용할 실제 모델 Animator를 지정합니다.</summary>
+    /// <remarks>
+    /// Enemy 루트에 남아 있는 호환용 Animator가 아니라 FBX 골격을 직접 구동하는 Animator를 공유해야
+    /// 현재 공격 상태와 전이 정보를 정확히 읽을 수 있습니다.
+    /// </remarks>
+    public void SetAnimator(Animator animator)
+    {
+        m_animator = animator;
+    }
+
     private void Awake()
     {
         // 공격 주체의 진영을 소유 HealthSystemBase에서 가져옵니다. 없으면 Enemy로 가정합니다.

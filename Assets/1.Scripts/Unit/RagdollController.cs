@@ -31,6 +31,31 @@ public sealed class RagdollController : MonoBehaviour
     [Tooltip("래그돌로 넘기기 직전에 애니메이터 자세를 한 번 강제로 갱신할지 여부입니다. 화면 밖에서는 뼈 자세가 갱신되지 않아 낡은 자세가 물리로 넘어가면 래그돌이 폭발합니다. 끄면 화면 밖 사망이 튈 수 있습니다.")]
     [SerializeField] private bool m_refreshPoseBeforeHandoff = true;
 
+    [Header("Ragdoll Stability")]
+    [Tooltip("물리 시뮬레이션 중 허용할 뼈 선속도 상한(m/s)입니다. 피격 충격과 관절 보정으로 속도가 누적돼 시체가 늘어지는 것을 막습니다.")]
+    [Min(0.01f)]
+    [SerializeField] private float m_maxSimulationSpeed = 8.0f;
+
+    [Tooltip("물리 시뮬레이션 중 허용할 뼈 각속도 상한(라디안/초)입니다. Rigidbody의 사전 상한과 FixedUpdate 사후 상한을 함께 적용합니다.")]
+    [Min(0.01f)]
+    [SerializeField] private float m_maxSimulationAngularSpeed = 12.0f;
+
+    [Tooltip("래그돌 뼈마다 적용할 관절·충돌 해석 반복 횟수입니다. 기본 물리 반복 수보다 높여 긴 관절 체인이 늘어나는 현상을 줄입니다.")]
+    [Min(1)]
+    [SerializeField] private int m_solverIterations = 12;
+
+    [Tooltip("래그돌 뼈마다 적용할 속도 해석 반복 횟수입니다. 관절이 한 프레임에 과도하게 회전하는 현상을 줄입니다.")]
+    [Min(1)]
+    [SerializeField] private int m_solverVelocityIterations = 4;
+
+    [Tooltip("관절 제약이 어긋났을 때 투영 보정이 허용할 거리(m)입니다. 작을수록 관절 늘어짐을 빠르게 되돌립니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_jointProjectionDistance = 0.02f;
+
+    [Tooltip("관절 제약이 어긋났을 때 투영 보정이 허용할 회전각(도)입니다. 작을수록 과도한 비틀림을 빠르게 되돌립니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_jointProjectionAngle = 5.0f;
+
     [Header("Hit Impulse")]
     [Tooltip("맞은 부위 외의 나머지 뼈에 함께 실어줄 충격량 비율입니다. 0이면 맞은 부위만 튀어 관절이 뒤틀리고, 1이면 몸 전체가 통째로 밀립니다.")]
     [Range(0.0f, 1.0f)]
@@ -38,6 +63,7 @@ public sealed class RagdollController : MonoBehaviour
 
     private Animator m_animator;
     private Rigidbody[] m_ragdollBodies = System.Array.Empty<Rigidbody>();
+    private CharacterJoint[] m_ragdollJoints = System.Array.Empty<CharacterJoint>();
     private Collider[] m_ragdollColliders = System.Array.Empty<Collider>();
     private Collider[] m_gameplayColliders = System.Array.Empty<Collider>();
     private bool[] m_gameplayColliderStates = System.Array.Empty<bool>();
@@ -132,12 +158,38 @@ public sealed class RagdollController : MonoBehaviour
     /// </remarks>
     private void LateUpdate()
     {
-        if (m_isRagdollActive || !m_inheritAnimationVelocity)
+        if (m_isRagdollActive)
+        {
+            // FixedUpdate 뒤의 PhysX 관절 해석이 속도를 다시 올릴 수 있습니다.
+            // 렌더 직전에도 잘라 다음 물리 스텝으로 과속이 이어지지 않게 합니다.
+            ClampSimulationVelocities();
+            return;
+        }
+
+        if (!m_inheritAnimationVelocity)
         {
             return;
         }
 
         SampleBoneVelocities();
+    }
+
+    /// <summary>
+    /// 다음 물리 스텝에 들어가기 전에 선속도와 각속도를 안전 범위로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Rigidbody.maxAngularVelocity"/>는 물리 스텝 <b>전</b>에만 적용되므로, 관절 해석이 끝난
+    /// 뒤에는 그 상한을 넘을 수 있습니다. FixedUpdate에서는 다음 해석 전 값을 제한하고,
+    /// <see cref="LateUpdate"/>에서는 관절 해석 뒤 렌더 직전 값을 다시 제한합니다.
+    /// </remarks>
+    private void FixedUpdate()
+    {
+        if (!m_isRagdollActive)
+        {
+            return;
+        }
+
+        ClampSimulationVelocities();
     }
 
     /// <summary>
@@ -184,10 +236,14 @@ public sealed class RagdollController : MonoBehaviour
         // 애니메이터가 만든 마지막 자세를 물리 쪽에 반영한 뒤 시뮬레이션을 시작합니다.
         Physics.SyncTransforms();
 
+        // 기존에 저장된 프리팹도 생성 도구를 다시 실행하지 않아도 안정화 설정을 받게 합니다.
+        ConfigureJointsForRagdoll();
+
         for (int i = 0; i < m_ragdollBodies.Length; i++)
         {
             Rigidbody body = m_ragdollBodies[i];
 
+            ConfigureBodyForRagdoll(body);
             body.isKinematic = false;
             ApplyInheritedVelocity(body, i);
             body.WakeUp();
@@ -208,6 +264,12 @@ public sealed class RagdollController : MonoBehaviour
     public void SetMinimumHitImpulse(float minimumImpulse)
     {
         m_minimumHitImpulse = Mathf.Max(0.0f, minimumImpulse);
+    }
+
+    /// <summary>래그돌 전환 전후에 켜고 끌 실제 모델 Animator를 지정합니다.</summary>
+    public void SetAnimator(Animator animator)
+    {
+        m_animator = animator;
     }
 
     /// <summary>
@@ -412,6 +474,61 @@ public sealed class RagdollController : MonoBehaviour
             m_maxInheritedAngularSpeed);
     }
 
+    /// <summary>
+    /// 래그돌 본 하나에 관절 안정화용 물리 상한을 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 생성 도구가 만든 옛 프리팹에도 동일하게 적용해야 하므로, 프리팹 직렬화 값만 믿지 않고
+    /// 래그돌 전환 순간에 다시 설정합니다. <see cref="Rigidbody.maxAngularVelocity"/>는 다음 물리
+    /// 스텝 전에 작동하고, 실제 사후 제한은 <see cref="ClampSimulationVelocities"/>가 담당합니다.
+    /// </remarks>
+    private void ConfigureBodyForRagdoll(Rigidbody body)
+    {
+        body.maxAngularVelocity = m_maxSimulationAngularSpeed;
+        body.solverIterations = m_solverIterations;
+        body.solverVelocityIterations = m_solverVelocityIterations;
+    }
+
+    /// <summary>래그돌 관절의 제약 전처리와 투영 보정을 활성화합니다.</summary>
+    /// <remarks>
+    /// 전처리는 PhysX가 풀기 어려운 제약을 정리하고, 투영은 반복 해석 뒤에도 남은 관절 간격을 되돌립니다.
+    /// 둘 다 래그돌을 생성할 때의 기본값이지만, 이미 만들어진 프리팹에도 적용해야 하므로 활성화 순간에
+    /// 한 번 더 보정합니다.
+    /// </remarks>
+    private void ConfigureJointsForRagdoll()
+    {
+        for (int i = 0; i < m_ragdollJoints.Length; i++)
+        {
+            CharacterJoint joint = m_ragdollJoints[i];
+            if (joint == null)
+            {
+                continue;
+            }
+
+            joint.enablePreprocessing = true;
+            joint.enableProjection = true;
+            joint.projectionDistance = m_jointProjectionDistance;
+            joint.projectionAngle = m_jointProjectionAngle;
+        }
+    }
+
+    /// <summary>래그돌 전체의 시뮬레이션 속도를 인스펙터 상한 안으로 제한합니다.</summary>
+    /// <remarks>Rigidbody를 직접 움직이는 기능이 아니라, 이미 물리가 계산한 과도한 속도만 잘라 냅니다.</remarks>
+    private void ClampSimulationVelocities()
+    {
+        for (int i = 0; i < m_ragdollBodies.Length; i++)
+        {
+            Rigidbody body = m_ragdollBodies[i];
+            if (body == null || body.isKinematic)
+            {
+                continue;
+            }
+
+            body.linearVelocity = ClampMagnitude(body.linearVelocity, m_maxSimulationSpeed);
+            body.angularVelocity = ClampMagnitude(body.angularVelocity, m_maxSimulationAngularSpeed);
+        }
+    }
+
     /// <summary>벡터의 크기를 상한으로 자릅니다. 방향은 유지합니다.</summary>
     private static Vector3 ClampMagnitude(Vector3 value, float maxMagnitude)
     {
@@ -513,6 +630,34 @@ public sealed class RagdollController : MonoBehaviour
     }
 
     /// <summary>
+    /// 풀에서 재사용할 캐릭터의 래그돌 물리와 뼈 자세를 Animator 기준 상태로 즉시 복원합니다.
+    /// </summary>
+    /// <remarks>
+    /// 래그돌 해제만으로는 물리가 마지막으로 기록한 뼈 Transform이 다음 Animator 갱신 전까지 남습니다.
+    /// 풀 스폰은 루트 위치를 먼저 옮긴 뒤 같은 프레임에 재활성화하므로, 이 메서드가 Rebind와 0초 갱신으로
+    /// 사망 자세가 새 스폰 지점에 한 프레임 보이는 현상을 막습니다. 실제 래그돌을 활성화했던 경우에만
+    /// Animator 상태를 재설정하므로, 최초 스폰의 Animator 진행 상태에는 영향을 주지 않습니다.
+    /// </remarks>
+    public void ResetForReuse()
+    {
+        if (!m_isRagdollActive)
+        {
+            return;
+        }
+
+        DeactivateRagdoll();
+
+        if (m_animator == null || !m_animator.enabled)
+        {
+            return;
+        }
+
+        m_animator.Rebind();
+        m_animator.Update(0.0f);
+        Physics.SyncTransforms();
+    }
+
+    /// <summary>
     /// 래그돌 물리를 끄고 Animator 구동 상태로 되돌립니다.
     /// </summary>
     /// <remarks>
@@ -562,10 +707,27 @@ public sealed class RagdollController : MonoBehaviour
     /// </remarks>
     private void CacheRagdollParts()
     {
-        m_animator = GetComponentInChildren<Animator>(true);
+        if (m_animator == null)
+        {
+            Animator[] animators = GetComponentsInChildren<Animator>(true);
+            for (int i = 0; i < animators.Length; i++)
+            {
+                Animator candidate = animators[i];
+                if (candidate.transform != transform
+                    && candidate.GetComponentInChildren<SkinnedMeshRenderer>(true) != null)
+                {
+                    m_animator = candidate;
+                    break;
+                }
+            }
+
+            m_animator ??= GetComponent<Animator>();
+        }
+
         m_renderers = GetComponentsInChildren<Renderer>(true);
 
         Joint[] joints = GetComponentsInChildren<Joint>(true);
+        m_ragdollJoints = GetComponentsInChildren<CharacterJoint>(true);
         HashSet<Rigidbody> bodySet = new HashSet<Rigidbody>();
 
         for (int i = 0; i < joints.Length; i++)

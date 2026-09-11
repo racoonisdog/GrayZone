@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.AI;
 
 /// <summary>
-/// 처치 상태입니다. 이동과 피격 판정을 즉시 걷어내고 래그돌로 넘긴 뒤 시체를 제거합니다.
+    /// 처치 상태입니다. 이동과 피격 판정을 즉시 걷어내고 래그돌로 넘긴 뒤 시체 유지 시간을 처리합니다.
 /// </summary>
 /// <remarks>
 /// 충돌 제거를 연출보다 먼저, 즉시 하는 것이 중요합니다.
@@ -103,12 +103,18 @@ public class DeadState : EnemyStateBase
         Controller.PlayDeathAnimation();
     }
 
-    /// <summary>시체 제거 시각까지 남은 시간만 셉니다.</summary>
+    /// <summary>시체 유지 시각까지 남은 시간만 셉니다.</summary>
     /// <remarks>이 상태에는 대기 단계가 없습니다. 전환은 <see cref="Enter"/>에서 이미 끝나 있습니다.</remarks>
     public override void Tick()
     {
         if (m_destroyCorpse && Time.time >= m_destroyTime)
         {
+            // 풀링 적은 자신의 스포너가 먼저 비활성 풀로 회수합니다. 처리할 풀이 없는 일반 배치 적만 기존처럼 파괴합니다.
+            if (Controller.TryHandleCorpseLifetimeElapsed())
+            {
+                return;
+            }
+
             Object.Destroy(Controller.gameObject);
         }
     }

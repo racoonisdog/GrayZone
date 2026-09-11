@@ -1,7 +1,27 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Serialization;
 using VInspector;
+
+/// <summary>
+/// 방어전에서 적이 어떤 대상군을 우선시할지 나타냅니다.
+/// </summary>
+/// <remarks>
+/// 방어전 스폰 경로를 모두 통과한 뒤 <see cref="PlayerFirst"/>는 현재 조작 플레이어에게 먼저 향하고,
+/// <see cref="TargetFirst"/>는 스폰 포인트가 제공한 방어 목표 위치로 향합니다.
+/// </remarks>
+public enum EnemyDefenseDisposition
+{
+    /// <summary>기존 적 탐색 규칙을 그대로 사용합니다.</summary>
+    Default,
+
+    /// <summary>웨이포인트 통과 후 현재 조작 플레이어에게 먼저 향하는 성향입니다.</summary>
+    PlayerFirst,
+
+    /// <summary>웨이포인트 통과 후 스폰 포인트의 목표 위치로 향하는 성향입니다.</summary>
+    TargetFirst,
+}
 
 /// <summary>
 /// Enemy 행동을 엄브렐라 HFSM으로 오케스트레이션하는 호스트입니다.
@@ -21,6 +41,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Header("Identity")]
     [Tooltip("이 감염체의 종류입니다. 시체 처리처럼 종류별로 다른 설정을 고를 때의 키로 씁니다. 밸런스 수치와는 무관합니다.")]
     [SerializeField] private EnemyType m_enemyType = EnemyType.Howler;
+
+    [Header("Defense Disposition")]
+    [Tooltip("방어전 경로 이후 행동입니다. Player First는 현재 조작 플레이어, Target First는 스폰 포인트의 목표 위치로 향합니다.")]
+    [SerializeField] private EnemyDefenseDisposition m_defenseDisposition = EnemyDefenseDisposition.Default;
 
     [Header("Balance Data")]
     [Tooltip("선택 사항인 적 밸런스 데이터입니다. 지정하면 아래 레거시 기본값보다 우선 적용됩니다.")]
@@ -44,6 +68,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     [Tooltip("추적 상태에서 사용할 NavMeshAgent 이동 속도(m/s)입니다.")]
     [SerializeField] private float chaseSpeed = 3.2f;
+
+    [Tooltip("활성화하면 이동 상태에서 걷기 속도와 걷기 모션을 사용하지 않고 항상 달리기 속도와 달리기 모션을 사용합니다. 정지 상태의 Idle은 유지합니다.")]
+    [SerializeField] private bool m_alwaysRun;
 
     [Tooltip("대상을 향해 몸을 돌리는 최대 각속도(도/초)입니다. 200이면 180도 도는 데 약 0.9초가 걸립니다. 값이 클수록 고개가 튕기듯 돌아갑니다.")]
     [SerializeField] private float rotationSpeed = 200f;
@@ -195,8 +222,39 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>현재 활성 상태입니다.</summary>
     private EnemyStateBase m_current;
 
+    // Start가 한 번 실행된 뒤에만 풀 재사용 시 초기 상태 전이를 직접 수행합니다.
+    private bool m_hasStarted;
+
+    /// <summary>현재 방어전 생성 개체에 적용 중인 개체별 기본 이동 속도가 있는지 여부입니다.</summary>
+    private bool m_hasSpawnMoveSpeed;
+
+    /// <summary>이번 전장 생성에서 한 번 선정되어 사망 또는 풀 반환까지 유지되는 기본 이동 속도(m/s)입니다.</summary>
+    private float m_spawnMoveSpeed;
+
+    /// <summary>현재 방어전 생성 개체가 순서대로 통과할 웨이포인트입니다.</summary>
+    private readonly List<Transform> m_defenseWaypoints = new List<Transform>();
+
+    /// <summary>웨이포인트 통과 후 사용할 외부 방어선 또는 방어 목표 위치입니다.</summary>
+    private Transform m_defenseTargetPosition;
+
+    /// <summary>현재 향하고 있는 방어전 웨이포인트 인덱스입니다.</summary>
+    private int m_defenseWaypointIndex;
+
+    /// <summary>이번 생성에서 방어전 진입 경로와 목표 복귀 행동을 적용할지 여부입니다.</summary>
+    private bool m_defenseNavigationActive;
+
     /// <summary>현재 활성 상태입니다.</summary>
     public EnemyStateBase Current => m_current;
+
+    /// <summary>
+    /// 종류별 시체 유지 시간이 끝났을 때 풀 소유자가 개체를 회수할 기회를 받는 콜백입니다.
+    /// </summary>
+    /// <remarks>
+    /// 반환값이 true인 콜백이 하나라도 있으면 해당 소유자가 개체를 처리한 것으로 보고
+    /// <see cref="EnemyFSM.DeadState"/>는 <see cref="Object.Destroy(Object)"/>를 호출하지 않습니다.
+    /// 일반 배치 적처럼 등록한 소유자가 없으면 기존 파괴 경로를 그대로 사용합니다.
+    /// </remarks>
+    public event System.Func<bool> OnCorpseLifetimeElapsed;
 
     // =========================
     // 상태가 읽어 쓰는 접근자 (튜닝 수치는 컨트롤러가 소유, 상태는 읽기만)
@@ -233,6 +291,34 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 골격이 없는 것은 프리팹 구성 누락이라 경고할 일이고, 나머지는 정상 경로입니다.
     /// </remarks>
     public bool HasRagdollSkeleton => ragdollController != null && ragdollController.IsConfigured;
+
+    /// <summary>
+    /// 시체 유지 시간이 끝났을 때 등록된 풀 소유자에게 회수 처리를 요청합니다.
+    /// </summary>
+    /// <returns>어느 한 소유자라도 개체 회수를 처리했으면 true입니다.</returns>
+    /// <remarks>
+    /// 콜백을 단순 알림으로 두지 않고 처리 여부를 반환하게 해, 풀링하지 않는 적의 기존
+    /// <see cref="Object.Destroy(Object)"/> 흐름과 풀링 적의 비활성 반환 흐름을 함께 유지합니다.
+    /// </remarks>
+    public bool TryHandleCorpseLifetimeElapsed()
+    {
+        System.Func<bool> handlers = OnCorpseLifetimeElapsed;
+        if (handlers == null)
+        {
+            return false;
+        }
+
+        System.Delegate[] invocationList = handlers.GetInvocationList();
+        for (int i = 0; i < invocationList.Length; i++)
+        {
+            if (invocationList[i] is System.Func<bool> handler && handler.Invoke())
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// 이 개체가 피격으로 밀려날 때 적용할 충격량 하한을 래그돌에 알립니다.
@@ -348,16 +434,22 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     public float WanderInterval => wanderInterval;
 
     /// <summary>배회 이동 속도입니다.</summary>
-    public float WanderSpeed => wanderSpeed;
+    public float WanderSpeed => ResolveMoveSpeed(wanderSpeed);
 
     /// <summary>추적 이동 속도입니다.</summary>
-    public float ChaseSpeed => chaseSpeed;
+    public float ChaseSpeed => ResolveMoveSpeed(chaseSpeed);
+
+    /// <summary>이동 중 걷기 단계 없이 항상 달리기 속도와 모션을 사용할지 여부입니다.</summary>
+    public bool AlwaysRun => m_alwaysRun;
 
     /// <summary>대상 방향 회전 보간 속도입니다.</summary>
     public float RotationSpeed => rotationSpeed;
 
     /// <summary>소음 위치로 이동할 때의 속도입니다.</summary>
-    public float NoiseChaseSpeed => noiseChaseSpeed;
+    public float NoiseChaseSpeed => ResolveMoveSpeed(noiseChaseSpeed);
+
+    /// <summary>이번 전장 생성에서 선정된 개체별 기본 이동 속도입니다. 방어전 생성 설정이 없으면 프리팹의 추적 속도를 반환합니다.</summary>
+    public float CurrentMoveSpeed => ResolveMoveSpeed(chaseSpeed);
 
     /// <summary>소음 위치에 도착했다고 볼 거리입니다.</summary>
     public float NoiseArriveDistance => noiseArriveDistance;
@@ -412,6 +504,57 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>이 감염체의 종류입니다. 종류별 설정을 고를 때의 키입니다.</summary>
     public EnemyType EnemyType => m_enemyType;
+
+    /// <summary>이 감염체가 방어전에서 우선시할 대상 성향입니다.</summary>
+    /// <remarks>방어전 생성 경로 통과 후 플레이어 탐색과 외부 방어선 이동의 우선순위를 결정합니다.</remarks>
+    public EnemyDefenseDisposition DefenseDisposition => m_defenseDisposition;
+
+    /// <summary>
+    /// 스폰 포인트가 이번 전장 생성에 사용할 이동 속도, 웨이포인트와 방어 목표를 주입합니다.
+    /// </summary>
+    /// <param name="moveSpeed">생성 시 한 번 선정된 개체별 기본 이동 속도(m/s)입니다.</param>
+    /// <param name="waypoints">먼저 순서대로 통과할 웨이포인트 목록입니다.</param>
+    /// <param name="targetPosition">경로 통과 후 사용할 외부 방어선 또는 방어 목표 위치입니다.</param>
+    /// <remarks>
+    /// 풀에서 활성화되기 전에 호출할 수 있습니다. 웨이포인트 참조는 개체별 목록으로 복사하고,
+    /// 선정 속도는 공격 대상 변경·경직·이동 재개 뒤에도 유지합니다.
+    /// </remarks>
+    public void ConfigureDefenseSpawn(
+        float moveSpeed,
+        IReadOnlyList<Transform> waypoints,
+        Transform targetPosition)
+    {
+        m_hasSpawnMoveSpeed = true;
+        m_spawnMoveSpeed = Mathf.Max(0.0f, moveSpeed);
+        m_defenseTargetPosition = targetPosition;
+        m_defenseWaypoints.Clear();
+
+        if (waypoints != null)
+        {
+            for (int i = 0; i < waypoints.Count; i++)
+            {
+                Transform waypoint = waypoints[i];
+                if (waypoint != null)
+                {
+                    m_defenseWaypoints.Add(waypoint);
+                }
+            }
+        }
+
+        RestartDefenseNavigation();
+    }
+
+    /// <summary>풀 반환 시 이번 생성에만 적용한 방어전 이동 설정을 제거합니다.</summary>
+    /// <remarks>다음 활성화에서 <see cref="ConfigureDefenseSpawn"/>이 새 속도와 경로를 다시 주입합니다.</remarks>
+    public void ClearDefenseSpawnConfiguration()
+    {
+        m_hasSpawnMoveSpeed = false;
+        m_spawnMoveSpeed = 0.0f;
+        m_defenseWaypoints.Clear();
+        m_defenseTargetPosition = null;
+        m_defenseWaypointIndex = 0;
+        m_defenseNavigationActive = false;
+    }
 
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
     public EnemyBalanceSO Balance => m_balanceSO;
@@ -481,6 +624,49 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         enemyHealth?.ApplyBalance(balance);
     }
 
+    /// <summary>
+    /// 풀에서 다시 꺼낼 적의 런타임 상태를 초기화합니다.
+    /// </summary>
+    /// <remarks>
+    /// 비활성화 시점에 해제된 이벤트 구독은 <see cref="OnEnable"/>에서 다시 연결됩니다.
+    /// 첫 활성화에서는 <see cref="Start"/>가 초기 상태 진입을 담당하고, 재사용 인스턴스만 여기서 배회 상태로 되돌립니다.
+    /// </remarks>
+    public void ResetForSpawn()
+    {
+        CacheReferences();
+
+        m_knockbackVelocity = Vector3.zero;
+        m_isStaggered = false;
+        RestoreAgentPositionOwnership();
+
+        ragdollController?.ResetForReuse();
+        enemyAttack?.SetHitboxActive(false);
+
+        targetSensor?.ClearAllInfo();
+        targetSensor?.ClearNoise();
+        targetSensor?.SetEngaged(false);
+
+        enemyHealth?.RestoreFull();
+        enemyHealth?.ResetStagger();
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.isStopped = false;
+            agent.ResetPath();
+        }
+
+        ResetAnimation();
+
+        if (!m_hasStarted)
+        {
+            return;
+        }
+
+        RollIdleType();
+        TransitionTo(Wander);
+        RestartDefenseNavigation();
+    }
+
     /// <summary>활성화될 때 체력 이벤트를 구독합니다.</summary>
     private void OnEnable()
     {
@@ -517,10 +703,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>초기 상태로 진입합니다.</summary>
     private void Start()
     {
+        m_hasStarted = true;
         RollIdleType();
 
         // TODO(슬라이스 2): 휴면/배회 배치 구분, 스폰 기준점 기록.
         TransitionTo(Wander);
+        RestartDefenseNavigation();
     }
 
     /// <summary>이동 애니메이션을 갱신하고, 경직 중이 아니면 현재 상태를 Tick합니다.</summary>
@@ -548,6 +736,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         // 잠금은 풀렸지만 이탈 블렌드가 남아 있으면 위치는 아직 루트 모션이 쥐고 있습니다.
         // 판단은 이미 재개된 상태이므로 아래 Tick은 그대로 돌립니다.
         UpdateStaggerHandover();
+
+        if (TickDefenseNavigation())
+        {
+            return;
+        }
 
         m_current?.Tick();
     }
@@ -841,7 +1034,19 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private void OnAnimatorMove()
     {
-        if (!m_staggerRootMotionActive || animator == null)
+        // 기존처럼 Enemy 루트 자체에 Animator가 있는 프리팹도 지원합니다.
+        // 모델 자식 Animator를 쓰는 경우에는 같은 GameObject의 Relay가 이 메서드 대신 전달합니다.
+        if (animator != null && animator.gameObject == gameObject)
+        {
+            ApplyAnimatorRootMotion(animator);
+        }
+    }
+
+    /// <summary>현재 Enemy Animator가 만든 루트 모션을 경직 구간에만 소비합니다.</summary>
+    /// <param name="sourceAnimator">이번 프레임의 루트 모션을 계산한 Animator입니다.</param>
+    internal void ApplyAnimatorRootMotion(Animator sourceAnimator)
+    {
+        if (!m_staggerRootMotionActive || sourceAnimator == null || sourceAnimator != animator)
         {
             return;
         }
@@ -851,7 +1056,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         // 절대 위치(rootPosition)가 아니라 변위(deltaPosition)를 쓰는 이유는, 아바타 루트와 GameObject
         // 피벗이 어긋나 있으면 절대 위치 대입이 매 프레임 그 차이만큼 튀기 때문입니다.
         // 변위는 그 차이와 무관하게 "이번 프레임에 얼마나 움직였는가"만 담습니다.
-        Vector3 target = transform.position + animator.deltaPosition;
+        Vector3 target = transform.position + sourceAnimator.deltaPosition;
 
         // NavMesh 밖으로 한 발이라도 나가면 그 지점에서 출발하는 경로 계산이 전부 실패하고
         // (EnemyTargetSensor.GetPathDistance가 PathComplete만 인정) 유효 대상이 사라집니다.
@@ -912,8 +1117,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         Vector3 velocity = m_staggerRootMotionActive ? Vector3.zero : agent.velocity;
 
         float speed = velocity.magnitude;
+        float animationSpeed = m_alwaysRun && speed > 0.01f
+            ? Mathf.Max(speed, chaseSpeed)
+            : speed;
 
-        animator.SetFloat(AnimMoveSpeed, speed);
+        animator.SetFloat(AnimMoveSpeed, animationSpeed);
 
         // 이동 방향을 자기 기준으로 바꿔 2D 블렌드 축에 넣습니다.
         // 월드 방향을 그대로 쓰면 몸이 어디를 보든 같은 값이 되어 옆걸음과 앞걸음을 구분하지 못합니다.
@@ -1331,6 +1539,169 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         animator?.SetFloat(AnimIdleType, IdleType);
     }
 
+    /// <summary>방어전 생성 설정이 있으면 개체별 선정 속도를, 없으면 상태별 프리팹 속도를 반환합니다.</summary>
+    private float ResolveMoveSpeed(float fallbackSpeed)
+    {
+        if (m_hasSpawnMoveSpeed)
+        {
+            return m_spawnMoveSpeed;
+        }
+
+        return m_alwaysRun ? chaseSpeed : fallbackSpeed;
+    }
+
+    /// <summary>이번 생성의 방어전 경로 진행도를 처음으로 되돌리고 첫 목적지를 준비합니다.</summary>
+    private void RestartDefenseNavigation()
+    {
+        m_defenseWaypointIndex = 0;
+        m_defenseNavigationActive = m_defenseWaypoints.Count > 0
+            || m_defenseTargetPosition != null
+            || m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst;
+
+        if (!m_defenseNavigationActive || agent == null || !agent.enabled || !agent.isOnNavMesh)
+        {
+            return;
+        }
+
+        agent.speed = CurrentMoveSpeed;
+        if (m_defenseWaypoints.Count > 0 && m_defenseWaypoints[0] != null)
+        {
+            MoveTo(m_defenseWaypoints[0].position);
+        }
+        else if (TryResolveDefenseDestination(out Vector3 destination))
+        {
+            MoveTo(destination);
+        }
+    }
+
+    /// <summary>웨이포인트를 순서대로 통과한 뒤 방어 성향에 맞는 목표 행동을 수행합니다.</summary>
+    /// <returns>이번 프레임의 이동 판단을 방어전 경로가 처리했으면 true입니다.</returns>
+    /// <remarks>
+    /// 웨이포인트 이동 중에는 경로 순서를 우선합니다. 직접 피격 등으로 교전에 들어가면 기존 전투 HFSM에
+    /// 제어권을 넘기고, 교전 종료 뒤 남은 경로나 방어 목표 이동을 이어갑니다.
+    /// </remarks>
+    private bool TickDefenseNavigation()
+    {
+        if (!m_defenseNavigationActive || m_current == Dead || m_current == Combat)
+        {
+            return false;
+        }
+
+        if (agent == null || !agent.enabled || !agent.isOnNavMesh)
+        {
+            return true;
+        }
+
+        agent.speed = CurrentMoveSpeed;
+
+        while (m_defenseWaypointIndex < m_defenseWaypoints.Count)
+        {
+            Transform waypoint = m_defenseWaypoints[m_defenseWaypointIndex];
+            if (waypoint == null)
+            {
+                m_defenseWaypointIndex++;
+                continue;
+            }
+
+            if (HasReachedDefensePosition(waypoint.position))
+            {
+                m_defenseWaypointIndex++;
+                continue;
+            }
+
+            MoveTo(waypoint.position);
+            return true;
+        }
+
+        if (m_defenseDisposition == EnemyDefenseDisposition.Default)
+        {
+            FinishDefenseNavigation();
+            return false;
+        }
+
+        if (m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst && targetSensor != null)
+        {
+            targetSensor.UpdatePerception();
+            if (targetSensor.HasAnyValidTarget)
+            {
+                TransitionTo(Combat);
+                return true;
+            }
+        }
+
+        if (!TryResolveDefenseDestination(out Vector3 targetPosition))
+        {
+            StopMoving();
+            return true;
+        }
+
+        if (HasReachedDefensePosition(targetPosition))
+        {
+            StopMoving();
+            return true;
+        }
+
+        MoveTo(targetPosition);
+        return true;
+    }
+
+    /// <summary>방어 성향에 따라 웨이포인트 이후의 실시간 이동 목적지를 구합니다.</summary>
+    /// <param name="destination">이동할 월드 좌표입니다.</param>
+    /// <returns>현재 사용할 수 있는 목적지가 있으면 true입니다.</returns>
+    /// <remarks>
+    /// <see cref="EnemyDefenseDisposition.PlayerFirst"/>는 <see cref="SquadManager.PlayerSquadMember"/>를 통해
+    /// 현재 조작 캐릭터를 매번 다시 확인합니다. 캐릭터가 전환되어도 새 플레이어를 따라가며, 유효한 플레이어가
+    /// 없으면 스폰 포인트가 제공한 목표 위치를 대체 목적지로 사용합니다.
+    /// </remarks>
+    private bool TryResolveDefenseDestination(out Vector3 destination)
+    {
+        if (m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst)
+        {
+            SquadManager squadManager = SquadManager.Instance;
+            SquadMemberController player = squadManager != null ? squadManager.PlayerSquadMember : null;
+            if (player != null && player.IsAlive && !player.IsDown)
+            {
+                destination = player.transform.position;
+                return true;
+            }
+        }
+
+        if (m_defenseTargetPosition != null)
+        {
+            destination = m_defenseTargetPosition.position;
+            return true;
+        }
+
+        destination = Vector3.zero;
+        return false;
+    }
+
+    /// <summary>현재 위치가 방어전 경로 목적지에 충분히 도착했는지 X/Z 평면에서 확인합니다.</summary>
+    private bool HasReachedDefensePosition(Vector3 position)
+    {
+        float arrivalDistance = agent != null
+            ? Mathf.Max(0.35f, agent.stoppingDistance)
+            : 0.35f;
+        Vector3 delta = position - transform.position;
+        delta.y = 0.0f;
+        return delta.sqrMagnitude <= arrivalDistance * arrivalDistance;
+    }
+
+    /// <summary>사용할 방어 목표가 없을 때 경로 우선권을 해제하고 현재 위치를 기준으로 배회를 다시 시작합니다.</summary>
+    private void FinishDefenseNavigation()
+    {
+        m_defenseNavigationActive = false;
+
+        if (m_current == Wander)
+        {
+            m_current.Exit();
+            m_current.Enter();
+            return;
+        }
+
+        TransitionTo(Wander);
+    }
+
     /// <summary>지정한 월드 좌표로 NavMesh 이동을 지시합니다.</summary>
     /// <param name="worldPosition">이동 목적지 월드 좌표입니다.</param>
     /// <remarks>이동 속도는 호출 상태가 <c>Agent.speed</c>로 미리 설정합니다(배회/추격 등).</remarks>
@@ -1366,7 +1737,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         if (animator == null)
         {
-            animator = GetComponent<Animator>();
+            animator = ResolveAnimator();
         }
 
         if (enemyHealth == null)
@@ -1389,10 +1760,92 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             ragdollController = GetComponent<RagdollController>();
         }
 
+        enemyAttack?.SetAnimator(animator);
+        ragdollController?.SetAnimator(animator);
+
         if (m_feedback != null)
         {
             EnsureFeedbackEmitter();
         }
+    }
+
+    /// <summary>
+    /// 실제 FBX 골격 루트에 붙은 Animator를 선택하고 Enemy 루트 Animator의 설정을 넘깁니다.
+    /// </summary>
+    /// <remarks>
+    /// FBX에서 생성한 Humanoid Avatar는 FBX 루트 기준의 골격 경로를 사용합니다. 프리팹 최상위 Enemy에
+    /// 같은 Avatar를 연결하면 모델 래퍼 Transform이 경로 앞에 추가되어 스킨 bind pose와 애니메이션 골격이
+    /// 어긋날 수 있습니다. 따라서 SkinnedMeshRenderer를 소유한 모델 자식 Animator를 우선 사용합니다.
+    /// </remarks>
+    private Animator ResolveAnimator()
+    {
+        Animator rootAnimator = GetComponent<Animator>();
+        Animator modelAnimator = FindModelAnimator();
+
+        if (modelAnimator == null)
+        {
+            return rootAnimator;
+        }
+
+        if (rootAnimator != null && rootAnimator != modelAnimator)
+        {
+            bool shouldEnableModelAnimator = rootAnimator.enabled;
+
+            modelAnimator.runtimeAnimatorController = rootAnimator.runtimeAnimatorController;
+            if (modelAnimator.avatar == null && rootAnimator.avatar != null)
+            {
+                modelAnimator.avatar = rootAnimator.avatar;
+            }
+
+            modelAnimator.applyRootMotion = rootAnimator.applyRootMotion;
+            modelAnimator.updateMode = rootAnimator.updateMode;
+            modelAnimator.cullingMode = rootAnimator.cullingMode;
+            modelAnimator.speed = rootAnimator.speed;
+
+            rootAnimator.enabled = false;
+            modelAnimator.enabled = shouldEnableModelAnimator;
+        }
+
+        EnemyAnimatorRootMotionRelay relay = modelAnimator.GetComponent<EnemyAnimatorRootMotionRelay>();
+        if (relay == null)
+        {
+            relay = modelAnimator.gameObject.AddComponent<EnemyAnimatorRootMotionRelay>();
+        }
+
+        relay.Initialize(this, modelAnimator);
+
+        // 애니메이션 이벤트는 Animator가 붙은 GameObject의 컴포넌트에만 전달됩니다. 재생을 모델 자식으로
+        // 옮긴 이상 루트의 이 클래스는 공격 클립 이벤트를 받지 못하므로, 같은 방식의 전달 계층을 붙입니다.
+        // 없으면 OnAttackHitboxOn이 오지 않아 판정 콜라이더가 켜지지 않고 근접 공격이 무피해가 됩니다.
+        EnemyAnimatorEventRelay eventRelay = modelAnimator.GetComponent<EnemyAnimatorEventRelay>();
+        if (eventRelay == null)
+        {
+            eventRelay = modelAnimator.gameObject.AddComponent<EnemyAnimatorEventRelay>();
+        }
+
+        eventRelay.Initialize(this);
+        return modelAnimator;
+    }
+
+    /// <summary>SkinnedMeshRenderer 골격을 직접 포함하는 모델 자식 Animator를 찾습니다.</summary>
+    private Animator FindModelAnimator()
+    {
+        Animator[] candidates = GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            Animator candidate = candidates[i];
+            if (candidate.transform == transform)
+            {
+                continue;
+            }
+
+            if (candidate.GetComponentInChildren<SkinnedMeshRenderer>(true) != null)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Feedback SO가 있을 때만 감염체 피드백 emitter를 런타임에 준비합니다.</summary>

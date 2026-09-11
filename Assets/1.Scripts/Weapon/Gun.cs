@@ -81,7 +81,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_shootDelay = 0.12f;
 
-    [Tooltip("재장전에 필요한 시간입니다. 현재 스크립트에서는 상태값 용도로 보관하며, 실제 완료 타이밍은 애니메이션 이벤트에서 처리할 수 있습니다.")]
+    [Tooltip("재장전에 걸리는 시간(초)입니다. 이 값이 정본이며 탄약 충전·조준선 게이지·재장전 애니메이션 배속이 모두 여기에 맞춰집니다. 애니메이션은 완료 이벤트가 이 시간에 오도록 자동으로 배속됩니다(예: 1배속 클립이 2.67초면 1.33을 넣으면 2배속). 줄이면 빨라지고 늘리면 느려집니다.")]
     [FormerlySerializedAs("reloadTime")]
     [BalanceField]
     [Clamp(Min = 0)]
@@ -229,7 +229,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_hipfireSpreadRecoveryPerSecond = 8.0f;
 
-    [Tooltip("힙파이어 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다.")]
+    [Tooltip("발사 입력을 놓은 뒤 이 시간(초)이 지나면 힙파이어 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다.")]
     [FormerlySerializedAs("m_spreadResetTime")]
     [FormerlySerializedAs("m_spreadRecoveryDelay")]
     [BalanceField]
@@ -266,7 +266,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_adsSpreadRecoveryPerSecond = 8.0f;
 
-    [Tooltip("ADS 사격을 멈춘 뒤 이 시간(초)이 지나면 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다.")]
+    [Tooltip("발사 입력을 놓은 뒤 이 시간(초)이 지나면 ADS 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_adsSpreadRecoveryDelay = 0.3f;
@@ -425,6 +425,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     private WeaponFeedbackEmitter m_feedbackEmitter;
     private float m_hipfireCurrentSpreadAdd;
     private float m_adsCurrentSpreadAdd;
+
+    /// <summary>발사 입력 홀드로 spread 회복을 막을 마지막 프레임입니다. AimController가 매 프레임 연장합니다.</summary>
+    private int m_spreadRecoveryBlockUntilFrame = -1;
     private int m_hipfireShotsInBurst;
     private int m_adsShotsInBurst;
     private float m_hipfireLastShotTime;
@@ -580,7 +583,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>힙파이어 연사 시 발마다 누적하는 탄퍼짐 각도입니다.</summary>
     public float HipfireSpreadIncreasePerShot => m_hipfireSpreadIncreasePerShot;
 
-    /// <summary>힙파이어 사격 중단 후 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
+    /// <summary>발사 입력을 놓은 뒤 힙파이어 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
     public float HipfireSpreadRecoveryDelay => m_hipfireSpreadRecoveryDelay;
 
     /// <summary>힙파이어 탄퍼짐의 초당 회복량입니다.</summary>
@@ -592,11 +595,25 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>ADS 연사 시 발마다 누적하는 탄퍼짐 각도입니다.</summary>
     public float AdsSpreadIncreasePerShot => m_adsSpreadIncreasePerShot;
 
-    /// <summary>ADS 사격 중단 후 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
+    /// <summary>발사 입력을 놓은 뒤 ADS 탄퍼짐 회복을 시작하기까지의 지연 시간입니다.</summary>
     public float AdsSpreadRecoveryDelay => m_adsSpreadRecoveryDelay;
 
     /// <summary>ADS 탄퍼짐의 초당 회복량입니다.</summary>
     public float AdsSpreadRecoveryPerSecond => m_adsSpreadRecoveryPerSecond;
+
+    /// <summary>
+    /// 현재 무기의 spread 회복을 발사 입력 홀드로 막을지 통지합니다.
+    /// </summary>
+    /// <remarks>
+    /// 입력은 무기가 아닌 <see cref="AimController"/>가 소유합니다. 호출 순서가 Gun.Update보다 늦어도
+    /// 다음 프레임까지 막도록 한 프레임의 여유를 둡니다. 짧은 클릭은 버튼을 놓은 직후 이 차단이 해제되어
+    /// 기존 유예 시간 뒤 일반 회복으로 이어집니다.
+    /// </remarks>
+    /// <param name="fireInputHeld">발사 입력을 계속 누르고 있으면 <c>true</c>입니다.</param>
+    public void SetSpreadRecoveryBlockedByHeldFireInput(bool fireInputHeld)
+    {
+        m_spreadRecoveryBlockUntilFrame = fireInputHeld ? Time.frameCount + 1 : -1;
+    }
 
     /// <summary>
     /// 컴포넌트 참조를 캐싱하고 필수 참조를 검증합니다.
@@ -666,8 +683,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </summary>
     private void Update()
     {
-        RecoverSpread(ref m_hipfireCurrentSpreadAdd, m_hipfireLastShotTime, m_hipfireSpreadRecoveryDelay, m_hipfireSpreadRecoveryPerSecond);
-        RecoverSpread(ref m_adsCurrentSpreadAdd, m_adsLastShotTime, m_adsSpreadRecoveryDelay, m_adsSpreadRecoveryPerSecond);
+        // AimController가 발사 입력을 유지하는 프레임을 통지하면 spread 회복을 건너뜁니다.
+        // 한 프레임 앞까지 유지하는 것은 Gun.Update와 AimController.Update 실행 순서가 바뀌어도 홀드 중
+        // 한 프레임만 회복됐다 다시 벌어지는 현상을 막기 위함입니다.
+        if (Time.frameCount > m_spreadRecoveryBlockUntilFrame)
+        {
+            RecoverSpread(ref m_hipfireCurrentSpreadAdd, m_hipfireLastShotTime, m_hipfireSpreadRecoveryDelay, m_hipfireSpreadRecoveryPerSecond);
+            RecoverSpread(ref m_adsCurrentSpreadAdd, m_adsLastShotTime, m_adsSpreadRecoveryDelay, m_adsSpreadRecoveryPerSecond);
+        }
         UpdateCurrentSpreadInspectorFields();
     }
 
@@ -1105,6 +1128,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <param name="origin">사격 시작점입니다.</param>
     /// <param name="direction">사격 방향입니다.</param>
     /// <param name="distance">사거리입니다.</param>
+    /// <param name="logStages">단계별 진단 로그를 남길지 여부입니다. 조준점 트레이스처럼 매 프레임 도는 경로는 끕니다.</param>
     /// <remarks>
     /// <b>왜 두 단계인가</b>: 부위 히트박스는 애니메이션 뼈에 붙어 매 프레임 위치가 바뀝니다. 항상 켜 두면
     /// 개체 하나당 십수 개가 매 프레임 브로드페이즈를 갱신하고 그 비용이 개체 수만큼 곱해집니다.
@@ -1117,7 +1141,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 방금 켠 콜라이더는 애니메이션이 옮겨 놓은 최신 위치가 아니라 이전에 동기화된 위치에 있습니다.
     /// 그대로 2차 레이를 쏘면 맞아야 할 것이 빗나가고, 그 빗나감은 재현이 어렵습니다.
     /// </remarks>
-    private void EnableHitboxesAlongShot(Vector3 origin, Vector3 direction, float distance)
+    private void EnableHitboxesAlongShot(Vector3 origin, Vector3 direction, float distance, bool logStages = true)
     {
         DisableOpenedHitboxes();
 
@@ -1153,15 +1177,18 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             m_openedHitboxGroups.Add(group);
         }
 
-        // 1차: 사격 레이가 HitDetectVolume을 지났는지. 여기서 0이면 그 대상은 아예 후보가 아닙니다.
-        LogTwoStageTrace(
-            $"1차 감지 | HitDetectVolume {m_blockingHits.Count}개 통과 (레이 원시 히트 {count}개)"
-            + (m_blockingHits.Count > 0 ? $" 최근접={m_blockingHits[0].collider.name}" : string.Empty));
+        if (logStages)
+        {
+            // 1차: 사격 레이가 HitDetectVolume을 지났는지. 여기서 0이면 그 대상은 아예 후보가 아닙니다.
+            LogTwoStageTrace(
+                $"1차 감지 | HitDetectVolume {m_blockingHits.Count}개 통과 (레이 원시 히트 {count}개)"
+                + (m_blockingHits.Count > 0 ? $" 최근접={m_blockingHits[0].collider.name}" : string.Empty));
 
-        // 2차: 그 결과로 어떤 대상의 부위 히트박스를 켰는지.
-        LogTwoStageTrace(
-            $"2차 히트박스 켬 | 대상 {m_openedHitboxGroups.Count}개"
-            + (m_openedHitboxGroups.Count > 0 ? $" [{DescribeOpenedGroups()}]" : " (없음 - 3차는 아무것도 못 맞힙니다)"));
+            // 2차: 그 결과로 어떤 대상의 부위 히트박스를 켰는지.
+            LogTwoStageTrace(
+                $"2차 히트박스 켬 | 대상 {m_openedHitboxGroups.Count}개"
+                + (m_openedHitboxGroups.Count > 0 ? $" [{DescribeOpenedGroups()}]" : " (없음 - 3차는 아무것도 못 맞힙니다)"));
+        }
 
         if (m_openedHitboxGroups.Count > 0)
         {
@@ -1183,6 +1210,56 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         }
 
         m_openedHitboxGroups.Clear();
+    }
+
+    /// <summary>
+    /// 조준점을 정하는 트레이스를 사격 판정과 동일한 2단계 규칙으로 수행합니다.
+    /// </summary>
+    /// <param name="origin">트레이스 시작 위치입니다. 보통 카메라 위치입니다.</param>
+    /// <param name="direction">트레이스 방향입니다.</param>
+    /// <param name="distance">트레이스 거리입니다.</param>
+    /// <param name="hitscanMask">부위 히트박스를 볼 수 있는 실제 판정 마스크입니다. 자기 레이어 제외처럼 호출부만 아는 규칙은 호출부가 반영해 넘깁니다.</param>
+    /// <param name="hit">가장 가까운, 탄을 막는 대상입니다.</param>
+    /// <returns>막는 대상을 찾았으면 <c>true</c>입니다.</returns>
+    /// <remarks>
+    /// <b>조준점은 반드시 목표의 표면에 찍혀야 합니다.</b> 총알은 카메라가 아니라 총구에서 나가고 방향은
+    /// <c>(조준점 - 총구)</c>로 정해집니다. 카메라선과 총구선은 <b>조준점 한 점에서만 만나는 두 직선</b>이므로,
+    /// 조준점이 목표보다 앞에 찍히면 그 점을 지난 뒤 목표 깊이에 닿기까지 두 선이 다시 벌어집니다.
+    /// 벌어지는 양은 <c>(총구가 카메라 조준축에서 벗어난 거리) / (총구에서 조준점까지의 거리)</c>에 남은 거리를
+    /// 곱한 값입니다. 3인칭이라 총구가 카메라보다 약 5m 앞·1m 옆에 있어 이 비율이 크고, 감지 볼륨 앞면
+    /// (몸보다 약 1m 앞)을 조준점으로 쓰면 실측 수십 cm가 어긋납니다.
+    ///
+    /// 그 오차가 반지름 6~9cm인 손·전완·정강이·발보다 커서 사지가 통째로 빗나가는데, 감지 볼륨은 2m라
+    /// 1차는 그대로 통과합니다. 그래서 "감지는 되는데 부위만 안 맞는" 모양이 되고, 몸통·머리(반지름 13~15cm)만
+    /// 우연히 살아남습니다. 조준점을 부위 표면에 두면 총구선이 그 점을 반드시 지나므로 거리·각도·부위
+    /// 크기와 무관하게 성립합니다.
+    ///
+    /// 후보를 여는 규칙을 <see cref="ResolveShotPath"/>와 공유하는 것이 요점입니다. 두 곳이 다른 규칙을 쓰면
+    /// 조준점과 탄착이 다시 갈립니다. 단계별 로그는 끕니다 - 이 경로는 전투 자세 동안 매 프레임 돌아
+    /// 켜 두면 콘솔이 프레임마다 두 줄씩 쌓입니다.
+    ///
+    /// 1차가 아무것도 찾지 못하면 히트박스를 켜지 않고 <see cref="Physics.SyncTransforms"/>도 부르지 않으므로,
+    /// 조준선에 유닛이 없는 평상시 추가 비용은 레이캐스트 한 번입니다.
+    /// </remarks>
+    public bool TryTraceAimPoint(
+        Vector3 origin, Vector3 direction, float distance, int hitscanMask, out RaycastHit hit)
+    {
+        EnableHitboxesAlongShot(origin, direction, distance, false);
+
+        try
+        {
+            int count = Physics.RaycastNonAlloc(
+                origin, direction, m_traceBuffer, distance, hitscanMask, QueryTriggerInteraction.Collide);
+
+            return TryResolveNearestBlocking(
+                m_traceBuffer, count, m_ownerFaction, m_allyBulletPassThrough, out hit);
+        }
+        finally
+        {
+            // 판정이 아니라 조준점 계산이므로, 같은 프레임의 실제 사격이 자기 1차를 다시 돌릴 수 있도록
+            // 반드시 원상태로 되돌립니다. 남겨 두면 사격 순서에 따라 켜진 대상이 달라집니다.
+            DisableOpenedHitboxes();
+        }
     }
 
     /// <summary>2단계 사격 판정이 끊기는 지점을 찾기 위한 임시 에디터 로그입니다.</summary>

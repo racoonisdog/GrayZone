@@ -11,17 +11,26 @@ using UnityEngine;
 /// </remarks>
 public static class EnemyMeleeWiring
 {
-    private const string PrefabPath = "Assets/2.Prefabs/Enemy/Enemy(Test).prefab";
+    private const string PrefabPath = "Assets/2.Prefabs/Enemy/Howler.prefab";
+    private const string DefencePrefabPath = "Assets/2.Prefabs/Enemy/Defence/Howler(Defence_A).prefab";
     private const string BalancePath = "Assets/5.Data/ScriptableObject/Enemy/ZombieAttackBalance.asset";
     private static readonly string[] HitboxNames = { "AttackPoint_L", "AttackPoint_R" };
 
     [MenuItem("GrayZone/Enemy/근접 판정 배선")]
     public static void Wire()
     {
-        GameObject root = PrefabUtility.LoadPrefabContents(PrefabPath);
+        WirePrefab(PrefabPath);
+        WirePrefab(DefencePrefabPath);
+        AssetDatabase.Refresh();
+    }
+
+    /// <summary>지정한 Enemy 프리팹의 양손 공격 판정과 Animator 참조를 연결합니다.</summary>
+    public static void WirePrefab(string prefabPath)
+    {
+        GameObject root = PrefabUtility.LoadPrefabContents(prefabPath);
         if (root == null)
         {
-            Debug.LogError($"프리팹을 찾지 못했습니다: {PrefabPath}");
+            Debug.LogError($"프리팹을 찾지 못했습니다: {prefabPath}");
             return;
         }
 
@@ -41,6 +50,16 @@ public static class EnemyMeleeWiring
                 Debug.LogError("EnemyAttack을 찾지 못했습니다.");
                 return;
             }
+
+            Animator animator = FindHumanoidAnimator(root);
+            if (animator == null)
+            {
+                Debug.LogError("유효한 Humanoid Animator를 찾지 못했습니다.");
+                return;
+            }
+
+            EnsureHitbox(animator, HumanBodyBones.LeftHand, HitboxNames[0], 0.4f, log);
+            EnsureHitbox(animator, HumanBodyBones.RightHand, HitboxNames[1], 0.5f, log);
 
             List<Melee> melees = new List<Melee>();
 
@@ -94,23 +113,79 @@ public static class EnemyMeleeWiring
             }
 
             SerializedProperty animatorProp = attackSo.FindProperty("m_animator");
-            if (animatorProp.objectReferenceValue == null)
-            {
-                animatorProp.objectReferenceValue = attack.GetComponent<Animator>();
-            }
+            animatorProp.objectReferenceValue = animator;
 
             attackSo.ApplyModifiedPropertiesWithoutUndo();
             log.Add($"EnemyAttack에 근접 무기 {melees.Count}개를 연결했습니다.");
 
-            PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         }
         finally
         {
             PrefabUtility.UnloadPrefabContents(root);
         }
 
-        AssetDatabase.Refresh();
-        Debug.Log("[EnemyMeleeWiring] 완료\n" + string.Join("\n", log));
+        Debug.Log($"[EnemyMeleeWiring] 완료: {prefabPath}\n" + string.Join("\n", log));
+    }
+
+    /// <summary>새 모델로 교체하면서 사라진 손 공격 판정을 Humanoid 손 뼈 아래에 복구합니다.</summary>
+    private static void EnsureHitbox(
+        Animator animator,
+        HumanBodyBones handBone,
+        string hitboxName,
+        float radius,
+        List<string> log)
+    {
+        Transform hand = animator.GetBoneTransform(handBone);
+        if (hand == null)
+        {
+            log.Add($"{handBone} 뼈가 없어 {hitboxName}을 만들지 못했습니다.");
+            return;
+        }
+
+        Transform point = FindDeep(hand, hitboxName);
+        if (point == null)
+        {
+            GameObject pointObject = new GameObject(hitboxName);
+            pointObject.layer = 9;
+            point = pointObject.transform;
+            point.SetParent(hand, false);
+            point.localPosition = new Vector3(0.0f, 0.15f, 0.0f);
+            point.localRotation = Quaternion.identity;
+            point.localScale = Vector3.one;
+            log.Add($"{handBone} 아래에 {hitboxName}을 생성했습니다.");
+        }
+
+        SphereCollider collider = point.GetComponent<SphereCollider>();
+        if (collider == null)
+        {
+            collider = point.gameObject.AddComponent<SphereCollider>();
+        }
+
+        collider.radius = radius;
+        collider.center = Vector3.zero;
+        collider.isTrigger = true;
+        collider.enabled = false;
+    }
+
+    /// <summary>메시 골격을 실제로 소유한 유효한 Humanoid Animator를 찾습니다.</summary>
+    private static Animator FindHumanoidAnimator(GameObject root)
+    {
+        Animator[] animators = root.GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < animators.Length; i++)
+        {
+            Animator animator = animators[i];
+            if (animator.avatar != null
+                && animator.avatar.isHuman
+                && animator.avatar.isValid
+                && animator.GetBoneTransform(HumanBodyBones.LeftHand) != null
+                && animator.GetBoneTransform(HumanBodyBones.RightHand) != null)
+            {
+                return animator;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>이름이 같은 자손을 깊이 우선으로 찾습니다.</summary>

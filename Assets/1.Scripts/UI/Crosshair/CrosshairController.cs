@@ -159,8 +159,28 @@ public class CrosshairController : MonoBehaviour
     [SerializeField] private float m_maxGapPixels = 220.0f;
 
     [EndIf]
-    [Tooltip("현재 gap이 목표 gap을 따라가는 보간 속도입니다. 0 이하이면 목표 gap을 즉시 반영합니다.")]
+    [Tooltip("최종 gap(중앙 간격 + 탄퍼짐 + 발당 펄스)이 목표를 따라가는 보간 속도입니다. 계수는 1-e^(-속도×dt)이라 프레임레이트와 무관하며, 초반이 빠르고 뒤로 갈수록 느려지는 앞쏠림 곡선입니다. 값이 클수록 즉각적이고, 0 이하이면 목표를 즉시 반영합니다(첫 발이 스냅처럼 보입니다).")]
     [SerializeField] private float m_lerpSpeed = 0.0f;
+
+    [Foldout("Shot Recoil Feedback")]
+    [Tooltip("켜면 실제 발사가 성사될 때마다 크로스헤어 팔이 한 번 빠르게 벌어졌다 복귀합니다. 무기의 실제 탄퍼짐·탄착에는 영향을 주지 않는 UI 피드백입니다.")]
+    [SerializeField] private bool m_enableShotRecoilPulse = true;
+
+    [Tooltip("발사 한 발이 크로스헤어 간격에 더하는 최대 벌어짐(픽셀)입니다. 연사 중에는 각 발의 펄스가 겹쳐집니다.")]
+    [ShowIf(nameof(m_enableShotRecoilPulse))]
+    [Min(0.0f)]
+    [SerializeField] private float m_shotRecoilPulseAmplitudePixels = 14.0f;
+
+    [Tooltip("발사 반동 UI 펄스 하나의 전체 길이(초)입니다. 피크 위치는 Shot Recoil Pulse Curve의 x축으로 정합니다.")]
+    [ShowIf(nameof(m_enableShotRecoilPulse))]
+    [Min(0.0f)]
+    [SerializeField] private float m_shotRecoilPulseDuration = 0.20f;
+
+    [Tooltip("발사 반동 UI 펄스 곡선입니다. 기본값은 약 32ms 안에 피크로 튀어 오른 뒤 부드럽게 복귀합니다. x=정규화 시간, y=벌어짐 배율입니다.")]
+    [ShowIf(nameof(m_enableShotRecoilPulse))]
+    [SerializeField]
+    private AnimationCurve m_shotRecoilPulseCurve = ImpulseEnvelope.BuildFastAttackConstantReleaseCurve(0.16f, 1.0f, 0.85f);
+    [EndIf]
 
     [Foldout("Shape Options")]
     [Header("Main")]
@@ -332,8 +352,31 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("헤드샷 히트마커 색상입니다. Figma Crosshair_HeadShot 원본은 빨강 계열입니다.")]
     [SerializeField] private Color m_hitMarkerColorHead = new Color32(226, 59, 59, 255);
 
-    [Tooltip("히트마커 각 삼각형의 길이(픽셀)입니다. 중앙에서 바깥으로 뻗는 방향 길이입니다.")]
+    [Tooltip("히트마커 각 삼각형의 길이(픽셀)입니다. 중앙에서 바깥으로 뻗는 방향 길이입니다. 딜량 비례가 꺼져 있을 때 쓰는 고정 길이입니다.")]
     [SerializeField] private float m_hitMarkerLengthPixels = 26.0f;
+
+    [Tooltip("켜면 히트마커 길이가 그 명중의 피해량에 비례해 달라집니다. 끄면 위의 고정 길이를 씁니다.")]
+    [SerializeField] private bool m_enableHitMarkerDamageScale = true;
+
+    [Tooltip("길이 비례의 기준이 되는 최소 피해량입니다. 이 이하의 피해는 모두 최소 길이로 표시됩니다.")]
+    [ShowIf(nameof(m_enableHitMarkerDamageScale))]
+    [SerializeField] private float m_hitMarkerMinDamage = 1.0f;
+
+    [Tooltip("길이 비례의 기준이 되는 최대 피해량입니다. 이 이상의 피해는 모두 최대 길이로 표시됩니다.")]
+    [ShowIf(nameof(m_enableHitMarkerDamageScale))]
+    [SerializeField] private float m_hitMarkerMaxDamage = 10.0f;
+
+    [Tooltip("최소 피해량일 때의 히트마커 삼각형 길이(픽셀)입니다.")]
+    [ShowIf(nameof(m_enableHitMarkerDamageScale))]
+    [Min(0.0f)]
+    [SerializeField] private float m_hitMarkerLengthAtMinDamagePixels = 16.0f;
+
+    [Tooltip("최대 피해량일 때의 히트마커 삼각형 길이(픽셀)입니다.")]
+    [ShowIf(nameof(m_enableHitMarkerDamageScale))]
+    [Min(0.0f)]
+    [SerializeField] private float m_hitMarkerLengthAtMaxDamagePixels = 40.0f;
+
+    [EndIf]
 
     [Tooltip("히트마커 중앙 공간(픽셀)입니다. 중심에서 각 삼각형이 시작되기까지의 빈 간격입니다.")]
     [SerializeField] private float m_hitMarkerCenterGapPixels = 8.0f;
@@ -344,6 +387,19 @@ public class CrosshairController : MonoBehaviour
 
     [Tooltip("히트마커가 표시된 뒤 사라지기까지 걸리는 페이드아웃 시간(초)입니다.")]
     [SerializeField] private float m_hitMarkerFadeDuration = 0.25f;
+
+    [Tooltip("히트마커의 기준 회전 각도(도)입니다. 화면 정면 기준 Z축 회전이며, 무작위 흔들림을 꺼도 이 각도는 그대로 적용됩니다.")]
+    [SerializeField] private float m_hitMarkerRollBaseDegrees = 0.0f;
+
+    [Tooltip("켜면 명중할 때마다 히트마커 회전이 기준 각도에서 무작위로 흔들립니다. 끄면 항상 기준 각도로 고정됩니다.")]
+    [SerializeField] private bool m_enableHitMarkerRandomRoll = true;
+
+    [Tooltip("히트마커가 발마다 기준 각도에서 무작위로 흔들리는 범위(도)입니다. 10이면 매 명중마다 기준에서 -10~+10도 사이가 적용됩니다.")]
+    [ShowIf(nameof(m_enableHitMarkerRandomRoll))]
+    [Min(0.0f)]
+    [SerializeField] private float m_hitMarkerRollRandomRangeDegrees = 10.0f;
+
+    [EndIf]
 
     [Header("Kill Skull")]
     [Tooltip("켜면 적을 처치했을 때 중앙에 해골이 떴다가 페이드아웃됩니다.")]
@@ -380,6 +436,16 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("차단 마커 색상입니다. 임시 UI라 링과 가운데 점이 같은 색을 씁니다.")]
     [SerializeField] private Color m_blockMarkerColor = new Color32(226, 59, 59, 255);
 
+    [Tooltip("켜면 차단 마커가 표시되는 동안 중앙 크로스헤어를 반투명하게 만듭니다. 차단 마커 자체와 탄착점 위치 표시는 영향을 받지 않습니다.")]
+    [SerializeField] private bool m_dimCrosshairWhileBlockMarker = true;
+
+    [Tooltip("차단 마커가 표시 중일 때의 크로스헤어 알파입니다. 0은 완전히 투명, 1은 기존처럼 불투명입니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_blockMarkerCrosshairAlpha = 0.4f;
+
+    [Tooltip("차단 마커 표시·해제에 맞춰 크로스헤어 알파가 전환되는 시간(초)입니다. 0이면 즉시 전환합니다.")]
+    [SerializeField] private float m_blockMarkerCrosshairFadeDuration = 0.20f;
+
     [Foldout("Debug")]
     [Tooltip("(디버그) 켜면 에디트 모드(비플레이)에서도 조준선을 미리 렌더링합니다. 프리뷰 전용이며 게임 로직엔 영향이 없습니다. [ExecuteAlways]와 함께 동작합니다.")]
     [SerializeField] private bool m_editModePreview = false;
@@ -409,8 +475,11 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("(디버그) Center Space를 제외한 spread 기여분 픽셀입니다. 유효각(spread×배율)을 FOV로 물리 투영한 값입니다.")]
     [ShowInInspector] private float DebugSpreadGapPixels => CalculateSpreadGapPixels(DebugSpreadDegrees, DebugSpreadDisplayFactor, DebugCameraFovDegrees);
 
-    [Tooltip("(디버그) 현재 계산된 최종 gap 픽셀입니다. Center Space + spread 기여분(상한 클램프가 켜져 있으면 Max Gap으로 제한)입니다.")]
-    [ShowInInspector] private float DebugCurrentGapPixels => CalculateTargetGapPixels(DebugSpreadDegrees, DebugSpreadDisplayFactor, DebugCameraFovDegrees);
+    [Tooltip("(디버그) 현재 화면에 적용 중인 최종 gap 픽셀입니다. 탄퍼짐 gap과 발사 반동 UI 펄스가 함께 반영됩니다.")]
+    [ShowInInspector] private float DebugCurrentGapPixels => m_currentGapPixels;
+
+    [Tooltip("(디버그) 현재 발사 반동 UI 펄스가 더하고 있는 gap(픽셀)입니다. 실제 탄퍼짐·탄착에는 영향을 주지 않습니다.")]
+    [ShowInInspector] private float DebugShotRecoilPulsePixels => m_currentShotRecoilPulsePixels;
 
     // 전환 시점에 연결되는 라이브 소스 포인터(값 복사 아님). null이면 미연결(0 표시).
     private System.Func<float> m_debugSpreadSource;
@@ -437,16 +506,33 @@ public class CrosshairController : MonoBehaviour
     private VisualElement m_blockMarkerElement;
     private bool m_isReloading;
     private bool m_blockMarkerVisible;
+    private float m_crosshairOpacity = 1.0f;
     private float m_ammoGaugeFill = 1.0f;
     private Color m_hitMarkerActiveColor;
     private float m_hitMarkerTimer;
+
+    /// <summary>이번 히트마커에 적용 중인 Z축 회전 각도(도)입니다. 명중마다 새로 뽑습니다.</summary>
+    private float m_hitMarkerRollDegrees;
+
+    /// <summary>이번 히트마커에 적용 중인 삼각형 길이(픽셀)입니다. 명중마다 피해량으로 다시 계산합니다.</summary>
+    private float m_hitMarkerActiveLengthPixels;
     private float m_killTimer;
     private float m_currentGapPixels;
+    private float m_targetSpreadGapPixels;
+    private float m_currentShotRecoilPulsePixels;
+    private float m_heldShotRecoilPulsePixels;
+    private float m_shotRecoilPulseSpreadScale = 1.0f;
     private float m_lastSpreadDegrees;
     private SpreadDistribution m_lastDistribution = SpreadDistribution.Gaussian;
     private float m_lastConcentration = 3.0f;
     private float m_lastSpreadDisplayFactor = 1.0f;
     private float m_lastCameraFovDegrees = 60.0f;
+
+    /// <summary>동시에 진행 중인 발사 반동 UI 펄스입니다.</summary>
+    private readonly ImpulseEnvelope m_shotRecoilPulseEnvelope = new ImpulseEnvelope();
+
+    /// <summary>발사 입력 홀드로 펄스 복귀를 막을 마지막 프레임입니다. AimController가 매 프레임 연장합니다.</summary>
+    private int m_shotRecoilPulseHoldUntilFrame = -1;
 
     /// <summary>탄퍼짐 정확도 표시 여부입니다.</summary>
     public bool UseSpreadAccuracy => m_useSpreadAccuracy;
@@ -463,6 +549,15 @@ public class CrosshairController : MonoBehaviour
     /// <summary>조준선 간격이 목표를 따라가는 보간 속도입니다.</summary>
     public float SpreadLerpSpeed => Mathf.Max(0.0f, m_lerpSpeed);
 
+    /// <summary>발사 반동 UI 펄스 사용 여부입니다.</summary>
+    public bool ShotRecoilPulseEnabled => m_enableShotRecoilPulse;
+
+    /// <summary>발사 한 발의 크로스헤어 벌어짐 최대값(픽셀)입니다.</summary>
+    public float ShotRecoilPulseAmplitudePixels => Mathf.Max(0.0f, m_shotRecoilPulseAmplitudePixels);
+
+    /// <summary>발사 반동 UI 펄스 한 번의 전체 길이(초)입니다.</summary>
+    public float ShotRecoilPulseDuration => Mathf.Max(0.0f, m_shotRecoilPulseDuration);
+
     private bool HasMainShape => m_mainShape != MainShape.None;
     private bool HasSubShape => m_subShape != SubShape.None;
     private bool HasSubCrossShape => m_subShape == SubShape.RoundedCross || m_subShape == SubShape.SquareCross;
@@ -477,7 +572,7 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 매 프레임 재장전 깜빡임과 히트마커·킬 해골 페이드아웃을 갱신합니다(플레이 중에만).
+    /// 매 프레임 재장전 깜빡임과 히트마커·킬 해골 페이드아웃, 차단 중 크로스헤어 알파를 갱신합니다(플레이 중에만).
     /// </summary>
     private void Update()
     {
@@ -489,6 +584,103 @@ public class CrosshairController : MonoBehaviour
         UpdateReloadBlink();
         UpdateHitMarkerFade();
         UpdateKillFade();
+        UpdateShotRecoilPulse();
+        UpdateGapSmoothing();
+        UpdateBlockMarkerCrosshairOpacity();
+    }
+
+    /// <summary>
+    /// 발사 반동 UI 펄스를 진행하고 현재 크로스헤어 간격에 합칩니다.
+    /// </summary>
+    /// <remarks>
+    /// 탄퍼짐 갱신과 분리해 한 발씩 즉시 피드백을 줄 수 있게 합니다. 따라서 ADS 정밀탄처럼 실제 spread가 0인
+    /// 첫 발에도 크로스헤어가 움직입니다. 발사 입력을 유지하면 펄스가 도달한 가장 큰 gap을 붙잡고, 버튼을
+    /// 놓은 뒤에만 일반 복귀를 재개합니다.
+    /// </remarks>
+    private void UpdateShotRecoilPulse()
+    {
+        if (!m_enableShotRecoilPulse)
+        {
+            if (m_currentShotRecoilPulsePixels <= 0.0f)
+            {
+                return;
+            }
+
+            m_shotRecoilPulseEnvelope.Clear();
+            m_currentShotRecoilPulsePixels = 0.0f;
+            m_heldShotRecoilPulsePixels = 0.0f;
+            ApplyCurrentGapLayout();
+            return;
+        }
+
+        float nextPulse = m_shotRecoilPulseEnvelope.Evaluate(
+            m_shotRecoilPulseDuration,
+            m_shotRecoilPulseCurve,
+            Time.deltaTime);
+
+        bool fireInputHeld = Time.frameCount <= m_shotRecoilPulseHoldUntilFrame;
+        if (fireInputHeld)
+        {
+            // 공격 구간은 기존 envelope가 진행시켜 빠르게 올리고, 이미 도달한 최고값은 홀드 중에
+            // 다시 내려가지 않게 붙잡습니다. 여러 발의 펄스가 합쳐져 초기 연사에서 과도하게 커지지 않도록
+            // 한 발의 표시 진폭으로 제한하며, 실제 spread 누적은 별도 gap이 계속 담당합니다.
+            m_heldShotRecoilPulsePixels = Mathf.Min(
+                ShotRecoilPulseAmplitudePixels,
+                Mathf.Max(m_heldShotRecoilPulsePixels, nextPulse));
+            nextPulse = m_heldShotRecoilPulsePixels;
+        }
+        else if (m_heldShotRecoilPulsePixels > 0.0f)
+        {
+            // 클릭/버튼 해제 뒤에는 기존 펄스 길이에 맞춘 일정 속도로 홀드분을 돌려 보냅니다.
+            float releaseSpeed = ShotRecoilPulseAmplitudePixels /
+                                 Mathf.Max(0.0001f, ShotRecoilPulseDuration);
+            m_heldShotRecoilPulsePixels = Mathf.MoveTowards(
+                m_heldShotRecoilPulsePixels,
+                0.0f,
+                releaseSpeed * Time.deltaTime);
+            nextPulse = Mathf.Max(nextPulse, m_heldShotRecoilPulsePixels);
+        }
+
+        if (Mathf.Abs(nextPulse - m_currentShotRecoilPulsePixels) <= GapSnapEpsilon &&
+            Mathf.Approximately(nextPulse, 0.0f))
+        {
+            return;
+        }
+
+        m_currentShotRecoilPulsePixels = Mathf.Max(0.0f, nextPulse);
+        ApplyCurrentGapLayout();
+    }
+
+    /// <summary>
+    /// 차단 마커 표시 상태에 맞춰 중앙 크로스헤어의 알파를 선형 보간합니다.
+    /// </summary>
+    /// <remarks>
+    /// 차단 마커는 <see cref="m_rootElement"/>의 직속 요소이고, 중앙 크로스헤어는
+    /// <see cref="m_crosshairElement"/> 아래에 있습니다. 따라서 이 요소에만 opacity를 적용하면
+    /// 실제 탄착점의 차단 마커는 선명하게 유지하면서 크로스헤어 색상의 알파만 함께 전환할 수 있습니다.
+    /// </remarks>
+    private void UpdateBlockMarkerCrosshairOpacity()
+    {
+        if (m_crosshairElement == null && !CacheVisualElements())
+        {
+            return;
+        }
+
+        float targetOpacity = m_dimCrosshairWhileBlockMarker && m_blockMarkerVisible
+            ? m_blockMarkerCrosshairAlpha
+            : 1.0f;
+
+        if (m_blockMarkerCrosshairFadeDuration <= 0.0f)
+        {
+            m_crosshairOpacity = targetOpacity;
+        }
+        else
+        {
+            float step = Time.deltaTime / m_blockMarkerCrosshairFadeDuration;
+            m_crosshairOpacity = Mathf.MoveTowards(m_crosshairOpacity, targetOpacity, step);
+        }
+
+        m_crosshairElement.style.opacity = m_crosshairOpacity;
     }
 
     /// <summary>
@@ -682,19 +874,172 @@ public class CrosshairController : MonoBehaviour
         m_lastSpreadDisplayFactor = CalculateDisplayFactor(m_lastDistribution, m_lastConcentration);
         m_lastCameraFovDegrees = Mathf.Max(1.0f, cameraFovDegrees);
 
-        float targetGap = CalculateTargetGapPixels(m_lastSpreadDegrees, m_lastSpreadDisplayFactor, m_lastCameraFovDegrees);
-        float lerpSpeed = Mathf.Max(0.0f, m_lerpSpeed);
+        // 여기서는 탄퍼짐 기여분의 **목표만** 갱신합니다. 실제 접근은 프레임당 한 번
+        // <see cref="UpdateGapSmoothing"/>가 최종 gap 전체에 대해 수행합니다. 예전에는 이 자리에서
+        // 탄퍼짐 기여분만 보간했는데, 그러면 매 발 계단식으로 바뀌는 펄스 기여분은 보간을 거치지 않아
+        // 두 성분의 변화 속도가 어긋나고 연사 중 벌어짐이 발마다 덜컥거렸습니다.
+        m_targetSpreadGapPixels = CalculateSpreadGapPixels(
+            m_lastSpreadDegrees, m_lastSpreadDisplayFactor, m_lastCameraFovDegrees);
 
-        m_currentGapPixels = snap || lerpSpeed <= 0.0f
-            ? targetGap
-            : Mathf.Lerp(m_currentGapPixels, targetGap, Time.deltaTime * lerpSpeed);
-
-        if (Mathf.Abs(m_currentGapPixels - targetGap) <= GapSnapEpsilon)
+        if (snap)
         {
-            m_currentGapPixels = targetGap;
+            m_currentGapPixels = ComposeTargetGapPixels();
+        }
+
+        ApplyCurrentGapLayout();
+    }
+
+    /// <summary>
+    /// 현재 상태가 가리키는 최종 gap 목표(중앙 간격 + 탄퍼짐 기여 + 비율 적용 펄스)를 계산합니다.
+    /// </summary>
+    private float ComposeTargetGapPixels()
+    {
+        float pulseGap = m_currentShotRecoilPulsePixels * Mathf.Clamp01(m_shotRecoilPulseSpreadScale);
+        float total = Mathf.Max(0.0f, m_centerSpacePixels + m_targetSpreadGapPixels + pulseGap);
+        return m_clampToMaxGap ? Mathf.Min(total, m_maxGapPixels) : total;
+    }
+
+    /// <summary>
+    /// 최종 gap을 목표로 프레임당 한 번 접근시키고 레이아웃에 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 탄퍼짐 기여분과 펄스 기여분을 **합친 뒤** 보간하므로 두 성분의 계단이 같은 곡선으로 흡수됩니다.
+    /// 그래서 연사 중 성분별 속도 차이로 생기던 덜컥거림이 사라지고, 첫 발의 펄스 상승(32ms 피크)도
+    /// 이 보간을 한 번 더 거쳐 스냅이 아닌 상승으로 보입니다.
+    /// <para>
+    /// 계수는 <c>1 - e^(-speed·dt)</c>입니다. 프레임레이트에 무관하게 같은 시정수를 갖고(예전 <c>dt·speed</c>는
+    /// 30fps에서 60fps보다 약 20% 빨리 붙었습니다), 초반이 가장 빠르고 뒤로 갈수록 느려지는 앞쏠림 곡선입니다.
+    /// </para>
+    /// 목표 자체가 단조증가하는 계단이면 이 보간의 출력도 단조증가합니다. 즉 벌어짐이 도중에 줄지 않습니다.
+    /// </remarks>
+    private void UpdateGapSmoothing()
+    {
+        float target = ComposeTargetGapPixels();
+        float speed = SpreadLerpSpeed;
+
+        m_currentGapPixels = speed <= 0.0f
+            ? target
+            : Mathf.Lerp(m_currentGapPixels, target, 1.0f - Mathf.Exp(-speed * Time.deltaTime));
+
+        if (Mathf.Abs(m_currentGapPixels - target) <= GapSnapEpsilon)
+        {
+            m_currentGapPixels = target;
         }
 
         ApplyLayout(m_currentGapPixels);
+    }
+
+    /// <summary>
+    /// 실제 발사가 성사된 프레임에 크로스헤어 벌어짐 펄스를 시작합니다.
+    /// </summary>
+    /// <remarks>
+    /// 탄퍼짐 표시는 여전히 <see cref="SetSpread"/>가 소유합니다. 이 메서드는 표시용 gap만 더하므로,
+    /// Gun의 spread·탄착·에임 반동에는 영향을 주지 않습니다.
+    /// </remarks>
+    public void TriggerShotRecoilPulse()
+    {
+        ClampSettings();
+
+        if (!m_enableShotRecoilPulse || m_shotRecoilPulseAmplitudePixels <= 0.0f ||
+            m_shotRecoilPulseDuration <= 0.0f)
+        {
+            return;
+        }
+
+        m_shotRecoilPulseEnvelope.Add(m_shotRecoilPulseAmplitudePixels);
+    }
+
+    /// <summary>
+    /// 진행 중인 발사 반동 UI 펄스를 즉시 제거하고 현재 탄퍼짐 간격만 남깁니다.
+    /// </summary>
+    /// <remarks>
+    /// 진행 중인 펄스를 한 프레임에 버리므로 총 gap이 그만큼 즉시 줄어듭니다. 따라서 사격 중 상한 처리에는
+    /// 쓰지 않습니다. 그 용도는 <see cref="SetShotRecoilPulseSpreadScale"/>의 비례 감쇠가 대신합니다.
+    /// 이 메서드는 무기 교체·전투 종료처럼 gap이 끊겨도 되는 하드 리셋 지점을 위해 남겨 둡니다.
+    /// 실제 탄퍼짐·탄착·에임 반동에는 영향을 주지 않습니다.
+    /// </remarks>
+    public void ClearShotRecoilPulse()
+    {
+        if (m_shotRecoilPulseEnvelope.ActiveCount == 0 &&
+            Mathf.Approximately(m_currentShotRecoilPulsePixels, 0.0f) &&
+            Mathf.Approximately(m_heldShotRecoilPulsePixels, 0.0f))
+        {
+            return;
+        }
+
+        m_shotRecoilPulseEnvelope.Clear();
+        m_currentShotRecoilPulsePixels = 0.0f;
+        m_heldShotRecoilPulsePixels = 0.0f;
+
+        // 씬 초기화 순서상 발사 처리가 UI Toolkit 트리보다 먼저 올 수 있습니다.
+        // 그때는 상태만 비우고, 다음 SetSpread/Update가 준비된 레이아웃에 반영하게 둡니다.
+        if (CacheVisualElements())
+        {
+            ApplyCurrentGapLayout();
+        }
+    }
+
+    /// <summary>
+    /// 현재 gap 값을 화면 레이아웃에 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 목표 계산은 <see cref="ComposeTargetGapPixels"/>, 목표 접근은 <see cref="UpdateGapSmoothing"/>이
+    /// 프레임당 한 번 담당합니다. 이 메서드는 다시 그리기만 하므로 한 프레임에 여러 번 불려도 안전합니다.
+    /// </remarks>
+    private void ApplyCurrentGapLayout()
+    {
+        // 플레이 중 보간이 켜져 있으면 목표 접근은 UpdateGapSmoothing이 프레임당 한 번만 담당합니다.
+        // 이 메서드는 한 프레임에 여러 번 불릴 수 있어, 여기서 보간을 진행하면 호출 횟수만큼 빨라집니다.
+        // 에디터 미리보기(Update 미실행)와 보간 off에서는 즉시 목표로 맞춥니다.
+        if (!Application.isPlaying || SpreadLerpSpeed <= 0.0f)
+        {
+            m_currentGapPixels = ComposeTargetGapPixels();
+        }
+
+        ApplyLayout(m_currentGapPixels);
+    }
+
+    /// <summary>
+    /// 발사 입력 홀드에 따라 발당 UI 펄스의 복귀를 막을지 통지합니다.
+    /// </summary>
+    /// <remarks>
+    /// 짧은 클릭은 버튼을 놓으면 기존 복귀 경로를 그대로 쓰고, 자동 사격 홀드는 초기 정밀탄의 UI 펄스까지
+    /// 최고 gap에 유지합니다. 한 프레임 여유는 CrosshairController와 AimController의 Update 순서 차이를 흡수합니다.
+    /// </remarks>
+    /// <param name="fireInputHeld">발사 입력을 계속 누르고 있으면 <c>true</c>입니다.</param>
+    public void SetShotRecoilPulseHoldByFireInput(bool fireInputHeld)
+    {
+        m_shotRecoilPulseHoldUntilFrame = fireInputHeld ? Time.frameCount + 1 : -1;
+    }
+
+    /// <summary>
+    /// 발당 UI 펄스가 최종 gap에 실릴 비율(0~1)을 통지합니다.
+    /// </summary>
+    /// <param name="scale01">1이면 펄스를 그대로 싣고, 0이면 펄스 기여를 없앱니다. 범위 밖 값은 Clamp01됩니다.</param>
+    /// <remarks>
+    /// 탄퍼짐이 상한에 도달한 뒤에도 발당 펄스를 계속 합치면 최대 벌어짐 상태에서 크로스헤어가 들썩입니다.
+    /// 예전에는 그 지점에서 <see cref="ClearShotRecoilPulse"/>로 펄스를 한 프레임에 버렸는데, 마지막 탄퍼짐
+    /// 증가폭이 펄스 진폭보다 작으면 그 순간 총 gap이 오히려 줄어들어 벌어짐이 단조증가하지 않았습니다.
+    /// 이 비율을 탄퍼짐 진행도에 맞춰 낮추면 상한에서 기여가 정확히 0이 되므로, 들썩임은 그대로 막으면서
+    /// 단조성을 지킬 수 있습니다. 비율은 무기 상한을 아는 <see cref="AimController"/>가 매 프레임 통지합니다.
+    /// 표시용 gap만 바꾸므로 Gun의 탄퍼짐·탄착·에임 반동에는 영향을 주지 않습니다.
+    /// </remarks>
+    public void SetShotRecoilPulseSpreadScale(float scale01)
+    {
+        float clamped = Mathf.Clamp01(scale01);
+        if (Mathf.Approximately(clamped, m_shotRecoilPulseSpreadScale))
+        {
+            return;
+        }
+
+        m_shotRecoilPulseSpreadScale = clamped;
+
+        // 씬 초기화 순서상 이 통지가 UI Toolkit 트리보다 먼저 올 수 있습니다.
+        // 그때는 비율만 담아 두고, 다음 SetSpread/Update가 준비된 레이아웃에 반영하게 둡니다.
+        if (CacheVisualElements())
+        {
+            ApplyCurrentGapLayout();
+        }
     }
 
     /// <summary>
@@ -753,15 +1098,6 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 탄퍼짐 표시를 기본 간격 상태로 되돌립니다.
-    /// </summary>
-    public void ResetSpread()
-    {
-        m_lastSpreadDegrees = 0.0f;
-        SetSpreadInternal(0.0f, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
-    }
-
-    /// <summary>
     /// 탄퍼짐 정확도 표시 토글을 런타임에 바꿉니다.
     /// </summary>
     /// <param name="enabled">탄퍼짐 벌어짐을 표시하려면 <c>true</c>, Center Space만 유지하려면 <c>false</c>입니다.</param>
@@ -798,6 +1134,42 @@ public class CrosshairController : MonoBehaviour
     /// <summary>조준선 간격 보간 속도를 설정합니다.</summary>
     /// <param name="value">음수는 0으로 보정됩니다.</param>
     public void SetSpreadLerpSpeed(float value) => m_lerpSpeed = Mathf.Max(0.0f, value);
+
+    /// <summary>발사 반동 UI 펄스 사용 여부를 설정합니다.</summary>
+    /// <param name="enabled">실제 발사마다 UI 펄스를 보이려면 <c>true</c>입니다.</param>
+    public void SetShotRecoilPulseEnabled(bool enabled)
+    {
+        m_enableShotRecoilPulse = enabled;
+        if (!enabled)
+        {
+            m_shotRecoilPulseEnvelope.Clear();
+            m_currentShotRecoilPulsePixels = 0.0f;
+            m_heldShotRecoilPulsePixels = 0.0f;
+        }
+
+        RefreshRuntimeLayout();
+    }
+
+    /// <summary>발사 한 발의 크로스헤어 벌어짐 최대값을 설정합니다.</summary>
+    /// <param name="value">새 최대 벌어짐(픽셀)입니다. 음수는 0으로 보정합니다.</param>
+    public void SetShotRecoilPulseAmplitudePixels(float value)
+    {
+        m_shotRecoilPulseAmplitudePixels = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>발사 반동 UI 펄스의 전체 길이를 설정합니다.</summary>
+    /// <param name="value">새 길이(초)입니다. 음수는 0으로 보정합니다.</param>
+    public void SetShotRecoilPulseDuration(float value)
+    {
+        m_shotRecoilPulseDuration = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>발사 반동 UI 펄스 곡선을 교체합니다.</summary>
+    /// <param name="value">새 곡선입니다. null이면 기본 삼각 펄스로 처리합니다.</param>
+    public void SetShotRecoilPulseCurve(AnimationCurve value)
+    {
+        m_shotRecoilPulseCurve = value == null ? null : new AnimationCurve(value.keys);
+    }
 
     // ─────────────────────────────────────────────────────────────
     // 런타임 조절용 접근자
@@ -1114,6 +1486,62 @@ public class CrosshairController : MonoBehaviour
     {
         get => m_hitMarkerFadeDuration;
         set { m_hitMarkerFadeDuration = Mathf.Max(0.0f, value); }
+    }
+
+    /// <summary>히트마커의 기준 Z축 회전 각도(도)입니다. 발마다의 무작위 흔들림이 이 값을 중심으로 더해집니다.</summary>
+    public float HitMarkerRollBaseDegrees
+    {
+        get => m_hitMarkerRollBaseDegrees;
+        set { m_hitMarkerRollBaseDegrees = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>히트마커가 발마다 기준 각도에서 무작위로 흔들리는 범위(도)입니다. 0이면 고정됩니다.</summary>
+    public float HitMarkerRollRandomRangeDegrees
+    {
+        get => m_hitMarkerRollRandomRangeDegrees;
+        set { m_hitMarkerRollRandomRangeDegrees = Mathf.Max(0.0f, value); }
+    }
+
+    /// <summary>명중마다 히트마커 회전을 무작위로 흔들지 여부입니다. 끄면 기준 각도로 고정됩니다.</summary>
+    public bool HitMarkerRandomRollEnabled
+    {
+        get => m_enableHitMarkerRandomRoll;
+        set => m_enableHitMarkerRandomRoll = value;
+    }
+
+    /// <summary>히트마커 길이를 피해량에 비례시킬지 여부입니다. 끄면 고정 길이를 씁니다.</summary>
+    public bool HitMarkerDamageScaleEnabled
+    {
+        get => m_enableHitMarkerDamageScale;
+        set => m_enableHitMarkerDamageScale = value;
+    }
+
+    /// <summary>길이 비례의 기준이 되는 최소 피해량입니다.</summary>
+    public float HitMarkerMinDamage
+    {
+        get => m_hitMarkerMinDamage;
+        set => m_hitMarkerMinDamage = value;
+    }
+
+    /// <summary>길이 비례의 기준이 되는 최대 피해량입니다.</summary>
+    public float HitMarkerMaxDamage
+    {
+        get => m_hitMarkerMaxDamage;
+        set => m_hitMarkerMaxDamage = value;
+    }
+
+    /// <summary>최소 피해량일 때의 히트마커 삼각형 길이(픽셀)입니다.</summary>
+    public float HitMarkerLengthAtMinDamagePixels
+    {
+        get => m_hitMarkerLengthAtMinDamagePixels;
+        set => m_hitMarkerLengthAtMinDamagePixels = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>최대 피해량일 때의 히트마커 삼각형 길이(픽셀)입니다.</summary>
+    public float HitMarkerLengthAtMaxDamagePixels
+    {
+        get => m_hitMarkerLengthAtMaxDamagePixels;
+        set => m_hitMarkerLengthAtMaxDamagePixels = Mathf.Max(0.0f, value);
     }
 
     /// <summary>조준선 주 선의 길이(픽셀)입니다.</summary>
@@ -1483,6 +1911,8 @@ public class CrosshairController : MonoBehaviour
         m_centerSpacePixels = Mathf.Max(0.0f, m_centerSpacePixels);
         m_maxGapPixels = Mathf.Max(m_centerSpacePixels, m_maxGapPixels);
         m_lerpSpeed = Mathf.Max(0.0f, m_lerpSpeed);
+        m_shotRecoilPulseAmplitudePixels = Mathf.Max(0.0f, m_shotRecoilPulseAmplitudePixels);
+        m_shotRecoilPulseDuration = Mathf.Max(0.0f, m_shotRecoilPulseDuration);
         m_mainSizePixels = Mathf.Max(0.0f, m_mainSizePixels);
         m_mainRingSizePixels = Mathf.Max(0.0f, m_mainRingSizePixels);
         m_mainRingThicknessPixels = Mathf.Max(0.0f, m_mainRingThicknessPixels);
@@ -1497,26 +1927,9 @@ public class CrosshairController : MonoBehaviour
         m_blockMarkerRingSizePixels = Mathf.Max(0.0f, m_blockMarkerRingSizePixels);
         m_blockMarkerRingThicknessPixels = Mathf.Max(0.0f, m_blockMarkerRingThicknessPixels);
         m_blockMarkerDotSizePixels = Mathf.Max(0.0f, m_blockMarkerDotSizePixels);
-    }
-
-    /// <summary>
-    /// 탄퍼짐 방사각·표시 배율·FOV로부터 이번 프레임 목표 벌어짐 간격(픽셀)을 계산합니다.
-    /// </summary>
-    /// <param name="spreadDegrees">현재 무기 탄퍼짐 방사각(도, 콘 반각=하드캡)입니다.</param>
-    /// <param name="displayFactor">콘 반각 대비 표시 배율(tan 공간)입니다.</param>
-    /// <param name="cameraFovDegrees">현재 조준 카메라 세로 FOV(도)입니다.</param>
-    /// <returns>Center Space에 탄퍼짐 기여분을 더한 목표 간격(픽셀)입니다. 상한 클램프가 켜져 있으면 Max Gap Pixels로 제한합니다.</returns>
-    private float CalculateTargetGapPixels(float spreadDegrees, float displayFactor, float cameraFovDegrees)
-    {
-        float spreadGap = CalculateSpreadGapPixels(spreadDegrees, displayFactor, cameraFovDegrees);
-        float target = m_centerSpacePixels + spreadGap;
-
-        if (m_clampToMaxGap)
-        {
-            target = Mathf.Min(target, m_maxGapPixels);
-        }
-
-        return Mathf.Max(0.0f, target);
+        m_blockMarkerCrosshairAlpha = Mathf.Clamp01(m_blockMarkerCrosshairAlpha);
+        m_blockMarkerCrosshairFadeDuration = Mathf.Max(0.0f, m_blockMarkerCrosshairFadeDuration);
+        m_hitMarkerRollRandomRangeDegrees = Mathf.Max(0.0f, m_hitMarkerRollRandomRangeDegrees);
     }
 
     /// <summary>
@@ -1529,7 +1942,7 @@ public class CrosshairController : MonoBehaviour
     /// <remarks>
     /// A(유효각): 탄은 콘 경계가 아니라 중심에 몰리므로, 배율로 "탄이 실제로 몰리는 반경"을 구합니다.
     /// C(물리 투영): 그 각도를 FOV로 실제 화면 투영해, 팔 벌어짐이 화면상 탄착 분포와 1:1이 되게 합니다.
-    /// <see cref="CalculateTargetGapPixels"/>와 디버그 표시가 동일한 값을 쓰도록 이 헬퍼를 공유합니다.
+    /// <see cref="ComposeTargetGapPixels"/>와 디버그 표시가 동일한 값을 쓰도록 이 헬퍼를 공유합니다.
     /// </remarks>
     private float CalculateSpreadGapPixels(float spreadDegrees, float displayFactor, float cameraFovDegrees)
     {
@@ -1769,6 +2182,62 @@ public class CrosshairController : MonoBehaviour
     /// 히트마커 요소의 위치·크기를 잡습니다. 가시성은 페이드 타이머가 제어하므로, 타이머가 없으면 숨깁니다.
     /// </summary>
     /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
+    /// <summary>
+    /// 지금 히트마커에 적용할 Z축 회전 각도(도)를 반환합니다.
+    /// </summary>
+    /// <returns>플레이 중에는 이번 명중에 뽑힌 각도, 에디트 프리뷰에서는 기준 각도입니다.</returns>
+    /// <remarks>
+    /// 프리뷰에서까지 무작위를 쓰면 레이아웃이 갱신될 때마다 각도가 흔들려 값 조정이 어렵습니다.
+    /// 그래서 프리뷰는 기준 각도만 보여주고, 무작위는 실제 명중 시점(<see cref="ShowHitMarker"/>)에만 뽑습니다.
+    /// </remarks>
+    private float ResolveHitMarkerRollDegrees()
+    {
+        return IsHitFeedbackPreview() ? m_hitMarkerRollBaseDegrees : m_hitMarkerRollDegrees;
+    }
+
+    /// <summary>
+    /// 피해량에 대응하는 히트마커 삼각형 길이(픽셀)를 계산합니다.
+    /// </summary>
+    /// <param name="damage">이번 명중의 최종 피해량입니다.</param>
+    /// <returns>비례가 꺼져 있거나 피해량이 0 이하이면 고정 길이, 아니면 최소~최대 길이 사이 보간값입니다.</returns>
+    /// <remarks>
+    /// 최소·최대 피해량이 같거나 뒤집혀 있으면 나눗셈이 성립하지 않으므로 고정 길이로 물러섭니다.
+    /// 설정 실수로 마커가 사라지거나 튀는 것보다 예전 크기로 도는 편이 낫기 때문입니다.
+    /// </remarks>
+    private float ResolveHitMarkerLengthPixels(int damage)
+    {
+        if (!m_enableHitMarkerDamageScale || damage <= 0)
+        {
+            return m_hitMarkerLengthPixels;
+        }
+
+        float span = m_hitMarkerMaxDamage - m_hitMarkerMinDamage;
+        if (span <= 0.0001f)
+        {
+            return m_hitMarkerLengthPixels;
+        }
+
+        float t = Mathf.Clamp01((damage - m_hitMarkerMinDamage) / span);
+        return Mathf.Lerp(m_hitMarkerLengthAtMinDamagePixels, m_hitMarkerLengthAtMaxDamagePixels, t);
+    }
+
+    /// <summary>
+    /// 지금 히트마커를 그릴 때 쓸 삼각형 길이(픽셀)를 반환합니다.
+    /// </summary>
+    /// <remarks>
+    /// 에디트 프리뷰에서는 피해량이 없으므로 고정 길이를 보여줍니다. 플레이 중에는 마지막 명중에서
+    /// 계산한 길이를 유지해, 페이드아웃되는 동안 크기가 흔들리지 않게 합니다.
+    /// </remarks>
+    private float ResolveActiveHitMarkerLengthPixels()
+    {
+        if (IsHitFeedbackPreview() || m_hitMarkerActiveLengthPixels <= 0.0f)
+        {
+            return m_hitMarkerLengthPixels;
+        }
+
+        return m_hitMarkerActiveLengthPixels;
+    }
+
     private void LayoutHitMarker(float center)
     {
         if (m_hitMarkerElement == null)
@@ -1776,7 +2245,9 @@ public class CrosshairController : MonoBehaviour
             return;
         }
 
-        if (!m_showHitMarker || m_hitMarkerLengthPixels <= 0.0f)
+        float activeLength = ResolveActiveHitMarkerLengthPixels();
+
+        if (!m_showHitMarker || activeLength <= 0.0f)
         {
             HideElement(m_hitMarkerElement);
             m_hitMarkerTimer = 0.0f;
@@ -1784,7 +2255,8 @@ public class CrosshairController : MonoBehaviour
         }
 
         // 중심에서 삼각형 바깥 끝(gap+length)에 밑변 절반 길이까지 감싸도록 여유를 둔 정사각형 요소.
-        float half = m_hitMarkerCenterGapPixels + m_hitMarkerLengthPixels + m_hitMarkerBaseLengthPixels;
+        // 길이가 피해량에 따라 달라지므로 요소 크기도 이번 길이에 맞춰 잡아야 큰 마커가 잘리지 않습니다.
+        float half = m_hitMarkerCenterGapPixels + activeLength + m_hitMarkerBaseLengthPixels;
         float size = half * 2.0f;
         float position = center - half;
 
@@ -1795,6 +2267,11 @@ public class CrosshairController : MonoBehaviour
         m_hitMarkerElement.style.width = size;
         m_hitMarkerElement.style.height = size;
         m_hitMarkerElement.style.backgroundColor = Color.clear;
+
+        // 요소가 중심을 감싸는 정사각형이라 기본 transform-origin(중앙)이 곧 조준 중심입니다.
+        // 따라서 회전만 얹으면 히트마커가 중심을 축으로 돕니다.
+        m_hitMarkerElement.style.rotate = new StyleRotate(
+            new Rotate(new Angle(ResolveHitMarkerRollDegrees(), AngleUnit.Degree)));
 
         if (IsHitFeedbackPreview())
         {
@@ -1876,7 +2353,7 @@ public class CrosshairController : MonoBehaviour
         float width = element.resolvedStyle.width;
         float height = element.resolvedStyle.height;
         float gap = Mathf.Max(0.0f, m_hitMarkerCenterGapPixels);
-        float length = Mathf.Max(0.0f, m_hitMarkerLengthPixels);
+        float length = Mathf.Max(0.0f, ResolveActiveHitMarkerLengthPixels());
         float halfBase = Mathf.Max(0.0f, m_hitMarkerBaseLengthPixels) * 0.5f;
         if (length <= 0.0f || width <= 0.0f || height <= 0.0f)
         {
@@ -1920,12 +2397,33 @@ public class CrosshairController : MonoBehaviour
     /// <param name="headshot">헤드샷이면 <c>true</c>(헤드샷 색), 아니면 몸샷 색입니다.</param>
     public void ShowHitMarker(bool headshot)
     {
+        ShowHitMarker(headshot, 0);
+    }
+
+    /// <summary>
+    /// 히트마커를 표시하고, 이번 명중의 피해량으로 길이를 정합니다.
+    /// </summary>
+    /// <param name="headshot">약점에 맞았으면 <c>true</c>입니다. 색상만 바꿉니다.</param>
+    /// <param name="damage">이번 명중으로 들어간 최종 피해량입니다. 0 이하이면 고정 길이를 씁니다.</param>
+    /// <remarks>
+    /// 길이 비례가 꺼져 있거나 피해량을 모르면 <see cref="m_hitMarkerLengthPixels"/>를 그대로 씁니다.
+    /// 그래서 피해량을 넘기지 않는 기존 호출도 예전과 같은 크기로 동작합니다.
+    /// </remarks>
+    public void ShowHitMarker(bool headshot, int damage)
+    {
         if (!m_showHitMarker || !CacheVisualElements() || m_hitMarkerElement == null)
         {
             return;
         }
 
+        m_hitMarkerActiveLengthPixels = ResolveHitMarkerLengthPixels(damage);
         m_hitMarkerActiveColor = headshot ? m_hitMarkerColorHead : m_hitMarkerColorBody;
+
+        // 발마다 기준 각도에서 ±범위만큼 새로 뽑습니다. 같은 그림이 반복되지 않게 해 타격감을 살립니다.
+        // 꺼져 있으면 기준 각도만 씁니다(기준 각도 자체는 토글과 무관하게 유지).
+        float range = m_enableHitMarkerRandomRoll ? Mathf.Max(0.0f, m_hitMarkerRollRandomRangeDegrees) : 0.0f;
+        m_hitMarkerRollDegrees = m_hitMarkerRollBaseDegrees + (range > 0.0f ? Random.Range(-range, range) : 0.0f);
+
         m_hitMarkerTimer = Mathf.Max(0.0001f, m_hitMarkerFadeDuration);
         m_hitMarkerElement.style.display = DisplayStyle.Flex;
         m_hitMarkerElement.style.opacity = 1.0f;
