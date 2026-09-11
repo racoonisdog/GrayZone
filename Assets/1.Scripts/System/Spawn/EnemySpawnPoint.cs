@@ -2,6 +2,12 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using VInspector;
+
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEditor.SceneManagement;
+#endif
 
 /// <summary>
 /// 범위 안에서 여러 <see cref="EnemySpawnEntrySO"/> 생산 항목을 독립적으로 풀링·생성하는 스폰 지점입니다.
@@ -99,6 +105,13 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_minimumSpawnDistance = 1.5f;
 
+    [Header("Defense Route")]
+    [Tooltip("이 지점에서 생성된 적이 먼저 순서대로 통과할 웨이포인트 목록입니다. 비어 있으면 대상 우선 성향에 따른 목표 선택을 즉시 시작합니다.")]
+    [SerializeField] private List<Transform> m_waypoints = new List<Transform>();
+
+    [Tooltip("웨이포인트 통과 후 향할 외부 방어선 또는 방어 목표 위치입니다. 플레이어 우선 적도 감지 가능한 플레이어가 없으면 이 위치를 사용합니다.")]
+    [SerializeField] private Transform m_targetPosition;
+
     [Header("Spawn State")]
     [Tooltip("켜면 각 SO의 생산 주기에 맞춰 풀 적을 활성화합니다. 끄면 앞으로의 배치 생산만 멈추며 이미 활성화된 적은 제거하지 않습니다.")]
     [SerializeField] private bool m_spawnEnabled = true;
@@ -111,6 +124,12 @@ public sealed class EnemySpawnPoint : MonoBehaviour
 
     /// <summary>직전 성공 위치와 다음 위치 사이에 보장할 X/Z 최소 거리입니다.</summary>
     public float MinimumSpawnDistance => m_minimumSpawnDistance;
+
+    /// <summary>생성된 적이 순서대로 통과할 웨이포인트 목록입니다.</summary>
+    public IReadOnlyList<Transform> Waypoints => m_waypoints;
+
+    /// <summary>웨이포인트 통과 후 사용할 외부 방어선 또는 방어 목표 위치입니다.</summary>
+    public Transform TargetPosition => m_targetPosition;
 
     /// <summary>신규 배치 생산을 허용하는지 여부입니다.</summary>
     public bool IsSpawnEnabled => m_spawnEnabled;
@@ -136,6 +155,9 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     /// <summary>Start를 지나 풀을 만들 수 있는 상태인지 여부입니다.</summary>
     private bool m_runtimeInitialized;
 
+    /// <summary>Inspector 또는 외부 직렬화 변경으로 Spawn Enabled가 다시 켜지는 순간을 감지할 이전 값입니다.</summary>
+    private bool m_lastSpawnEnabledState;
+
     /// <summary>직전 성공 스폰 위치가 있는지 여부입니다.</summary>
     private bool m_hasLastSpawnPosition;
 
@@ -150,6 +172,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         if (Application.isPlaying && m_runtimeInitialized)
         {
             m_runtimeSynchronizationPending = true;
+            RestartInitialSpawnDelay();
         }
     }
 
@@ -158,6 +181,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     {
         EnsurePoolRoot();
         m_runtimeInitialized = true;
+        m_lastSpawnEnabledState = m_spawnEnabled;
         SynchronizeSpawnRuntimes();
     }
 
@@ -167,6 +191,15 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         if (!m_runtimeInitialized)
         {
             return;
+        }
+
+        if (m_lastSpawnEnabledState != m_spawnEnabled)
+        {
+            m_lastSpawnEnabledState = m_spawnEnabled;
+            if (m_spawnEnabled)
+            {
+                RestartInitialSpawnDelay();
+            }
         }
 
         if (m_runtimeSynchronizationPending)
@@ -240,6 +273,31 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         m_runtimeSynchronizationPending = true;
     }
 
+    /// <summary>이 스폰 포인트의 자식으로 새 웨이포인트를 만들고 경로 목록 끝에 추가합니다.</summary>
+    /// <remarks>에디터에서만 동작하며 Undo와 Scene dirty 처리를 함께 수행합니다.</remarks>
+    [Button("Add Waypoint Child")]
+    [ContextMenu("Add Waypoint Child")]
+    private void AddWaypointChild()
+    {
+#if UNITY_EDITOR
+        if (Application.isPlaying)
+        {
+            Debug.LogWarning("[EnemySpawnPoint] Play Mode에서는 웨이포인트 자식을 만들지 않습니다.", this);
+            return;
+        }
+
+        GameObject child = new GameObject($"Waypoint {m_waypoints.Count + 1}");
+        Undo.RegisterCreatedObjectUndo(child, "Add Enemy Waypoint");
+        child.transform.SetParent(transform, false);
+
+        Undo.RecordObject(this, "Add Enemy Waypoint");
+        m_waypoints.Add(child.transform);
+        EditorUtility.SetDirty(this);
+        EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        Selection.activeGameObject = child;
+#endif
+    }
+
     /// <summary>스폰 매니저가 자식 지점에 공통 Inspector 설정을 복사할 때 사용합니다.</summary>
     /// <remarks>SO 자체의 생산 값은 복사하지 않고 참조 목록만 복사합니다. Play Mode에서 호출하면 다음 Update에 런타임 구성을 동기화합니다.</remarks>
     public void ApplyConfiguration(
@@ -278,17 +336,11 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         }
 
         m_spawnEnabled = isEnabled;
+        m_lastSpawnEnabledState = isEnabled;
 
         if (isEnabled && Application.isPlaying)
         {
-            for (int i = 0; i < m_spawnRuntimes.Count; i++)
-            {
-                SpawnRuntime runtime = m_spawnRuntimes[i];
-                if (!runtime.IsRetired)
-                {
-                    runtime.NextProductionTime = Time.time;
-                }
-            }
+            RestartInitialSpawnDelay();
         }
     }
 
@@ -322,7 +374,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
                 {
                     Entry = entry,
                     Prefab = entry.EnemyPrefab,
-                    NextProductionTime = Time.time + entry.ProductionInterval,
+                    NextProductionTime = Time.time + entry.InitialSpawnDelay,
                 };
                 m_spawnRuntimes.Add(runtime);
             }
@@ -487,6 +539,9 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         enemyTransform.SetParent(null, false);
         enemyTransform.SetPositionAndRotation(spawnPosition, transform.rotation);
 
+        float moveSpeed = item.Runtime.Entry.SampleMoveSpeed();
+        item.Enemy.ConfigureDefenseSpawn(moveSpeed, m_waypoints, m_targetPosition);
+
         // EnemyController가 먼저 사망 상태를 정리한 뒤 이 지점이 래그돌 유지 상태로 전환하도록 순서를 보장합니다.
         if (item.Health != null && item.DeathHandler != null)
         {
@@ -573,6 +628,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         }
 
         EnsurePoolRoot();
+        item.Enemy.ClearDefenseSpawnConfiguration();
         item.Enemy.transform.SetParent(m_poolRoot, true);
         item.Enemy.gameObject.SetActive(false);
 
@@ -728,6 +784,20 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         }
 
         return count;
+    }
+
+    /// <summary>현재 활성 생산 항목의 첫 생산 시각을 각 SO의 시작 지연시간 기준으로 다시 계산합니다.</summary>
+    /// <remarks>컴포넌트 재활성화와 <see cref="SetSpawnEnabled"/> 재개 때마다 이전 카운트를 버리고 처음부터 센 값을 사용합니다.</remarks>
+    private void RestartInitialSpawnDelay()
+    {
+        for (int i = 0; i < m_spawnRuntimes.Count; i++)
+        {
+            SpawnRuntime runtime = m_spawnRuntimes[i];
+            if (!runtime.IsRetired && runtime.Entry != null)
+            {
+                runtime.NextProductionTime = Time.time + runtime.Entry.InitialSpawnDelay;
+            }
+        }
     }
 
     /// <summary>현재 SO 목록의 Inspector 변경 이벤트를 구독합니다.</summary>

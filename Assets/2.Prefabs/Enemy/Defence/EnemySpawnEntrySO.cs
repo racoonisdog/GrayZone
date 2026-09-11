@@ -24,9 +24,22 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
     [Min(0.01f)]
     [SerializeField] private float m_productionInterval = 5.0f;
 
+    [Tooltip("스폰 포인트가 작동을 시작하거나 다시 활성화된 뒤 첫 생산까지 기다릴 시간(초)입니다. 첫 생산 이후에는 Production Interval을 사용합니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_initialSpawnDelay;
+
     [Tooltip("이 항목이 동시에 활성화할 수 있는 적 최대 수입니다. 이를 참조하는 스폰 포인트는 게임 시작 시 이 수만큼 비활성 풀을 준비합니다.")]
     [Min(1)]
     [SerializeField] private int m_maxCapacity = 10;
+
+    [Header("Movement")]
+    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 기본 이동 속도의 최솟값(m/s)입니다. 선정값은 사망하거나 풀로 반환될 때까지 유지됩니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_moveSpeedMin = 3.2f;
+
+    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 기본 이동 속도의 최댓값(m/s)입니다. 최솟값보다 작게 입력하면 최솟값으로 보정됩니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_moveSpeedMax = 3.2f;
 
     /// <summary>이 생산 항목이 생성할 적 프리팹입니다.</summary>
     public EnemyController EnemyPrefab => m_enemyPrefab;
@@ -37,8 +50,24 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
     /// <summary>다음 배치 생산까지의 대기 시간(초)입니다.</summary>
     public float ProductionInterval => m_productionInterval;
 
+    /// <summary>스폰 포인트가 작동을 시작한 뒤 첫 생산까지의 대기 시간(초)입니다.</summary>
+    public float InitialSpawnDelay => m_initialSpawnDelay;
+
     /// <summary>이 프리팹 항목이 동시에 점유할 수 있는 최대 풀 수용량입니다.</summary>
     public int MaxCapacity => m_maxCapacity;
+
+    /// <summary>개체별 기본 이동 속도 범위의 최솟값(m/s)입니다.</summary>
+    public float MoveSpeedMin => m_moveSpeedMin;
+
+    /// <summary>개체별 기본 이동 속도 범위의 최댓값(m/s)입니다.</summary>
+    public float MoveSpeedMax => m_moveSpeedMax;
+
+    /// <summary>새로 생성되는 한 개체가 사용할 기본 이동 속도를 균등 분포로 선정합니다.</summary>
+    /// <returns>최솟값과 최댓값 사이에서 선정한 기본 이동 속도(m/s)입니다.</returns>
+    public float SampleMoveSpeed()
+    {
+        return UnityEngine.Random.Range(m_moveSpeedMin, m_moveSpeedMax);
+    }
 
     /// <summary>Play Mode 중 이 에셋의 Inspector 값이 바뀌었음을 구독자에게 알립니다.</summary>
     public event Action<EnemySpawnEntrySO> ConfigurationChanged;
@@ -48,7 +77,10 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
     {
         m_spawnCount = Mathf.Max(1, m_spawnCount);
         m_productionInterval = Mathf.Max(0.01f, m_productionInterval);
+        m_initialSpawnDelay = Mathf.Max(0.0f, m_initialSpawnDelay);
         m_maxCapacity = Mathf.Max(1, m_maxCapacity);
+        m_moveSpeedMin = Mathf.Max(0.0f, m_moveSpeedMin);
+        m_moveSpeedMax = Mathf.Max(m_moveSpeedMin, m_moveSpeedMax);
 
         if (Application.isPlaying)
         {
