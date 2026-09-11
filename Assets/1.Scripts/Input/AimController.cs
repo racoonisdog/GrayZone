@@ -882,17 +882,23 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// 무기 쪽 재장전 타이머가 끝났을 때 재장전 비주얼 상태를 대신 정리합니다.
     /// </summary>
     /// <remarks>
-    /// 직접 조작 중이면 재장전 클립의 애니메이션 이벤트(<see cref="Reload"/>)가 정리를 맡으므로 여기서는
-    /// 아무것도 하지 않습니다. 이 경로는 장전 도중 다른 대원으로 전환해 이 컴포넌트가 꺼진 경우만을 위한
-    /// 것입니다. 꺼진 컴포넌트에는 애니메이션 이벤트가 오지 않아 <c>IsReload</c>가 내려가지 않고,
-    /// 재장전 스테이트의 이탈 조건이 <c>IfNot IsReload</c>라 그 대원은 재장전 자세에서 빠져나오지 못합니다.
-    /// C# 이벤트는 컴포넌트를 꺼도 끊기지 않으므로 이 경로는 그대로 살아 있습니다.
+    /// 정규 경로는 재장전 클립의 애니메이션 이벤트(<see cref="Reload"/>)입니다. 이 경로는 그 이벤트가
+    /// 오지 못했을 때를 받는 안전망이고, <c>IsReload</c>가 아직 서 있을 때만 움직입니다. 정상 재생에서는
+    /// 이벤트가 먼저 값을 내리므로 여기서는 아무 일도 일어나지 않습니다.
     ///
+    /// 이벤트가 유실되는 경로를 이번까지 두 가지 확인했습니다. 컴포넌트가 꺼져 있으면 오지 않고(장전 중
+    /// 다른 대원으로 전환), 그 애니메이션이 올라간 레이어의 weight가 0이어도 오지 않습니다(장전 중
+    /// 조작권을 돌려받아 전투 자세가 상체 레이어를 덮은 경우). 어느 쪽이든 <c>IsReload</c>가 내려가지
+    /// 않는데, 재장전 스테이트의 이탈 조건이 <c>IfNot IsReload</c>이고 조준·사격 처리도 이 값이 서 있으면
+    /// 통째로 건너뛰므로, 한 번 놓치면 그 대원은 영영 사격하지 못합니다. 복구 수단이 없는 잠금이라
+    /// 원인별로 막는 것과 별개로 안전망을 둡니다.
+    ///
+    /// C# 이벤트는 컴포넌트를 꺼도 끊기지 않으므로 이 경로는 어느 경우에나 살아 있습니다.
     /// 탄약은 <see cref="Gun.CompleteReload"/>가 이미 채운 뒤이므로 무기 쪽 완료 처리는 다시 하지 않습니다.
     /// </remarks>
     private void OnWeaponReloadCompleted()
     {
-        if (isActiveAndEnabled || !m_hasRequiredReferences)
+        if (!m_hasRequiredReferences || m_controller == null || !m_controller.IsReload)
         {
             return;
         }
@@ -2439,6 +2445,42 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// 무기 쪽 재장전이 아직 진행 중인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 조작 컨트롤러의 <c>IsReload</c>만으로는 부족합니다. 그 값은 재장전 비주얼이 걸려 있다는 표시이고,
+    /// 실제로 탄약이 채워지는 시점을 쥔 것은 무기 쪽 타이머입니다. 둘이 모두 서 있을 때만 "재장전 중"입니다.
+    /// </remarks>
+    private bool IsReloadInProgress => m_controller != null
+                                    && m_controller.IsReload
+                                    && m_weaponController != null
+                                    && m_weaponController.IsReloading;
+
+    /// <summary>
+    /// 진행 중인 재장전의 상체 레이어와 리그 weight를 다시 세웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 값은 <see cref="BeginReload"/>가 세우는 것과 같습니다. 허리는 계속 조준 방향을 보고, 손만 풀어
+    /// 탄창을 다루게 합니다. 손까지 총 그립에 묶으면 탄창 교체 동작이 그립에 붙어 깨집니다.
+    ///
+    /// 재장전이 시작된 뒤 조작권이 오가면 그때마다 전투 자세를 적용하는 경로들이 이 값을 덮어씁니다.
+    /// 상체 레이어가 0으로 내려가면 남은 재장전 모션이 보이지 않을 뿐 아니라, 그 레이어의 애니메이션
+    /// 이벤트도 발생하지 않아 <c>IsReload</c>를 내릴 정규 경로까지 끊깁니다.
+    /// </remarks>
+    private void ApplyReloadVisualState()
+    {
+        m_inCombatStance = false;
+        SetRigWeights(1.0f, 0.0f);
+        SetWeaponLayerWeight(1.0f);
+        m_recoilLayerTarget = 0.0f;
+
+        if (m_animator != null)
+        {
+            m_animator.SetBool(AnimIDShoot, false);
+        }
+    }
+
+    /// <summary>
     /// 재장전 완료 후 조작 컨트롤러와 조준 보정 상태를 정리합니다.
     /// </summary>
     /// <param name="completeWeaponReload">무기 탄약도 완료 처리할지 여부입니다.</param>
@@ -2496,6 +2538,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     {
         if (!m_hasRequiredReferences)
         {
+            return;
+        }
+
+        // 재장전 도중에 조작권을 돌려받은 경우입니다. 넘겨받은 전투 자세를 그대로 적용하면 상체 레이어가
+        // 0으로 내려가 남은 재장전 모션이 통째로 사라집니다. 진행 중인 재장전이 전투 자세보다 우선입니다.
+        if (IsReloadInProgress)
+        {
+            ApplyReloadVisualState();
             return;
         }
 
@@ -2780,19 +2830,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         //
         // 리그는 <see cref="BeginReload"/>와 같은 조합을 씁니다. 허리는 계속 조준 방향을 보고, 손만
         // 풀어 탄창을 다루게 합니다. 손까지 총 그립에 붙여 두면 탄창 교체 동작이 그립에 묶여 깨집니다.
-        if (m_controller != null && m_controller.IsReload
-            && m_weaponController != null && m_weaponController.IsReloading)
+        if (IsReloadInProgress)
         {
-            m_inCombatStance = false;
-            SetRigWeights(1.0f, 0.0f);
-            SetWeaponLayerWeight(1.0f);
-            m_recoilLayerTarget = 0.0f;
-
-            if (m_animator != null)
-            {
-                m_animator.SetBool(AnimIDShoot, false);
-            }
-
+            ApplyReloadVisualState();
             UpdateStanceWeights();
             return;
         }
