@@ -882,28 +882,22 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// 무기 쪽 재장전 타이머가 끝났을 때 재장전 비주얼 상태를 대신 정리합니다.
     /// </summary>
     /// <remarks>
-    /// 정규 경로는 재장전 클립의 애니메이션 이벤트(<see cref="Reload"/>)입니다. 이 경로는 그 이벤트가
-    /// 오지 못했을 때를 받는 안전망이고, <c>IsReload</c>가 아직 서 있을 때만 움직입니다. 정상 재생에서는
-    /// 이벤트가 먼저 값을 내리므로 여기서는 아무 일도 일어나지 않습니다.
+    /// 무기 타이머가 끝나는 순간을 <see cref="ReconcileReloadState"/>에 알리는 세 번째 진입점입니다.
+    /// 매 프레임 도는 두 경로(조작 멤버의 <c>Update</c>, AI의 <see cref="ApplyAiCombatStance"/>)가 어느
+    /// 쪽도 돌지 않는 상태 - 조작 멤버도 AI도 아닌 대원 - 를 메웁니다. C# 이벤트는 컴포넌트를 꺼도
+    /// 끊기지 않으므로 이 경로만은 어느 경우에나 살아 있습니다.
     ///
-    /// 이벤트가 유실되는 경로를 이번까지 두 가지 확인했습니다. 컴포넌트가 꺼져 있으면 오지 않고(장전 중
-    /// 다른 대원으로 전환), 그 애니메이션이 올라간 레이어의 weight가 0이어도 오지 않습니다(장전 중
-    /// 조작권을 돌려받아 전투 자세가 상체 레이어를 덮은 경우). 어느 쪽이든 <c>IsReload</c>가 내려가지
-    /// 않는데, 재장전 스테이트의 이탈 조건이 <c>IfNot IsReload</c>이고 조준·사격 처리도 이 값이 서 있으면
-    /// 통째로 건너뛰므로, 한 번 놓치면 그 대원은 영영 사격하지 못합니다. 복구 수단이 없는 잠금이라
-    /// 원인별로 막는 것과 별개로 안전망을 둡니다.
-    ///
-    /// C# 이벤트는 컴포넌트를 꺼도 끊기지 않으므로 이 경로는 어느 경우에나 살아 있습니다.
-    /// 탄약은 <see cref="Gun.CompleteReload"/>가 이미 채운 뒤이므로 무기 쪽 완료 처리는 다시 하지 않습니다.
+    /// 실제 판단과 정리는 전부 <see cref="ReconcileReloadState"/>가 합니다. 여기서 따로 처리하면
+    /// 같은 규칙이 두 벌이 되고, 그렇게 갈라진 재장전 처리가 이번 버그들의 원인이었습니다.
     /// </remarks>
     private void OnWeaponReloadCompleted()
     {
-        if (!m_hasRequiredReferences || m_controller == null || !m_controller.IsReload)
+        if (!m_hasRequiredReferences)
         {
             return;
         }
 
-        FinishReloadVisualState(false);
+        ReconcileReloadState();
     }
 
     /// <summary>
@@ -959,6 +953,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         {
             return;
         }
+
+        // 사격 차단을 푸는 것이 이 프레임의 조준·사격 처리보다 먼저입니다.
+        ReconcileReloadState();
 
         // Gun은 입력 소유자가 아니므로, 조준 컨트롤러가 홀드 여부를 전달해 실제 탄퍼짐/크로스헤어 회복도
         // 논리 반동과 같은 입력 기준으로 멈춥니다.
@@ -2457,6 +2454,37 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
                                     && m_weaponController.IsReloading;
 
     /// <summary>
+    /// 재장전 비주얼 래치를 무기 쪽 진행 상태에 맞춥니다.
+    /// </summary>
+    /// <remarks>
+    /// 재장전이 어디까지 갔는지를 실제로 쥐고 있는 것은 <see cref="Gun"/>의 타이머 하나뿐입니다. 그쪽은
+    /// 조작권이 오가거나 컴포넌트가 꺼져도 계속 돌아 반드시 끝납니다. 반면 <c>IsReload</c>는 그 진행도를
+    /// 따로 복제한 것이 아니라 "재장전 비주얼이 걸려 있다"는 표시일 뿐인데, 이 값을 내리는 경로가
+    /// 재장전 클립의 애니메이션 이벤트 하나뿐이었습니다.
+    ///
+    /// 문제는 이 값이 조준·사격 처리 전체를 막는 자리에도 쓰인다는 점입니다. 그래서 애니메이션 쪽 사정으로
+    /// 이벤트를 한 번 놓치면(컴포넌트 비활성, 해당 레이어 weight 0) 탄약은 채워졌는데 사격만 영영 막히는,
+    /// 복구 수단이 없는 상태가 됐습니다. 리그 weight 같은 표시용 값이 입력 가능 여부를 잠그면 안 됩니다.
+    ///
+    /// 그래서 주인을 무기 쪽으로 두고 래치가 그보다 오래 살아남지 못하게 매 프레임 맞춥니다. 이 경로가
+    /// 있으면 이벤트는 더 이상 사격 재개의 유일한 조건이 아니며, 놓치더라도 다음 프레임에 풀립니다.
+    /// </remarks>
+    private void ReconcileReloadState()
+    {
+        if (m_controller == null || !m_controller.IsReload)
+        {
+            return;
+        }
+
+        if (m_weaponController == null || m_weaponController.IsReloading)
+        {
+            return;
+        }
+
+        FinishReloadVisualState(false);
+    }
+
+    /// <summary>
     /// 진행 중인 재장전의 상체 레이어와 리그 weight를 다시 세웁니다.
     /// </summary>
     /// <remarks>
@@ -2822,6 +2850,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         {
             m_animator = GetComponent<Animator>();
         }
+
+        // AI가 몰고 있는 동안에도 래치가 무기 상태보다 오래 남지 않게 합니다. 이 컴포넌트는 꺼져 있어
+        // Update가 돌지 않으므로, 매 프레임 들어오는 이 경로가 조작 멤버의 Update 자리를 대신합니다.
+        ReconcileReloadState();
 
         // 재장전 중에는 재장전 비주얼이 전투 자세보다 우선입니다. 재장전 모션은 상체 레이어에 있는데
         // 이 함수는 AI가 매 프레임 부르므로, 거르지 않으면 전환 직후부터 상체 레이어를 0으로 눌러
