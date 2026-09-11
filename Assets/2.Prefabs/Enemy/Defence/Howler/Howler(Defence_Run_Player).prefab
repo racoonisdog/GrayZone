@@ -1850,7 +1850,7 @@ GameObject:
   - component: {fileID: 6582405716747375709}
   - component: {fileID: 8215177168001985325}
   m_Layer: 9
-  m_Name: Howler(Defence_A)
+  m_Name: Howler(Defence_Run_Player)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2007,7 +2007,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
-  m_defenseDisposition: 0
+  m_defenseDisposition: 1
   m_balanceSO: {fileID: 11400000, guid: 9199ae7a21bc4dc6a804e2275068cbd5, type: 2}
   m_feedback: {fileID: 0}
   wanderRadius: 8
