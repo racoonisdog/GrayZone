@@ -5720,7 +5720,7 @@ MonoBehaviour:
   m_targetLayer:
     serializedVersion: 2
     m_Bits: 0
-  m_hipfireHoldDuration: 0
+  m_hipfireHoldDuration: 0.5
   m_adsFov: 20
   m_hipfireFov: 30
   m_zoomLerpSpeed: 10
