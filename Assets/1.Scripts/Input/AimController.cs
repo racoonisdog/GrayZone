@@ -2967,6 +2967,23 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_isPlayerControlled = value;
     }
 
+    /// <summary>
+    /// AI가 모는 대원의 상체 조준 목표 지점을 갱신합니다.
+    /// </summary>
+    /// <param name="point">이 대원이 겨눌 월드 지점입니다.</param>
+    /// <remarks>
+    /// 조작 멤버는 <see cref="UpdateCombat"/>가 카메라 트레이스 결과로 이 지점을 씁니다. AI 대원은 그 경로를
+    /// 타지 않으므로 <see cref="SquadAIController"/>가 자기 조준점을 직접 넘깁니다.
+    ///
+    /// 대원마다 조준 목표가 따로 있어야 하는 이유는 상체 조준 IK가 이 지점을 바라보기 때문입니다.
+    /// 하나를 공유하면 봇 상체가 플레이어 조준을 따라가고, 반대로 AI가 지점을 옮기면 플레이어 상체까지
+    /// 같이 꺾입니다.
+    /// </remarks>
+    public void ApplyAiLookPoint(Vector3 point)
+    {
+        ApplyLookTarget(point);
+    }
+
     /// <summary>지금 플레이어가 직접 조작 중인지 여부입니다.</summary>
     public bool IsPlayerControlled => m_isPlayerControlled;
 
