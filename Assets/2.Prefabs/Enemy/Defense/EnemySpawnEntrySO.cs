@@ -1,12 +1,13 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 방어전에서 하나의 적 프리팹을 어떤 생산 규칙으로 운용할지 정의하는 전용 설정 에셋입니다.
 /// </summary>
 /// <remarks>
 /// 적의 방어전 성향, AI, 밸런스와 래그돌 설정은 <see cref="EnemyController"/> 프리팹이 소유합니다.
-/// 이 에셋은 해당 프리팹의 생산 수량, 주기와 최대 수용량만 정의합니다.
+/// 이 에셋은 해당 프리팹의 생산 수량, 주기, 최대 수용량과 생성별 Walk/Run 속도 범위를 정의합니다.
 /// </remarks>
 [CreateAssetMenu(fileName = "EnemyDefenseSO_Name_Type", menuName = "GrayZone/Defense/Enemy Defense Spawn Config")]
 public sealed class EnemySpawnEntrySO : ScriptableObject
@@ -33,13 +34,23 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
     [SerializeField] private int m_maxCapacity = 10;
 
     [Header("Movement")]
-    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 기본 이동 속도의 최솟값(m/s)입니다. 선정값은 사망하거나 풀로 반환될 때까지 유지됩니다.")]
+    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 걷기 이동 속도의 최솟값(m/s)입니다. Always Run이 켜져 있으면 사용하지 않습니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_moveSpeedMin = 3.2f;
+    [FormerlySerializedAs("m_moveSpeedMin")]
+    [SerializeField] private float m_walkSpeedMin = 3.2f;
 
-    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 기본 이동 속도의 최댓값(m/s)입니다. 최솟값보다 작게 입력하면 최솟값으로 보정됩니다.")]
+    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 걷기 이동 속도의 최댓값(m/s)입니다. 최솟값보다 작게 입력하면 최솟값으로 보정됩니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_moveSpeedMax = 3.2f;
+    [FormerlySerializedAs("m_moveSpeedMax")]
+    [SerializeField] private float m_walkSpeedMax = 3.2f;
+
+    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 달리기 이동 속도의 최솟값(m/s)입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_runSpeedMin = 3.2f;
+
+    [Tooltip("적이 전장에 생성될 때 한 번 선정할 개체별 달리기 이동 속도의 최댓값(m/s)입니다. 최솟값보다 작게 입력하면 최솟값으로 보정됩니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_runSpeedMax = 3.2f;
 
     /// <summary>이 생산 항목이 생성할 적 프리팹입니다.</summary>
     public EnemyController EnemyPrefab => m_enemyPrefab;
@@ -56,17 +67,28 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
     /// <summary>이 프리팹 항목이 동시에 점유할 수 있는 최대 풀 수용량입니다.</summary>
     public int MaxCapacity => m_maxCapacity;
 
-    /// <summary>개체별 기본 이동 속도 범위의 최솟값(m/s)입니다.</summary>
-    public float MoveSpeedMin => m_moveSpeedMin;
+    /// <summary>개체별 걷기 이동 속도 범위의 최솟값(m/s)입니다.</summary>
+    public float WalkSpeedMin => m_walkSpeedMin;
 
-    /// <summary>개체별 기본 이동 속도 범위의 최댓값(m/s)입니다.</summary>
-    public float MoveSpeedMax => m_moveSpeedMax;
+    /// <summary>개체별 걷기 이동 속도 범위의 최댓값(m/s)입니다.</summary>
+    public float WalkSpeedMax => m_walkSpeedMax;
 
-    /// <summary>새로 생성되는 한 개체가 사용할 기본 이동 속도를 균등 분포로 선정합니다.</summary>
-    /// <returns>최솟값과 최댓값 사이에서 선정한 기본 이동 속도(m/s)입니다.</returns>
-    public float SampleMoveSpeed()
+    /// <summary>개체별 달리기 이동 속도 범위의 최솟값(m/s)입니다.</summary>
+    public float RunSpeedMin => m_runSpeedMin;
+
+    /// <summary>개체별 달리기 이동 속도 범위의 최댓값(m/s)입니다.</summary>
+    public float RunSpeedMax => m_runSpeedMax;
+
+    /// <summary>새로 생성되는 한 개체가 사용할 걷기 이동 속도를 균등 분포로 선정합니다.</summary>
+    public float SampleWalkSpeed()
     {
-        return UnityEngine.Random.Range(m_moveSpeedMin, m_moveSpeedMax);
+        return UnityEngine.Random.Range(m_walkSpeedMin, m_walkSpeedMax);
+    }
+
+    /// <summary>새로 생성되는 한 개체가 사용할 달리기 이동 속도를 균등 분포로 선정합니다.</summary>
+    public float SampleRunSpeed()
+    {
+        return UnityEngine.Random.Range(m_runSpeedMin, m_runSpeedMax);
     }
 
     /// <summary>Play Mode 중 이 에셋의 Inspector 값이 바뀌었음을 구독자에게 알립니다.</summary>
@@ -79,8 +101,10 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
         m_productionInterval = Mathf.Max(0.01f, m_productionInterval);
         m_initialSpawnDelay = Mathf.Max(0.0f, m_initialSpawnDelay);
         m_maxCapacity = Mathf.Max(1, m_maxCapacity);
-        m_moveSpeedMin = Mathf.Max(0.0f, m_moveSpeedMin);
-        m_moveSpeedMax = Mathf.Max(m_moveSpeedMin, m_moveSpeedMax);
+        m_walkSpeedMin = Mathf.Max(0.0f, m_walkSpeedMin);
+        m_walkSpeedMax = Mathf.Max(m_walkSpeedMin, m_walkSpeedMax);
+        m_runSpeedMin = Mathf.Max(0.0f, m_runSpeedMin);
+        m_runSpeedMax = Mathf.Max(m_runSpeedMin, m_runSpeedMax);
 
         if (Application.isPlaying)
         {

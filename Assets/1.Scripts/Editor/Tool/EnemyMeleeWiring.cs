@@ -12,7 +12,8 @@ using UnityEngine;
 public static class EnemyMeleeWiring
 {
     private const string PrefabPath = "Assets/2.Prefabs/Enemy/Howler.prefab";
-    private const string DefencePrefabPath = "Assets/2.Prefabs/Enemy/Defence/Howler(Defence_A).prefab";
+    private const string DefensePlayerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab";
+    private const string DefenseRunPlayerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Run_Player).prefab";
     private const string BalancePath = "Assets/5.Data/ScriptableObject/Enemy/ZombieAttackBalance.asset";
     private static readonly string[] HitboxNames = { "AttackPoint_L", "AttackPoint_R" };
 
@@ -20,7 +21,8 @@ public static class EnemyMeleeWiring
     public static void Wire()
     {
         WirePrefab(PrefabPath);
-        WirePrefab(DefencePrefabPath);
+        WirePrefab(DefensePlayerPrefabPath);
+        WirePrefab(DefenseRunPlayerPrefabPath);
         AssetDatabase.Refresh();
     }
 

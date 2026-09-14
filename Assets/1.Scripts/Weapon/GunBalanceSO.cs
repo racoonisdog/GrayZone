@@ -58,6 +58,9 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_hipfireMaxSpread")]
     [SerializeField] private float Gun_m_hipfireMaxSpread = 7f;
 
+    [Tooltip("공중에 떠 있는 동안 힙파이어·ADS 방사각에 함께 더해지는 각도(도). 연사 누적과 별개로 즉시 적용됩니다. (0 이상)")]
+    [SerializeField] private float Gun_m_airborneExtraSpread = 2f;
+
     [Tooltip("힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상)")]
     [FormerlySerializedAs("m_hipfireMinSpreadShotCount")]
     [SerializeField] private int Gun_m_hipfireMinSpreadShotCount = 3;

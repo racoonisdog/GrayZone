@@ -15,7 +15,8 @@ using UnityEngine;
 public static class HumanoidRagdollBuilder
 {
     private const string HowlerPrefabPath = "Assets/2.Prefabs/Enemy/Howler.prefab";
-    private const string DefenceHowlerPrefabPath = "Assets/2.Prefabs/Enemy/Defence/Howler(Defence_A).prefab";
+    private const string DefensePlayerHowlerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab";
+    private const string DefenseRunPlayerHowlerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Run_Player).prefab";
 
     /// <summary>현재 Howler 프리팹을 새 Humanoid 골격 기준으로 다시 구성합니다.</summary>
     [MenuItem("GrayZone/Enemy/Howler 래그돌 재구성")]
@@ -28,7 +29,8 @@ public static class HumanoidRagdollBuilder
         }
 
         RebuildPrefab(HowlerPrefabPath);
-        RebuildPrefab(DefenceHowlerPrefabPath);
+        RebuildPrefab(DefensePlayerHowlerPrefabPath);
+        RebuildPrefab(DefenseRunPlayerHowlerPrefabPath);
     }
 
     /// <summary>지정한 프리팹 하나의 래그돌을 현재 Humanoid Avatar에 맞춰 저장합니다.</summary>

@@ -3,12 +3,17 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 분대원 상태 초상화(SquadStatus N)에 다운/사망 상태 필터와 구조 가능 시간 타이머를 반영합니다.
+/// 분대원 상태 슬롯(SquadStatus N)에 초상화, 다운/사망 상태 필터, 구조 가능 시간 타이머를 반영합니다.
 /// </summary>
 /// <remarks>
 /// 레이아웃(초상화·HP바·검정 배경 박스·필터·타이머)은 씬 계층에 미리 배치돼 있고, 이 컨트롤러는
-/// 이름으로 자식을 찾아 값(필터 표시/색, 타이머 문자열)만 갱신합니다. 각 슬롯은 SquadManager의
-/// 분대원 인덱스에 매핑되며, 슬롯 이름 뒤 숫자(예: "SquadStatus 1")를 인덱스로 사용합니다.
+/// 이름으로 자식을 찾아 값(초상화 스프라이트, 필터 표시/색, 타이머 문자열)만 갱신합니다.
+///
+/// 슬롯이 어떤 대원을 가리키는지는 <see cref="SquadHudSlotOrder"/>가 결정합니다. 슬롯 이름 뒤 숫자
+/// (예: "SquadStatus 1")는 분대 인덱스가 아니라 "몇 번째 팀 슬롯인가"를 뜻하며, 조작 중인 대원은
+/// PlayerStatus 쪽에서 이미 표시되므로 여기서는 빠집니다. 같은 슬롯의 HP 게이지(Gauge_HP-N)는
+/// NormalHudPlayerStatusBinder가 갱신하는데, 그쪽도 같은 규칙을 쓰므로 한 슬롯 안의 초상화·게이지·
+/// 필터·타이머가 항상 같은 대원을 가리킵니다.
 /// </remarks>
 [DisallowMultipleComponent]
 public class SquadStatusHudBinder : MonoBehaviour
@@ -19,9 +24,10 @@ public class SquadStatusHudBinder : MonoBehaviour
         [Tooltip("SquadStatus 슬롯 루트입니다.")]
         public RectTransform root;
 
-        [Tooltip("이 슬롯이 표시할 분대원 인덱스(SquadManager.SquadMembers 기준)입니다.")]
-        public int memberIndex = 1;
+        [Tooltip("몇 번째 팀 슬롯인지(1부터). 분대 인덱스가 아니라 조작 중이 아닌 대원 목록에서의 순번입니다.")]
+        public int slotOrdinal = 1;
 
+        [System.NonSerialized] public Image portrait;
         [System.NonSerialized] public Image filter;
         [System.NonSerialized] public TMP_Text timer;
         [System.NonSerialized] public bool resolved;
@@ -29,6 +35,7 @@ public class SquadStatusHudBinder : MonoBehaviour
 
     private const string FilterName = "Status_Filter";
     private const string TimerName = "ReviveTimer";
+    private const string PortraitName = "PlayerbleProfile";
     private const string SlotPrefix = "SquadStatus";
 
     [Header("Squad")]
@@ -44,6 +51,9 @@ public class SquadStatusHudBinder : MonoBehaviour
 
     [Tooltip("사망(전투 이탈) 상태 반투명 필터 색입니다.")]
     [SerializeField] private Color m_deadColor = new Color(0.0f, 0.0f, 0.0f, 0.65f);
+
+    /// <summary>매 프레임 재사용하는 팀 슬롯 순서 버퍼입니다. LateUpdate에서 도는 경로라 할당을 피합니다.</summary>
+    private readonly System.Collections.Generic.List<PlayerbleUnitData> m_teammates = new();
 
     private void Awake()
     {
@@ -99,7 +109,7 @@ public class SquadStatusHudBinder : MonoBehaviour
             var slot = new Slot
             {
                 root = child,
-                memberIndex = ParseTrailingIndex(child.name, found.Count + 1),
+                slotOrdinal = ParseTrailingIndex(child.name, found.Count + 1),
             };
             found.Add(slot);
         }
@@ -144,7 +154,14 @@ public class SquadStatusHudBinder : MonoBehaviour
             slot.timer = timer.GetComponent<TMP_Text>();
         }
 
-        slot.resolved = slot.filter != null || slot.timer != null;
+        // 초상화는 PlayerStatus 쪽과 이름이 같아서(PlayerbleProfile) 반드시 슬롯 루트 안에서만 찾습니다.
+        Transform portrait = slot.root.Find(PortraitName);
+        if (portrait != null)
+        {
+            slot.portrait = portrait.GetComponent<Image>();
+        }
+
+        slot.resolved = slot.portrait != null || slot.filter != null || slot.timer != null;
     }
 
     private void UpdateSlots()
@@ -154,7 +171,9 @@ public class SquadStatusHudBinder : MonoBehaviour
             return;
         }
 
-        System.Collections.Generic.IReadOnlyList<SquadMemberController> members = m_squadManager.SquadMembers;
+        System.Collections.Generic.IReadOnlyList<PlayerbleUnitData> sources = m_squadManager.PlayerDataSources;
+        PlayerbleUnitData controlled = SquadHudSlotOrder.ResolveControlled(sources);
+        SquadHudSlotOrder.BuildTeammateOrder(sources, controlled, m_teammates);
 
         foreach (Slot slot in m_slots)
         {
@@ -165,22 +184,35 @@ public class SquadStatusHudBinder : MonoBehaviour
 
             ResolveSlot(slot);
 
-            SquadMemberController member = members != null
-                && slot.memberIndex >= 0
-                && slot.memberIndex < members.Count
-                ? members[slot.memberIndex]
-                : null;
-
-            PlayerHealth health = member != null ? member.GetComponent<PlayerHealth>() : null;
+            PlayerbleUnitData member = SquadHudSlotOrder.ResolveSlot(m_teammates, slot.slotOrdinal);
 
             bool isDead = member != null && !member.IsAlive;
+
+            // IsDown(SquadMemberController)과 IsHealthDowned(PlayerHealth)는 별개 신호라 둘을 함께 봅니다.
             bool isDowned = member != null
                 && member.IsAlive
-                && (member.IsDown || (health != null && health.IsDowned));
+                && (member.IsDown || member.IsHealthDowned);
 
+            ApplyPortrait(slot.portrait, member);
             ApplyFilter(slot.filter, isDead, isDowned);
-            ApplyTimer(slot.timer, isDowned, health);
+            ApplyTimer(slot.timer, isDowned, member);
         }
+    }
+
+    private static void ApplyPortrait(Image portrait, PlayerbleUnitData member)
+    {
+        if (portrait == null)
+        {
+            return;
+        }
+
+        Sprite sprite = member != null ? member.HudPortrait : null;
+        if (portrait.sprite != sprite)
+        {
+            portrait.sprite = sprite;
+        }
+
+        SetActive(portrait.gameObject, sprite != null);
     }
 
     private void ApplyFilter(Image filter, bool isDead, bool isDowned)
@@ -206,17 +238,17 @@ public class SquadStatusHudBinder : MonoBehaviour
         }
     }
 
-    private static void ApplyTimer(TMP_Text timer, bool isDowned, PlayerHealth health)
+    private static void ApplyTimer(TMP_Text timer, bool isDowned, PlayerbleUnitData member)
     {
         if (timer == null)
         {
             return;
         }
 
-        if (isDowned && health != null)
+        if (isDowned && member != null)
         {
             SetActive(timer.gameObject, true);
-            timer.text = Mathf.CeilToInt(health.DownTimeRemaining).ToString();
+            timer.text = Mathf.CeilToInt(member.DownTimeRemaining).ToString();
         }
         else
         {

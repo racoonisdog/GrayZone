@@ -17,5 +17,7 @@ MonoBehaviour:
   m_productionInterval: 5
   m_initialSpawnDelay: 5
   m_maxCapacity: 10
-  m_moveSpeedMin: 3.2
-  m_moveSpeedMax: 3.2
+  m_walkSpeedMin: 8
+  m_walkSpeedMax: 10
+  m_runSpeedMin: 8
+  m_runSpeedMax: 10
