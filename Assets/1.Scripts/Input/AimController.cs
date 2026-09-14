@@ -54,6 +54,23 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private static readonly int AnimIDReload = Animator.StringToHash("DoReload");
 
     /// <summary>
+    /// Base Layer의 점프 계열 상태들입니다. 상체를 공중용으로 덮어야 하는 구간을 판정하는 데 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 접지 판정만으로는 부족합니다. 착지하는 순간 <c>Grounded</c>는 곧바로 참이 되지만 Base Layer는
+    /// <c>JumpLand</c>로 들어가 클립의 70% 지점까지 머문 뒤에야 지상 이동 블렌드로 넘어갑니다.
+    /// 그 사이 Base Layer가 재생하는 것은 팔을 내린 착지 클립이라, 접지 판정만 보고 상체 레이어를 내리면
+    /// 조준이나 사격을 유지하고 있어도 팔이 한 번 내려갔다 올라옵니다.
+    /// 이륙 쪽도 같은 이유로 <c>JumpStart</c>를 함께 봅니다.
+    /// </remarks>
+    private static readonly int[] JumpMotionStateHashes =
+    {
+        Animator.StringToHash("Base Layer.JumpStart"),
+        Animator.StringToHash("Base Layer.InAir"),
+        Animator.StringToHash("Base Layer.JumpLand"),
+    };
+
+    /// <summary>
     /// 재장전 중인지 여부입니다. 애니메이터가 재장전 스테이트에 들어가고 나오는 조건입니다.
     /// </summary>
     /// <remarks>
@@ -311,6 +328,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>지금 적용 중인 공중 조준 레이어 weight입니다. 목표는 <see cref="ResolveAirActionLayerTarget"/>가 정합니다.</summary>
     private float m_airActionLayerWeight;
 
+    /// <summary>
+    /// 이번 프레임에 공중 자세 보정이 필요한지입니다. <see cref="RefreshAirMotionState"/>가 프레임마다 한 번 갱신합니다.
+    /// </summary>
+    /// <remarks>
+    /// 애니메이터 상태 조회가 들어가므로 weight를 정하는 함수들이 각자 부르지 않고 이 값을 나눠 씁니다.
+    /// </remarks>
+    private bool m_airMotionActive;
+
     /// <summary>반동(Additive) 레이어 weight의 목표값입니다.</summary>
     private float m_recoilLayerTarget;
 
@@ -351,6 +376,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
     [Clamp(Min = 0)]
     [SerializeField] private float m_stanceBlendDuration = 0.15f;
+
+    [Tooltip("공중 상체 레이어가 0에서 1로 올라오는 데 걸리는 시간입니다. 내려갈 때는 이 값이 아니라 자세 전환 시간을 씁니다. 애니메이터가 지상 조준 블렌드에서 JumpStart로 넘어가는 전이가 0.07초라, 이 값이 그보다 길면 상체가 점프 자세로 바뀐 뒤에도 레이어가 덜 올라와 조준이 한 번 풀립니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_airActionLayerRiseDuration = 0.06f;
 
     [Foldout("Audio Options")]
     [Tooltip("사격 사운드입니다. 실제 사격 사운드를 Gun가 처리한다면 비워둘 수 있습니다.")]
@@ -2859,6 +2888,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private void UpdateStanceWeights()
     {
+        RefreshAirMotionState();
+
         float step = m_stanceBlendDuration <= 0.0f
             ? 1.0f
             : Time.deltaTime / m_stanceBlendDuration;
@@ -2870,7 +2901,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_rigWeight = Mathf.MoveTowards(m_rigWeight, aimTarget, step);
         m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, handTarget, step);
         m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, m_weaponLayerTarget, step);
-        m_airActionLayerWeight = Mathf.MoveTowards(m_airActionLayerWeight, ResolveAirActionLayerTarget(), step);
+
+        // 공중 상체 레이어만 오를 때와 내릴 때의 시간을 다르게 씁니다. 이유는 아래 함수 주석에 적어 두었습니다.
+        float airTarget = ResolveAirActionLayerTarget();
+        m_airActionLayerWeight = Mathf.MoveTowards(
+            m_airActionLayerWeight,
+            airTarget,
+            ResolveAirActionLayerStep(airTarget, step));
 
         // 반동은 자세 전환보다 빨라야 첫 발이 밋밋하지 않습니다. 그래서 자세 블렌드 시간을 쓰지 않고 즉시 올립니다.
         m_recoilLayerWeight = m_recoilLayerTarget;
@@ -2878,8 +2915,88 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         ApplyStanceWeights();
     }
 
+    /// <summary>
+    /// 공중 상체 레이어 weight가 이번 프레임에 움직일 양을 돌려줍니다.
+    /// </summary>
+    /// <param name="target">이번 프레임의 목표 weight입니다.</param>
+    /// <param name="stanceStep">자세 전환 시간으로 계산한 기본 이동량입니다.</param>
+    /// <remarks>
+    /// 오를 때와 내릴 때 쓰는 시간이 다릅니다.
+    ///
+    /// <b>오를 때</b>는 애니메이터를 따라가야 합니다. 점프하면 Base Layer가 지상 조준 블렌드에서
+    /// <c>JumpStart</c>로 0.07초에 걸쳐 넘어갑니다. 그 시간이 지나면 상체는 이미 점프 자세인데,
+    /// 자세 전환 시간(0.15초)으로 올리면 그 시점에 레이어가 절반도 못 올라옵니다. 실측으로 0.46이었고,
+    /// 그 차이만큼 조준이 한 번 풀렸다 돌아옵니다. 그래서 <see cref="m_airActionLayerRiseDuration"/>을
+    /// 따로 두고 애니메이터 전이보다 짧게 잡습니다.
+    ///
+    /// <b>내릴 때</b>는 그럴 필요가 없습니다. 착지는 <c>JumpLand</c>가 끝나고 Base Layer가 지상 조준
+    /// 클립에 도착한 뒤에야 목표가 0이 되므로 서두를 이유가 없고, 공중에서 조준을 푸는 경우에는
+    /// 오히려 자세 전환 시간으로 천천히 내려가는 편이 자연스럽습니다.
+    /// </remarks>
+    private float ResolveAirActionLayerStep(float target, float stanceStep)
+    {
+        if (target <= m_airActionLayerWeight)
+        {
+            return stanceStep;
+        }
+
+        return m_airActionLayerRiseDuration <= 0.0f
+            ? 1.0f
+            : Time.deltaTime / m_airActionLayerRiseDuration;
+    }
+
     /// <summary>이 대원이 지금 공중에 떠 있는지 여부입니다.</summary>
     private bool IsAirborne => m_controller != null && !m_controller.Grounded;
+
+    /// <summary>
+    /// 이번 프레임의 <see cref="m_airMotionActive"/>를 다시 구합니다.
+    /// </summary>
+    /// <remarks>
+    /// 접지 판정과 Base Layer의 점프 모션 재생 중 하나라도 해당하면 공중 구간으로 봅니다.
+    /// 둘을 함께 보는 이유는 <see cref="JumpMotionStateHashes"/> 주석에 적어 두었습니다.
+    /// </remarks>
+    private void RefreshAirMotionState()
+    {
+        m_airMotionActive = IsAirborne || IsPlayingJumpMotion();
+    }
+
+    /// <summary>Base Layer가 점프·낙하·착지 클립을 재생 중인지 여부입니다.</summary>
+    /// <remarks>
+    /// 전이 중이면 다음 상태도 함께 봅니다. 이륙할 때 지상 이동 블렌드에서 <c>JumpStart</c>로 넘어가는
+    /// 구간이 여기에 해당하고, 착지할 때 <c>JumpLand</c>에서 지상 이동 블렌드로 돌아가는 구간은
+    /// 현재 상태 쪽이 <c>JumpLand</c>라 전이가 끝날 때까지 참으로 남습니다. 그래서 상체 레이어가
+    /// Base Layer의 조준 클립이 다 올라온 뒤에 내려가고, 중간에 비는 구간이 없습니다.
+    /// </remarks>
+    private bool IsPlayingJumpMotion()
+    {
+        if (m_animator == null || m_animator.layerCount == 0)
+        {
+            return false;
+        }
+
+        if (IsJumpMotionState(m_animator.GetCurrentAnimatorStateInfo(0).fullPathHash))
+        {
+            return true;
+        }
+
+        return m_animator.IsInTransition(0)
+            && IsJumpMotionState(m_animator.GetNextAnimatorStateInfo(0).fullPathHash);
+    }
+
+    /// <summary>주어진 Base Layer 상태가 점프 계열인지 여부입니다.</summary>
+    /// <param name="fullPathHash">검사할 상태의 전체 경로 해시입니다.</param>
+    private static bool IsJumpMotionState(int fullPathHash)
+    {
+        for (int i = 0; i < JumpMotionStateHashes.Length; i++)
+        {
+            if (JumpMotionStateHashes[i] == fullPathHash)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// 공중 설정을 반영한 리그 weight 목표값을 돌려줍니다.
@@ -2895,7 +3012,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private float ResolveAirborneAdjustedRigTarget(float target)
     {
-        if (m_enableCombatRigInAir || !IsAirborne)
+        if (m_enableCombatRigInAir || !m_airMotionActive)
         {
             return target;
         }
@@ -2917,7 +3034,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private float ResolveAirActionLayerTarget()
     {
-        if (!m_useWeaponLayerAimPoseInAir || !IsAirborne || !m_inCombatStance || IsReloadInProgress)
+        if (!m_useWeaponLayerAimPoseInAir || !m_airMotionActive || !m_inCombatStance || IsReloadInProgress)
         {
             return 0.0f;
         }
@@ -2933,6 +3050,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private void SnapStanceWeights()
     {
+        RefreshAirMotionState();
+
         m_rigWeight = m_rigWeightTarget;
         m_handRigWeight = m_handRigWeightTarget;
         m_weaponLayerWeight = m_weaponLayerTarget;
