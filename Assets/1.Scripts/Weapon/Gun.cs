@@ -251,6 +251,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Tooltip("현재 적용 중인 ADS 방사각(도)입니다. 런타임 관찰용이며 직접 편집하는 값이 아닙니다.")]
     [ReadOnly][SerializeField] private float m_adsCurrentSpread;
 
+    [Tooltip("공중에 떠 있는 동안 더해지는 방사각(도)입니다. 힙파이어와 ADS 모두에 같은 값이 더해지며, 연사 누적과 별개로 즉시 적용됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_airborneExtraSpread = 2.0f;
+
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
@@ -426,6 +431,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     private float m_hipfireCurrentSpreadAdd;
     private float m_adsCurrentSpreadAdd;
 
+    /// <summary>이 무기를 든 대상이 공중에 떠 있는지 여부입니다. <see cref="SetAirborne"/>가 매 프레임 씁니다.</summary>
+    private bool m_isAirborne;
+
     /// <summary>발사 입력 홀드로 spread 회복을 막을 마지막 프레임입니다. AimController가 매 프레임 연장합니다.</summary>
     private int m_spreadRecoveryBlockUntilFrame = -1;
     private int m_hipfireShotsInBurst;
@@ -567,10 +575,44 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <returns>사격 상태를 변경하지 않고 계산한 현재 탄퍼짐 방사각(도)입니다.</returns>
     public float GetCurrentSpread(bool isAds)
     {
-        return isAds
+        float spread = isAds
             ? GetCurrentSpread(m_adsMinSpread, m_adsMaxSpread, m_adsCurrentSpreadAdd)
             : GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
+
+        return spread + CurrentAirborneExtraSpread;
     }
+
+    /// <summary>공중에 떠 있는 동안 더해지는 방사각(도)입니다.</summary>
+    public float AirborneExtraSpread => m_airborneExtraSpread;
+
+    /// <summary>이 무기를 든 대상이 지금 공중에 떠 있는지 여부입니다.</summary>
+    public bool IsAirborne => m_isAirborne;
+
+    /// <summary>
+    /// 지금 실제로 더해지는 공중 추가 방사각(도)입니다. 접지 상태면 0입니다.
+    /// </summary>
+    /// <remarks>
+    /// 이 값은 최소·최대 방사각 양쪽에 같이 더해집니다. 즉 공중에서는 사거리 콘 전체가 통째로 넓어지고,
+    /// 연사 누적이 없는 첫 발도 지상보다 벌어집니다. 누적값에 더하지 않는 이유는 공중이 연사와 무관한
+    /// 별개의 불안정 요인이기 때문입니다. 누적에 섞으면 착지 후에도 회복 곡선을 타면서 남습니다.
+    /// </remarks>
+    private float CurrentAirborneExtraSpread => m_isAirborne ? Mathf.Max(0.0f, m_airborneExtraSpread) : 0.0f;
+
+    /// <summary>
+    /// 이 무기를 든 대상의 접지 여부를 전달합니다.
+    /// </summary>
+    /// <param name="value">공중에 떠 있으면 true입니다.</param>
+    /// <remarks>
+    /// 무기는 입력이나 이동 상태의 소유자가 아니므로 접지 여부를 스스로 알 수 없습니다.
+    /// <see cref="AimController"/>가 매 프레임 전달합니다.
+    /// </remarks>
+    public void SetAirborne(bool value)
+    {
+        m_isAirborne = value;
+    }
+
+    /// <summary>공중 추가 방사각(도)을 설정합니다. 음수는 0으로 보정합니다.</summary>
+    public void SetAirborneExtraSpread(float value) => m_airborneExtraSpread = Mathf.Max(0.0f, value);
 
     /// <summary>현재 사격 자세의 방사각 최소·최대값을 함께 반환합니다.</summary>
     /// <param name="isAds">ADS면 <c>true</c>, 힙파이어면 <c>false</c>입니다.</param>
@@ -581,6 +623,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     {
         minSpread = Mathf.Max(0.0f, isAds ? m_adsMinSpread : m_hipfireMinSpread);
         maxSpread = Mathf.Max(minSpread, isAds ? m_adsMaxSpread : m_hipfireMaxSpread);
+
+        // 공중에서는 콘 전체가 통째로 올라갑니다. 최소에만 더하면 크로스헤어가 상한에 눌려 벌어지지 않습니다.
+        float extra = CurrentAirborneExtraSpread;
+        minSpread += extra;
+        maxSpread += extra;
     }
 
     /// <summary>탄퍼짐 콘 안에서의 분포 방식입니다. 크로스헤어가 표시 배율을 계산할 때 읽습니다(읽기 전용).</summary>
@@ -1457,7 +1504,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <returns>최소 방사각 + 누적 증가값으로 계산한 이번 사격의 방사각(도)입니다.</returns>
     private float ResolveShotSpread(bool isAds)
     {
-        return isAds
+        return CurrentAirborneExtraSpread + (isAds
             ? ResolveShotSpread(
                 m_adsMinSpread,
                 m_adsMaxSpread,
@@ -1475,7 +1522,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
                 m_hipfireSpreadRecoveryDelay,
                 ref m_hipfireCurrentSpreadAdd,
                 ref m_hipfireShotsInBurst,
-                ref m_hipfireLastShotTime);
+                ref m_hipfireLastShotTime));
     }
 
     /// <summary>

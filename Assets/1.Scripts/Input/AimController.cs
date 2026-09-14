@@ -317,6 +317,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
 
     [Foldout("IK Options")]
+    [Tooltip("켜면 공중에서도 조준·사격 시 상체 조준 리그와 손 IK를 지상과 같은 방식으로 올립니다. 끄면 공중에 있는 동안만 두 리그를 0으로 내립니다. 어느 쪽이든 즉시 바뀌지 않고 자세 전환 시간으로 보간합니다.")]
+    [SerializeField] private bool m_enableCombatRigInAir = true;
+
     [Tooltip("손 위치 보정에 사용할 Rig입니다.")]
     [FormerlySerializedAs("handRig")]
     [SerializeField] private Rig m_handRig;
@@ -798,6 +801,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <param name="value">새로 적용할 시간(초)입니다. 음수는 0으로 잘립니다.</param>
     public void SetStanceBlendDuration(float value) => m_stanceBlendDuration = Mathf.Max(0.0f, value);
 
+    /// <summary>공중에서도 조준·사격 시 상체 조준 리그와 손 IK를 지상과 같게 올릴지 여부입니다.</summary>
+    public bool EnableCombatRigInAir => m_enableCombatRigInAir;
+
+    /// <summary>공중 전투 리그 사용 여부를 설정합니다.</summary>
+    public void SetEnableCombatRigInAir(bool value) => m_enableCombatRigInAir = value;
+
     public void SetVisualKickMaxRoll(float value) => m_visualKickMaxRoll = value;
 
     /// <summary>누적 가능한 FOV 펀치 상한을 설정합니다.</summary>
@@ -970,6 +979,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         // 사격 차단을 푸는 것이 이 프레임의 조준·사격 처리보다 먼저입니다.
         ReconcileReloadState();
+
+        // 무기는 이동 상태의 소유자가 아니라 접지 여부를 스스로 알 수 없습니다. 공중 추가 탄퍼짐이
+        // 이 값을 보고 걸리므로, 조작 여부와 무관하게 매 프레임 넘깁니다.
+        if (m_weaponController != null)
+        {
+            m_weaponController.SetAirborne(IsAirborne);
+        }
 
         if (m_isPlayerControlled)
         {
@@ -2808,14 +2824,43 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             ? 1.0f
             : Time.deltaTime / m_stanceBlendDuration;
 
-        m_rigWeight = Mathf.MoveTowards(m_rigWeight, m_rigWeightTarget, step);
-        m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, m_handRigWeightTarget, step);
+        // 공중 처리는 목표값만 바꿉니다. 현재값을 직접 건드리면 뜨고 내리는 순간 자세가 툭 끊깁니다.
+        float aimTarget = ResolveAirborneAdjustedRigTarget(m_rigWeightTarget);
+        float handTarget = ResolveAirborneAdjustedRigTarget(m_handRigWeightTarget);
+
+        m_rigWeight = Mathf.MoveTowards(m_rigWeight, aimTarget, step);
+        m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, handTarget, step);
         m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, m_weaponLayerTarget, step);
 
         // 반동은 자세 전환보다 빨라야 첫 발이 밋밋하지 않습니다. 그래서 자세 블렌드 시간을 쓰지 않고 즉시 올립니다.
         m_recoilLayerWeight = m_recoilLayerTarget;
 
         ApplyStanceWeights();
+    }
+
+    /// <summary>이 대원이 지금 공중에 떠 있는지 여부입니다.</summary>
+    private bool IsAirborne => m_controller != null && !m_controller.Grounded;
+
+    /// <summary>
+    /// 공중 설정을 반영한 리그 weight 목표값을 돌려줍니다.
+    /// </summary>
+    /// <param name="target">지상 기준으로 정해진 원래 목표 weight입니다.</param>
+    /// <remarks>
+    /// <see cref="m_enableCombatRigInAir"/>가 켜져 있으면 원래 목표를 그대로 씁니다. 즉 공중에서도 조준·사격 시
+    /// 지상과 똑같이 1까지 올라갑니다. 실측상 이것이 현재 동작이기도 해서, 기본값을 켜 두면 지금과 달라지는 것이
+    /// 없습니다. 이 함수는 동작을 바꾸려고 넣은 것이 아니라 <b>기획이 바뀌면 끌 수 있는 자리</b>를 만들려고 둔 것입니다.
+    ///
+    /// 꺼져 있으면 공중에 있는 동안만 목표를 0으로 내립니다. 현재값이 아니라 목표만 바꾸므로 뜨고 내리는 전환도
+    /// <see cref="m_stanceBlendDuration"/>으로 보간되고, 착지하면 원래 목표로 다시 올라갑니다.
+    /// </remarks>
+    private float ResolveAirborneAdjustedRigTarget(float target)
+    {
+        if (m_enableCombatRigInAir || !IsAirborne)
+        {
+            return target;
+        }
+
+        return 0.0f;
     }
 
     /// <summary>
