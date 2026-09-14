@@ -33,6 +33,20 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private const int RecoilLayerIndex = 2;
 
+    /// <summary>
+    /// 공중 조준 자세를 담당하는 애니메이터 레이어 인덱스입니다.
+    /// </summary>
+    /// <remarks>
+    /// 지상에서는 Base Layer의 조준 트리가 상하체가 붙은 전신 조준 클립을 갖고 있어 별도 레이어가 필요 없습니다.
+    /// 공중에는 그 클립이 없고 Base Layer가 점프 클립을 재생해야 하므로, 다리는 Base Layer에 두고 상체만
+    /// 이 레이어로 덮어 조준 자세를 만듭니다. 마스크는 몸통을 포함하고 다리를 제외합니다.
+    ///
+    /// 사격 자세는 이 레이어에 두지 않습니다. 사격 중에도 상체는 조준 자세를 유지하고 반동은
+    /// <see cref="RecoilLayerIndex"/>의 Additive 레이어가 얹습니다. 지상과 같은 역할 분담이며,
+    /// 같은 클립을 Override와 Additive 양쪽에 걸어 이중 적용되는 것을 막습니다.
+    /// </remarks>
+    private const int AirActionLayerIndex = 3;
+
     // 이 시간(초) 이상 사격이 끊기면 좌우 킥 번갈이 패턴을 첫 발부터 다시 시작합니다.
     private const float KickPatternResetGap = 0.25f;
 
@@ -293,6 +307,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>지금 적용 중인 상체(무기) 레이어 weight입니다.</summary>
     private float m_weaponLayerWeight;
+
+    /// <summary>지금 적용 중인 공중 조준 레이어 weight입니다. 목표는 <see cref="ResolveAirActionLayerTarget"/>가 정합니다.</summary>
+    private float m_airActionLayerWeight;
 
     /// <summary>반동(Additive) 레이어 weight의 목표값입니다.</summary>
     private float m_recoilLayerTarget;
@@ -2837,11 +2854,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         float aimTarget = ResolveAirborneAdjustedRigTarget(m_rigWeightTarget);
         float handTarget = ResolveAirborneAdjustedRigTarget(m_handRigWeightTarget);
 
-        float weaponLayerTarget = ResolveAirborneAdjustedWeaponLayerTarget(m_weaponLayerTarget);
-
         m_rigWeight = Mathf.MoveTowards(m_rigWeight, aimTarget, step);
         m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, handTarget, step);
-        m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, weaponLayerTarget, step);
+        m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, m_weaponLayerTarget, step);
+        m_airActionLayerWeight = Mathf.MoveTowards(m_airActionLayerWeight, ResolveAirActionLayerTarget(), step);
 
         // 반동은 자세 전환보다 빨라야 첫 발이 밋밋하지 않습니다. 그래서 자세 블렌드 시간을 쓰지 않고 즉시 올립니다.
         m_recoilLayerWeight = m_recoilLayerTarget;
@@ -2875,28 +2891,25 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
-    /// 공중 설정을 반영한 상체(Action) 레이어 weight 목표값을 돌려줍니다.
+    /// 공중 조준 레이어(<see cref="AirActionLayerIndex"/>)의 목표 weight를 돌려줍니다.
     /// </summary>
-    /// <param name="target">지상 기준으로 정해진 원래 목표 weight입니다.</param>
     /// <remarks>
-    /// 지상에서는 조준만으로 이 레이어를 올리지 않습니다. Base Layer의 조준 트리가 자세별 조준 포즈를
-    /// 이미 갖고 있어서, 여기에 서 있는 무기 클립을 덮으면 웅크림 조준이 서 있는 자세로 바뀌기 때문입니다.
+    /// 공중이면서 전투 자세일 때만 1입니다. 지상에서는 Base Layer의 전신 조준 클립이 그 역할을 하므로 0입니다.
     ///
-    /// 공중에는 그 전제가 없습니다. Base Layer가 <c>JumpStart</c>/<c>InAir</c>를 재생하고 이 상태에는
-    /// 조준 포즈가 없어서, 레이어를 올리지 않으면 손 IK만 총에 붙고 상체는 점프 자세로 남습니다.
-    /// 그래서 공중에서 전투 자세일 때만 이 레이어로 조준 자세를 보충합니다.
+    /// 재장전 중에는 올리지 않습니다. 재장전은 Action 레이어가 팔을 맡는데, 그 위에 이 레이어가 몸통까지
+    /// 조준 자세로 덮으면 탄창을 다루는 동작이 어그러집니다.
     ///
     /// <see cref="m_enableCombatRigInAir"/>와는 별개 스위치입니다. 저쪽은 리그(손 IK·허리) weight를,
     /// 이쪽은 애니메이터 레이어를 다룹니다. 공중 전투 연출을 통째로 끄려면 둘 다 꺼야 합니다.
     /// </remarks>
-    private float ResolveAirborneAdjustedWeaponLayerTarget(float target)
+    private float ResolveAirActionLayerTarget()
     {
-        if (!m_useWeaponLayerAimPoseInAir || !IsAirborne || !m_inCombatStance)
+        if (!m_useWeaponLayerAimPoseInAir || !IsAirborne || !m_inCombatStance || IsReloadInProgress)
         {
-            return target;
+            return 0.0f;
         }
 
-        return Mathf.Max(target, 1.0f);
+        return 1.0f;
     }
 
     /// <summary>
@@ -2911,6 +2924,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_handRigWeight = m_handRigWeightTarget;
         m_weaponLayerWeight = m_weaponLayerTarget;
         m_recoilLayerWeight = m_recoilLayerTarget;
+        m_airActionLayerWeight = ResolveAirActionLayerTarget();
 
         ApplyStanceWeights();
     }
@@ -3026,6 +3040,11 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             if (m_animator.layerCount > RecoilLayerIndex)
             {
                 m_animator.SetLayerWeight(RecoilLayerIndex, m_recoilLayerWeight);
+            }
+
+            if (m_animator.layerCount > AirActionLayerIndex)
+            {
+                m_animator.SetLayerWeight(AirActionLayerIndex, m_airActionLayerWeight);
             }
         }
     }
