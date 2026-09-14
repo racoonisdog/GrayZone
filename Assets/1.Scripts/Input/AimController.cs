@@ -320,6 +320,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("켜면 공중에서도 조준·사격 시 상체 조준 리그와 손 IK를 지상과 같은 방식으로 올립니다. 끄면 공중에 있는 동안만 두 리그를 0으로 내립니다. 어느 쪽이든 즉시 바뀌지 않고 자세 전환 시간으로 보간합니다.")]
     [SerializeField] private bool m_enableCombatRigInAir = true;
 
+    [Tooltip("켜면 공중에서 전투 자세일 때 상체(Action) 레이어를 올려 조준 자세를 냅니다. 지상은 Base Layer의 조준 트리가 그 자세를 갖고 있지만 점프·낙하 상태에는 없어서, 켜지 않으면 공중에서 상체가 점프 자세로 남습니다.")]
+    [SerializeField] private bool m_useWeaponLayerAimPoseInAir = true;
+
     [Tooltip("손 위치 보정에 사용할 Rig입니다.")]
     [FormerlySerializedAs("handRig")]
     [SerializeField] private Rig m_handRig;
@@ -806,6 +809,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>공중 전투 리그 사용 여부를 설정합니다.</summary>
     public void SetEnableCombatRigInAir(bool value) => m_enableCombatRigInAir = value;
+
+    /// <summary>공중에서 상체(Action) 레이어로 조준 자세를 낼지 여부입니다.</summary>
+    public bool UseWeaponLayerAimPoseInAir => m_useWeaponLayerAimPoseInAir;
+
+    /// <summary>공중 상체 조준 자세 사용 여부를 설정합니다.</summary>
+    public void SetUseWeaponLayerAimPoseInAir(bool value) => m_useWeaponLayerAimPoseInAir = value;
 
     public void SetVisualKickMaxRoll(float value) => m_visualKickMaxRoll = value;
 
@@ -2828,9 +2837,11 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         float aimTarget = ResolveAirborneAdjustedRigTarget(m_rigWeightTarget);
         float handTarget = ResolveAirborneAdjustedRigTarget(m_handRigWeightTarget);
 
+        float weaponLayerTarget = ResolveAirborneAdjustedWeaponLayerTarget(m_weaponLayerTarget);
+
         m_rigWeight = Mathf.MoveTowards(m_rigWeight, aimTarget, step);
         m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, handTarget, step);
-        m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, m_weaponLayerTarget, step);
+        m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, weaponLayerTarget, step);
 
         // 반동은 자세 전환보다 빨라야 첫 발이 밋밋하지 않습니다. 그래서 자세 블렌드 시간을 쓰지 않고 즉시 올립니다.
         m_recoilLayerWeight = m_recoilLayerTarget;
@@ -2861,6 +2872,31 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         return 0.0f;
+    }
+
+    /// <summary>
+    /// 공중 설정을 반영한 상체(Action) 레이어 weight 목표값을 돌려줍니다.
+    /// </summary>
+    /// <param name="target">지상 기준으로 정해진 원래 목표 weight입니다.</param>
+    /// <remarks>
+    /// 지상에서는 조준만으로 이 레이어를 올리지 않습니다. Base Layer의 조준 트리가 자세별 조준 포즈를
+    /// 이미 갖고 있어서, 여기에 서 있는 무기 클립을 덮으면 웅크림 조준이 서 있는 자세로 바뀌기 때문입니다.
+    ///
+    /// 공중에는 그 전제가 없습니다. Base Layer가 <c>JumpStart</c>/<c>InAir</c>를 재생하고 이 상태에는
+    /// 조준 포즈가 없어서, 레이어를 올리지 않으면 손 IK만 총에 붙고 상체는 점프 자세로 남습니다.
+    /// 그래서 공중에서 전투 자세일 때만 이 레이어로 조준 자세를 보충합니다.
+    ///
+    /// <see cref="m_enableCombatRigInAir"/>와는 별개 스위치입니다. 저쪽은 리그(손 IK·허리) weight를,
+    /// 이쪽은 애니메이터 레이어를 다룹니다. 공중 전투 연출을 통째로 끄려면 둘 다 꺼야 합니다.
+    /// </remarks>
+    private float ResolveAirborneAdjustedWeaponLayerTarget(float target)
+    {
+        if (!m_useWeaponLayerAimPoseInAir || !IsAirborne || !m_inCombatStance)
+        {
+            return target;
+        }
+
+        return Mathf.Max(target, 1.0f);
     }
 
     /// <summary>
