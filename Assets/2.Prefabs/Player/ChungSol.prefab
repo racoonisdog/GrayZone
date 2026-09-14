@@ -680,7 +680,7 @@ PrefabInstance:
     - target: {fileID: 2726920372953862480, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_hudPortrait
       value: 
-      objectReference: {fileID: 21300000, guid: 27fdf752cfdfda541908a53ea6757eed, type: 3}
+      objectReference: {fileID: 21300000, guid: bd10d8bf73420494bb267b6fb5f93887, type: 3}
     - target: {fileID: 3705982125215987319, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Enabled
       value: 0

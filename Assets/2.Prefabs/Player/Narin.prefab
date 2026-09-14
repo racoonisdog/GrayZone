@@ -470,7 +470,7 @@ PrefabInstance:
     - target: {fileID: 2726920372953862480, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_hudPortrait
       value: 
-      objectReference: {fileID: 21300000, guid: e6947137540e33049878d680d7f58722, type: 3}
+      objectReference: {fileID: 21300000, guid: d2b7f2b6e8b0cce4bbbb56189e29be5e, type: 3}
     - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_aimRig
       value: 

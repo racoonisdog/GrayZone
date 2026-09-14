@@ -446,7 +446,7 @@ PrefabInstance:
     - target: {fileID: 2726920372953862480, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_hudPortrait
       value: 
-      objectReference: {fileID: 21300000, guid: 203179d35f81b6349bfcb69af09fe32b, type: 3}
+      objectReference: {fileID: 21300000, guid: 6bb53d3bc9e63e44b8672f1a41834553, type: 3}
     - target: {fileID: 3705982125215987319, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Enabled
       value: 0
