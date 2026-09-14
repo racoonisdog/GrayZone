@@ -377,13 +377,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3c430f382484144e925c097c2d33cfe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Animation.Rigging::UnityEngine.Animations.Rigging.MultiAimConstraint
-  m_Weight: 0
+  m_Weight: 1
   m_Data:
     m_ConstrainedObject: {fileID: 2174833204144200841}
     m_SourceObjects:
       m_Length: 1
       m_Item0:
-        transform: {fileID: 0}
+        transform: {fileID: 5349481367592501410}
         weight: 1
       m_Item1:
         transform: {fileID: 0}
@@ -406,7 +406,7 @@ MonoBehaviour:
       m_Item7:
         transform: {fileID: 0}
         weight: 0
-    m_Offset: {x: 0, y: 55, z: 15}
+    m_Offset: {x: 0, y: 25, z: 0}
     m_MinLimit: -180
     m_MaxLimit: 180
     m_AimAxis: 4
@@ -443,6 +443,10 @@ PrefabInstance:
       propertyPath: m_Enabled
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 2726920372953862480, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_hudPortrait
+      value: 
+      objectReference: {fileID: 21300000, guid: 203179d35f81b6349bfcb69af09fe32b, type: 3}
     - target: {fileID: 3705982125215987319, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Enabled
       value: 0
@@ -711,6 +715,11 @@ MonoBehaviour:
 --- !u!4 &2137951434080301018 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4526457136588419995, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+  m_PrefabInstance: {fileID: 2556552864231513153}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &5349481367592501410 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7586207739713084643, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
   m_PrefabInstance: {fileID: 2556552864231513153}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &5935108209426925478
