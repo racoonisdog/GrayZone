@@ -1864,7 +1864,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2644337924908843311}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 4.462}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -1936,7 +1936,7 @@ MonoBehaviour:
   m_currentHp: 10
   m_hpSlider: {fileID: 0}
   m_hpText: {fileID: 0}
-  m_staggerThreshold: 3
+  m_staggerThreshold: 15
   m_staggerDecayPerSecond: 1
   m_staggerImmunityDuration: 0.2
   m_debugDrawStaggerGauge: 1
@@ -2007,12 +2007,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_isDefenseEnemy: 0
+  m_defenseDisposition: 0
   m_balanceSO: {fileID: 11400000, guid: 9199ae7a21bc4dc6a804e2275068cbd5, type: 2}
   m_feedback: {fileID: 0}
   wanderRadius: 8
   wanderInterval: 3
   wanderSpeed: 2
   chaseSpeed: 6
+  m_alwaysRun: 0
   rotationSpeed: 8
   idleTypeMin: 0
   idleTypeMax: 1
@@ -2106,6 +2109,12 @@ MonoBehaviour:
   m_maxInheritedSpeed: 4
   m_maxInheritedAngularSpeed: 12
   m_refreshPoseBeforeHandoff: 1
+  m_maxSimulationSpeed: 8
+  m_maxSimulationAngularSpeed: 12
+  m_solverIterations: 12
+  m_solverVelocityIterations: 4
+  m_jointProjectionDistance: 0.02
+  m_jointProjectionAngle: 5
   m_impulseSpreadRatio: 0.25
 --- !u!114 &8215177168001985325
 MonoBehaviour:

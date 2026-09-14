@@ -5485,8 +5485,8 @@ MonoBehaviour:
   m_runtimeId: 
   m_characterId: 0
   m_displayName: Player
-  m_resultPortrait: {fileID: 0}
-  m_hudPortrait: {fileID: 0}
+  m_resultPortrait: {fileID: 21300000, guid: 4590603f62bba2149b89d88ed378f621, type: 3}
+  m_hudPortrait: {fileID: 21300000, guid: e6947137540e33049878d680d7f58722, type: 3}
   m_reliability: 0
   m_health: {fileID: 0}
   m_squadMember: {fileID: 0}
@@ -5651,6 +5651,7 @@ MonoBehaviour:
   m_sprint: 0
   m_aim: 0
   m_shoot: 0
+  m_throwMode: 0
   m_reload: 0
   m_crouch: 0
   m_crouchToggle: 1
@@ -5893,6 +5894,7 @@ MonoBehaviour:
   m_handRig: {fileID: 1889801956405540337}
   m_aimRig: {fileID: 5330369050693916040}
   m_stanceBlendDuration: 0.15
+  m_airActionLayerRiseDuration: 0.06
   m_shootingSound: {fileID: 0}
   m_reloadSounds: []
   m_drawHitscanDebugRay: 1

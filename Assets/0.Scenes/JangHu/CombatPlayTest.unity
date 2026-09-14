@@ -36870,6 +36870,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1801956681}
     m_Modifications:
+    - target: {fileID: 1294966282692387780, guid: cb39875d6fd7adf4391498b5c93601a6, type: 3}
+      propertyPath: m_Mesh
+      value: 
+      objectReference: {fileID: -5503142162925835272, guid: 7e6d6dc3974e98349a2f3642e30202c1, type: 3}
     - target: {fileID: 2644337924908843311, guid: cb39875d6fd7adf4391498b5c93601a6, type: 3}
       propertyPath: m_Name
       value: Enemy_01_DormantSeed_Solo
@@ -91704,7 +91708,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1801956681
 Transform:
   m_ObjectHideFlags: 0
@@ -112759,7 +112763,7 @@ PrefabInstance:
     - target: {fileID: 2376397128308552998, guid: 00d8ab193dc5e2c4d8c55337ba2bb91f, type: 3}
       propertyPath: m_hudPortrait
       value: 
-      objectReference: {fileID: 21300000, guid: a4e46e83de5944742a87cfffb56f7456, type: 3}
+      objectReference: {fileID: 21300000, guid: d2b7f2b6e8b0cce4bbbb56189e29be5e, type: 3}
     - target: {fileID: 3651029312063593687, guid: 00d8ab193dc5e2c4d8c55337ba2bb91f, type: 3}
       propertyPath: m_Name
       value: Narin
@@ -113204,7 +113208,7 @@ PrefabInstance:
     - target: {fileID: 8402258448121550923, guid: 8583a50ea56b37b48947ebb47367b9c1, type: 3}
       propertyPath: m_hudPortrait
       value: 
-      objectReference: {fileID: 21300000, guid: ef07e329763b0fe4390fe6abc3e5f881, type: 3}
+      objectReference: {fileID: 21300000, guid: bd10d8bf73420494bb267b6fb5f93887, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -116771,7 +116775,7 @@ PrefabInstance:
     - target: {fileID: 481116503970024721, guid: d1cc3c8e7eaaee646ada25510fece90b, type: 3}
       propertyPath: m_hudPortrait
       value: 
-      objectReference: {fileID: 21300000, guid: 87e12293a568b474f8222f3bfc34775e, type: 3}
+      objectReference: {fileID: 21300000, guid: 6bb53d3bc9e63e44b8672f1a41834553, type: 3}
     - target: {fileID: 1216539951183372832, guid: d1cc3c8e7eaaee646ada25510fece90b, type: 3}
       propertyPath: m_aimImage
       value: 
