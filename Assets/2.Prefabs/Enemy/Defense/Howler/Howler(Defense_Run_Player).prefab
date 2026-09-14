@@ -2007,6 +2007,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_isDefenseEnemy: 1
   m_defenseDisposition: 1
   m_balanceSO: {fileID: 11400000, guid: 9199ae7a21bc4dc6a804e2275068cbd5, type: 2}
   m_feedback: {fileID: 0}
@@ -2014,6 +2015,7 @@ MonoBehaviour:
   wanderInterval: 3
   wanderSpeed: 2
   chaseSpeed: 6
+  m_alwaysRun: 1
   rotationSpeed: 8
   idleTypeMin: 0
   idleTypeMax: 1
