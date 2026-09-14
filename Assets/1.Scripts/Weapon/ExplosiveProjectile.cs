@@ -48,7 +48,7 @@ public class ExplosiveProjectile : MonoBehaviour
 
         if (m_elapsedTime >= m_fuseTime)
         {
-            Explode();
+            Detonate();
         }
     }
 
@@ -60,10 +60,13 @@ public class ExplosiveProjectile : MonoBehaviour
             return;
         }
 
-        Explode();
+        Detonate();
     }
 
-    private void Explode()
+    /// <summary>
+    /// 포물선 이동 종료나 스윕 충돌처럼 외부 이동 컴포넌트가 폭발을 요청할 때 사용하는 진입점입니다.
+    /// </summary>
+    public void Detonate()
     {
         if (m_hasExploded)
         {
