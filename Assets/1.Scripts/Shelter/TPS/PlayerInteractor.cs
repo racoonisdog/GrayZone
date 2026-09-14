@@ -129,7 +129,9 @@ public class PlayerInteractor : MonoBehaviour
 
         if (interactable != null)
         {
-            interactable.Interact(gameObject);
+            if (interactable.CanInteract(gameObject))
+                interactable.Interact(gameObject);
+
             return;
         }
 
@@ -170,7 +172,7 @@ public class PlayerInteractor : MonoBehaviour
         {
             GameObject target = m_interactionTargets[i];
 
-            if (!IsValidRegisteredTarget(target))
+            if (!IsAvailableInteractionTarget(target))
                 continue;
 
             float distanceSqr = (target.transform.position - origin).sqrMagnitude;
@@ -258,6 +260,15 @@ public class PlayerInteractor : MonoBehaviour
     private bool IsValidRegisteredTarget(GameObject target)
     {
         return target != null && target.activeInHierarchy && IsInteractionTarget(target);
+    }
+
+    private bool IsAvailableInteractionTarget(GameObject target)
+    {
+        if (!IsValidRegisteredTarget(target))
+            return false;
+
+        IInteractable interactable = ResolveInteractable(target);
+        return interactable == null || interactable.CanInteract(gameObject);
     }
 
     private void RemoveInvalidTargets()

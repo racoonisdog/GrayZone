@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -6,6 +7,9 @@ using UnityEngine;
 public class FacilityUIInteractable : MonoBehaviour, IInteractable
 {
     [SerializeField] private UIManager m_uiManager;
+
+    /// <summary>시설 UI 열기 요청이 정상적으로 전달된 뒤 발생합니다.</summary>
+    public event Action<FacilityUIInteractable> Interacted;
 
     /// <summary>탭 상호작용이므로 홀드 시간이 없음</summary>
     public float HoldDuration => 0f;
@@ -33,6 +37,9 @@ public class FacilityUIInteractable : MonoBehaviour, IInteractable
     /// <param name="interactor">상호작용을 실행한 오브젝트</param>
     public void Interact(GameObject interactor)
     {
+        if (!CanInteract(interactor))
+            return;
+
         if (m_uiManager == null)
         {
             Debug.LogWarning("[FacilityUIInteractable] UIManager is not found.", this);
@@ -40,6 +47,7 @@ public class FacilityUIInteractable : MonoBehaviour, IInteractable
         }
 
         // 넘길 대상은 상호작용을 건 플레이어(interactor)가 아니라, 시설 본체(this).
-        m_uiManager.TryOpenTargetUI(gameObject);
+        if (m_uiManager.TryOpenTargetUI(gameObject))
+            Interacted?.Invoke(this);
     }
 }
