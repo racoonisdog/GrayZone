@@ -87,7 +87,7 @@ public class ParabolicProjectileMover : MonoBehaviour
         if (m_hasPlannedCollision && m_plannedCollisionTime <= 0.0f)
         {
             m_rigidbody.position = m_plannedCollisionPosition;
-            m_projectile.Detonate();
+            m_projectile.DetonateAt(m_plannedCollisionPosition);
             return;
         }
 
@@ -107,7 +107,7 @@ public class ParabolicProjectileMover : MonoBehaviour
                 : previous;
 
             m_rigidbody.position = centerAtHit;
-            m_projectile.Detonate();
+            m_projectile.DetonateAt(centerAtHit);
             return;
         }
 
@@ -115,7 +115,7 @@ public class ParabolicProjectileMover : MonoBehaviour
         {
             m_elapsedTime = m_plannedCollisionTime;
             m_rigidbody.position = m_plannedCollisionPosition;
-            m_projectile.Detonate();
+            m_projectile.DetonateAt(m_plannedCollisionPosition);
             return;
         }
 
