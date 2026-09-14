@@ -873,6 +873,11 @@ public class SquadAIController : MonoBehaviour
         if (m_aimController != null)
         {
             // 겨눌 지점을 함께 넘겨 상체 IK 타겟이 AI 기준으로 움직이게 합니다.
+            if (inCombat)
+            {
+                m_aimController.ApplyAiLookPoint(m_aimPoint + Vector3.up);
+            }
+
             m_aimController.ApplyAiCombatStance(inCombat, shooting);
         }
     }

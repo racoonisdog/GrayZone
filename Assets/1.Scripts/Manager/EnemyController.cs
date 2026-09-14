@@ -42,10 +42,14 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Tooltip("이 감염체의 종류입니다. 시체 처리처럼 종류별로 다른 설정을 고를 때의 키로 씁니다. 밸런스 수치와는 무관합니다.")]
     [SerializeField] private EnemyType m_enemyType = EnemyType.Howler;
 
-    [Header("Defense Disposition")]
+    [Foldout("Defense")]
+    [Tooltip("이 프리팹이 기본적으로 Defense 전용 적인지 여부입니다. EnemyDefenseSpawnPoint에서 생성되면 런타임에도 true로 설정됩니다.")]
+    [SerializeField] private bool m_isDefenseEnemy;
+
     [Tooltip("방어전 경로 이후 행동입니다. Player First는 현재 조작 플레이어, Target First는 스폰 포인트의 목표 위치로 향합니다.")]
     [SerializeField] private EnemyDefenseDisposition m_defenseDisposition = EnemyDefenseDisposition.Default;
 
+    [EndFoldout]
     [Header("Balance Data")]
     [Tooltip("선택 사항인 적 밸런스 데이터입니다. 지정하면 아래 레거시 기본값보다 우선 적용됩니다.")]
     [FormerlySerializedAs("m_balance")]
@@ -225,11 +229,17 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     // Start가 한 번 실행된 뒤에만 풀 재사용 시 초기 상태 전이를 직접 수행합니다.
     private bool m_hasStarted;
 
-    /// <summary>현재 방어전 생성 개체에 적용 중인 개체별 기본 이동 속도가 있는지 여부입니다.</summary>
+    /// <summary>현재 Spawn SO에서 주입한 개체별 이동 속도가 있는지 여부입니다.</summary>
     private bool m_hasSpawnMoveSpeed;
 
-    /// <summary>이번 전장 생성에서 한 번 선정되어 사망 또는 풀 반환까지 유지되는 기본 이동 속도(m/s)입니다.</summary>
-    private float m_spawnMoveSpeed;
+    /// <summary>이번 생성에서 선정되어 사망 또는 풀 반환까지 유지되는 Spawn SO 걷기 속도(m/s)입니다.</summary>
+    private float m_spawnWalkSpeed;
+
+    /// <summary>이번 생성에서 선정되어 사망 또는 풀 반환까지 유지되는 Spawn SO 달리기 속도(m/s)입니다.</summary>
+    private float m_spawnRunSpeed;
+
+    /// <summary>현재 개체가 EnemyDefenseSpawnPoint에서 생성됐는지 나타내는 런타임 표식입니다.</summary>
+    private bool m_isDefenseSpawn;
 
     /// <summary>현재 방어전 생성 개체가 순서대로 통과할 웨이포인트입니다.</summary>
     private readonly List<Transform> m_defenseWaypoints = new List<Transform>();
@@ -434,10 +444,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     public float WanderInterval => wanderInterval;
 
     /// <summary>배회 이동 속도입니다.</summary>
-    public float WanderSpeed => ResolveMoveSpeed(wanderSpeed);
+    public float WanderSpeed => ResolveMoveSpeed(wanderSpeed, false);
 
     /// <summary>추적 이동 속도입니다.</summary>
-    public float ChaseSpeed => ResolveMoveSpeed(chaseSpeed);
+    public float ChaseSpeed => ResolveMoveSpeed(chaseSpeed, true);
 
     /// <summary>이동 중 걷기 단계 없이 항상 달리기 속도와 모션을 사용할지 여부입니다.</summary>
     public bool AlwaysRun => m_alwaysRun;
@@ -446,10 +456,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     public float RotationSpeed => rotationSpeed;
 
     /// <summary>소음 위치로 이동할 때의 속도입니다.</summary>
-    public float NoiseChaseSpeed => ResolveMoveSpeed(noiseChaseSpeed);
+    public float NoiseChaseSpeed => ResolveMoveSpeed(noiseChaseSpeed, false);
 
-    /// <summary>이번 전장 생성에서 선정된 개체별 기본 이동 속도입니다. 방어전 생성 설정이 없으면 프리팹의 추적 속도를 반환합니다.</summary>
-    public float CurrentMoveSpeed => ResolveMoveSpeed(chaseSpeed);
+    /// <summary>이번 생성에 최종 적용된 개체별 이동 속도입니다. Spawn SO 값이 없으면 Balance/Inspector의 추적 속도를 반환합니다.</summary>
+    public float CurrentMoveSpeed => ResolveMoveSpeed(chaseSpeed, true);
 
     /// <summary>소음 위치에 도착했다고 볼 거리입니다.</summary>
     public float NoiseArriveDistance => noiseArriveDistance;
@@ -509,23 +519,48 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <remarks>방어전 생성 경로 통과 후 플레이어 탐색과 외부 방어선 이동의 우선순위를 결정합니다.</remarks>
     public EnemyDefenseDisposition DefenseDisposition => m_defenseDisposition;
 
+    /// <summary>프리팹 설정 또는 현재 생성 경로에 의해 Defense 전용 적으로 활성화됐는지 여부입니다.</summary>
+    public bool IsDefenseEnemy => m_isDefenseEnemy || m_isDefenseSpawn;
+
     /// <summary>
-    /// 스폰 포인트가 이번 전장 생성에 사용할 이동 속도, 웨이포인트와 방어 목표를 주입합니다.
+    /// 스폰 포인트가 Inspector/Balance 결과보다 우선할 이번 생성의 이동 속도를 주입합니다.
     /// </summary>
-    /// <param name="moveSpeed">생성 시 한 번 선정된 개체별 기본 이동 속도(m/s)입니다.</param>
+    /// <param name="walkSpeed">생성 시 한 번 선정된 개체별 걷기 이동 속도(m/s)입니다.</param>
+    /// <param name="runSpeed">생성 시 한 번 선정된 개체별 달리기 이동 속도(m/s)입니다.</param>
+    /// <remarks>프리팹 활성화 전에 호출해도 되며, 풀 반환 전까지 모든 이동 상태에서 유지됩니다.</remarks>
+    public void ConfigureSpawn(float walkSpeed, float runSpeed)
+    {
+        m_hasSpawnMoveSpeed = true;
+        m_spawnWalkSpeed = Mathf.Max(0.0f, walkSpeed);
+        m_spawnRunSpeed = Mathf.Max(0.0f, runSpeed);
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.speed = CurrentMoveSpeed;
+        }
+    }
+
+    /// <summary>풀 반환 시 이번 Spawn SO가 주입한 런타임 값만 제거합니다.</summary>
+    public void ClearSpawnConfiguration()
+    {
+        m_hasSpawnMoveSpeed = false;
+        m_spawnWalkSpeed = 0.0f;
+        m_spawnRunSpeed = 0.0f;
+    }
+
+    /// <summary>
+    /// Defense 스폰 포인트가 이번 생성의 Defense 표식, 웨이포인트와 목표 위치를 주입합니다.
+    /// </summary>
     /// <param name="waypoints">먼저 순서대로 통과할 웨이포인트 목록입니다.</param>
     /// <param name="targetPosition">경로 통과 후 사용할 외부 방어선 또는 방어 목표 위치입니다.</param>
     /// <remarks>
-    /// 풀에서 활성화되기 전에 호출할 수 있습니다. 웨이포인트 참조는 개체별 목록으로 복사하고,
-    /// 선정 속도는 공격 대상 변경·경직·이동 재개 뒤에도 유지합니다.
+    /// 풀에서 활성화되기 전에 호출할 수 있습니다. 웨이포인트 참조는 개체별 목록으로 복사합니다.
     /// </remarks>
     public void ConfigureDefenseSpawn(
-        float moveSpeed,
         IReadOnlyList<Transform> waypoints,
         Transform targetPosition)
     {
-        m_hasSpawnMoveSpeed = true;
-        m_spawnMoveSpeed = Mathf.Max(0.0f, moveSpeed);
+        m_isDefenseSpawn = true;
         m_defenseTargetPosition = targetPosition;
         m_defenseWaypoints.Clear();
 
@@ -544,12 +579,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         RestartDefenseNavigation();
     }
 
-    /// <summary>풀 반환 시 이번 생성에만 적용한 방어전 이동 설정을 제거합니다.</summary>
-    /// <remarks>다음 활성화에서 <see cref="ConfigureDefenseSpawn"/>이 새 속도와 경로를 다시 주입합니다.</remarks>
+    /// <summary>풀 반환 시 이번 생성에만 적용한 Defense 표식과 경로 설정을 제거합니다.</summary>
+    /// <remarks>프리팹의 Inspector 설정은 바꾸지 않고 Defense 스폰 포인트가 주입한 런타임 값만 해제합니다.</remarks>
     public void ClearDefenseSpawnConfiguration()
     {
-        m_hasSpawnMoveSpeed = false;
-        m_spawnMoveSpeed = 0.0f;
+        m_isDefenseSpawn = false;
         m_defenseWaypoints.Clear();
         m_defenseTargetPosition = null;
         m_defenseWaypointIndex = 0;
@@ -1118,7 +1152,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         float speed = velocity.magnitude;
         float animationSpeed = m_alwaysRun && speed > 0.01f
-            ? Mathf.Max(speed, chaseSpeed)
+            ? Mathf.Max(speed, ChaseSpeed)
             : speed;
 
         animator.SetFloat(AnimMoveSpeed, animationSpeed);
@@ -1539,12 +1573,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         animator?.SetFloat(AnimIdleType, IdleType);
     }
 
-    /// <summary>방어전 생성 설정이 있으면 개체별 선정 속도를, 없으면 상태별 프리팹 속도를 반환합니다.</summary>
-    private float ResolveMoveSpeed(float fallbackSpeed)
+    /// <summary>Spawn SO 값이 있으면 그 값을, 없으면 Always Run 또는 상태별 Balance/Inspector 속도를 반환합니다.</summary>
+    private float ResolveMoveSpeed(float fallbackSpeed, bool runSpeed)
     {
         if (m_hasSpawnMoveSpeed)
         {
-            return m_spawnMoveSpeed;
+            return m_alwaysRun || runSpeed ? m_spawnRunSpeed : m_spawnWalkSpeed;
         }
 
         return m_alwaysRun ? chaseSpeed : fallbackSpeed;
@@ -1554,9 +1588,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     private void RestartDefenseNavigation()
     {
         m_defenseWaypointIndex = 0;
-        m_defenseNavigationActive = m_defenseWaypoints.Count > 0
+        m_defenseNavigationActive = IsDefenseEnemy
+            && (m_defenseWaypoints.Count > 0
             || m_defenseTargetPosition != null
-            || m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst;
+            || m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst);
 
         if (!m_defenseNavigationActive || agent == null || !agent.enabled || !agent.isOnNavMesh)
         {
@@ -1582,7 +1617,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private bool TickDefenseNavigation()
     {
-        if (!m_defenseNavigationActive || m_current == Dead || m_current == Combat)
+        if (!IsDefenseEnemy || !m_defenseNavigationActive || m_current == Dead || m_current == Combat)
         {
             return false;
         }

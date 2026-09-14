@@ -2,12 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
-using VInspector;
-
-#if UNITY_EDITOR
-using UnityEditor;
-using UnityEditor.SceneManagement;
-#endif
 
 /// <summary>
 /// 범위 안에서 여러 <see cref="EnemySpawnEntrySO"/> 생산 항목을 독립적으로 풀링·생성하는 스폰 지점입니다.
@@ -18,7 +12,7 @@ using UnityEditor.SceneManagement;
 /// 적이 사망하면 <see cref="EnemyManager.Entry.CorpseLifetime"/> 동안 래그돌을 유지한 뒤 해당 SO의 풀로 반납합니다.
 /// </remarks>
 [DisallowMultipleComponent]
-public sealed class EnemySpawnPoint : MonoBehaviour
+public class EnemySpawnPoint : MonoBehaviour
 {
     /// <summary>풀 안의 한 적 인스턴스와 사망 뒤 복원할 상태를 보관합니다.</summary>
     private sealed class PoolItem
@@ -105,13 +99,6 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_minimumSpawnDistance = 1.5f;
 
-    [Header("Defense Route")]
-    [Tooltip("이 지점에서 생성된 적이 먼저 순서대로 통과할 웨이포인트 목록입니다. 비어 있으면 대상 우선 성향에 따른 목표 선택을 즉시 시작합니다.")]
-    [SerializeField] private List<Transform> m_waypoints = new List<Transform>();
-
-    [Tooltip("웨이포인트 통과 후 향할 외부 방어선 또는 방어 목표 위치입니다. 플레이어 우선 적도 감지 가능한 플레이어가 없으면 이 위치를 사용합니다.")]
-    [SerializeField] private Transform m_targetPosition;
-
     [Header("Spawn State")]
     [Tooltip("켜면 각 SO의 생산 주기에 맞춰 풀 적을 활성화합니다. 끄면 앞으로의 배치 생산만 멈추며 이미 활성화된 적은 제거하지 않습니다.")]
     [SerializeField] private bool m_spawnEnabled = true;
@@ -124,12 +111,6 @@ public sealed class EnemySpawnPoint : MonoBehaviour
 
     /// <summary>직전 성공 위치와 다음 위치 사이에 보장할 X/Z 최소 거리입니다.</summary>
     public float MinimumSpawnDistance => m_minimumSpawnDistance;
-
-    /// <summary>생성된 적이 순서대로 통과할 웨이포인트 목록입니다.</summary>
-    public IReadOnlyList<Transform> Waypoints => m_waypoints;
-
-    /// <summary>웨이포인트 통과 후 사용할 외부 방어선 또는 방어 목표 위치입니다.</summary>
-    public Transform TargetPosition => m_targetPosition;
 
     /// <summary>신규 배치 생산을 허용하는지 여부입니다.</summary>
     public bool IsSpawnEnabled => m_spawnEnabled;
@@ -165,7 +146,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     private Vector3 m_lastSpawnPosition;
 
     /// <summary>활성화될 때 SO 변경 이벤트를 연결하고, 재활성화라면 다음 프레임 동기화를 예약합니다.</summary>
-    private void OnEnable()
+    protected virtual void OnEnable()
     {
         RefreshEntrySubscriptions();
 
@@ -177,7 +158,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     }
 
     /// <summary>게임 시작 시 등록된 SO마다 최대 수용량만큼 비활성 풀을 준비합니다.</summary>
-    private void Start()
+    protected virtual void Start()
     {
         EnsurePoolRoot();
         m_runtimeInitialized = true;
@@ -186,7 +167,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     }
 
     /// <summary>각 SO의 생산 주기와 풀 수용량을 독립적으로 처리합니다.</summary>
-    private void Update()
+    protected virtual void Update()
     {
         if (!m_runtimeInitialized)
         {
@@ -241,13 +222,13 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     }
 
     /// <summary>비활성화될 때 SO 변경 이벤트 연결을 해제합니다.</summary>
-    private void OnDisable()
+    protected virtual void OnDisable()
     {
         UnsubscribeEntryChanges();
     }
 
     /// <summary>스폰 지점 제거 시 풀 항목과 SO 이벤트가 이 지점을 계속 참조하지 않도록 해제합니다.</summary>
-    private void OnDestroy()
+    protected virtual void OnDestroy()
     {
         UnsubscribeEntryChanges();
 
@@ -262,7 +243,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     }
 
     /// <summary>Inspector에서 입력한 영역 값이 유효한 하한을 지키도록 보정하고, Play Mode에서는 동기화를 예약합니다.</summary>
-    private void OnValidate()
+    protected virtual void OnValidate()
     {
         m_spawnAreaSize = new Vector2(
             Mathf.Max(0.0f, m_spawnAreaSize.x),
@@ -271,31 +252,6 @@ public sealed class EnemySpawnPoint : MonoBehaviour
 
         RefreshEntrySubscriptions();
         m_runtimeSynchronizationPending = true;
-    }
-
-    /// <summary>이 스폰 포인트의 자식으로 새 웨이포인트를 만들고 경로 목록 끝에 추가합니다.</summary>
-    /// <remarks>에디터에서만 동작하며 Undo와 Scene dirty 처리를 함께 수행합니다.</remarks>
-    [Button("Add Waypoint Child")]
-    [ContextMenu("Add Waypoint Child")]
-    private void AddWaypointChild()
-    {
-#if UNITY_EDITOR
-        if (Application.isPlaying)
-        {
-            Debug.LogWarning("[EnemySpawnPoint] Play Mode에서는 웨이포인트 자식을 만들지 않습니다.", this);
-            return;
-        }
-
-        GameObject child = new GameObject($"Waypoint {m_waypoints.Count + 1}");
-        Undo.RegisterCreatedObjectUndo(child, "Add Enemy Waypoint");
-        child.transform.SetParent(transform, false);
-
-        Undo.RecordObject(this, "Add Enemy Waypoint");
-        m_waypoints.Add(child.transform);
-        EditorUtility.SetDirty(this);
-        EditorSceneManager.MarkSceneDirty(gameObject.scene);
-        Selection.activeGameObject = child;
-#endif
     }
 
     /// <summary>스폰 매니저가 자식 지점에 공통 Inspector 설정을 복사할 때 사용합니다.</summary>
@@ -539,9 +495,6 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         enemyTransform.SetParent(null, false);
         enemyTransform.SetPositionAndRotation(spawnPosition, transform.rotation);
 
-        float moveSpeed = item.Runtime.Entry.SampleMoveSpeed();
-        item.Enemy.ConfigureDefenseSpawn(moveSpeed, m_waypoints, m_targetPosition);
-
         // EnemyController가 먼저 사망 상태를 정리한 뒤 이 지점이 래그돌 유지 상태로 전환하도록 순서를 보장합니다.
         if (item.Health != null && item.DeathHandler != null)
         {
@@ -551,6 +504,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         item.Enemy.gameObject.SetActive(true);
         RestoreInitialReusableComponentState(item);
         item.Enemy.ResetForSpawn();
+        ConfigureSpawnedEnemy(item.Enemy, item.Runtime.Entry);
 
         if (item.Health != null && item.DeathHandler != null)
         {
@@ -628,7 +582,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
         }
 
         EnsurePoolRoot();
-        item.Enemy.ClearDefenseSpawnConfiguration();
+        ClearSpawnedEnemyConfiguration(item.Enemy);
         item.Enemy.transform.SetParent(m_poolRoot, true);
         item.Enemy.gameObject.SetActive(false);
 
@@ -661,6 +615,27 @@ public sealed class EnemySpawnPoint : MonoBehaviour
                 ReturnToPool(item);
             }
         }
+    }
+
+    /// <summary>적의 Inspector/Balance 초기화가 끝난 결과 위에 이번 Spawn SO의 런타임 값을 적용합니다.</summary>
+    /// <param name="enemy">이번에 활성화할 적입니다.</param>
+    /// <param name="entry">적을 생산한 Spawn SO입니다.</param>
+    /// <remarks>파생 스폰 포인트는 base 호출 뒤 자기 전용 설정을 추가해 Spawn SO 우선순위를 보존합니다.</remarks>
+    protected virtual void ConfigureSpawnedEnemy(EnemyController enemy, EnemySpawnEntrySO entry)
+    {
+        if (enemy == null || entry == null)
+        {
+            return;
+        }
+
+        enemy.ConfigureSpawn(entry.SampleWalkSpeed(), entry.SampleRunSpeed());
+    }
+
+    /// <summary>풀 반환 시 이번 생성에서 주입한 Spawn SO 런타임 값만 제거합니다.</summary>
+    /// <param name="enemy">풀로 반환할 적입니다.</param>
+    protected virtual void ClearSpawnedEnemyConfiguration(EnemyController enemy)
+    {
+        enemy?.ClearSpawnConfiguration();
     }
 
     /// <summary>퇴역한 SO 런타임의 비활성 풀 적과 이벤트 연결을 정리합니다.</summary>
@@ -843,7 +818,7 @@ public sealed class EnemySpawnPoint : MonoBehaviour
     }
 
     /// <summary>선택된 스폰 지점의 월드 X/Z 생성 범위를 Scene View에 표시합니다.</summary>
-    private void OnDrawGizmosSelected()
+    protected virtual void OnDrawGizmosSelected()
     {
         Gizmos.color = new Color(0.2f, 0.9f, 1.0f, 0.8f);
         Gizmos.DrawWireCube(

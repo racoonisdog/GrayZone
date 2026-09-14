@@ -12,6 +12,7 @@ Gun_m_hitscanRange,탄이 도달하는 최대 사거리(m)입니다. 이 거리�
 Gun_m_knockbackImpulse,명중 시 대상을 밀어내는 넉백 충격량(N·s)입니다. 사망한 대상은 래그돌이 이 힘을 받습니다. 0이면 피격 대상이 정한 최소치만 적용됩니다. (0 이상),0
 Gun_m_hipfireMinSpread,힙파이어(비조준) 시 최소 방사각(도). (0 이상),1
 Gun_m_hipfireMaxSpread,힙파이어(비조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),3
+Gun_m_airborneExtraSpread,공중에 떠 있는 동안 힙파이어·ADS 방사각에 함께 더해지는 각도(도). 연사 누적과 별개로 즉시 적용됩니다. (0 이상),2
 Gun_m_hipfireMinSpreadShotCount,힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상),0
 Gun_m_hipfireSpreadIncreasePerShot,힙파이어 발사마다 누적되는 방사각 증가량(도). (0 이상),0.25
 Gun_m_hipfireSpreadRecoveryPerSecond,힙파이어 사격을 멈춘 뒤 초당 회복(감소)하는 방사각(도/초). (0 이상),8

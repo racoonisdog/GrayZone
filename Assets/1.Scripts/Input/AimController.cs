@@ -33,6 +33,20 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private const int RecoilLayerIndex = 2;
 
+    /// <summary>
+    /// 공중 조준 자세를 담당하는 애니메이터 레이어 인덱스입니다.
+    /// </summary>
+    /// <remarks>
+    /// 지상에서는 Base Layer의 조준 트리가 상하체가 붙은 전신 조준 클립을 갖고 있어 별도 레이어가 필요 없습니다.
+    /// 공중에는 그 클립이 없고 Base Layer가 점프 클립을 재생해야 하므로, 다리는 Base Layer에 두고 상체만
+    /// 이 레이어로 덮어 조준 자세를 만듭니다. 마스크는 몸통을 포함하고 다리를 제외합니다.
+    ///
+    /// 사격 자세는 이 레이어에 두지 않습니다. 사격 중에도 상체는 조준 자세를 유지하고 반동은
+    /// <see cref="RecoilLayerIndex"/>의 Additive 레이어가 얹습니다. 지상과 같은 역할 분담이며,
+    /// 같은 클립을 Override와 Additive 양쪽에 걸어 이중 적용되는 것을 막습니다.
+    /// </remarks>
+    private const int AirActionLayerIndex = 3;
+
     // 이 시간(초) 이상 사격이 끊기면 좌우 킥 번갈이 패턴을 첫 발부터 다시 시작합니다.
     private const float KickPatternResetGap = 0.25f;
 
@@ -257,6 +271,21 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>지난 프레임의 조준 상태입니다. 바뀐 프레임에 전환을 새로 시작하기 위한 것입니다.</summary>
     private bool m_zoomWasAds;
 
+    /// <summary>
+    /// 이 대원을 지금 플레이어가 직접 조작하고 있는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 예전에는 이 컴포넌트의 활성 여부가 그 표시를 겸했습니다. 조작하지 않는 대원은 컴포넌트를 껐습니다.
+    /// 그런데 이 컴포넌트는 조작 전용(입력·조준 카메라·조준선)과 캐릭터 전용(리그 weight·애니메이터 레이어)을
+    /// 함께 들고 있어서, 조작 전용을 끄려고 컴포넌트를 끄면 캐릭터 쪽 몫까지 같이 죽었습니다. 꺼진 동안의
+    /// 몫을 AI 경로가 따로 구현하면서 같은 규칙이 두 벌이 됐고, 꺼진 컴포넌트에는 애니메이션 이벤트도
+    /// 배달되지 않아 재장전 종료 신호가 유실됐습니다.
+    ///
+    /// 그래서 컴포넌트는 항상 켜 두고 조작 여부만 이 값으로 표시합니다.
+    /// <see cref="SquadMemberController"/>가 <see cref="SetPlayerControlled"/>로 설정합니다.
+    /// </remarks>
+    private bool m_isPlayerControlled;
+
     /// <summary>상체 조준(허리) 리그 weight의 목표값입니다.</summary>
     private float m_rigWeightTarget;
 
@@ -278,6 +307,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>지금 적용 중인 상체(무기) 레이어 weight입니다.</summary>
     private float m_weaponLayerWeight;
+
+    /// <summary>지금 적용 중인 공중 조준 레이어 weight입니다. 목표는 <see cref="ResolveAirActionLayerTarget"/>가 정합니다.</summary>
+    private float m_airActionLayerWeight;
 
     /// <summary>반동(Additive) 레이어 weight의 목표값입니다.</summary>
     private float m_recoilLayerTarget;
@@ -302,6 +334,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
 
     [Foldout("IK Options")]
+    [Tooltip("켜면 공중에서도 조준·사격 시 상체 조준 리그와 손 IK를 지상과 같은 방식으로 올립니다. 끄면 공중에 있는 동안만 두 리그를 0으로 내립니다. 어느 쪽이든 즉시 바뀌지 않고 자세 전환 시간으로 보간합니다.")]
+    [SerializeField] private bool m_enableCombatRigInAir = true;
+
+    [Tooltip("켜면 공중에서 전투 자세일 때 상체(Action) 레이어를 올려 조준 자세를 냅니다. 지상은 Base Layer의 조준 트리가 그 자세를 갖고 있지만 점프·낙하 상태에는 없어서, 켜지 않으면 공중에서 상체가 점프 자세로 남습니다.")]
+    [SerializeField] private bool m_useWeaponLayerAimPoseInAir = true;
+
     [Tooltip("손 위치 보정에 사용할 Rig입니다.")]
     [FormerlySerializedAs("handRig")]
     [SerializeField] private Rig m_handRig;
@@ -787,6 +825,18 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <param name="value">새로 적용할 시간(초)입니다. 음수는 0으로 잘립니다.</param>
     public void SetStanceBlendDuration(float value) => m_stanceBlendDuration = Mathf.Max(0.0f, value);
 
+    /// <summary>공중에서도 조준·사격 시 상체 조준 리그와 손 IK를 지상과 같게 올릴지 여부입니다.</summary>
+    public bool EnableCombatRigInAir => m_enableCombatRigInAir;
+
+    /// <summary>공중 전투 리그 사용 여부를 설정합니다.</summary>
+    public void SetEnableCombatRigInAir(bool value) => m_enableCombatRigInAir = value;
+
+    /// <summary>공중에서 상체(Action) 레이어로 조준 자세를 낼지 여부입니다.</summary>
+    public bool UseWeaponLayerAimPoseInAir => m_useWeaponLayerAimPoseInAir;
+
+    /// <summary>공중 상체 조준 자세 사용 여부를 설정합니다.</summary>
+    public void SetUseWeaponLayerAimPoseInAir(bool value) => m_useWeaponLayerAimPoseInAir = value;
+
     public void SetVisualKickMaxRoll(float value) => m_visualKickMaxRoll = value;
 
     /// <summary>누적 가능한 FOV 펀치 상한을 설정합니다.</summary>
@@ -866,6 +916,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (m_weaponController != null)
         {
             m_weaponController.OnHitFeedback += OnWeaponHitFeedback;
+            m_weaponController.OnReloadCompleted += OnWeaponReloadCompleted;
         }
     }
 
@@ -877,7 +928,30 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (m_weaponController != null)
         {
             m_weaponController.OnHitFeedback -= OnWeaponHitFeedback;
+            m_weaponController.OnReloadCompleted -= OnWeaponReloadCompleted;
         }
+    }
+
+    /// <summary>
+    /// 무기 쪽 재장전 타이머가 끝났을 때 재장전 비주얼 상태를 대신 정리합니다.
+    /// </summary>
+    /// <remarks>
+    /// 무기 타이머가 끝나는 순간을 <see cref="ReconcileReloadState"/>에 알리는 세 번째 진입점입니다.
+    /// 매 프레임 도는 두 경로(조작 멤버의 <c>Update</c>, AI의 <see cref="ApplyAiCombatStance"/>)가 어느
+    /// 쪽도 돌지 않는 상태 - 조작 멤버도 AI도 아닌 대원 - 를 메웁니다. C# 이벤트는 컴포넌트를 꺼도
+    /// 끊기지 않으므로 이 경로만은 어느 경우에나 살아 있습니다.
+    ///
+    /// 실제 판단과 정리는 전부 <see cref="ReconcileReloadState"/>가 합니다. 여기서 따로 처리하면
+    /// 같은 규칙이 두 벌이 되고, 그렇게 갈라진 재장전 처리가 이번 버그들의 원인이었습니다.
+    /// </remarks>
+    private void OnWeaponReloadCompleted()
+    {
+        if (!m_hasRequiredReferences)
+        {
+            return;
+        }
+
+        ReconcileReloadState();
     }
 
     /// <summary>
@@ -885,14 +959,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     /// <param name="feedback">헤드샷·킬 여부와 최종 피해량을 담은 피격 피드백입니다.</param>
     /// <remarks>
-    /// 직접 조작 중인 대원의 사격만 조준선에 반영합니다. 조준선은 스쿼드 전체가 <b>한 개를 공유</b>하고,
-    /// C# 이벤트는 컴포넌트를 꺼도 해제되지 않습니다. 그래서 막지 않으면 AI가 모는 팀원이 적을 맞힐 때마다
-    /// 플레이어 화면에 히트마커와 처치 표시가 떠서, 내가 맞힌 것처럼 보입니다.
-    /// 직접 조작 여부는 <see cref="SquadMemberController"/>가 이 컴포넌트의 활성 상태로 표시합니다.
+    /// 직접 조작 중인 대원의 사격만 조준선에 반영합니다. 조준선은 스쿼드 전체가 <b>한 개를 공유</b>하므로,
+    /// 막지 않으면 AI가 모는 팀원이 적을 맞힐 때마다 플레이어 화면에 히트마커와 처치 표시가 떠서,
+    /// 내가 맞힌 것처럼 보입니다.
     /// </remarks>
     private void OnWeaponHitFeedback(CombatDamage.HitFeedback feedback)
     {
-        if (!isActiveAndEnabled)
+        if (!m_isPlayerControlled)
         {
             return;
         }
@@ -934,6 +1007,40 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
+        // 사격 차단을 푸는 것이 이 프레임의 조준·사격 처리보다 먼저입니다.
+        ReconcileReloadState();
+
+        // 무기는 이동 상태의 소유자가 아니라 접지 여부를 스스로 알 수 없습니다. 공중 추가 탄퍼짐이
+        // 이 값을 보고 걸리므로, 조작 여부와 무관하게 매 프레임 넘깁니다.
+        if (m_weaponController != null)
+        {
+            m_weaponController.SetAirborne(IsAirborne);
+        }
+
+        if (m_isPlayerControlled)
+        {
+            UpdatePlayerControlledFrame();
+        }
+
+        // 리그·레이어 보간은 조작 여부와 무관하게 돌아야 합니다. AI가 모는 대원도 자세가 바뀌고,
+        // 여기서 멈추면 그 대원의 가중치가 중간값에 얼어붙습니다.
+        UpdateStanceWeights();
+    }
+
+    /// <summary>
+    /// 직접 조작 중인 대원에서만 도는 입력·조준·조준선 처리입니다.
+    /// </summary>
+    /// <remarks>
+    /// 여기 있는 것들은 전부 플레이어가 조작할 때만 의미가 있습니다. 입력을 읽거나, 스쿼드가 하나만
+    /// 공유하는 조준 카메라·조준선을 건드리는 것들입니다. AI가 모는 대원에서 돌면 세 대원이 같은
+    /// 카메라와 조준선을 두고 다툽니다.
+    ///
+    /// 반대로 리그 weight와 애니메이터 레이어는 누가 몰든 그 대원에게 계속 필요하므로 <see cref="Update"/>
+    /// 쪽에 둡니다. 이 컴포넌트가 두 종류를 함께 들고 있어서, 예전에는 조작 전용을 끄려고 컴포넌트를
+    /// 통째로 꺼야 했고 그때마다 캐릭터 쪽 몫이 같이 죽었습니다.
+    /// </remarks>
+    private void UpdatePlayerControlledFrame()
+    {
         // Gun은 입력 소유자가 아니므로, 조준 컨트롤러가 홀드 여부를 전달해 실제 탄퍼짐/크로스헤어 회복도
         // 논리 반동과 같은 입력 기준으로 멈춥니다.
         if (m_weaponController != null)
@@ -953,7 +1060,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 유효하므로, 그 상태의 기준 벌어짐은 여기서 따로 유지합니다.
         UpdateRestingCrosshair();
 
-        UpdateStanceWeights();
         UpdateCrosshairDebugOnStanceChange();
         UpdateReloadCrosshair();
     }
@@ -2428,6 +2534,73 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// 무기 쪽 재장전이 아직 진행 중인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 조작 컨트롤러의 <c>IsReload</c>만으로는 부족합니다. 그 값은 재장전 비주얼이 걸려 있다는 표시이고,
+    /// 실제로 탄약이 채워지는 시점을 쥔 것은 무기 쪽 타이머입니다. 둘이 모두 서 있을 때만 "재장전 중"입니다.
+    /// </remarks>
+    private bool IsReloadInProgress => m_controller != null
+                                    && m_controller.IsReload
+                                    && m_weaponController != null
+                                    && m_weaponController.IsReloading;
+
+    /// <summary>
+    /// 재장전 비주얼 래치를 무기 쪽 진행 상태에 맞춥니다.
+    /// </summary>
+    /// <remarks>
+    /// 재장전이 어디까지 갔는지를 실제로 쥐고 있는 것은 <see cref="Gun"/>의 타이머 하나뿐입니다. 그쪽은
+    /// 조작권이 오가거나 컴포넌트가 꺼져도 계속 돌아 반드시 끝납니다. 반면 <c>IsReload</c>는 그 진행도를
+    /// 따로 복제한 것이 아니라 "재장전 비주얼이 걸려 있다"는 표시일 뿐인데, 이 값을 내리는 경로가
+    /// 재장전 클립의 애니메이션 이벤트 하나뿐이었습니다.
+    ///
+    /// 문제는 이 값이 조준·사격 처리 전체를 막는 자리에도 쓰인다는 점입니다. 그래서 애니메이션 쪽 사정으로
+    /// 이벤트를 한 번 놓치면(컴포넌트 비활성, 해당 레이어 weight 0) 탄약은 채워졌는데 사격만 영영 막히는,
+    /// 복구 수단이 없는 상태가 됐습니다. 리그 weight 같은 표시용 값이 입력 가능 여부를 잠그면 안 됩니다.
+    ///
+    /// 그래서 주인을 무기 쪽으로 두고 래치가 그보다 오래 살아남지 못하게 매 프레임 맞춥니다. 이 경로가
+    /// 있으면 이벤트는 더 이상 사격 재개의 유일한 조건이 아니며, 놓치더라도 다음 프레임에 풀립니다.
+    /// </remarks>
+    private void ReconcileReloadState()
+    {
+        if (m_controller == null || !m_controller.IsReload)
+        {
+            return;
+        }
+
+        if (m_weaponController == null || m_weaponController.IsReloading)
+        {
+            return;
+        }
+
+        FinishReloadVisualState(false);
+    }
+
+    /// <summary>
+    /// 진행 중인 재장전의 상체 레이어와 리그 weight를 다시 세웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 값은 <see cref="BeginReload"/>가 세우는 것과 같습니다. 허리는 계속 조준 방향을 보고, 손만 풀어
+    /// 탄창을 다루게 합니다. 손까지 총 그립에 묶으면 탄창 교체 동작이 그립에 붙어 깨집니다.
+    ///
+    /// 재장전이 시작된 뒤 조작권이 오가면 그때마다 전투 자세를 적용하는 경로들이 이 값을 덮어씁니다.
+    /// 상체 레이어가 0으로 내려가면 남은 재장전 모션이 보이지 않을 뿐 아니라, 그 레이어의 애니메이션
+    /// 이벤트도 발생하지 않아 <c>IsReload</c>를 내릴 정규 경로까지 끊깁니다.
+    /// </remarks>
+    private void ApplyReloadVisualState()
+    {
+        m_inCombatStance = false;
+        SetRigWeights(1.0f, 0.0f);
+        SetWeaponLayerWeight(1.0f);
+        m_recoilLayerTarget = 0.0f;
+
+        if (m_animator != null)
+        {
+            m_animator.SetBool(AnimIDShoot, false);
+        }
+    }
+
+    /// <summary>
     /// 재장전 완료 후 조작 컨트롤러와 조준 보정 상태를 정리합니다.
     /// </summary>
     /// <param name="completeWeaponReload">무기 탄약도 완료 처리할지 여부입니다.</param>
@@ -2485,6 +2658,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     {
         if (!m_hasRequiredReferences)
         {
+            return;
+        }
+
+        // 재장전 도중에 조작권을 돌려받은 경우입니다. 넘겨받은 전투 자세를 그대로 적용하면 상체 레이어가
+        // 0으로 내려가 남은 재장전 모션이 통째로 사라집니다. 진행 중인 재장전이 전투 자세보다 우선입니다.
+        if (IsReloadInProgress)
+        {
+            ApplyReloadVisualState();
             return;
         }
 
@@ -2682,14 +2863,66 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             ? 1.0f
             : Time.deltaTime / m_stanceBlendDuration;
 
-        m_rigWeight = Mathf.MoveTowards(m_rigWeight, m_rigWeightTarget, step);
-        m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, m_handRigWeightTarget, step);
+        // 공중 처리는 목표값만 바꿉니다. 현재값을 직접 건드리면 뜨고 내리는 순간 자세가 툭 끊깁니다.
+        float aimTarget = ResolveAirborneAdjustedRigTarget(m_rigWeightTarget);
+        float handTarget = ResolveAirborneAdjustedRigTarget(m_handRigWeightTarget);
+
+        m_rigWeight = Mathf.MoveTowards(m_rigWeight, aimTarget, step);
+        m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, handTarget, step);
         m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, m_weaponLayerTarget, step);
+        m_airActionLayerWeight = Mathf.MoveTowards(m_airActionLayerWeight, ResolveAirActionLayerTarget(), step);
 
         // 반동은 자세 전환보다 빨라야 첫 발이 밋밋하지 않습니다. 그래서 자세 블렌드 시간을 쓰지 않고 즉시 올립니다.
         m_recoilLayerWeight = m_recoilLayerTarget;
 
         ApplyStanceWeights();
+    }
+
+    /// <summary>이 대원이 지금 공중에 떠 있는지 여부입니다.</summary>
+    private bool IsAirborne => m_controller != null && !m_controller.Grounded;
+
+    /// <summary>
+    /// 공중 설정을 반영한 리그 weight 목표값을 돌려줍니다.
+    /// </summary>
+    /// <param name="target">지상 기준으로 정해진 원래 목표 weight입니다.</param>
+    /// <remarks>
+    /// <see cref="m_enableCombatRigInAir"/>가 켜져 있으면 원래 목표를 그대로 씁니다. 즉 공중에서도 조준·사격 시
+    /// 지상과 똑같이 1까지 올라갑니다. 실측상 이것이 현재 동작이기도 해서, 기본값을 켜 두면 지금과 달라지는 것이
+    /// 없습니다. 이 함수는 동작을 바꾸려고 넣은 것이 아니라 <b>기획이 바뀌면 끌 수 있는 자리</b>를 만들려고 둔 것입니다.
+    ///
+    /// 꺼져 있으면 공중에 있는 동안만 목표를 0으로 내립니다. 현재값이 아니라 목표만 바꾸므로 뜨고 내리는 전환도
+    /// <see cref="m_stanceBlendDuration"/>으로 보간되고, 착지하면 원래 목표로 다시 올라갑니다.
+    /// </remarks>
+    private float ResolveAirborneAdjustedRigTarget(float target)
+    {
+        if (m_enableCombatRigInAir || !IsAirborne)
+        {
+            return target;
+        }
+
+        return 0.0f;
+    }
+
+    /// <summary>
+    /// 공중 조준 레이어(<see cref="AirActionLayerIndex"/>)의 목표 weight를 돌려줍니다.
+    /// </summary>
+    /// <remarks>
+    /// 공중이면서 전투 자세일 때만 1입니다. 지상에서는 Base Layer의 전신 조준 클립이 그 역할을 하므로 0입니다.
+    ///
+    /// 재장전 중에는 올리지 않습니다. 재장전은 Action 레이어가 팔을 맡는데, 그 위에 이 레이어가 몸통까지
+    /// 조준 자세로 덮으면 탄창을 다루는 동작이 어그러집니다.
+    ///
+    /// <see cref="m_enableCombatRigInAir"/>와는 별개 스위치입니다. 저쪽은 리그(손 IK·허리) weight를,
+    /// 이쪽은 애니메이터 레이어를 다룹니다. 공중 전투 연출을 통째로 끄려면 둘 다 꺼야 합니다.
+    /// </remarks>
+    private float ResolveAirActionLayerTarget()
+    {
+        if (!m_useWeaponLayerAimPoseInAir || !IsAirborne || !m_inCombatStance || IsReloadInProgress)
+        {
+            return 0.0f;
+        }
+
+        return 1.0f;
     }
 
     /// <summary>
@@ -2704,6 +2937,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_handRigWeight = m_handRigWeightTarget;
         m_weaponLayerWeight = m_weaponLayerTarget;
         m_recoilLayerWeight = m_recoilLayerTarget;
+        m_airActionLayerWeight = ResolveAirActionLayerTarget();
 
         ApplyStanceWeights();
     }
@@ -2732,6 +2966,40 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <see cref="SquadAIController"/>가 다른 이동 파라미터와 함께 직접 채웁니다.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// 이 대원을 플레이어가 직접 조작하는지 설정합니다.
+    /// </summary>
+    /// <param name="value">직접 조작 중이면 true입니다.</param>
+    /// <remarks>
+    /// <see cref="SquadMemberController"/>가 조작권을 옮길 때 부릅니다. 컴포넌트를 끄는 대신 이 값만
+    /// 내려야 합니다. 끄면 <see cref="Update"/>가 멈춰 리그 weight 보간이 그 자리에 얼어붙고,
+    /// 애니메이션 이벤트도 배달되지 않습니다.
+    /// </remarks>
+    public void SetPlayerControlled(bool value)
+    {
+        m_isPlayerControlled = value;
+    }
+
+    /// <summary>
+    /// AI가 모는 대원의 상체 조준 목표 지점을 갱신합니다.
+    /// </summary>
+    /// <param name="point">이 대원이 겨눌 월드 지점입니다.</param>
+    /// <remarks>
+    /// 조작 멤버는 <see cref="UpdateCombat"/>가 카메라 트레이스 결과로 이 지점을 씁니다. AI 대원은 그 경로를
+    /// 타지 않으므로 <see cref="SquadAIController"/>가 자기 조준점을 직접 넘깁니다.
+    ///
+    /// 대원마다 조준 목표가 따로 있어야 하는 이유는 상체 조준 IK가 이 지점을 바라보기 때문입니다.
+    /// 하나를 공유하면 봇 상체가 플레이어 조준을 따라가고, 반대로 AI가 지점을 옮기면 플레이어 상체까지
+    /// 같이 꺾입니다.
+    /// </remarks>
+    public void ApplyAiLookPoint(Vector3 point)
+    {
+        ApplyLookTarget(point);
+    }
+
+    /// <summary>지금 플레이어가 직접 조작 중인지 여부입니다.</summary>
+    public bool IsPlayerControlled => m_isPlayerControlled;
+
     public void ApplyAiCombatStance(bool inCombat, bool shooting)
     {
         if (m_animator == null)
@@ -2739,22 +3007,39 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_animator = GetComponent<Animator>();
         }
 
+        // AI가 몰고 있는 동안에도 래치가 무기 상태보다 오래 남지 않게 합니다. 이 컴포넌트는 꺼져 있어
+        // Update가 돌지 않으므로, 매 프레임 들어오는 이 경로가 조작 멤버의 Update 자리를 대신합니다.
+        ReconcileReloadState();
+
+        // 재장전 중에는 재장전 비주얼이 전투 자세보다 우선입니다. 재장전 모션은 상체 레이어에 있는데
+        // 이 함수는 AI가 매 프레임 부르므로, 거르지 않으면 전환 직후부터 상체 레이어를 0으로 눌러
+        // 재장전 모션이 통째로 보이지 않습니다. 조작 멤버 쪽에서 같은 이유로
+        // <see cref="ForceStopAim(bool)"/>가 재장전 중에만 상체 레이어를 유지하는 것과 같은 처리입니다.
+        //
+        // 리그는 <see cref="BeginReload"/>와 같은 조합을 씁니다. 허리는 계속 조준 방향을 보고, 손만
+        // 풀어 탄창을 다루게 합니다. 손까지 총 그립에 붙여 두면 탄창 교체 동작이 그립에 묶여 깨집니다.
+        if (IsReloadInProgress)
+        {
+            ApplyReloadVisualState();
+            return;
+        }
+
         m_inCombatStance = inCombat;
 
-        // <b>상체 조준 리그(m_aimRig)는 건드리지 않습니다(실측으로 발견).</b>
-        // 그 리그의 MultiAimConstraint source가 씬에 하나뿐인 LookTarget 오브젝트이고 세 멤버가 그것을
-        // 공유합니다. 그래서 두 방향 모두 오염됩니다.
-        //  - 그냥 weight만 올리면: 타겟이 플레이어 조준점에 있으므로 봇 상체가 플레이어 마우스를 따라 꺾입니다.
-        //  - AI가 타겟을 옮기면: 같은 오브젝트라 플레이어 상체까지 같이 꺾입니다.
-        // 멤버마다 자기 LookTarget을 갖도록 프리팹과 리그를 고쳐야 풀립니다. 그 전까지는 조준 포즈를
-        // Base Layer의 IsAim 트리로만 냅니다(카메라와 무관).
+        // 애니메이션에 관한 한 봇은 조작 멤버와 같아야 합니다. 그래서 아래 두 줄은
+        // <see cref="ApplyCombatStanceState"/>가 조작 멤버에 적용하는 것과 같은 값을 씁니다.
+        // 다른 것은 조준 카메라·조준선처럼 스쿼드가 공유하는 UI뿐이고, 그쪽은 여기서 건드리지 않습니다.
         //
-        // 손 IK는 무기 그립을 따라가는 per-character 타겟이라 안전하므로 함께 올립니다.
-        SetRigWeights(0.0f, inCombat ? 1.0f : 0.0f);
+        // 상체 조준 리그(m_aimRig)를 함께 올려도 되는 것은 지금 그 리그의 Spine IK 제약 weight가 0이기
+        // 때문입니다. 제약을 다시 켜려면 먼저 LookTarget을 멤버별로 나눠야 합니다. 지금은 씬에 하나뿐인
+        // 오브젝트를 셋이 공유해서, 켜는 순간 봇 상체가 플레이어 마우스를 따라 꺾이고 반대로 AI가 타겟을
+        // 옮기면 플레이어 상체까지 같이 꺾입니다.
+        SetRigWeight(inCombat ? 1.0f : 0.0f);
 
         // 상체 레이어는 조준만으로 올리지 않습니다. Base Layer의 조준 트리가 이미 자세를 갖고 있어
-        // 여기서 덮으면 웅크린 채 조준해도 서 있는 자세로 보입니다(기존 주석의 판단을 그대로 따릅니다).
-        SetWeaponLayerWeight(shooting ? 1.0f : 0.0f);
+        // 여기서 덮으면 웅크린 채 조준해도 서 있는 자세로 바뀝니다. 봇만 사격 중에 이 레이어를 올리던
+        // 것이 사격할 때 총 IK와 고개가 틀어져 보이던 원인입니다.
+        SetWeaponLayerWeight(0.0f);
 
         m_recoilLayerTarget = inCombat && shooting ? m_recoilAnimationWeight : 0.0f;
 
@@ -2762,8 +3047,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         {
             m_animator.SetBool(AnimIDShoot, inCombat && shooting);
         }
-
-        UpdateStanceWeights();
     }
 
     /// <summary>지금 값을 리그와 애니메이터 레이어에 반영합니다.</summary>
@@ -2787,6 +3070,11 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             if (m_animator.layerCount > RecoilLayerIndex)
             {
                 m_animator.SetLayerWeight(RecoilLayerIndex, m_recoilLayerWeight);
+            }
+
+            if (m_animator.layerCount > AirActionLayerIndex)
+            {
+                m_animator.SetLayerWeight(AirActionLayerIndex, m_airActionLayerWeight);
             }
         }
     }

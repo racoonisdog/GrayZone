@@ -1007,7 +1007,10 @@ public class SquadMemberController : MonoBehaviour
         if (m_aimController != null)
         {
             m_aimController.ForceStopAim();
-            m_aimController.enabled = false;
+
+            // 컴포넌트를 끄지 않습니다. 리그 weight 보간과 애니메이션 이벤트가 그 안에서 돌기 때문에,
+            // 끄면 사망 대원의 자세 가중치가 중간값에 얼어붙습니다.
+            m_aimController.SetPlayerControlled(false);
         }
 
         if (m_thirdPersonController != null)
@@ -1073,7 +1076,12 @@ public class SquadMemberController : MonoBehaviour
 
         if (m_aimController != null)
         {
-            m_aimController.enabled = allowDirectControl;
+            // 이 컴포넌트만은 끄지 않고 조작 여부만 넘깁니다. 조작 전용(입력·조준 카메라·조준선)과
+            // 캐릭터 전용(리그 weight·애니메이터 레이어)을 함께 들고 있어서, 끄면 뒤쪽까지 같이 죽습니다.
+            // 그 때문에 AI 경로가 같은 처리를 따로 구현해 규칙이 두 벌이 됐고, 꺼진 컴포넌트에는
+            // 애니메이션 이벤트가 배달되지 않아 재장전 종료 신호가 유실됐습니다.
+            m_aimController.enabled = true;
+            m_aimController.SetPlayerControlled(allowDirectControl);
         }
 
         if (m_weaponController != null)

@@ -10,6 +10,12 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class NormalHudPlayerStatusBinder : MonoBehaviour
 {
+    /// <summary>초상화 오브젝트 이름입니다. PlayerStatus와 SquadStatus 슬롯이 같은 이름을 씁니다.</summary>
+    private const string PortraitName = "PlayerbleProfile";
+
+    /// <summary>조작 멤버 상태 위젯 컨테이너 이름입니다. 초상화 이름이 슬롯과 겹쳐 탐색 범위를 여기로 좁힙니다.</summary>
+    private const string PlayerStatusName = "PlayerStatus";
+
     [Serializable]
     private sealed class HealthGaugeSlot
     {
@@ -111,6 +117,9 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     [SerializeField] private RawImage m_hpGaugeRawImage;
     [SerializeField] private Image m_hpGaugeImage;
 
+    [Tooltip("조작 중인 대원의 얼굴 초상화(PlayerStatus/PlayerbleProfile)입니다. 비워 두면 Awake에서 이름으로 찾습니다.")]
+    [SerializeField] private Image m_portraitImage;
+
     [Header("Ammo")]
     [Tooltip("현재 탄창 탄약 수 텍스트(Mag_Count)입니다.")]
     [SerializeField] private TMP_Text m_magCountText;
@@ -153,6 +162,10 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             m_squadManager = UnityEngine.Object.FindFirstObjectByType<SquadManager>();
         }
 
+        // 초상화만 예외적으로 여기서도 찾습니다. 나중에 추가된 필드라 이미 저장된 씬에는 직렬화된 값이
+        // 없고, 그대로 두면 기존 씬에서 초상화가 영영 비어 있게 됩니다. 인스펙터에 값이 있으면 그대로 씁니다.
+        ResolvePortraitImage();
+
         ValidateReferences();
         RefreshPlayerDataSources();
         SetPlayerSquadMemberData(ResolvePlayerSquadMemberData());
@@ -168,6 +181,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         WarnIfNull(m_magCountText, "탄창 탄약 텍스트(m_magCountText / Mag_Count)");
         WarnIfNull(m_magAllText, "예비 탄약 텍스트(m_magAllText / Mag_All)");
         WarnIfNull(m_squadManager, "SquadManager(m_squadManager)");
+        WarnIfNull(m_portraitImage, "조작 멤버 초상화(m_portraitImage / PlayerStatus/PlayerbleProfile)");
 
         if (m_hpGaugeImage == null && m_hpGaugeRawImage == null)
         {
@@ -265,9 +279,36 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             }
         }
 
+        ResolvePortraitImage();
+
         for (int i = 0; i < m_teamGaugeSlots.Length; i++)
         {
             m_teamGaugeSlots[i]?.AutoFind(transform);
+        }
+    }
+
+    /// <summary>초상화 참조가 비어 있으면 이름으로 찾아 채웁니다. 이미 있으면 건드리지 않습니다.</summary>
+    /// <remarks>
+    /// SquadStatus 슬롯의 초상화도 이름이 같은 PlayerbleProfile이라, 반드시 PlayerStatus 안에서만 찾습니다.
+    /// HUD 전체에서 이름으로 찾으면 계층 순서에 따라 팀 슬롯 쪽 초상화를 잡을 수 있습니다.
+    /// </remarks>
+    private void ResolvePortraitImage()
+    {
+        if (m_portraitImage != null)
+        {
+            return;
+        }
+
+        Transform playerStatus = FindDeep(transform, PlayerStatusName);
+        if (playerStatus == null)
+        {
+            return;
+        }
+
+        Transform portrait = playerStatus.Find(PortraitName);
+        if (portrait != null)
+        {
+            m_portraitImage = portrait.GetComponent<Image>();
         }
     }
 
@@ -330,30 +371,8 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             RefreshPlayerDataSources();
         }
 
-        if (m_playerDataSources == null)
-        {
-            return null;
-        }
-
-        for (int i = 0; i < m_playerDataSources.Length; i++)
-        {
-            PlayerbleUnitData data = m_playerDataSources[i];
-            if (data != null && data.IsPlayerSquadMember)
-            {
-                return data;
-            }
-        }
-
-        for (int i = 0; i < m_playerDataSources.Length; i++)
-        {
-            PlayerbleUnitData data = m_playerDataSources[i];
-            if (data != null && data.CanDeploy)
-            {
-                return data;
-            }
-        }
-
-        return null;
+        // 조작 대상 판정은 SquadStatusHudBinder와 공유합니다. 두 벌로 두면 슬롯 주인이 어긋납니다.
+        return SquadHudSlotOrder.ResolveControlled(m_playerDataSources);
     }
 
     private void SetPlayerSquadMemberData(PlayerbleUnitData nextData)
@@ -402,8 +421,31 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             m_magAllText.text = (m_playerSquadMemberData != null ? m_playerSquadMemberData.ReserveAmmo : 0).ToString();
         }
 
+        UpdatePortrait();
         UpdateGauge(normalizedHp);
         UpdateTeamGauges();
+    }
+
+    /// <summary>
+    /// 조작 중인 대원의 초상화를 체력값과 같은 경로(PlayerbleUnitData)에서 끌어와 반영합니다.
+    /// </summary>
+    private void UpdatePortrait()
+    {
+        if (m_portraitImage == null)
+        {
+            return;
+        }
+
+        Sprite sprite = m_playerSquadMemberData != null ? m_playerSquadMemberData.HudPortrait : null;
+        if (m_portraitImage.sprite != sprite)
+        {
+            m_portraitImage.sprite = sprite;
+        }
+
+        if (m_portraitImage.gameObject.activeSelf != (sprite != null))
+        {
+            m_portraitImage.gameObject.SetActive(sprite != null);
+        }
     }
 
     /// <summary>
@@ -456,36 +498,9 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
     private void BuildSortedTeamData()
     {
-        m_sortedTeamData.Clear();
-
-        if (m_playerDataSources == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < m_playerDataSources.Length; i++)
-        {
-            PlayerbleUnitData data = m_playerDataSources[i];
-            if (data == null || data == m_playerSquadMemberData)
-            {
-                continue;
-            }
-
-            m_sortedTeamData.Add(data);
-        }
-
-        m_sortedTeamData.Sort(CompareTeamData);
-    }
-
-    private static int CompareTeamData(PlayerbleUnitData left, PlayerbleUnitData right)
-    {
-        int reliabilityCompare = left.Reliability.CompareTo(right.Reliability);
-        if (reliabilityCompare != 0)
-        {
-            return reliabilityCompare;
-        }
-
-        return string.CompareOrdinal(left.RuntimeId, right.RuntimeId);
+        // 팀 슬롯 순서도 SquadStatusHudBinder와 같은 규칙을 씁니다. 그래야 Gauge_HP-N과
+        // 같은 슬롯의 PlayerbleProfile / Status_Filter / ReviveTimer가 같은 대원을 가리킵니다.
+        SquadHudSlotOrder.BuildTeammateOrder(m_playerDataSources, m_playerSquadMemberData, m_sortedTeamData);
     }
 
     private static void UpdateRawImageGauge(

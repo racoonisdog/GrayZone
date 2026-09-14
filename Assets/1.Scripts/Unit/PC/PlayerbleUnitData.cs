@@ -37,6 +37,9 @@ public class PlayerbleUnitData : MonoBehaviour
     [Tooltip("필드 결과 UI에서 이 캐릭터를 표시할 때 사용하는 풀바디 초상화입니다. 없으면 결과 UI는 이미지를 숨깁니다.")]
     [SerializeField] private Sprite m_resultPortrait;
 
+    [Tooltip("전투 HUD(PlayerStatus / SquadStatus)에 표시할 얼굴 초상화입니다. 결과 UI용 풀바디 초상화와 크기·구도가 달라 별도 필드로 둡니다. 없으면 HUD는 이미지를 숨깁니다.")]
+    [SerializeField] private Sprite m_hudPortrait;
+
     [Header("Public Runtime Data")]
     [Range(0, 100)]
     [SerializeField] private int m_reliability;
@@ -153,6 +156,15 @@ public class PlayerbleUnitData : MonoBehaviour
     public Sprite ResultPortrait => m_resultPortrait;
 
     /// <summary>
+    /// 전투 HUD가 체력값과 같은 경로로 끌어가는 얼굴 초상화입니다. 없으면 <c>null</c>입니다.
+    /// </summary>
+    /// <remarks>
+    /// HUD는 조작 멤버를 매 프레임 다시 조회하므로, 이 값도 그때 함께 읽혀 전환에 자동으로 따라갑니다.
+    /// 결과 UI용 <see cref="ResultPortrait"/>와는 용도가 다릅니다.
+    /// </remarks>
+    public Sprite HudPortrait => m_hudPortrait;
+
+    /// <summary>
     /// UI나 로그에서 표시할 이름입니다.
     /// 값이 비어 있으면 GameObject 이름을 반환합니다.
     /// </summary>
@@ -195,6 +207,20 @@ public class PlayerbleUnitData : MonoBehaviour
     /// 현재 다운 상태인지 여부입니다.
     /// </summary>
     public bool IsDown => m_squadMember != null && m_squadMember.IsDown;
+
+    /// <summary>
+    /// 체력 Module이 보고하는 다운 상태입니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="IsDown"/>(SquadMemberController 기준)과는 별개 신호이고 서로 어긋날 수 있어,
+    /// HUD처럼 "다운으로 보여야 하는가"를 판단하는 쪽은 둘을 함께 봅니다.
+    /// </remarks>
+    public bool IsHealthDowned => m_health != null && m_health.IsDowned;
+
+    /// <summary>
+    /// 다운 상태에서 남은 구조 가능 시간(초)입니다. 다운이 아니면 0입니다.
+    /// </summary>
+    public float DownTimeRemaining => m_health != null ? m_health.DownTimeRemaining : 0.0f;
 
     /// <summary>
     /// 직접 조작 중인지 여부입니다.
