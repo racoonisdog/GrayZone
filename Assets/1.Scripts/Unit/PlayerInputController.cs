@@ -50,6 +50,9 @@ public class PlayerInputController : MonoBehaviour
     [FormerlySerializedAs("shoot")]
     [SerializeField] private bool m_shoot;
 
+    [Tooltip("폭발탄 투척 모드가 활성화됐는지 여부입니다.")]
+    [SerializeField] private bool m_throwMode;
+
     [Tooltip("재장전 입력이 눌린 상태인지 여부입니다.")]
     [FormerlySerializedAs("reload")]
     [SerializeField] private bool m_reload;
@@ -104,8 +107,14 @@ public class PlayerInputController : MonoBehaviour
     /// <summary>조준 입력 상태입니다.</summary>
     public bool Aim => m_aim;
 
-    /// <summary>발사 입력 상태입니다.</summary>
-    public bool Shoot => m_shoot;
+    /// <summary>발사 입력 상태입니다. 투척 모드에서는 총기 발사로 전달하지 않습니다.</summary>
+    public bool Shoot => !m_throwMode && m_shoot;
+
+    /// <summary>폭발탄 투척 모드 활성 상태입니다.</summary>
+    public bool ThrowMode => m_throwMode;
+
+    /// <summary>투척 모드에서 좌클릭 입력이 눌린 상태입니다.</summary>
+    public bool Throw => m_throwMode && m_shoot;
 
     /// <summary>재장전 입력 상태입니다.</summary>
     public bool Reload => m_reload;
@@ -215,7 +224,7 @@ public class PlayerInputController : MonoBehaviour
     /// </summary>
     public bool shoot
     {
-        get => m_shoot;
+        get => Shoot;
         set => m_shoot = value;
     }
 
@@ -341,6 +350,23 @@ public class PlayerInputController : MonoBehaviour
         }
 
         ShootInput(value.isPressed);
+    }
+
+    /// <summary>
+    /// 폭발탄 투척 모드를 켜거나 끄는 입력 액션 콜백입니다.
+    /// </summary>
+    /// <param name="value">Input System에서 전달된 투척 모드 입력 상태입니다.</param>
+    public void OnThrowMode(InputValue value)
+    {
+        if (!m_isInputEnabled || !value.isPressed)
+        {
+            return;
+        }
+
+        m_throwMode = !m_throwMode;
+
+        // 모드를 바꾸는 순간 누르고 있던 좌클릭이 다른 행동으로 넘어가지 않게 중립화합니다.
+        m_shoot = false;
     }
 
     /// <summary>
@@ -755,6 +781,7 @@ public class PlayerInputController : MonoBehaviour
         m_sprint = false;
         m_aim = false;
         m_shoot = false;
+        m_throwMode = false;
         m_reload = false;
         m_crouch = false;
         m_interact = false;

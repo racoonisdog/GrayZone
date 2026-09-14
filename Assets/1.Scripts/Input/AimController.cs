@@ -404,6 +404,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private Gun m_weaponController;
     private Camera m_mainCamera;
     private EnemyController m_currentAimEnemy;
+    private Vector3 m_currentAimPoint;
     private bool m_hasRequiredReferences;
     private bool m_inCombatStance;
     private bool m_isAds;
@@ -460,6 +461,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>현재 히트스캔이 조준 중인 적입니다.</summary>
     public EnemyController CurrentAimEnemy => m_currentAimEnemy;
+
+    /// <summary>카메라 크로스헤어가 가리키는 현재 월드 조준점입니다.</summary>
+    public Vector3 CurrentAimPoint => m_currentAimPoint;
 
     /// <summary>사격 시 재생할 효과음입니다. 지정하지 않았으면 <c>null</c>입니다.</summary>
     /// <remarks>무기별 사운드는 <see cref="WeaponFeedbackEmitter"/>가 담당하고, 이 값은 캐릭터 쪽 보조 배선입니다.</remarks>
@@ -1212,7 +1216,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private void UpdateStanceArbitration()
     {
         bool sprint = m_input.Sprint;
-        bool combat = m_input.Aim || m_input.Shoot;
+        bool combat = m_input.Aim || m_input.Shoot || m_input.ThrowMode;
 
         if (sprint && !m_sprintWasHeld)
         {
@@ -1258,6 +1262,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (m_input.Sprint && m_sprintOverridesCombat)
         {
             ExitCombatStance();
+            return;
+        }
+
+        // 투척 대기: 힙파이어 백뷰와 조준점 계산은 유지하지만 총기 발사는 입력 계층에서 차단합니다.
+        if (m_input.ThrowMode)
+        {
+            EnterCombatStance(false);
+            UpdateCombat();
             return;
         }
 
@@ -1568,6 +1580,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         // 조준점: 카메라 트레이스가 잡은 실제 사격 목표. 총알이 겨누는 지점입니다.
         Vector3 aimPoint = ResolveAimPoint(lookPoint);
+        m_currentAimPoint = aimPoint;
 
         // 탄착점: 총구에서 조준점으로 가다가 걸리는 지점(shotInfo.EndPoint). 실제 사격이 이 결과를 사용합니다.
         Gun.HitscanShotInfo shotInfo = EvaluateHitscanShot(aimPoint);

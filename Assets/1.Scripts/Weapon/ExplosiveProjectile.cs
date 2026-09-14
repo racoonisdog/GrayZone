@@ -29,6 +29,9 @@ public class ExplosiveProjectile : MonoBehaviour
     private float m_elapsedTime;
     private bool m_hasExploded;
 
+    /// <summary>충돌하지 않았을 때 자동 폭발할 때까지의 시간입니다.</summary>
+    public float FuseTime => m_fuseTime;
+
     private void Reset()
     {
         m_damageTargetLayers = LayerMask.GetMask("Enemy", "EnemyHitbox");
@@ -48,7 +51,7 @@ public class ExplosiveProjectile : MonoBehaviour
 
         if (m_elapsedTime >= m_fuseTime)
         {
-            Explode();
+            Detonate();
         }
     }
 
@@ -60,10 +63,13 @@ public class ExplosiveProjectile : MonoBehaviour
             return;
         }
 
-        Explode();
+        Detonate();
     }
 
-    private void Explode()
+    /// <summary>
+    /// 포물선 이동 종료나 스윕 충돌처럼 외부 이동 컴포넌트가 폭발을 요청할 때 사용하는 진입점입니다.
+    /// </summary>
+    public void Detonate()
     {
         if (m_hasExploded)
         {
