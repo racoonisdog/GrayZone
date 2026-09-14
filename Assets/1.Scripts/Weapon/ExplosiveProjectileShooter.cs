@@ -14,17 +14,22 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Tooltip("플레이어 Collider 중심을 기준으로 한 로컬 투척 시작 위치입니다.")]
     [SerializeField] private Vector3 m_throwOriginOffset = new Vector3(0.0f, 0.2f, 1.0f);
 
-    [Tooltip("최대 투척 거리")]
+    [Tooltip("수평 조준 시 폭탄이 같은 높이로 돌아올 때의 기준 투척 거리입니다. 실제 비행 종료점은 아닙니다.")]
+    [UnityEngine.Serialization.FormerlySerializedAs("m_maxThrowDistance")]
     [Min(0.1f)]
-    [SerializeField] private float m_maxThrowDistance = 20.0f;
+    [SerializeField] private float m_referenceThrowDistance = 20.0f;
 
-    [Tooltip("포물선의 최고 높이.")]
+    [Tooltip("수평 조준 시 투척 시작점보다 올라갈 기준 최고 높이입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_arcHeight = 4.0f;
 
-    [Tooltip("투척 시작부터 도착까지 걸리는 시간입니다.")]
+    [Tooltip("포물선을 아래로 휘게 하는 스크립트 가속도입니다. Rigidbody 중력은 사용하지 않습니다.")]
     [Min(0.01f)]
-    [SerializeField] private float m_travelDuration = 1.0f;
+    [SerializeField] private float m_downwardAcceleration = 9.81f;
+
+    [Tooltip("LineRenderer로 미리 보여 줄 포물선의 최대 누적 길이입니다. 실제 폭탄 이동은 제한하지 않습니다.")]
+    [Min(0.1f)]
+    [SerializeField] private float m_trajectoryPreviewDistance = 20.0f;
 
     [Tooltip("한 번 투척한 뒤 다음 투척 경로를 표시하고 다시 던질 수 있을 때까지의 시간입니다.")]
     [Min(0.0f)]
@@ -59,9 +64,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private bool m_wasThrowModeActive;
     private bool m_throwWasHeld;
     private Vector3 m_throwStart;
-    private Vector3 m_throwEnd;
-    private Vector3 m_plannedEndPosition;
-    private float m_plannedEndNormalizedTime = 1.0f;
+    private Vector3 m_initialVelocity;
+    private bool m_hasPlannedCollision;
+    private float m_plannedCollisionTime;
+    private Vector3 m_plannedCollisionPosition;
     private int m_trajectoryPointCount;
     private float m_nextThrowReadyTime;
 
@@ -137,13 +143,41 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         Vector3 origin = m_sourceCollider != null ? m_sourceCollider.bounds.center : transform.position;
         m_throwStart = origin + transform.TransformDirection(m_throwOriginOffset);
 
-        Vector3 toAimPoint = m_aimController.CurrentAimPoint - m_throwStart;
-        if (toAimPoint.sqrMagnitude < 0.0001f)
+        Vector3 aimDirection = m_aimController.CurrentAimPoint - m_throwStart;
+        if (aimDirection.sqrMagnitude < 0.0001f)
         {
-            toAimPoint = transform.forward * m_maxThrowDistance;
+            aimDirection = transform.forward;
         }
 
-        m_throwEnd = m_throwStart + Vector3.ClampMagnitude(toAimPoint, m_maxThrowDistance);
+        aimDirection.Normalize();
+
+        Vector3 horizontalDirection = Vector3.ProjectOnPlane(aimDirection, Vector3.up);
+        if (horizontalDirection.sqrMagnitude < 0.0001f)
+        {
+            horizontalDirection = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+        }
+
+        horizontalDirection.Normalize();
+
+        float downwardAcceleration = Mathf.Max(0.01f, m_downwardAcceleration);
+        float upwardSpeed = m_arcHeight > 0.0f
+            ? Mathf.Sqrt(2.0f * downwardAcceleration * m_arcHeight)
+            : 0.0f;
+        float referenceFlightTime = upwardSpeed > 0.0f
+            ? 2.0f * upwardSpeed / downwardAcceleration
+            : 1.0f;
+        float horizontalSpeed = m_referenceThrowDistance / referenceFlightTime;
+        float launchSpeed = Mathf.Sqrt(horizontalSpeed * horizontalSpeed + upwardSpeed * upwardSpeed);
+        float baseLaunchAngle = Mathf.Atan2(upwardSpeed, horizontalSpeed);
+        float aimPitch = Mathf.Asin(Mathf.Clamp(aimDirection.y, -1.0f, 1.0f));
+        float launchAngle = Mathf.Clamp(
+            baseLaunchAngle + aimPitch,
+            -80.0f * Mathf.Deg2Rad,
+            80.0f * Mathf.Deg2Rad);
+
+        m_initialVelocity =
+            horizontalDirection * (Mathf.Cos(launchAngle) * launchSpeed) +
+            Vector3.up * (Mathf.Sin(launchAngle) * launchSpeed);
     }
 
     private void DrawTrajectory()
@@ -162,39 +196,76 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         int segmentCount = Mathf.Clamp(m_trajectorySegments, 4, MaxTrajectoryPointCount - 1);
         m_trajectoryPointCount = 1;
         m_trajectoryPoints[0] = m_throwStart;
-        m_plannedEndNormalizedTime = 1.0f;
-        m_plannedEndPosition = m_throwEnd;
+        m_hasPlannedCollision = false;
+        m_plannedCollisionTime = 0.0f;
+        m_plannedCollisionPosition = m_throwStart;
 
         Vector3 previous = m_throwStart;
         float previousTime = 0.0f;
+        float previewDistance = Mathf.Max(0.1f, m_trajectoryPreviewDistance);
+        float targetSegmentLength = previewDistance / segmentCount;
+        float accumulatedDistance = 0.0f;
+        float fuseTime = m_projectilePrefab != null
+            ? Mathf.Max(0.0f, m_projectilePrefab.FuseTime)
+            : float.PositiveInfinity;
 
         for (int i = 1; i <= segmentCount; i++)
         {
-            float currentTime = i / (float)segmentCount;
+            Vector3 currentVelocity = ParabolicProjectileMover.EvaluateVelocity(
+                m_initialVelocity,
+                m_downwardAcceleration,
+                previousTime);
+            float sampleInterval = Mathf.Clamp(
+                targetSegmentLength / Mathf.Max(currentVelocity.magnitude, 1.0f),
+                0.01f,
+                0.25f);
+            float currentTime = Mathf.Min(previousTime + sampleInterval, fuseTime);
+
+            if (currentTime <= previousTime)
+            {
+                return;
+            }
+
             Vector3 next = ParabolicProjectileMover.EvaluatePosition(
                 m_throwStart,
-                m_throwEnd,
-                m_arcHeight,
+                m_initialVelocity,
+                m_downwardAcceleration,
                 currentTime);
+            Vector3 segment = next - previous;
+            float segmentDistance = segment.magnitude;
+            float remainingPreviewDistance = previewDistance - accumulatedDistance;
+            bool reachedPreviewLimit = segmentDistance >= remainingPreviewDistance;
+
+            if (reachedPreviewLimit && segmentDistance > 0.0001f)
+            {
+                float previewFraction = Mathf.Clamp01(remainingPreviewDistance / segmentDistance);
+                currentTime = Mathf.Lerp(previousTime, currentTime, previewFraction);
+                next = ParabolicProjectileMover.EvaluatePosition(
+                    m_throwStart,
+                    m_initialVelocity,
+                    m_downwardAcceleration,
+                    currentTime);
+                segment = next - previous;
+                segmentDistance = segment.magnitude;
+            }
 
             if (TryGetBlockingHit(previous, next, out RaycastHit hit))
             {
-                Vector3 segment = next - previous;
-                float segmentDistance = segment.magnitude;
                 float hitFraction = segmentDistance > 0.0001f
                     ? Mathf.Clamp01(hit.distance / segmentDistance)
                     : 0.0f;
 
-                m_plannedEndNormalizedTime = Mathf.Lerp(previousTime, currentTime, hitFraction);
-                m_plannedEndPosition = ParabolicProjectileMover.EvaluatePosition(
+                m_hasPlannedCollision = true;
+                m_plannedCollisionTime = Mathf.Lerp(previousTime, currentTime, hitFraction);
+                m_plannedCollisionPosition = ParabolicProjectileMover.EvaluatePosition(
                     m_throwStart,
-                    m_throwEnd,
-                    m_arcHeight,
-                    m_plannedEndNormalizedTime);
+                    m_initialVelocity,
+                    m_downwardAcceleration,
+                    m_plannedCollisionTime);
 
-                if ((m_plannedEndPosition - previous).sqrMagnitude > 0.000001f)
+                if ((m_plannedCollisionPosition - previous).sqrMagnitude > 0.000001f)
                 {
-                    m_trajectoryPoints[m_trajectoryPointCount] = m_plannedEndPosition;
+                    m_trajectoryPoints[m_trajectoryPointCount] = m_plannedCollisionPosition;
                     m_trajectoryPointCount++;
                 }
 
@@ -203,6 +274,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
             m_trajectoryPoints[m_trajectoryPointCount] = next;
             m_trajectoryPointCount++;
+            accumulatedDistance += segmentDistance;
+
+            if (reachedPreviewLimit || currentTime >= fuseTime)
+            {
+                return;
+            }
+
             previous = next;
             previousTime = currentTime;
         }
@@ -216,21 +294,17 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
-        float initialSampleTime = Mathf.Min(0.05f, m_plannedEndNormalizedTime);
-        Vector3 initialSamplePosition = initialSampleTime > 0.0f
-            ? ParabolicProjectileMover.EvaluatePosition(
-                m_throwStart,
-                m_throwEnd,
-                m_arcHeight,
-                initialSampleTime)
-            : m_plannedEndPosition;
-        Vector3 initialDirection = initialSamplePosition - m_throwStart;
-
-        Quaternion rotation = initialDirection.sqrMagnitude > 0.0001f
-            ? Quaternion.LookRotation(initialDirection.normalized, Vector3.up)
+        Quaternion rotation = m_initialVelocity.sqrMagnitude > 0.0001f
+            ? Quaternion.LookRotation(m_initialVelocity.normalized, Vector3.up)
             : transform.rotation;
 
         ExplosiveProjectile projectile = Instantiate(m_projectilePrefab, m_throwStart, rotation);
+        Collider[] projectileColliders = projectile.GetComponentsInChildren<Collider>(true);
+        foreach (Collider projectileCollider in projectileColliders)
+        {
+            projectileCollider.isTrigger = true;
+        }
+
         Rigidbody projectileRigidbody = projectile.GetComponent<Rigidbody>();
         projectileRigidbody.useGravity = false;
         projectileRigidbody.isKinematic = true;
@@ -242,11 +316,11 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         mover.Initialize(
             projectile,
             m_throwStart,
-            m_throwEnd,
-            m_arcHeight,
-            m_travelDuration,
-            m_plannedEndNormalizedTime,
-            m_plannedEndPosition,
+            m_initialVelocity,
+            m_downwardAcceleration,
+            m_hasPlannedCollision,
+            m_plannedCollisionTime,
+            m_plannedCollisionPosition,
             m_collisionRadius,
             m_collisionLayers,
             transform);

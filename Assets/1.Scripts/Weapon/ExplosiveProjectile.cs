@@ -29,6 +29,9 @@ public class ExplosiveProjectile : MonoBehaviour
     private float m_elapsedTime;
     private bool m_hasExploded;
 
+    /// <summary>충돌하지 않았을 때 자동 폭발할 때까지의 시간입니다.</summary>
+    public float FuseTime => m_fuseTime;
+
     private void Reset()
     {
         m_damageTargetLayers = LayerMask.GetMask("Enemy", "EnemyHitbox");

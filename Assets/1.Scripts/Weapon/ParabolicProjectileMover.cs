@@ -12,11 +12,11 @@ public class ParabolicProjectileMover : MonoBehaviour
     private Rigidbody m_rigidbody;
     private Transform m_owner;
     private Vector3 m_start;
-    private Vector3 m_end;
-    private float m_arcHeight;
-    private float m_duration;
-    private float m_plannedEndNormalizedTime;
-    private Vector3 m_plannedEndPosition;
+    private Vector3 m_initialVelocity;
+    private float m_downwardAcceleration;
+    private bool m_hasPlannedCollision;
+    private float m_plannedCollisionTime;
+    private Vector3 m_plannedCollisionPosition;
     private float m_collisionRadius;
     private int m_collisionLayers;
     private float m_elapsedTime;
@@ -25,23 +25,37 @@ public class ParabolicProjectileMover : MonoBehaviour
     /// <summary>
     /// 경로 표시와 실제 이동이 함께 사용하는 포물선 위치 계산입니다.
     /// </summary>
-    public static Vector3 EvaluatePosition(Vector3 start, Vector3 end, float arcHeight, float normalizedTime)
+    public static Vector3 EvaluatePosition(
+        Vector3 start,
+        Vector3 initialVelocity,
+        float downwardAcceleration,
+        float elapsedTime)
     {
-        float t = Mathf.Clamp01(normalizedTime);
-        Vector3 straightPosition = Vector3.Lerp(start, end, t);
-        float verticalOffset = 4.0f * arcHeight * t * (1.0f - t);
-        return straightPosition + Vector3.up * verticalOffset;
+        float time = Mathf.Max(0.0f, elapsedTime);
+        return start +
+            initialVelocity * time +
+            Vector3.down * (0.5f * Mathf.Max(0.0f, downwardAcceleration) * time * time);
+    }
+
+    /// <summary>지정한 경과 시간의 포물선 속도를 계산합니다.</summary>
+    public static Vector3 EvaluateVelocity(
+        Vector3 initialVelocity,
+        float downwardAcceleration,
+        float elapsedTime)
+    {
+        float time = Mathf.Max(0.0f, elapsedTime);
+        return initialVelocity + Vector3.down * (Mathf.Max(0.0f, downwardAcceleration) * time);
     }
 
     /// <summary>생성 직후 이동에 필요한 경로와 충돌 조건을 설정합니다.</summary>
     public void Initialize(
         ExplosiveProjectile projectile,
         Vector3 start,
-        Vector3 end,
-        float arcHeight,
-        float duration,
-        float plannedEndNormalizedTime,
-        Vector3 plannedEndPosition,
+        Vector3 initialVelocity,
+        float downwardAcceleration,
+        bool hasPlannedCollision,
+        float plannedCollisionTime,
+        Vector3 plannedCollisionPosition,
         float collisionRadius,
         LayerMask collisionLayers,
         Transform owner)
@@ -50,11 +64,11 @@ public class ParabolicProjectileMover : MonoBehaviour
         m_rigidbody = GetComponent<Rigidbody>();
         m_owner = owner;
         m_start = start;
-        m_end = end;
-        m_arcHeight = Mathf.Max(0.0f, arcHeight);
-        m_duration = Mathf.Max(0.01f, duration);
-        m_plannedEndNormalizedTime = Mathf.Clamp01(plannedEndNormalizedTime);
-        m_plannedEndPosition = plannedEndPosition;
+        m_initialVelocity = initialVelocity;
+        m_downwardAcceleration = Mathf.Max(0.0f, downwardAcceleration);
+        m_hasPlannedCollision = hasPlannedCollision;
+        m_plannedCollisionTime = Mathf.Max(0.0f, plannedCollisionTime);
+        m_plannedCollisionPosition = plannedCollisionPosition;
         m_collisionRadius = Mathf.Max(0.0f, collisionRadius);
         m_collisionLayers = collisionLayers;
         m_elapsedTime = 0.0f;
@@ -70,21 +84,19 @@ public class ParabolicProjectileMover : MonoBehaviour
             return;
         }
 
-        if (m_plannedEndNormalizedTime <= 0.0f)
+        if (m_hasPlannedCollision && m_plannedCollisionTime <= 0.0f)
         {
-            m_rigidbody.position = m_plannedEndPosition;
+            m_rigidbody.position = m_plannedCollisionPosition;
             m_projectile.Detonate();
             return;
         }
 
         Vector3 previous = m_rigidbody.position;
-        float plannedEndTime = m_duration * m_plannedEndNormalizedTime;
-        m_elapsedTime = Mathf.Min(m_elapsedTime + Time.fixedDeltaTime, plannedEndTime);
-        float t = m_elapsedTime / m_duration;
-        bool reachedPlannedEnd = t >= m_plannedEndNormalizedTime;
-        Vector3 next = reachedPlannedEnd
-            ? m_plannedEndPosition
-            : EvaluatePosition(m_start, m_end, m_arcHeight, t);
+        float nextTime = m_elapsedTime + Time.fixedDeltaTime;
+        bool reachedPlannedCollision = m_hasPlannedCollision && nextTime >= m_plannedCollisionTime;
+        Vector3 next = reachedPlannedCollision
+            ? m_plannedCollisionPosition
+            : EvaluatePosition(m_start, m_initialVelocity, m_downwardAcceleration, nextTime);
 
         if (TryGetBlockingHit(previous, next, out RaycastHit hit))
         {
@@ -99,13 +111,15 @@ public class ParabolicProjectileMover : MonoBehaviour
             return;
         }
 
-        if (reachedPlannedEnd)
+        if (reachedPlannedCollision)
         {
-            m_rigidbody.position = m_plannedEndPosition;
+            m_elapsedTime = m_plannedCollisionTime;
+            m_rigidbody.position = m_plannedCollisionPosition;
             m_projectile.Detonate();
             return;
         }
 
+        m_elapsedTime = nextTime;
         m_rigidbody.MovePosition(next);
     }
 

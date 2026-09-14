@@ -25829,6 +25829,42 @@ MonoBehaviour:
   m_clampToMaxGap: 0
   m_maxGapPixels: 220
   m_lerpSpeed: 0
+  m_enableShotRecoilPulse: 1
+  m_shotRecoilPulseAmplitudePixels: 14
+  m_shotRecoilPulseDuration: 0.2
+  m_shotRecoilPulseCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 7.352941
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.16
+      value: 1
+      inSlope: 0
+      outSlope: -1.1904762
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -1.1904762
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   m_mainShape: 1
   m_mainSizePixels: 3
   m_mainRingSizePixels: 8
@@ -25870,9 +25906,17 @@ MonoBehaviour:
   m_hitMarkerColorBody: {r: 0.8509804, g: 0.8509804, b: 0.8509804, a: 1}
   m_hitMarkerColorHead: {r: 0.8862745, g: 0.23137255, b: 0.23137255, a: 1}
   m_hitMarkerLengthPixels: 16
+  m_enableHitMarkerDamageScale: 1
+  m_hitMarkerMinDamage: 1
+  m_hitMarkerMaxDamage: 10
+  m_hitMarkerLengthAtMinDamagePixels: 16
+  m_hitMarkerLengthAtMaxDamagePixels: 40
   m_hitMarkerCenterGapPixels: 8
   m_hitMarkerBaseLengthPixels: 5.5
   m_hitMarkerFadeDuration: 0.25
+  m_hitMarkerRollBaseDegrees: 0
+  m_enableHitMarkerRandomRoll: 1
+  m_hitMarkerRollRandomRangeDegrees: 10
   m_showKillSkull: 1
   m_killSkullTexture: {fileID: 2800000, guid: 7a6209cfe005b9346ad8ff7738e9f147, type: 3}
   m_killSkullTint: {r: 1, g: 1, b: 1, a: 1}
@@ -25884,6 +25928,9 @@ MonoBehaviour:
   m_blockMarkerRingThicknessPixels: 2
   m_blockMarkerDotSizePixels: 4
   m_blockMarkerColor: {r: 0.8862745, g: 0.23137255, b: 0.23137255, a: 1}
+  m_dimCrosshairWhileBlockMarker: 1
+  m_blockMarkerCrosshairAlpha: 0.4
+  m_blockMarkerCrosshairFadeDuration: 0.2
   m_editModePreview: 1
   m_previewHitFeedback: 1
   m_previewHeadshotColor: 0
@@ -50631,12 +50678,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_defenseDisposition: 0
   m_balanceSO: {fileID: 0}
   m_feedback: {fileID: 0}
   wanderRadius: 8
   wanderInterval: 3
   wanderSpeed: 1.2
   chaseSpeed: 3.2
+  m_alwaysRun: 0
   rotationSpeed: 8
   idleTypeMin: 0
   idleTypeMax: 1
@@ -56000,6 +56049,34 @@ PrefabInstance:
       propertyPath: pivotNode
       value: 
       objectReference: {fileID: 381178839}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.57734615
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.559505
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.022803247
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.18995675
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.09624478
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.6664486
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.7144927
+      objectReference: {fileID: 0}
     - target: {fileID: 7478737136312639184, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: pivotNode
       value: 
@@ -76708,12 +76785,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_defenseDisposition: 0
   m_balanceSO: {fileID: 11400000, guid: 9199ae7a21bc4dc6a804e2275068cbd5, type: 2}
   m_feedback: {fileID: 0}
   wanderRadius: 8
   wanderInterval: 3
   wanderSpeed: 1.2
   chaseSpeed: 3.2
+  m_alwaysRun: 0
   rotationSpeed: 8
   idleTypeMin: 0
   idleTypeMax: 1
@@ -90819,6 +90898,34 @@ PrefabInstance:
       propertyPath: pivotNode
       value: 
       objectReference: {fileID: 1758722267}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.57734615
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.559505
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.022803247
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.18995675
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.09624478
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.6664486
+      objectReference: {fileID: 0}
+    - target: {fileID: 7422653759305141713, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.7144927
+      objectReference: {fileID: 0}
     - target: {fileID: 7478737136312639184, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: pivotNode
       value: 
@@ -130475,6 +130582,7 @@ MonoBehaviour:
   m_sprint: 0
   m_aim: 0
   m_shoot: 0
+  m_throwMode: 0
   m_reload: 0
   m_crouch: 0
   m_crouchToggle: 1
@@ -143533,8 +143641,11 @@ MonoBehaviour:
   m_crouchSpeed: 1.2
   m_crouchHeight: 1.1
   m_crouchTransitionDuration: 0.2
+  m_crouchLandingTransitionDuration: 0.08
   m_moveStateBlendDuration: 0.2
   m_rotationSmoothTime: 0.12
+  m_movementDirectionTurnSpeed: 360
+  m_movementDirectionSmoothMaxAngle: 60
   m_speedChangeRate: 10
   m_jumpHeight: 1.2
   m_gravity: -22
@@ -159603,9 +159714,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExplosiveProjectileShooter
   m_projectilePrefab: {fileID: 1009443997989111266, guid: 657fbc85b4a21094b979f88498413f13, type: 3}
-  m_spawnOffset: {x: 20, y: 0, z: 0}
-  m_launchSpeed: 10
-  m_fireKey: 19
+  m_throwOriginOffset: {x: 0, y: 0.2, z: 1}
+  m_maxThrowDistance: 20
+  m_arcHeight: 1.5
+  m_travelDuration: 1
+  m_throwCooldown: 1
+  m_trajectorySegments: 24
+  m_collisionRadius: 0.5
+  m_collisionLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_trajectoryWidth: 0.04
+  m_trajectoryColor: {r: 1, g: 0.75, b: 0.1, a: 0.9}
 --- !u!4 &8015878197354320271
 Transform:
   m_ObjectHideFlags: 0
