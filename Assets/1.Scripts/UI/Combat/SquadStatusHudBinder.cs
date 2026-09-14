@@ -3,17 +3,17 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 분대원 상태 슬롯(SquadStatus N)에 다운/사망 상태 필터와 구조 가능 시간 타이머를 반영합니다.
+/// 분대원 상태 슬롯(SquadStatus N)에 초상화, 다운/사망 상태 필터, 구조 가능 시간 타이머를 반영합니다.
 /// </summary>
 /// <remarks>
 /// 레이아웃(초상화·HP바·검정 배경 박스·필터·타이머)은 씬 계층에 미리 배치돼 있고, 이 컨트롤러는
-/// 이름으로 자식을 찾아 값(필터 표시/색, 타이머 문자열)만 갱신합니다.
+/// 이름으로 자식을 찾아 값(초상화 스프라이트, 필터 표시/색, 타이머 문자열)만 갱신합니다.
 ///
 /// 슬롯이 어떤 대원을 가리키는지는 <see cref="SquadHudSlotOrder"/>가 결정합니다. 슬롯 이름 뒤 숫자
 /// (예: "SquadStatus 1")는 분대 인덱스가 아니라 "몇 번째 팀 슬롯인가"를 뜻하며, 조작 중인 대원은
 /// PlayerStatus 쪽에서 이미 표시되므로 여기서는 빠집니다. 같은 슬롯의 HP 게이지(Gauge_HP-N)는
-/// NormalHudPlayerStatusBinder가 갱신하는데, 그쪽도 같은 규칙을 쓰므로 한 슬롯 안의 게이지·필터·
-/// 타이머가 항상 같은 대원을 가리킵니다.
+/// NormalHudPlayerStatusBinder가 갱신하는데, 그쪽도 같은 규칙을 쓰므로 한 슬롯 안의 초상화·게이지·
+/// 필터·타이머가 항상 같은 대원을 가리킵니다.
 /// </remarks>
 [DisallowMultipleComponent]
 public class SquadStatusHudBinder : MonoBehaviour
@@ -27,6 +27,7 @@ public class SquadStatusHudBinder : MonoBehaviour
         [Tooltip("몇 번째 팀 슬롯인지(1부터). 분대 인덱스가 아니라 조작 중이 아닌 대원 목록에서의 순번입니다.")]
         public int slotOrdinal = 1;
 
+        [System.NonSerialized] public Image portrait;
         [System.NonSerialized] public Image filter;
         [System.NonSerialized] public TMP_Text timer;
         [System.NonSerialized] public bool resolved;
@@ -34,6 +35,7 @@ public class SquadStatusHudBinder : MonoBehaviour
 
     private const string FilterName = "Status_Filter";
     private const string TimerName = "ReviveTimer";
+    private const string PortraitName = "PlayerbleProfile";
     private const string SlotPrefix = "SquadStatus";
 
     [Header("Squad")]
@@ -152,7 +154,14 @@ public class SquadStatusHudBinder : MonoBehaviour
             slot.timer = timer.GetComponent<TMP_Text>();
         }
 
-        slot.resolved = slot.filter != null || slot.timer != null;
+        // 초상화는 PlayerStatus 쪽과 이름이 같아서(PlayerbleProfile) 반드시 슬롯 루트 안에서만 찾습니다.
+        Transform portrait = slot.root.Find(PortraitName);
+        if (portrait != null)
+        {
+            slot.portrait = portrait.GetComponent<Image>();
+        }
+
+        slot.resolved = slot.portrait != null || slot.filter != null || slot.timer != null;
     }
 
     private void UpdateSlots()
@@ -184,9 +193,26 @@ public class SquadStatusHudBinder : MonoBehaviour
                 && member.IsAlive
                 && (member.IsDown || member.IsHealthDowned);
 
+            ApplyPortrait(slot.portrait, member);
             ApplyFilter(slot.filter, isDead, isDowned);
             ApplyTimer(slot.timer, isDowned, member);
         }
+    }
+
+    private static void ApplyPortrait(Image portrait, PlayerbleUnitData member)
+    {
+        if (portrait == null)
+        {
+            return;
+        }
+
+        Sprite sprite = member != null ? member.HudPortrait : null;
+        if (portrait.sprite != sprite)
+        {
+            portrait.sprite = sprite;
+        }
+
+        SetActive(portrait.gameObject, sprite != null);
     }
 
     private void ApplyFilter(Image filter, bool isDead, bool isDowned)
