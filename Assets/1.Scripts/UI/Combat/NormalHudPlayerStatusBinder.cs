@@ -330,30 +330,8 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             RefreshPlayerDataSources();
         }
 
-        if (m_playerDataSources == null)
-        {
-            return null;
-        }
-
-        for (int i = 0; i < m_playerDataSources.Length; i++)
-        {
-            PlayerbleUnitData data = m_playerDataSources[i];
-            if (data != null && data.IsPlayerSquadMember)
-            {
-                return data;
-            }
-        }
-
-        for (int i = 0; i < m_playerDataSources.Length; i++)
-        {
-            PlayerbleUnitData data = m_playerDataSources[i];
-            if (data != null && data.CanDeploy)
-            {
-                return data;
-            }
-        }
-
-        return null;
+        // 조작 대상 판정은 SquadStatusHudBinder와 공유합니다. 두 벌로 두면 슬롯 주인이 어긋납니다.
+        return SquadHudSlotOrder.ResolveControlled(m_playerDataSources);
     }
 
     private void SetPlayerSquadMemberData(PlayerbleUnitData nextData)
@@ -456,36 +434,9 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
     private void BuildSortedTeamData()
     {
-        m_sortedTeamData.Clear();
-
-        if (m_playerDataSources == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < m_playerDataSources.Length; i++)
-        {
-            PlayerbleUnitData data = m_playerDataSources[i];
-            if (data == null || data == m_playerSquadMemberData)
-            {
-                continue;
-            }
-
-            m_sortedTeamData.Add(data);
-        }
-
-        m_sortedTeamData.Sort(CompareTeamData);
-    }
-
-    private static int CompareTeamData(PlayerbleUnitData left, PlayerbleUnitData right)
-    {
-        int reliabilityCompare = left.Reliability.CompareTo(right.Reliability);
-        if (reliabilityCompare != 0)
-        {
-            return reliabilityCompare;
-        }
-
-        return string.CompareOrdinal(left.RuntimeId, right.RuntimeId);
+        // 팀 슬롯 순서도 SquadStatusHudBinder와 같은 규칙을 씁니다. 그래야 Gauge_HP-N과
+        // 같은 슬롯의 Status_Filter / ReviveTimer가 같은 대원을 가리킵니다.
+        SquadHudSlotOrder.BuildTeammateOrder(m_playerDataSources, m_playerSquadMemberData, m_sortedTeamData);
     }
 
     private static void UpdateRawImageGauge(
