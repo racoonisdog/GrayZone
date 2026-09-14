@@ -7,6 +7,8 @@ using UnityEngine.Rendering;
 public class ExplosiveProjectileShooter : MonoBehaviour
 {
     private const int MaxTrajectoryPointCount = 65;
+    private const int ExplosionPreviewSegmentCount = 48;
+    private const float ExplosionPreviewHeightOffset = 0.03f;
 
     [Tooltip("투척할 ExplosiveProjectile Prefab입니다.")]
     [SerializeField] private ExplosiveProjectile m_projectilePrefab;
@@ -60,6 +62,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private AimController m_aimController;
     private Collider m_sourceCollider;
     private LineRenderer m_trajectoryLine;
+    private LineRenderer m_explosionPreviewLine;
     private Material m_runtimeLineMaterial;
     private bool m_wasThrowModeActive;
     private bool m_throwWasHeld;
@@ -68,6 +71,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private bool m_hasPlannedCollision;
     private float m_plannedCollisionTime;
     private Vector3 m_plannedCollisionPosition;
+    private bool m_hasExplosionPreview;
+    private Vector3 m_explosionPreviewCenter;
     private int m_trajectoryPointCount;
     private float m_nextThrowReadyTime;
 
@@ -189,6 +194,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         {
             m_trajectoryLine.SetPosition(i, m_trajectoryPoints[i]);
         }
+
+        DrawExplosionPreview();
     }
 
     private void BuildTrajectoryPlan()
@@ -199,6 +206,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_hasPlannedCollision = false;
         m_plannedCollisionTime = 0.0f;
         m_plannedCollisionPosition = m_throwStart;
+        m_hasExplosionPreview = false;
+        m_explosionPreviewCenter = m_throwStart;
 
         Vector3 previous = m_throwStart;
         float previousTime = 0.0f;
@@ -208,6 +217,12 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         float fuseTime = m_projectilePrefab != null
             ? Mathf.Max(0.0f, m_projectilePrefab.FuseTime)
             : float.PositiveInfinity;
+
+        if (fuseTime <= 0.0f)
+        {
+            m_hasExplosionPreview = true;
+            return;
+        }
 
         for (int i = 1; i <= segmentCount; i++)
         {
@@ -262,6 +277,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                     m_initialVelocity,
                     m_downwardAcceleration,
                     m_plannedCollisionTime);
+                m_hasExplosionPreview = true;
+                m_explosionPreviewCenter = m_plannedCollisionPosition;
 
                 if ((m_plannedCollisionPosition - previous).sqrMagnitude > 0.000001f)
                 {
@@ -276,7 +293,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_trajectoryPointCount++;
             accumulatedDistance += segmentDistance;
 
-            if (reachedPreviewLimit || currentTime >= fuseTime)
+            if (currentTime >= fuseTime)
+            {
+                m_hasExplosionPreview = true;
+                m_explosionPreviewCenter = next;
+                return;
+            }
+
+            if (reachedPreviewLimit)
             {
                 return;
             }
@@ -381,14 +405,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         lineObject.transform.SetParent(transform, false);
 
         m_trajectoryLine = lineObject.AddComponent<LineRenderer>();
-        m_trajectoryLine.useWorldSpace = true;
-        m_trajectoryLine.loop = false;
-        m_trajectoryLine.widthMultiplier = m_trajectoryWidth;
-        m_trajectoryLine.startColor = m_trajectoryColor;
-        m_trajectoryLine.endColor = m_trajectoryColor;
-        m_trajectoryLine.shadowCastingMode = ShadowCastingMode.Off;
-        m_trajectoryLine.receiveShadows = false;
-        m_trajectoryLine.enabled = false;
+        ConfigurePreviewLine(m_trajectoryLine, false);
+
+        GameObject explosionPreviewObject = new GameObject("ExplosionRadiusPreview");
+        explosionPreviewObject.transform.SetParent(transform, false);
+
+        m_explosionPreviewLine = explosionPreviewObject.AddComponent<LineRenderer>();
+        ConfigurePreviewLine(m_explosionPreviewLine, true);
 
         Shader lineShader = Shader.Find("Universal Render Pipeline/Unlit");
         if (lineShader != null)
@@ -398,7 +421,49 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                 hideFlags = HideFlags.HideAndDontSave
             };
             m_runtimeLineMaterial.SetColor("_BaseColor", m_trajectoryColor);
-            m_trajectoryLine.material = m_runtimeLineMaterial;
+            m_trajectoryLine.sharedMaterial = m_runtimeLineMaterial;
+            m_explosionPreviewLine.sharedMaterial = m_runtimeLineMaterial;
+        }
+    }
+
+    private void ConfigurePreviewLine(LineRenderer lineRenderer, bool loop)
+    {
+        lineRenderer.useWorldSpace = true;
+        lineRenderer.loop = loop;
+        lineRenderer.widthMultiplier = m_trajectoryWidth;
+        lineRenderer.startColor = m_trajectoryColor;
+        lineRenderer.endColor = m_trajectoryColor;
+        lineRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        lineRenderer.receiveShadows = false;
+        lineRenderer.enabled = false;
+    }
+
+    private void DrawExplosionPreview()
+    {
+        if (!m_hasExplosionPreview || m_projectilePrefab == null)
+        {
+            m_explosionPreviewLine.enabled = false;
+            m_explosionPreviewLine.positionCount = 0;
+            return;
+        }
+
+        float radius = Mathf.Max(0.0f, m_projectilePrefab.ExplosionRadius);
+        if (radius <= 0.0f)
+        {
+            m_explosionPreviewLine.enabled = false;
+            m_explosionPreviewLine.positionCount = 0;
+            return;
+        }
+
+        Vector3 center = m_explosionPreviewCenter + Vector3.up * ExplosionPreviewHeightOffset;
+        m_explosionPreviewLine.enabled = true;
+        m_explosionPreviewLine.positionCount = ExplosionPreviewSegmentCount;
+
+        for (int i = 0; i < ExplosionPreviewSegmentCount; i++)
+        {
+            float angle = 2.0f * Mathf.PI * i / ExplosionPreviewSegmentCount;
+            Vector3 offset = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle)) * radius;
+            m_explosionPreviewLine.SetPosition(i, center + offset);
         }
     }
 
@@ -411,5 +476,11 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
         m_trajectoryLine.enabled = false;
         m_trajectoryLine.positionCount = 0;
+
+        if (m_explosionPreviewLine != null)
+        {
+            m_explosionPreviewLine.enabled = false;
+            m_explosionPreviewLine.positionCount = 0;
+        }
     }
 }
