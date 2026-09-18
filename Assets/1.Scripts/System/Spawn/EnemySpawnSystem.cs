@@ -31,6 +31,10 @@ public sealed class EnemySpawnSystem : MonoBehaviour
     [Tooltip("새 자식과 일괄 적용 대상의 신규 배치 생산 허용 상태입니다. 끄면 기존 활성 적은 유지됩니다.")]
     [SerializeField] private bool m_templateSpawnEnabled = true;
 
+    [Tooltip("자식 스포너가 한 프레임에 미리 생성할 적 프리팹 수입니다.")]
+    [Min(1)]
+    [SerializeField] private int m_templatePoolPrewarmCountPerFrame = 2;
+
     [EndFoldout]
     [Foldout("Debug")]
     [Tooltip("선택된 매니저의 모든 자식 스폰 범위를 Scene View에 표시합니다. 에디터 진단용이며 런타임 생성 규칙에는 영향을 주지 않습니다.")]
@@ -45,6 +49,7 @@ public sealed class EnemySpawnSystem : MonoBehaviour
             Mathf.Max(0.0f, m_templateSpawnAreaSize.x),
             Mathf.Max(0.0f, m_templateSpawnAreaSize.y));
         m_templateMinimumSpawnDistance = Mathf.Max(0.0f, m_templateMinimumSpawnDistance);
+        m_templatePoolPrewarmCountPerFrame = Mathf.Max(1, m_templatePoolPrewarmCountPerFrame);
     }
 
     /// <summary>템플릿 값을 적용한 자식 스폰 포인트를 생성합니다.</summary>
@@ -138,7 +143,8 @@ public sealed class EnemySpawnSystem : MonoBehaviour
             m_templateSpawnEntries,
             m_templateSpawnAreaSize,
             m_templateMinimumSpawnDistance,
-            m_templateSpawnEnabled);
+            m_templateSpawnEnabled,
+            m_templatePoolPrewarmCountPerFrame);
     }
 
     /// <summary>선택된 매니저의 자식 스폰 범위를 Scene View에 한꺼번에 표시합니다.</summary>
@@ -160,10 +166,22 @@ public sealed class EnemySpawnSystem : MonoBehaviour
                 continue;
             }
 
+            // 지점이 스스로 그리는 것과 같은 방향으로 그립니다. 여기만 월드 정렬로 두면
+            // 시스템을 선택했을 때와 지점을 선택했을 때 박스가 서로 다르게 보입니다.
             Vector2 areaSize = point.SpawnAreaSize;
+            Matrix4x4 previous = Gizmos.matrix;
+            Gizmos.matrix = Matrix4x4.TRS(point.transform.position, point.AreaRotation, Vector3.one);
+
             Gizmos.DrawWireCube(
-                point.transform.position,
+                Vector3.zero,
                 new Vector3(areaSize.x, 0.05f, areaSize.y));
+
+            if (point.ForwardGizmoLength > 0.0f)
+            {
+                Gizmos.DrawLine(Vector3.zero, new Vector3(0.0f, 0.0f, point.ForwardGizmoLength));
+            }
+
+            Gizmos.matrix = previous;
         }
     }
 }

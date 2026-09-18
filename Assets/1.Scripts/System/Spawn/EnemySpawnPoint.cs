@@ -81,6 +81,9 @@ public class EnemySpawnPoint : MonoBehaviour
         /// <summary>Inspector 목록에서 제거됐거나 프리팹이 바뀌어 신규 생산을 중단한 옛 런타임인지 여부입니다.</summary>
         public bool IsRetired;
 
+        /// <summary>현재 목표 풀 용량의 사전 생성이 끝나 생산 시작 지연시간을 예약했는지 여부입니다.</summary>
+        public bool IsPrewarmComplete;
+
         /// <summary>프리팹 누락 경고를 반복 출력하지 않기 위한 상태입니다.</summary>
         public bool MissingPrefabWarningLogged;
     }
@@ -92,8 +95,19 @@ public class EnemySpawnPoint : MonoBehaviour
     [SerializeField] private List<EnemySpawnEntrySO> m_spawnEntries = new List<EnemySpawnEntrySO>();
 
     [Header("Spawn Area")]
-    [Tooltip("스폰 지점의 월드 X/Z 좌표를 중심으로 적을 무작위 생성할 가로·세로 범위(m)입니다. Y 좌표는 이 오브젝트 위치를 그대로 사용합니다.")]
+    [Tooltip("스폰 지점을 중심으로 적을 무작위 생성할 가로·세로 범위(m)입니다. 이 오브젝트의 Y축 회전을 따라 함께 돌아갑니다. Y 좌표는 이 오브젝트 위치를 그대로 사용합니다.")]
     [SerializeField] private Vector2 m_spawnAreaSize = new Vector2(10.0f, 10.0f);
+
+    [Tooltip("Scene View에서 정면(로컬 +Z)을 표시하는 선의 길이(m)입니다. 표시 전용이라 스폰 동작에는 영향이 없습니다. 0이면 그리지 않습니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_forwardGizmoLength = 3.0f;
+
+    [Tooltip("켜면 생성 위치를 가장 가까운 NavMesh 위로 붙입니다. 끄면 이 오브젝트의 Y 좌표를 그대로 씁니다. 경사면이나 터레인 위에 지점을 놓을 때 켭니다.")]
+    [SerializeField] private bool m_snapToGround = true;
+
+    [Tooltip("지면 스냅에서 NavMesh를 찾을 최대 거리(m)입니다. 이 안에서 못 찾으면 붙이지 않고 원래 높이로 생성합니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_groundSnapMaxDistance = 5.0f;
 
     [Tooltip("모든 생산 항목을 통틀어 직전 성공 스폰 위치의 X/Z 반경 중 다음 적을 만들지 않을 최소 거리(m)입니다.")]
     [Min(0.0f)]
@@ -103,17 +117,40 @@ public class EnemySpawnPoint : MonoBehaviour
     [Tooltip("켜면 각 SO의 생산 주기에 맞춰 풀 적을 활성화합니다. 끄면 앞으로의 배치 생산만 멈추며 이미 활성화된 적은 제거하지 않습니다.")]
     [SerializeField] private bool m_spawnEnabled = true;
 
+    [Tooltip("한 프레임에 이 스포너가 미리 생성할 적 프리팹 수입니다. 큰 풀을 여러 프레임에 나눠 준비해 시작 프레임의 부하를 줄입니다.")]
+    [Min(1)]
+    [SerializeField] private int m_poolPrewarmCountPerFrame = 2;
+
     /// <summary>이 지점이 운용할 프리팹별 생산 설정 목록입니다.</summary>
     public IReadOnlyList<EnemySpawnEntrySO> SpawnEntries => m_spawnEntries;
 
-    /// <summary>월드 X/Z 평면에서 사용할 무작위 생성 범위입니다.</summary>
+    /// <summary>생성 범위의 가로·세로입니다. <see cref="AreaRotation"/>이 도는 평면 위에서 해석합니다.</summary>
     public Vector2 SpawnAreaSize => m_spawnAreaSize;
+
+    /// <summary>Scene View에서 정면을 표시하는 선의 길이입니다.</summary>
+    public float ForwardGizmoLength => m_forwardGizmoLength;
+
+    /// <summary>생성 위치를 NavMesh 위로 붙일지 여부입니다.</summary>
+    public bool SnapToGround => m_snapToGround;
+
+    /// <summary>
+    /// 생성 범위를 회전시킬 때 쓰는 Y축(yaw) 회전입니다.
+    /// </summary>
+    /// <remarks>
+    /// 전체 회전이 아니라 Y축만 씁니다. 스폰 범위는 지면에 눕는 사각형이라, 지점을 경사면에 놓거나
+    /// 부모를 따라 기울어졌을 때 전체 회전을 쓰면 범위가 같이 기울어 적이 공중이나 지면 아래에 생깁니다.
+    /// 기즈모와 실제 생성 위치가 같은 값을 써야 보이는 것과 결과가 어긋나지 않으므로 여기서 한 번만 정합니다.
+    /// </remarks>
+    public Quaternion AreaRotation => Quaternion.Euler(0.0f, transform.eulerAngles.y, 0.0f);
 
     /// <summary>직전 성공 위치와 다음 위치 사이에 보장할 X/Z 최소 거리입니다.</summary>
     public float MinimumSpawnDistance => m_minimumSpawnDistance;
 
     /// <summary>신규 배치 생산을 허용하는지 여부입니다.</summary>
     public bool IsSpawnEnabled => m_spawnEnabled;
+
+    /// <summary>한 프레임에 미리 생성하는 최대 풀 항목 수입니다.</summary>
+    public int PoolPrewarmCountPerFrame => m_poolPrewarmCountPerFrame;
 
     /// <summary>모든 SO 풀에서 현재 수용량을 점유하는 적 수입니다. 래그돌 유지 중인 시체도 반환 전까지 포함합니다.</summary>
     public int ActiveEnemyCount => GetActiveEnemyCount();
@@ -141,6 +178,9 @@ public class EnemySpawnPoint : MonoBehaviour
 
     /// <summary>직전 성공 스폰 위치가 있는지 여부입니다.</summary>
     private bool m_hasLastSpawnPosition;
+
+    /// <summary>지면 스냅 실패 경고를 이미 남겼는지 여부입니다. 매 생성마다 같은 경고가 쌓이는 것을 막습니다.</summary>
+    private bool m_hasWarnedGroundSnapFailure;
 
     /// <summary>다음 후보 위치에서 최소 거리 검사를 할 직전 성공 스폰 위치입니다.</summary>
     private Vector3 m_lastSpawnPosition;
@@ -188,6 +228,8 @@ public class EnemySpawnPoint : MonoBehaviour
             SynchronizeSpawnRuntimes();
         }
 
+        int remainingPrewarmCount = Mathf.Max(1, m_poolPrewarmCountPerFrame);
+
         for (int i = m_spawnRuntimes.Count - 1; i >= 0; i--)
         {
             SpawnRuntime runtime = m_spawnRuntimes[i];
@@ -204,12 +246,43 @@ public class EnemySpawnPoint : MonoBehaviour
                 continue;
             }
 
-            if (!m_spawnEnabled || runtime.Entry == null)
+            if (runtime.Entry == null)
             {
                 continue;
             }
 
-            EnsurePoolCapacity(runtime, runtime.Entry.MaxCapacity);
+            int desiredCapacity = Mathf.Max(0, runtime.Entry.MaxCapacity);
+            if (runtime.PoolItems.Count < desiredCapacity)
+            {
+                runtime.IsPrewarmComplete = false;
+                EnsurePoolCapacity(runtime, desiredCapacity, ref remainingPrewarmCount);
+            }
+
+            if (runtime.PoolItems.Count < desiredCapacity)
+            {
+                runtime.IsPrewarmComplete = false;
+            }
+        }
+
+        if (!AreAllSpawnRuntimesPrewarmed())
+        {
+            return;
+        }
+
+        ScheduleProductionAfterPrewarm();
+
+        if (!m_spawnEnabled)
+        {
+            return;
+        }
+
+        for (int i = m_spawnRuntimes.Count - 1; i >= 0; i--)
+        {
+            SpawnRuntime runtime = m_spawnRuntimes[i];
+            if (runtime.IsRetired || runtime.Entry == null || !runtime.IsPrewarmComplete)
+            {
+                continue;
+            }
 
             if (Time.time < runtime.NextProductionTime)
             {
@@ -217,7 +290,45 @@ public class EnemySpawnPoint : MonoBehaviour
             }
 
             ProduceBatch(runtime);
-            runtime.NextProductionTime = Time.time + runtime.Entry.ProductionInterval;
+
+            // 무작위 주기 설정이면 배치마다 다시 뽑아야 간격이 실제로 흔들립니다.
+            runtime.NextProductionTime = Time.time + runtime.Entry.SampleProductionInterval();
+        }
+    }
+
+    /// <summary>프리팹이 유효한 모든 현재 생산 항목의 풀 준비가 끝났는지 확인합니다.</summary>
+    private bool AreAllSpawnRuntimesPrewarmed()
+    {
+        for (int i = 0; i < m_spawnRuntimes.Count; i++)
+        {
+            SpawnRuntime runtime = m_spawnRuntimes[i];
+            if (runtime.IsRetired || runtime.Entry == null || runtime.Prefab == null)
+            {
+                continue;
+            }
+
+            if (runtime.PoolItems.Count < Mathf.Max(0, runtime.Entry.MaxCapacity))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>전체 풀 준비가 끝난 한 시점을 기준으로 각 SO의 최초 생산 지연시간을 시작합니다.</summary>
+    private void ScheduleProductionAfterPrewarm()
+    {
+        for (int i = 0; i < m_spawnRuntimes.Count; i++)
+        {
+            SpawnRuntime runtime = m_spawnRuntimes[i];
+            if (runtime.IsRetired || runtime.Entry == null || runtime.Prefab == null || runtime.IsPrewarmComplete)
+            {
+                continue;
+            }
+
+            runtime.IsPrewarmComplete = true;
+            runtime.NextProductionTime = Time.time + runtime.Entry.InitialSpawnDelay;
         }
     }
 
@@ -249,6 +360,7 @@ public class EnemySpawnPoint : MonoBehaviour
             Mathf.Max(0.0f, m_spawnAreaSize.x),
             Mathf.Max(0.0f, m_spawnAreaSize.y));
         m_minimumSpawnDistance = Mathf.Max(0.0f, m_minimumSpawnDistance);
+        m_poolPrewarmCountPerFrame = Mathf.Max(1, m_poolPrewarmCountPerFrame);
 
         RefreshEntrySubscriptions();
         m_runtimeSynchronizationPending = true;
@@ -260,7 +372,8 @@ public class EnemySpawnPoint : MonoBehaviour
         IList<EnemySpawnEntrySO> spawnEntries,
         Vector2 spawnAreaSize,
         float minimumSpawnDistance,
-        bool spawnEnabled)
+        bool spawnEnabled,
+        int poolPrewarmCountPerFrame)
     {
         m_spawnEntries.Clear();
         if (spawnEntries != null)
@@ -276,6 +389,7 @@ public class EnemySpawnPoint : MonoBehaviour
             Mathf.Max(0.0f, spawnAreaSize.y));
         m_minimumSpawnDistance = Mathf.Max(0.0f, minimumSpawnDistance);
         m_spawnEnabled = spawnEnabled;
+        m_poolPrewarmCountPerFrame = Mathf.Max(1, poolPrewarmCountPerFrame);
 
         RefreshEntrySubscriptions();
         m_runtimeSynchronizationPending = true;
@@ -330,13 +444,15 @@ public class EnemySpawnPoint : MonoBehaviour
                 {
                     Entry = entry,
                     Prefab = entry.EnemyPrefab,
-                    NextProductionTime = Time.time + entry.InitialSpawnDelay,
                 };
                 m_spawnRuntimes.Add(runtime);
             }
 
             runtime.IsRetired = false;
-            EnsurePoolCapacity(runtime, entry.MaxCapacity);
+            if (runtime.PoolItems.Count < Mathf.Max(0, entry.MaxCapacity))
+            {
+                runtime.IsPrewarmComplete = false;
+            }
         }
     }
 
@@ -356,9 +472,9 @@ public class EnemySpawnPoint : MonoBehaviour
     }
 
     /// <summary>한 SO의 최대 수용량까지 비활성 풀 항목을 미리 생성합니다.</summary>
-    private void EnsurePoolCapacity(SpawnRuntime runtime, int desiredCapacity)
+    private void EnsurePoolCapacity(SpawnRuntime runtime, int desiredCapacity, ref int remainingPrewarmCount)
     {
-        if (runtime == null)
+        if (runtime == null || remainingPrewarmCount <= 0)
         {
             return;
         }
@@ -371,12 +487,14 @@ public class EnemySpawnPoint : MonoBehaviour
         }
 
         EnsurePoolRoot();
-        while (runtime.PoolItems.Count < desiredCapacity)
+        while (runtime.PoolItems.Count < desiredCapacity && remainingPrewarmCount > 0)
         {
             if (CreatePoolItem(runtime) == null)
             {
                 return;
             }
+
+            remainingPrewarmCount--;
         }
     }
 
@@ -493,7 +611,8 @@ public class EnemySpawnPoint : MonoBehaviour
 
         Transform enemyTransform = item.Enemy.transform;
         enemyTransform.SetParent(null, false);
-        enemyTransform.SetPositionAndRotation(spawnPosition, transform.rotation);
+        // 전체 회전이 아니라 Y축만 씁니다. 지점이 기울어 있어도 적은 서서 나와야 합니다.
+        enemyTransform.SetPositionAndRotation(spawnPosition, AreaRotation);
 
         // EnemyController가 먼저 사망 상태를 정리한 뒤 이 지점이 래그돌 유지 상태로 전환하도록 순서를 보장합니다.
         if (item.Health != null && item.DeathHandler != null)
@@ -675,20 +794,30 @@ public class EnemySpawnPoint : MonoBehaviour
         }
     }
 
-    /// <summary>직전 성공 스폰 위치와의 최소 거리를 만족하는 무작위 월드 X/Z 위치를 찾습니다.</summary>
+    /// <summary>직전 성공 스폰 위치와의 최소 거리를 만족하는 무작위 위치를 찾습니다.</summary>
+    /// <remarks>
+    /// 범위는 <see cref="AreaRotation"/>을 따라 돕니다. 가로/세로를 월드 X/Z에 그대로 더하지 않고
+    /// 로컬 좌표로 뽑은 뒤 회전시켜 더합니다. 스케일은 반영하지 않습니다. 지점에 스케일을 주더라도
+    /// 인스펙터에 적은 범위(m)가 그대로 유지되는 편이 예측하기 쉽기 때문입니다.
+    /// </remarks>
     private bool TryGetValidSpawnPosition(out Vector3 spawnPosition)
     {
         float halfWidth = m_spawnAreaSize.x * 0.5f;
         float halfDepth = m_spawnAreaSize.y * 0.5f;
         float minimumDistanceSqr = m_minimumSpawnDistance * m_minimumSpawnDistance;
         Vector3 origin = transform.position;
+        Quaternion areaRotation = AreaRotation;
 
         for (int i = 0; i < SpawnPositionSearchAttempts; i++)
         {
-            Vector3 candidate = new Vector3(
-                origin.x + UnityEngine.Random.Range(-halfWidth, halfWidth),
-                origin.y,
-                origin.z + UnityEngine.Random.Range(-halfDepth, halfDepth));
+            Vector3 localOffset = new Vector3(
+                UnityEngine.Random.Range(-halfWidth, halfWidth),
+                0.0f,
+                UnityEngine.Random.Range(-halfDepth, halfDepth));
+
+            Vector3 candidate = origin + (areaRotation * localOffset);
+            candidate.y = origin.y;
+            candidate = SnapCandidateToGround(candidate);
 
             if (!m_hasLastSpawnPosition)
             {
@@ -709,6 +838,42 @@ public class EnemySpawnPoint : MonoBehaviour
 
         spawnPosition = default;
         return false;
+    }
+
+    /// <summary>
+    /// 생성 후보 위치를 가장 가까운 NavMesh 위로 붙입니다.
+    /// </summary>
+    /// <param name="candidate">범위 안에서 뽑은 원래 후보 위치입니다.</param>
+    /// <returns><see cref="m_snapToGround"/>가 꺼져 있거나 NavMesh를 못 찾으면 원래 위치를 그대로 돌려줍니다.</returns>
+    /// <remarks>
+    /// 레이캐스트가 아니라 NavMesh를 기준으로 삼습니다. 여기서 만드는 적은 <see cref="NavMeshAgent"/>로 움직이므로,
+    /// 콜라이더 표면에 붙여 봐야 그 지점이 NavMesh 밖이면 에이전트가 경로를 잡지 못합니다.
+    ///
+    /// 못 찾았을 때 후보를 버리지 않고 원래 위치를 쓰는 이유는, NavMesh가 없는 씬에서 모든 시도가 실패해
+    /// 생산이 조용히 멈추는 쪽이 더 나쁘기 때문입니다. 대신 처음 한 번만 경고를 남깁니다.
+    /// </remarks>
+    private Vector3 SnapCandidateToGround(Vector3 candidate)
+    {
+        if (!m_snapToGround)
+        {
+            return candidate;
+        }
+
+        if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, m_groundSnapMaxDistance, NavMesh.AllAreas))
+        {
+            return hit.position;
+        }
+
+        if (!m_hasWarnedGroundSnapFailure)
+        {
+            m_hasWarnedGroundSnapFailure = true;
+            Debug.LogWarning(
+                $"[EnemySpawnPoint] '{name}': 생성 범위 안에서 {m_groundSnapMaxDistance}m 내 NavMesh를 찾지 못했습니다. " +
+                "지면 스냅 없이 이 지점의 Y 좌표로 생성합니다. NavMesh 베이크 여부나 스냅 거리를 확인하세요.",
+                this);
+        }
+
+        return candidate;
     }
 
     /// <summary>비활성 풀 적을 정리해 둘 런타임 부모를 준비합니다.</summary>
@@ -768,7 +933,7 @@ public class EnemySpawnPoint : MonoBehaviour
         for (int i = 0; i < m_spawnRuntimes.Count; i++)
         {
             SpawnRuntime runtime = m_spawnRuntimes[i];
-            if (!runtime.IsRetired && runtime.Entry != null)
+            if (!runtime.IsRetired && runtime.Entry != null && runtime.IsPrewarmComplete)
             {
                 runtime.NextProductionTime = Time.time + runtime.Entry.InitialSpawnDelay;
             }
@@ -817,12 +982,27 @@ public class EnemySpawnPoint : MonoBehaviour
         }
     }
 
-    /// <summary>선택된 스폰 지점의 월드 X/Z 생성 범위를 Scene View에 표시합니다.</summary>
+    /// <summary>선택된 스폰 지점의 생성 범위와 정면을 Scene View에 표시합니다.</summary>
+    /// <remarks>
+    /// <see cref="AreaRotation"/>을 행렬로 걸어 실제 생성 범위와 같은 방향으로 그립니다.
+    /// 정면 선은 로컬 +Z로, 적이 어느 쪽을 보고 생성되는지 확인하는 용도입니다.
+    /// </remarks>
     protected virtual void OnDrawGizmosSelected()
     {
+        Matrix4x4 previous = Gizmos.matrix;
+        Gizmos.matrix = Matrix4x4.TRS(transform.position, AreaRotation, Vector3.one);
+
         Gizmos.color = new Color(0.2f, 0.9f, 1.0f, 0.8f);
         Gizmos.DrawWireCube(
-            transform.position,
+            Vector3.zero,
             new Vector3(m_spawnAreaSize.x, 0.05f, m_spawnAreaSize.y));
+
+        if (m_forwardGizmoLength > 0.0f)
+        {
+            Gizmos.color = new Color(1.0f, 0.45f, 0.1f, 0.9f);
+            Gizmos.DrawLine(Vector3.zero, new Vector3(0.0f, 0.0f, m_forwardGizmoLength));
+        }
+
+        Gizmos.matrix = previous;
     }
 }
