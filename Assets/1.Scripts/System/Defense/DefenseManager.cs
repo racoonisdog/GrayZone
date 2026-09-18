@@ -1,3 +1,4 @@
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -9,7 +10,7 @@ using UnityEngine;
 /// <see cref="EnemySpawnPoint"/>와 <see cref="EnemySpawnEntrySO"/>가 소유합니다.
 /// </remarks>
 [DisallowMultipleComponent]
-public sealed class DefenseRoundManager : MonoBehaviour
+public sealed class DefenseManager : MonoBehaviour
 {
     [Header("Defense Round")]
     [Tooltip("Defense 게임을 시작한 뒤 스포너를 활성화해 둘 라운드 시간(초)입니다.")]
@@ -22,6 +23,13 @@ public sealed class DefenseRoundManager : MonoBehaviour
 
     [Tooltip("라운드 시작/휴식 전환 때 켜고 끌 EnemySpawnPoint 목록입니다. 비어 있는 항목은 무시합니다.")]
     [SerializeField] private List<EnemySpawnPoint> m_spawnPoints = new List<EnemySpawnPoint>();
+
+    /// <summary>Defense 게임이 시작될 때 발생합니다. 튜토리얼 안내처럼 시작 시점에 붙는 UI가 구독합니다.</summary>
+    /// <remarks>
+    /// <see cref="StartDefenseGame"/>를 다시 부르면 재시작으로 보고 매번 발생합니다.
+    /// 구독자가 중복 표시를 원하지 않으면 자기 쪽에서 한 번만 처리하도록 판단합니다.
+    /// </remarks>
+    public event Action OnDefenseStarted;
 
     /// <summary>게임이 시작되어 라운드 매니저가 타이머를 갱신 중인지 여부입니다.</summary>
     private bool m_isGameStarted;
@@ -94,6 +102,7 @@ public sealed class DefenseRoundManager : MonoBehaviour
     {
         m_isGameStarted = true;
         BeginRound();
+        OnDefenseStarted?.Invoke();
     }
 
     /// <summary>Defense 게임을 중지하고 이 매니저가 제어한 스포너를 끕니다.</summary>
