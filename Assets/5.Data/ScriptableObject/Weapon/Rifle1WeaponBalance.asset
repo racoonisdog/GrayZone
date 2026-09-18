@@ -12,16 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 495c9ece0bf94cb5a87a3b0bf6a94479, type: 3}
   m_Name: Rifle1WeaponBalance
   m_EditorClassIdentifier: Assembly-CSharp::GunBalanceSO
-  Gun_m_maxBullet: 30
-  Gun_m_shootDelay: 0.12
+  Gun_m_maxBullet: 45
+  Gun_m_shootDelay: 0.08
   Gun_m_reloadTime: 1.3335
-  Gun_m_hitscanDamage: 1
+  Gun_m_hitscanDamage: 3
   Gun_m_allowHeadshot: 1
   Gun_m_headshotDamageMultiplier: 2
   Gun_m_hitscanRange: 100
   Gun_m_knockbackImpulse: 0
   Gun_m_hipfireMinSpread: 1
   Gun_m_hipfireMaxSpread: 3
+  Gun_m_airborneExtraSpread: 2
   Gun_m_hipfireMinSpreadShotCount: 0
   Gun_m_hipfireSpreadIncreasePerShot: 0.25
   Gun_m_hipfireSpreadRecoveryPerSecond: 8

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: EnemyBalance
   m_EditorClassIdentifier: Assembly-CSharp::EnemyBalanceSO
   m_enemyId: enemy.basic
-  m_maxHp: 30
+  m_maxHp: 10
   m_wanderRadius: 8
   m_wanderInterval: 3
   m_wanderSpeed: 2

@@ -36,9 +36,12 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
     {
         base.ConfigureSpawnedEnemy(enemy, entry);
 
-        if (enemy != null)
+        if (enemy != null && entry != null)
         {
-            enemy.ConfigureDefenseSpawn(m_waypoints, m_targetPosition);
+            enemy.ConfigureDefenseSpawn(
+                m_waypoints,
+                m_targetPosition,
+                entry.PrioritizeWaypointsForPlayerFirst);
         }
     }
 
