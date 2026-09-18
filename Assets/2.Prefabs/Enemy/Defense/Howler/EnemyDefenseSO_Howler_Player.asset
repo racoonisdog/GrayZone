@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: EnemyDefenseSO_Howler_Player
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawnEntrySO
   m_enemyPrefab: {fileID: 2990036820463330610, guid: eda57c1f100ad23449048090ceed8a7f, type: 3}
-  m_spawnCount: 1
-  m_productionInterval: 5
+  m_spawnCount: 8
+  m_productionInterval: 20
   m_initialSpawnDelay: 5
-  m_maxCapacity: 10
+  m_maxCapacity: 25
   m_walkSpeedMin: 3.2
   m_walkSpeedMax: 3.2
-  m_runSpeedMin: 3.2
-  m_runSpeedMax: 3.2
+  m_runSpeedMin: 4.5
+  m_runSpeedMax: 7

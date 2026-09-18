@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Placeholder_DefaultSurfaceFeedback
   m_EditorClassIdentifier: Assembly-CSharp::SurfaceFeedbackSO
   m_surfaceId: Placeholder
-  m_physicsMaterials: []
+  m_materialTypes: 
   m_impactSounds: []
-  m_decalPrefab: {fileID: 5850849655289077858, guid: 250b7e666b30cf44eb88e9d286e1b019, type: 3}
+  m_decalPrefab: {fileID: 0}
   m_decalLifetime: 20
