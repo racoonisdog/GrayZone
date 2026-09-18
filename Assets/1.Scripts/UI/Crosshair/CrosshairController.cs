@@ -795,6 +795,9 @@ public class CrosshairController : MonoBehaviour
     /// <summary>전체화면 UI 등이 조준선을 강제로 숨기고 있는지 여부입니다.</summary>
     private bool m_isSuppressed;
 
+    /// <summary>투척 모드가 기본 조준선을 숨기고 있는지 여부입니다.</summary>
+    private bool m_isThrowModeSuppressed;
+
     /// <summary>
     /// 조준선 표시 여부를 설정합니다.
     /// </summary>
@@ -830,6 +833,18 @@ public class CrosshairController : MonoBehaviour
         ApplyRootVisibility();
     }
 
+    /// <summary>투척 모드 전용 조준선으로 교체하는 동안 기본 조준선을 숨깁니다.</summary>
+    public void SetThrowModeSuppressed(bool suppressed)
+    {
+        if (m_isThrowModeSuppressed == suppressed)
+        {
+            return;
+        }
+
+        m_isThrowModeSuppressed = suppressed;
+        ApplyRootVisibility();
+    }
+
     /// <summary>표시 요청과 억제 상태를 합쳐 루트 요소에 반영합니다.</summary>
     private void ApplyRootVisibility()
     {
@@ -838,7 +853,7 @@ public class CrosshairController : MonoBehaviour
             return;
         }
 
-        bool visible = m_requestedVisible && !m_isSuppressed;
+        bool visible = m_requestedVisible && !m_isSuppressed && !m_isThrowModeSuppressed;
         m_rootElement.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
@@ -1096,6 +1111,9 @@ public class CrosshairController : MonoBehaviour
         m_debugSpreadSource = spreadSource;
         m_debugFovSource = fovSource;
     }
+
+    /// <summary>무기 탄퍼짐을 조준선 간격에 반영하고 있는지 여부입니다.</summary>
+    public bool SpreadAccuracyEnabled => m_useSpreadAccuracy;
 
     /// <summary>
     /// 탄퍼짐 정확도 표시 토글을 런타임에 바꿉니다.

@@ -10,8 +10,136 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private const int ExplosionPreviewSegmentCount = 48;
     private const float ExplosionPreviewHeightOffset = 0.03f;
 
+    [System.Serializable]
+    private sealed class CrosshairPreset
+    {
+        [Tooltip("무기 탄퍼짐에 따라 조준선 간격을 변경할지 여부입니다.")]
+        [SerializeField] private bool m_useSpreadAccuracy;
+
+        [Tooltip("중앙 표시 형태입니다.")]
+        [SerializeField] private CrosshairController.MainShape m_mainShape = CrosshairController.MainShape.Ring;
+
+        [Tooltip("중앙점 크기입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_mainSizePixels = 3.0f;
+
+        [Tooltip("중앙 링 지름입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_mainRingSizePixels = 14.0f;
+
+        [Tooltip("중앙 링 두께입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_mainRingThicknessPixels = 2.0f;
+
+        [Tooltip("중앙 표시 색상입니다.")]
+        [SerializeField] private Color m_mainColor = new Color(1.0f, 1.0f, 1.0f, 1.0f);
+
+        [Tooltip("중앙 표시 외곽선 두께입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_mainStrokeThicknessPixels = 1.0f;
+
+        [Tooltip("중앙 표시 외곽선 색상입니다.")]
+        [SerializeField] private Color m_mainStrokeColor = Color.black;
+
+        [Tooltip("보조 표시 형태입니다.")]
+        [SerializeField] private CrosshairController.SubShape m_subShape = CrosshairController.SubShape.RoundedCross;
+
+        [Tooltip("중앙과 보조 표시 사이의 간격입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_centerSpacePixels = 12.0f;
+
+        [Tooltip("보조 점 크기입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_subSizePixels = 2.0f;
+
+        [Tooltip("보조 십자선 길이입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_subWidthPixels = 7.0f;
+
+        [Tooltip("보조 십자선 두께입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_subThicknessPixels = 2.0f;
+
+        [Tooltip("보조 링 지름입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_subRingSizePixels = 20.0f;
+
+        [Tooltip("보조 링 두께입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_subRingThicknessPixels = 2.0f;
+
+        [Tooltip("보조 표시 색상입니다.")]
+        [SerializeField] private Color m_subColor = new Color(1.0f, 1.0f, 1.0f, 1.0f);
+
+        [Tooltip("보조 표시 외곽선 두께입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_subStrokeThicknessPixels = 1.0f;
+
+        [Tooltip("보조 표시 외곽선 색상입니다.")]
+        [SerializeField] private Color m_subStrokeColor = Color.black;
+
+        [Tooltip("Rounded Cross 모서리 반지름입니다.")]
+        [Min(0.0f)]
+        [SerializeField] private float m_cornerRadiusPixels = 2.0f;
+
+        public static CrosshairPreset Capture(CrosshairController crosshair)
+        {
+            return new CrosshairPreset
+            {
+                m_useSpreadAccuracy = crosshair.SpreadAccuracyEnabled,
+                m_mainShape = crosshair.CurrentMainShape,
+                m_mainSizePixels = crosshair.MainSizePixels,
+                m_mainRingSizePixels = crosshair.MainRingSizePixels,
+                m_mainRingThicknessPixels = crosshair.MainRingThicknessPixels,
+                m_mainColor = crosshair.MainColor,
+                m_mainStrokeThicknessPixels = crosshair.MainStrokeThicknessPixels,
+                m_mainStrokeColor = crosshair.MainStrokeColor,
+                m_subShape = crosshair.CurrentSubShape,
+                m_centerSpacePixels = crosshair.CenterSpacePixels,
+                m_subSizePixels = crosshair.SubSizePixels,
+                m_subWidthPixels = crosshair.SubWidthPixels,
+                m_subThicknessPixels = crosshair.SubThicknessPixels,
+                m_subRingSizePixels = crosshair.SubRingSizePixels,
+                m_subRingThicknessPixels = crosshair.SubRingThicknessPixels,
+                m_subColor = crosshair.SubColor,
+                m_subStrokeThicknessPixels = crosshair.SubStrokeThicknessPixels,
+                m_subStrokeColor = crosshair.SubStrokeColor,
+                m_cornerRadiusPixels = crosshair.CornerRadiusPixels,
+            };
+        }
+
+        public void Apply(CrosshairController crosshair)
+        {
+            crosshair.SetSpreadAccuracyEnabled(m_useSpreadAccuracy);
+            crosshair.CurrentMainShape = m_mainShape;
+            crosshair.MainSizePixels = m_mainSizePixels;
+            crosshair.MainRingSizePixels = m_mainRingSizePixels;
+            crosshair.MainRingThicknessPixels = m_mainRingThicknessPixels;
+            crosshair.MainColor = m_mainColor;
+            crosshair.MainStrokeThicknessPixels = m_mainStrokeThicknessPixels;
+            crosshair.MainStrokeColor = m_mainStrokeColor;
+            crosshair.CurrentSubShape = m_subShape;
+            crosshair.CenterSpacePixels = m_centerSpacePixels;
+            crosshair.SubSizePixels = m_subSizePixels;
+            crosshair.SubWidthPixels = m_subWidthPixels;
+            crosshair.SubThicknessPixels = m_subThicknessPixels;
+            crosshair.SubRingSizePixels = m_subRingSizePixels;
+            crosshair.SubRingThicknessPixels = m_subRingThicknessPixels;
+            crosshair.SubColor = m_subColor;
+            crosshair.SubStrokeThicknessPixels = m_subStrokeThicknessPixels;
+            crosshair.SubStrokeColor = m_subStrokeColor;
+            crosshair.CornerRadiusPixels = m_cornerRadiusPixels;
+        }
+    }
+
     [Tooltip("투척할 ExplosiveProjectile Prefab입니다.")]
     [SerializeField] private ExplosiveProjectile m_projectilePrefab;
+
+    [Tooltip("G 투척 모드에서 수치 프리셋을 적용할 크로스헤어입니다. 비어 있으면 AimController 또는 Scene에서 자동으로 찾습니다.")]
+    [SerializeField] private CrosshairController m_defaultCrosshair;
+
+    [Tooltip("G 투척 모드에서 기존 크로스헤어에 임시로 적용할 수치 프리셋입니다.")]
+    [SerializeField] private CrosshairPreset m_throwCrosshairPreset = new CrosshairPreset();
 
     [Tooltip("플레이어 Collider 중심을 기준으로 한 로컬 투척 시작 위치입니다.")]
     [SerializeField] private Vector3 m_throwOriginOffset = new Vector3(0.0f, 0.2f, 1.0f);
@@ -28,6 +156,11 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Tooltip("포물선을 아래로 휘게 하는 스크립트 가속도입니다. Rigidbody 중력은 사용하지 않습니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_downwardAcceleration = 9.81f;
+
+    [Tooltip("포물선의 거리와 높이는 유지하면서 실제 비행 속도만 조절합니다. 1은 기본 속도, 2는 두 배 속도입니다.")]
+    [InspectorName("Throw Speed")]
+    [Min(0.01f)]
+    [SerializeField] private float m_throwSpeedMultiplier = 1.0f;
 
     [Tooltip("LineRenderer로 미리 보여 줄 포물선의 최대 누적 길이입니다. 실제 폭탄 이동은 제한하지 않습니다.")]
     [Min(0.1f)]
@@ -75,6 +208,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private Vector3 m_explosionPreviewCenter;
     private int m_trajectoryPointCount;
     private float m_nextThrowReadyTime;
+    private bool m_crosshairModeInitialized;
+    private bool m_throwCrosshairActive;
+    private CrosshairPreset m_savedCrosshairPreset;
 
     private void Awake()
     {
@@ -82,11 +218,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_aimController = GetComponent<AimController>();
         m_sourceCollider = GetComponent<Collider>();
         CreateTrajectoryLine();
+        ApplyCrosshairMode(m_input != null && m_input.ThrowMode);
     }
 
     private void LateUpdate()
     {
-        if (m_input == null || m_aimController == null || !m_input.ThrowMode)
+        bool throwModeActive = m_input != null && m_input.ThrowMode;
+        ApplyCrosshairMode(throwModeActive);
+
+        if (m_input == null || m_aimController == null || !throwModeActive)
         {
             HideTrajectory();
             m_wasThrowModeActive = false;
@@ -130,6 +270,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void OnDisable()
     {
+        ApplyCrosshairMode(false);
+        m_crosshairModeInitialized = false;
         HideTrajectory();
         m_wasThrowModeActive = false;
         m_throwWasHeld = false;
@@ -140,6 +282,50 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         if (m_runtimeLineMaterial != null)
         {
             Destroy(m_runtimeLineMaterial);
+        }
+    }
+
+    private void ApplyCrosshairMode(bool throwModeActive)
+    {
+        if (m_crosshairModeInitialized && m_throwCrosshairActive == throwModeActive)
+        {
+            return;
+        }
+
+        ResolveDefaultCrosshair();
+        if (throwModeActive)
+        {
+            if (m_defaultCrosshair != null && m_throwCrosshairPreset != null)
+            {
+                m_savedCrosshairPreset = CrosshairPreset.Capture(m_defaultCrosshair);
+                m_throwCrosshairPreset.Apply(m_defaultCrosshair);
+            }
+        }
+        else if (m_defaultCrosshair != null && m_savedCrosshairPreset != null)
+        {
+            m_savedCrosshairPreset.Apply(m_defaultCrosshair);
+            m_savedCrosshairPreset = null;
+        }
+
+        m_throwCrosshairActive = throwModeActive;
+        m_crosshairModeInitialized = true;
+    }
+
+    private void ResolveDefaultCrosshair()
+    {
+        if (m_defaultCrosshair != null)
+        {
+            return;
+        }
+
+        if (m_aimController != null)
+        {
+            m_defaultCrosshair = m_aimController.CrosshairController;
+        }
+
+        if (m_defaultCrosshair == null)
+        {
+            m_defaultCrosshair = FindFirstObjectByType<CrosshairController>(FindObjectsInactive.Include);
         }
     }
 
@@ -214,11 +400,12 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         float previewDistance = Mathf.Max(0.1f, m_trajectoryPreviewDistance);
         float targetSegmentLength = previewDistance / segmentCount;
         float accumulatedDistance = 0.0f;
-        float fuseTime = m_projectilePrefab != null
-            ? Mathf.Max(0.0f, m_projectilePrefab.FuseTime)
+        float throwSpeedMultiplier = Mathf.Max(0.01f, m_throwSpeedMultiplier);
+        float trajectoryTimeLimit = m_projectilePrefab != null
+            ? Mathf.Max(0.0f, m_projectilePrefab.FuseTime) * throwSpeedMultiplier
             : float.PositiveInfinity;
 
-        if (fuseTime <= 0.0f)
+        if (trajectoryTimeLimit <= 0.0f)
         {
             m_hasExplosionPreview = true;
             return;
@@ -234,7 +421,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                 targetSegmentLength / Mathf.Max(currentVelocity.magnitude, 1.0f),
                 0.01f,
                 0.25f);
-            float currentTime = Mathf.Min(previousTime + sampleInterval, fuseTime);
+            float currentTime = Mathf.Min(previousTime + sampleInterval, trajectoryTimeLimit);
 
             if (currentTime <= previousTime)
             {
@@ -293,7 +480,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_trajectoryPointCount++;
             accumulatedDistance += segmentDistance;
 
-            if (currentTime >= fuseTime)
+            if (currentTime >= trajectoryTimeLimit)
             {
                 m_hasExplosionPreview = true;
                 m_explosionPreviewCenter = next;
@@ -342,6 +529,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_throwStart,
             m_initialVelocity,
             m_downwardAcceleration,
+            m_throwSpeedMultiplier,
             m_hasPlannedCollision,
             m_plannedCollisionTime,
             m_plannedCollisionPosition,
