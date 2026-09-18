@@ -22,6 +22,13 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private float inputDeadZone = 0.01f;
     [SerializeField] private float animationSpeedChangeRate = 10f;
 
+    [Header("Air Movement")]
+    [SerializeField] private float groundAcceleration = 30f;
+    [SerializeField] private float groundDeceleration = 35f;
+    [Range(0f, 1f)]
+    [SerializeField] private float airControl = 0.3f;
+    [SerializeField] private float airDrag = 0.5f;
+
     [Header("Gravity")]
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float groundedStickVelocity = -2f;
@@ -39,6 +46,7 @@ public class PlayerMove : MonoBehaviour
     private float rotationVelocity;
     private float animationBlend;
     private Vector3 currentMoveDirection;
+    private Vector3 horizontalVelocity;
     private bool jumpedThisFrame;
 
 #if ENABLE_INPUT_SYSTEM
@@ -89,7 +97,7 @@ public class PlayerMove : MonoBehaviour
         {
             ClearMoveState();
             ApplyGravity();
-            MoveCharacter(Vector3.zero);
+            MoveCharacter();
             UpdateAnimator();
             return;
         }
@@ -97,10 +105,11 @@ public class PlayerMove : MonoBehaviour
         MoveInput = ReadMoveInput();
         currentMoveDirection = GetCameraRelativeMoveDirection(MoveInput);
 
-        RotateOnlyWhileMoving(currentMoveDirection);
+        UpdateHorizontalVelocity(currentMoveDirection);
+        RotateOnlyWhileMoving(horizontalVelocity);
         ApplyJump();
         ApplyGravity();
-        MoveCharacter(currentMoveDirection);
+        MoveCharacter();
         UpdateAnimator();
     }
 
@@ -134,6 +143,7 @@ public class PlayerMove : MonoBehaviour
         playerInputMove = Vector2.zero;
         MoveInput = Vector2.zero;
         currentMoveDirection = Vector3.zero;
+        horizontalVelocity = Vector3.zero;
         animationBlend = 0f;
         UpdateAnimator();
     }
@@ -158,6 +168,7 @@ public class PlayerMove : MonoBehaviour
     {
         MoveInput = Vector2.zero;
         currentMoveDirection = Vector3.zero;
+        horizontalVelocity = Vector3.zero;
         rotationVelocity = 0f;
         animationBlend = 0f;
         jumpedThisFrame = false;
@@ -237,6 +248,9 @@ public class PlayerMove : MonoBehaviour
 
     private bool IsSprintPressed()
     {
+        if (!IsGrounded)
+            return false;
+
 #if ENABLE_INPUT_SYSTEM
         if (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed)
             return true;
@@ -248,6 +262,47 @@ public class PlayerMove : MonoBehaviour
 #endif
 
         return false;
+    }
+
+    private void UpdateHorizontalVelocity(Vector3 inputDirection)
+    {
+        bool hasInput = inputDirection.sqrMagnitude > inputDeadZone * inputDeadZone;
+
+        if (IsGrounded)
+        {
+            float targetSpeed = hasInput
+                ? (IsSprintPressed() ? sprintSpeed : moveSpeed)
+                : 0f;
+            Vector3 targetVelocity = inputDirection * targetSpeed;
+            float acceleration = targetVelocity.sqrMagnitude > horizontalVelocity.sqrMagnitude
+                ? groundAcceleration
+                : groundDeceleration;
+
+            horizontalVelocity = Vector3.MoveTowards(
+                horizontalVelocity,
+                targetVelocity,
+                acceleration * Time.deltaTime
+            );
+            return;
+        }
+
+        if (hasInput && horizontalVelocity.sqrMagnitude > 0.0001f)
+        {
+            float preservedSpeed = horizontalVelocity.magnitude;
+            Vector3 targetVelocity = inputDirection * preservedSpeed;
+
+            horizontalVelocity = Vector3.MoveTowards(
+                horizontalVelocity,
+                targetVelocity,
+                groundAcceleration * airControl * Time.deltaTime
+            );
+        }
+
+        horizontalVelocity = Vector3.MoveTowards(
+            horizontalVelocity,
+            Vector3.zero,
+            airDrag * Time.deltaTime
+        );
     }
 
     private void RotateOnlyWhileMoving(Vector3 moveDirection)
@@ -306,27 +361,24 @@ public class PlayerMove : MonoBehaviour
         return false;
     }
 
-    private void MoveCharacter(Vector3 moveDirection)
+    private void MoveCharacter()
     {
-        float currentSpeed = IsSprintPressed() ? sprintSpeed : moveSpeed;
-        Vector3 horizontalMove = moveDirection * currentSpeed;
         Vector3 verticalMove = Vector3.up * verticalVelocity;
 
-        characterController.Move((horizontalMove + verticalMove) * Time.deltaTime);
+        characterController.Move((horizontalVelocity + verticalMove) * Time.deltaTime);
     }
 
     private void UpdateAnimator()
     {
         if (modelAnimator == null) return;
 
-        float currentSpeed = IsSprintPressed() ? sprintSpeed : moveSpeed;
-        float targetSpeed = HasMoveInput ? currentSpeed : 0f;
+        float targetSpeed = horizontalVelocity.magnitude;
         animationBlend = Mathf.Lerp(animationBlend, targetSpeed, Time.deltaTime * animationSpeedChangeRate);
 
         if (animationBlend < 0.01f)
             animationBlend = 0f;
 
-        float motionSpeed = HasMoveInput ? MoveInput.magnitude : 0f;
+        float motionSpeed = Mathf.Clamp01(targetSpeed / moveSpeed);
         bool isGrounded = IsGrounded;
 
         modelAnimator.SetFloat(speedAnimationId, animationBlend);

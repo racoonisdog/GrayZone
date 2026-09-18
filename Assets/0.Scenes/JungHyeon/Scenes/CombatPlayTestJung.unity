@@ -50678,6 +50678,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_isDefenseEnemy: 0
   m_defenseDisposition: 0
   m_balanceSO: {fileID: 0}
   m_feedback: {fileID: 0}
@@ -63697,6 +63698,7 @@ MonoBehaviour:
   m_currentHpText: {fileID: 1329119133}
   m_hpGaugeRawImage: {fileID: 0}
   m_hpGaugeImage: {fileID: 2058418714}
+  m_portraitImage: {fileID: 0}
   m_magCountText: {fileID: 1859333922}
   m_magAllText: {fileID: 482295621}
   m_squadManager: {fileID: 0}
@@ -76785,6 +76787,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_isDefenseEnemy: 0
   m_defenseDisposition: 0
   m_balanceSO: {fileID: 11400000, guid: 9199ae7a21bc4dc6a804e2275068cbd5, type: 2}
   m_feedback: {fileID: 0}
@@ -123816,6 +123819,7 @@ MonoBehaviour:
   m_characterId: 0
   m_displayName: Player
   m_resultPortrait: {fileID: 0}
+  m_hudPortrait: {fileID: 0}
   m_reliability: 0
   m_health: {fileID: 0}
   m_squadMember: {fileID: 0}
@@ -130464,6 +130468,8 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+  m_enableCombatRigInAir: 1
+  m_useWeaponLayerAimPoseInAir: 1
   m_handRig: {fileID: 3984459501817953471}
   m_aimRig: {fileID: 4685319685425908380}
   m_stanceBlendDuration: 0.15
@@ -159714,10 +159720,33 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExplosiveProjectileShooter
   m_projectilePrefab: {fileID: 1009443997989111266, guid: 657fbc85b4a21094b979f88498413f13, type: 3}
+  m_defaultCrosshair: {fileID: 0}
+  m_throwCrosshairPreset:
+    m_useSpreadAccuracy: 0
+    m_mainShape: 2
+    m_mainSizePixels: 3
+    m_mainRingSizePixels: 14
+    m_mainRingThicknessPixels: 2
+    m_mainColor: {r: 1, g: 1, b: 1, a: 0.27450982}
+    m_mainStrokeThicknessPixels: 1
+    m_mainStrokeColor: {r: 0, g: 0, b: 0, a: 0.27450982}
+    m_subShape: 3
+    m_centerSpacePixels: 12
+    m_subSizePixels: 2
+    m_subWidthPixels: 7
+    m_subThicknessPixels: 2
+    m_subRingSizePixels: 20
+    m_subRingThicknessPixels: 2
+    m_subColor: {r: 1, g: 1, b: 1, a: 0.27450982}
+    m_subStrokeThicknessPixels: 1
+    m_subStrokeColor: {r: 0, g: 0, b: 0, a: 0.27450982}
+    m_cornerRadiusPixels: 2
   m_throwOriginOffset: {x: 0, y: 0.2, z: 1}
-  m_maxThrowDistance: 20
+  m_referenceThrowDistance: 20
   m_arcHeight: 1.5
-  m_travelDuration: 1
+  m_downwardAcceleration: 20
+  m_throwSpeedMultiplier: 1.25
+  m_trajectoryPreviewDistance: 20
   m_throwCooldown: 1
   m_trajectorySegments: 24
   m_collisionRadius: 0.5
@@ -161045,6 +161074,7 @@ MonoBehaviour:
   m_adsMinSpread: 0
   m_adsMaxSpread: 1
   m_adsCurrentSpread: 0
+  m_airborneExtraSpread: 2
   m_adsMinSpreadShotCount: 3
   m_adsSpreadIncreasePerShot: 0.4
   m_adsSpreadRecoveryPerSecond: 8

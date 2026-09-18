@@ -14,6 +14,7 @@ public class ParabolicProjectileMover : MonoBehaviour
     private Vector3 m_start;
     private Vector3 m_initialVelocity;
     private float m_downwardAcceleration;
+    private float m_speedMultiplier;
     private bool m_hasPlannedCollision;
     private float m_plannedCollisionTime;
     private Vector3 m_plannedCollisionPosition;
@@ -53,6 +54,7 @@ public class ParabolicProjectileMover : MonoBehaviour
         Vector3 start,
         Vector3 initialVelocity,
         float downwardAcceleration,
+        float speedMultiplier,
         bool hasPlannedCollision,
         float plannedCollisionTime,
         Vector3 plannedCollisionPosition,
@@ -66,6 +68,7 @@ public class ParabolicProjectileMover : MonoBehaviour
         m_start = start;
         m_initialVelocity = initialVelocity;
         m_downwardAcceleration = Mathf.Max(0.0f, downwardAcceleration);
+        m_speedMultiplier = Mathf.Max(0.01f, speedMultiplier);
         m_hasPlannedCollision = hasPlannedCollision;
         m_plannedCollisionTime = Mathf.Max(0.0f, plannedCollisionTime);
         m_plannedCollisionPosition = plannedCollisionPosition;
@@ -92,7 +95,7 @@ public class ParabolicProjectileMover : MonoBehaviour
         }
 
         Vector3 previous = m_rigidbody.position;
-        float nextTime = m_elapsedTime + Time.fixedDeltaTime;
+        float nextTime = m_elapsedTime + Time.fixedDeltaTime * m_speedMultiplier;
         bool reachedPlannedCollision = m_hasPlannedCollision && nextTime >= m_plannedCollisionTime;
         Vector3 next = reachedPlannedCollision
             ? m_plannedCollisionPosition
