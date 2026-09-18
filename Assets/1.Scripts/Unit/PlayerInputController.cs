@@ -66,6 +66,12 @@ public class PlayerInputController : MonoBehaviour
     [Tooltip("상호작용 입력이 눌린 상태(홀드 포함)인지 여부입니다.")]
     [SerializeField] private bool m_interact;
 
+    /// <summary>튜토리얼 닫기 입력이 눌렸는지입니다. 읽는 쪽이 소비합니다.</summary>
+    private bool m_tutorialClose;
+
+    /// <summary>상호작용 입력을 손 뗄 때까지 막고 있는지입니다.</summary>
+    private bool m_suppressInteractUntilRelease;
+
     [Tooltip("인벤토리 열기 입력이 눌린 상태인지 여부입니다. 여닫기 판정은 소비 측에서 처리합니다.")]
     [SerializeField] private bool m_inventory;
 
@@ -142,8 +148,58 @@ public class PlayerInputController : MonoBehaviour
             }
 
             RefreshInteractionInputFromAction();
+
+            // 억제 중이면 키에서 손을 뗄 때까지 눌리지 않은 것으로 봅니다.
+            // 손을 뗀 시점에 억제를 스스로 풀어, 다음 입력부터 정상으로 돌아옵니다.
+            if (m_suppressInteractUntilRelease)
+            {
+                if (m_interact)
+                {
+                    return false;
+                }
+
+                m_suppressInteractUntilRelease = false;
+            }
+
             return m_interact;
         }
+    }
+
+    /// <summary>
+    /// 이번 프레임에 튜토리얼 닫기 입력이 눌렸는지 여부입니다. 한 번 읽으면 소비됩니다.
+    /// </summary>
+    /// <remarks>
+    /// 누르는 순간만 필요한 입력이라 읽을 때 지웁니다. 눌린 상태를 유지해 두면 안내를 닫은 뒤에도
+    /// 같은 값이 남아 다음 안내가 뜨자마자 닫힙니다.
+    ///
+    /// 닫기 액션이 프로젝트에 없으면 이 값은 계속 <c>false</c>입니다. 그 경우 안내는 닫히지 않으므로
+    /// 소비 측에서 다른 닫기 수단을 두어야 합니다.
+    /// </remarks>
+    public bool TutorialClosePressed
+    {
+        get
+        {
+            if (!m_isInputEnabled || !m_tutorialClose)
+            {
+                return false;
+            }
+
+            m_tutorialClose = false;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 상호작용 입력을 키에서 손을 뗄 때까지 막습니다.
+    /// </summary>
+    /// <remarks>
+    /// 튜토리얼 닫기가 상호작용과 같은 키일 때 씁니다. 막지 않으면 안내를 닫은 그 입력이 그대로
+    /// 이어져 눈앞의 대상과 상호작용해 버립니다. 시간이 아니라 "뗄 때까지"인 이유는, 얼마나 오래
+    /// 누르고 있을지 알 수 없어서입니다.
+    /// </remarks>
+    public void SuppressInteractUntilRelease()
+    {
+        m_suppressInteractUntilRelease = true;
     }
 
     /// <summary>인벤토리 입력이 눌린 상태입니다. 여닫기 전환은 소비 측에서 판정합니다.</summary>
@@ -421,6 +477,24 @@ public class PlayerInputController : MonoBehaviour
         }
 
         InteractInput(value.isPressed);
+    }
+
+    /// <summary>
+    /// 튜토리얼 닫기(TutorialClose) 입력 액션 콜백입니다.
+    /// </summary>
+    /// <param name="value">Input System에서 전달된 입력 상태입니다.</param>
+    /// <remarks>
+    /// 액션이 정의되어 있지 않으면 이 콜백은 호출되지 않습니다. 그 경우
+    /// <see cref="TutorialClosePressed"/>는 계속 <c>false</c>이고 다른 동작에 영향을 주지 않습니다.
+    /// </remarks>
+    public void OnTutorialClose(InputValue value)
+    {
+        if (!m_isInputEnabled || !value.isPressed)
+        {
+            return;
+        }
+
+        m_tutorialClose = true;
     }
 
     /// <summary>
