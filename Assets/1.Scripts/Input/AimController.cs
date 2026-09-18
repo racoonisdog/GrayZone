@@ -941,6 +941,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_hasRequiredReferences = true;
         BindConfiguredBalance();
         ApplyCombatStanceState(false, false, 0.0f);
+        SnapStanceWeights();
 
         if (m_weaponController != null)
         {
@@ -2647,7 +2648,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_hipfireTimer = 0.0f;
         SetAimState(false);
         HideHitscanBlockMarker();
-        SetRigWeight(0.0f);
+        // 재장전이 끝나면 조준 허리만 풀고, 손은 다시 총기 그립에 고정합니다.
+        SetRigWeights(0.0f, 1.0f);
         SetWeaponLayerWeight(0.0f);
         m_animator.SetBool(AnimIDShoot, false);
 
@@ -2725,7 +2727,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
                                 && m_weaponController != null
                                 && m_weaponController.IsReloading;
 
-        ForceStopAim(keepReloadAnimation);
+        ForceStopAim(keepReloadAnimation, releaseHandRig: false);
     }
 
     /// <summary>
@@ -2737,7 +2739,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     public void ReleaseCombatVisuals()
     {
-        ForceStopAim(false);
+        ForceStopAim(false, releaseHandRig: true);
     }
 
     /// <summary>
@@ -2765,15 +2767,20 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>
     /// 조준을 강제로 해제합니다.
     /// </summary>
-    /// <param name="keepReloadAnimation">true이면 재장전 상체 애니메이션을 위해 무기 레이어 weight를 유지합니다.</param>
-    private void ForceStopAim(bool keepReloadAnimation)
+    /// <param name="keepReloadAnimation">true이면 재장전 상체 애니메이션과 Aim Rig를 유지합니다.</param>
+    /// <param name="releaseHandRig">true이면 다운/사망 전신 모션을 위해 Hand Rig도 해제합니다.</param>
+    private void ForceStopAim(bool keepReloadAnimation, bool releaseHandRig)
     {
         m_inCombatStance = false;
         m_isAds = false;
         m_hipfireTimer = 0.0f;
         SetAimState(false);
         HideHitscanBlockMarker();
-        SetRigWeight(0.0f);
+        // 일반적인 조준 해제는 Idle 총기 그립을 유지합니다. 재장전 또는 다운/사망처럼
+        // 손 애니메이션을 온전히 써야 하는 상태에서만 Hand Rig를 함께 내립니다.
+        float aimWeight = keepReloadAnimation ? 1.0f : 0.0f;
+        float handWeight = keepReloadAnimation || releaseHandRig ? 0.0f : 1.0f;
+        SetRigWeights(aimWeight, handWeight);
         SetWeaponLayerWeight(keepReloadAnimation ? 1.0f : 0.0f);
 
         // 사격이 끝난 경로이므로 반동은 항상 내립니다. 남으면 다운·사망 모션 위에 반동이 더해집니다.
@@ -2798,7 +2805,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     {
         m_inCombatStance = active;
         SetAimState(active);
-        SetRigWeight(active ? 1.0f : 0.0f);
+        // 비전투 상태에서도 손은 총기 그립에 고정하고, Aim Rig만 전투 자세에 따라 전환합니다.
+        SetRigWeights(active ? 1.0f : 0.0f, 1.0f);
         SetWeaponLayerWeight(weaponLayerWeight);
 
         // 반동은 사격을 이어받을 때만 남깁니다. 전투 자세를 나가면 반드시 0입니다.
@@ -2816,26 +2824,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
-    /// 조준 및 손 IK 리그 weight의 목표값을 설정합니다.
-    /// </summary>
-    /// <param name="weight">목표 리그 weight입니다. 0이면 비활성, 1이면 활성입니다.</param>
-    /// <remarks>
-    /// 즉시 대입하지 않는 이유는 조준을 넣고 뺄 때 상체 자세가 한 프레임에 갈아타 툭 끊기기 때문입니다.
-    /// 실제 적용은 <see cref="UpdateStanceWeights"/>가 매 프레임 목표를 향해 옮기며 합니다.
-    /// </remarks>
-    private void SetRigWeight(float weight)
-    {
-        m_rigWeightTarget = weight;
-        m_handRigWeightTarget = weight;
-    }
-
-    /// <summary>
     /// 허리 조준 리그와 손 IK 리그의 목표 weight를 따로 설정합니다.
     /// </summary>
     /// <param name="aimWeight">허리(상체 조준) 리그 목표 weight입니다.</param>
     /// <param name="handWeight">손 IK 리그 목표 weight입니다.</param>
     /// <remarks>
-    /// 재장전처럼 둘이 반대가 되는 구간에만 씁니다. 그 외에는 <see cref="SetRigWeight"/>로 함께 움직입니다.
+    /// 재장전(Aim 1/Hand 0)이나 평상시(Aim 0/Hand 1)처럼 둘의 목표가 다른 구간에 씁니다.
     /// </remarks>
     private void SetRigWeights(float aimWeight, float handWeight)
     {
@@ -3133,7 +3127,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 재장전 중에는 재장전 비주얼이 전투 자세보다 우선입니다. 재장전 모션은 상체 레이어에 있는데
         // 이 함수는 AI가 매 프레임 부르므로, 거르지 않으면 전환 직후부터 상체 레이어를 0으로 눌러
         // 재장전 모션이 통째로 보이지 않습니다. 조작 멤버 쪽에서 같은 이유로
-        // <see cref="ForceStopAim(bool)"/>가 재장전 중에만 상체 레이어를 유지하는 것과 같은 처리입니다.
+        // <see cref="ForceStopAim(bool, bool)"/>가 재장전 중에만 상체 레이어를 유지하는 것과 같은 처리입니다.
         //
         // 리그는 <see cref="BeginReload"/>와 같은 조합을 씁니다. 허리는 계속 조준 방향을 보고, 손만
         // 풀어 탄창을 다루게 합니다. 손까지 총 그립에 붙여 두면 탄창 교체 동작이 그립에 묶여 깨집니다.
@@ -3153,7 +3147,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 때문입니다. 제약을 다시 켜려면 먼저 LookTarget을 멤버별로 나눠야 합니다. 지금은 씬에 하나뿐인
         // 오브젝트를 셋이 공유해서, 켜는 순간 봇 상체가 플레이어 마우스를 따라 꺾이고 반대로 AI가 타겟을
         // 옮기면 플레이어 상체까지 같이 꺾입니다.
-        SetRigWeight(inCombat ? 1.0f : 0.0f);
+        // AI도 비전투 상태에서 총기 그립은 유지하고, 상체 조준만 전투 여부에 따라 전환합니다.
+        SetRigWeights(inCombat ? 1.0f : 0.0f, 1.0f);
 
         // 상체 레이어는 조준만으로 올리지 않습니다. Base Layer의 조준 트리가 이미 자세를 갖고 있어
         // 여기서 덮으면 웅크린 채 조준해도 서 있는 자세로 바뀝니다. 봇만 사격 중에 이 레이어를 올리던
