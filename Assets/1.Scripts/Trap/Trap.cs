@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using VInspector;
 
 /// <summary>
@@ -27,8 +28,9 @@ public enum TrapDamageMode
 public abstract class Trap : MonoBehaviour, IInteractable
 {
     [Header("Build")]
-    [Tooltip("켜면 처음에 청사진 상태로 놓입니다. 상호작용해서 자원을 내야 실제로 작동하는 함정이 됩니다. 끄면 처음부터 설치된 상태입니다.")]
-    [SerializeField] private bool m_startAsBlueprint = true;
+    [Tooltip("켜면 시작할 때 이미 설치된 상태입니다. 끄면 청사진 상태로 시작하며, 자원을 내고 설치하기 전까지 작동하지 않습니다.")]
+    [FormerlySerializedAs("m_startAsBlueprint")]
+    [SerializeField] private bool m_startPlaced = false;
 
     [Tooltip("설치할 때 소모할 자원입니다. 셸터에 이미 정의된 자원 중에서 고릅니다.")]
     [Variants(
@@ -86,10 +88,11 @@ public abstract class Trap : MonoBehaviour, IInteractable
     [Tooltip("피해를 주는 방식입니다. 어느 쪽이든 들어온 순간 한 번은 줍니다. Tick은 머무는 동안 추가로 반복합니다.")]
     [SerializeField] protected TrapDamageMode m_damageMode = TrapDamageMode.Tick;
 
-    [Tooltip("Tick 방식에서 1초에 몇 번 피해를 줄지입니다. 2면 0.5초마다 한 번씩 m_damage만큼 들어갑니다. 진입 시 1회는 이 값과 무관하게 항상 들어갑니다.")]
+    [Tooltip("Tick 방식에서 피해를 주는 간격(초)입니다. 0.5면 0.5초마다 한 번씩 m_damage만큼 들어갑니다. 진입 시 1회는 이 값과 무관하게 항상 들어갑니다.")]
     [ShowIf(nameof(m_damageMode), TrapDamageMode.Tick)]
     [Min(0.01f)]
-    [SerializeField] protected float m_damageTickRate = 1.0f;
+    [FormerlySerializedAs("m_damageTickRate")]
+    [SerializeField] protected float m_damageTickInterval = 1.0f;
     [EndIf]
 
     /// <summary>이 함정의 현재 내구도입니다.</summary>
@@ -101,17 +104,11 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// <summary>이 함정이 피해를 주는 방식입니다.</summary>
     public TrapDamageMode DamageMode => m_damageMode;
 
-    /// <summary>Tick 방식에서 1초당 피해 횟수입니다.</summary>
-    public float DamageTickRate => Mathf.Max(0.01f, m_damageTickRate);
+    /// <summary>Tick 방식에서 피해 사이의 간격(초)입니다.</summary>
+    public float DamageInterval => Mathf.Max(0.01f, m_damageTickInterval);
 
-    /// <summary>
-    /// Tick 방식에서 피해 사이의 간격(초)입니다. <see cref="DamageTickRate"/>의 역수입니다.
-    /// </summary>
-    /// <remarks>
-    /// 인스펙터에는 초당 횟수만 두고 간격은 여기서 계산합니다. 두 값을 각각 들고 있으면 한쪽만 고쳤을 때
-    /// 서로 어긋나고, 어느 쪽이 실제로 쓰이는지 알기 어려워집니다.
-    /// </remarks>
-    public float DamageInterval => 1.0f / DamageTickRate;
+    /// <summary>Tick 방식에서 1초당 피해 횟수입니다. 이전 API 호환용으로 유지합니다.</summary>
+    public float DamageTickRate => 1.0f / DamageInterval;
 
     /// <summary>이 함정이 아직 멀쩡한지 여부입니다.</summary>
     public bool IsAlive => m_health > 0;
@@ -131,7 +128,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
     protected virtual void Awake()
     {
         CacheVisuals();
-        IsBuilt = !m_startAsBlueprint;
+        IsBuilt = m_startPlaced;
         ApplyBuildStateVisual();
     }
 

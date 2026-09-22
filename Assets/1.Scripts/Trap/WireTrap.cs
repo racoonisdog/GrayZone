@@ -269,8 +269,11 @@ public sealed class WireTrap : Trap
     {
         if (enemy == null)
         {
-            // 파괴되어 키가 null이 된 항목을 지웁니다.
-            m_occupants.Remove(null);
+            // Unity의 파괴된 객체는 == null이지만 Dictionary의 실제 참조 키는 남아 있습니다.
+            if (!ReferenceEquals(enemy, null))
+            {
+                m_occupants.Remove(enemy);
+            }
             return;
         }
 

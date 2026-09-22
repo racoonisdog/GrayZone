@@ -91,6 +91,9 @@ public class SquadAITargeting
         new Dictionary<EnemyController, float>();
 
     private readonly List<EnemyController> m_threatRemoveBuffer = new List<EnemyController>();
+    private readonly List<EnemyController> m_cacheKeyBuffer = new List<EnemyController>();
+    private readonly Dictionary<EnemyController, uint> m_observedGenerations =
+        new Dictionary<EnemyController, uint>();
 
     // 사격선이 막히기 시작한 시각입니다. 일시적인 가림과 지속적인 가림을 가르는 데 씁니다(§10.1).
     private readonly Dictionary<EnemyController, float> m_blockedSince =
@@ -221,6 +224,7 @@ public class SquadAITargeting
             return;
         }
 
+        ObserveGeneration(attacker);
         m_damageThreat.TryGetValue(attacker, out float current);
         m_damageThreat[attacker] = current + damage * DamageThreatPerPoint;
     }
@@ -235,6 +239,7 @@ public class SquadAITargeting
     /// </remarks>
     public void Tick(in Context context)
     {
+        PruneLifetimeCaches();
         DecayDamageThreat();
 
         if (!context.CanEngage || context.Intel == null)
@@ -279,6 +284,7 @@ public class SquadAITargeting
         ClearTarget();
         m_damageThreat.Clear();
         m_blockedSince.Clear();
+        m_observedGenerations.Clear();
     }
 
     /// <summary>
@@ -407,7 +413,7 @@ public class SquadAITargeting
     /// </remarks>
     private static bool IsCandidate(SquadEnemyIntel.EnemyIntel record)
     {
-        if (record == null || record.Enemy == null || !record.HasLivePosition)
+        if (record == null || !record.IsCurrentLifetime || !record.HasLivePosition)
         {
             return false;
         }
@@ -529,14 +535,22 @@ public class SquadAITargeting
     private void UpdateBlockTimers(in Context context)
     {
         m_blockRemoveBuffer.Clear();
+        // Intel에서 빠진 대상은 '계속 가려짐'이 아닙니다. 재발견 시 새 타이머로 시작합니다.
+        foreach (var pair in m_blockedSince)
+        {
+            if (!context.Intel.TryGet(pair.Key, out var intel) || !intel.HasLivePosition)
+                m_blockRemoveBuffer.Add(pair.Key);
+        }
 
         foreach (var record in context.Intel.All)
         {
             EnemyController enemy = record.Enemy;
-            if (enemy == null || !record.HasLivePosition)
+            if (!record.IsCurrentLifetime || !record.HasLivePosition)
             {
                 continue;
             }
+
+            ObserveGeneration(enemy);
 
             if (HasClearFiringLine(context, enemy))
             {
@@ -618,11 +632,12 @@ public class SquadAITargeting
         float decay = DamageThreatDecayPerSecond * Time.deltaTime;
 
         m_threatRemoveBuffer.Clear();
-        var keys = new List<EnemyController>(m_damageThreat.Keys);
+        m_cacheKeyBuffer.Clear();
+        m_cacheKeyBuffer.AddRange(m_damageThreat.Keys);
 
-        for (int i = 0; i < keys.Count; i++)
+        for (int i = 0; i < m_cacheKeyBuffer.Count; i++)
         {
-            EnemyController enemy = keys[i];
+            EnemyController enemy = m_cacheKeyBuffer[i];
             float value = m_damageThreat[enemy] - decay;
 
             if (enemy == null || value <= 0.0f)
@@ -637,6 +652,39 @@ public class SquadAITargeting
         for (int i = 0; i < m_threatRemoveBuffer.Count; i++)
         {
             m_damageThreat.Remove(m_threatRemoveBuffer[i]);
+        }
+    }
+
+    /// <summary>같은 풀 인스턴스의 새 생애에는 이전 사격 차단/위협도/타겟 유예를 넘기지 않습니다.</summary>
+    private void ObserveGeneration(EnemyController enemy)
+    {
+        if (m_observedGenerations.TryGetValue(enemy, out uint generation) && generation != enemy.SpawnGeneration)
+        {
+            m_damageThreat.Remove(enemy);
+            m_blockedSince.Remove(enemy);
+            if (m_currentTarget == enemy) ClearTarget();
+        }
+        m_observedGenerations[enemy] = enemy.SpawnGeneration;
+    }
+
+    private void PruneLifetimeCaches()
+    {
+        m_cacheKeyBuffer.Clear();
+        foreach (var pair in m_observedGenerations)
+        {
+            EnemyController enemy = pair.Key;
+            if (enemy == null || !enemy.gameObject.activeInHierarchy || enemy.CurrentHP <= 0 ||
+                pair.Value != enemy.SpawnGeneration)
+            {
+                m_cacheKeyBuffer.Add(enemy);
+            }
+        }
+        foreach (EnemyController enemy in m_cacheKeyBuffer)
+        {
+            m_damageThreat.Remove(enemy);
+            m_blockedSince.Remove(enemy);
+            m_observedGenerations.Remove(enemy);
+            if (ReferenceEquals(m_currentTarget, enemy)) ClearTarget();
         }
     }
 
