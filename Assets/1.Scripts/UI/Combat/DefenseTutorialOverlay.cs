@@ -72,6 +72,13 @@ public class DefenseTutorialOverlay : MonoBehaviour
     {
         AutoFindReferences();
         Subscribe();
+
+        // UI 루트가 꺼진 채 씬이 시작되면 OnEnable이 늦게 돌아 시작 이벤트를 놓칩니다.
+        // 이벤트만 믿지 않고, 이미 시작된 상태면 여기서 판단합니다.
+        if (m_roundManager != null && m_roundManager.IsGameStarted)
+        {
+            HandleDefenseStarted();
+        }
     }
 
     private void OnDisable()
