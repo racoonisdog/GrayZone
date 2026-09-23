@@ -220,6 +220,16 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>처치 상태입니다.</summary>
     public DeadState Dead { get; private set; }
+    private AttackState m_defenseAttack;
+    private DefenseEventHealth m_defenseObjective;
+    private bool m_hasDefenseApproachSettings;
+    private float m_defenseApproachStoppingDistance;
+
+    /// <summary>스포너의 목표 위치 또는 그 부모에 연결된 방어 목표 체력입니다. 좌표 전용 마커면 null입니다.</summary>
+    public DefenseEventHealth DefenseObjective => m_defenseObjective;
+
+    /// <summary>현재 방어 목표 공격 상태를 실행하고 있는지 여부입니다.</summary>
+    public bool IsAttackingDefenseObjective => m_defenseAttack != null && m_current == m_defenseAttack;
     // 각성 준비(AwakenState)는 슬라이스 2에서 추가.
     // 경직은 상태가 아니라 상태 위에 얹히는 잠금이라 여기 목록에 없습니다(§5.7). HandleStaggered 참고.
 
@@ -689,7 +699,16 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         if (agent != null && agent.enabled && agent.isOnNavMesh)
         {
-            agent.speed = CurrentMoveSpeed;
+            // 재사용에서는 Wander.Enter가 이미 실행됐습니다. SO 데이터는 덮어쓰되
+            // 현재 상태의 걷기/달리기 선택을 바꾸지 않아 첫 생성과 재사용을 일치시킵니다.
+            if (m_defenseNavigationActive)
+            {
+                agent.speed = CurrentMoveSpeed;
+            }
+            else
+            {
+                m_current?.ResumeMovement();
+            }
         }
     }
 
@@ -727,6 +746,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     {
         m_isDefenseSpawn = true;
         m_defenseTargetPosition = targetPosition;
+        m_defenseObjective = targetPosition != null ? targetPosition.GetComponentInParent<DefenseEventHealth>() : null;
         m_prioritizeDefenseWaypointsForPlayerFirst = prioritizeWaypointsForPlayerFirst;
         m_defenseWaypoints.Clear();
 
@@ -749,9 +769,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <remarks>프리팹의 Inspector 설정은 바꾸지 않고 Defense 스폰 포인트가 주입한 런타임 값만 해제합니다.</remarks>
     public void ClearDefenseSpawnConfiguration()
     {
+        RestoreDefenseApproachSettings();
         m_isDefenseSpawn = false;
         m_defenseWaypoints.Clear();
         m_defenseTargetPosition = null;
+        m_defenseObjective = null;
         m_defenseWaypointIndex = 0;
         m_defenseNavigationActive = false;
         m_prioritizeDefenseWaypointsForPlayerFirst = true;
@@ -765,6 +787,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>현재 HP입니다. 체력 컴포넌트가 없으면 0을 반환합니다.</summary>
     public int CurrentHP => enemyHealth != null ? enemyHealth.CurrentHP : 0;
+
+    /// <summary>풀 재사용 전후를 관찰자 캐시가 구분할 수 있는 생성 세대입니다.</summary>
+    /// <remarks>인스턴스 참조가 같아도 ResetForSpawn마다 증가하며 저장 데이터에는 쓰지 않습니다.</remarks>
+    public uint SpawnGeneration { get; private set; }
 
     /// <summary>현재 유효한 추적 대상 스쿼드 멤버입니다.</summary>
     public SquadMemberController CurrentTarget => targetSensor != null ? targetSensor.CurrentTarget : null;
@@ -834,6 +860,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     public void ResetForSpawn()
     {
+        unchecked { SpawnGeneration++; }
         CacheReferences();
 
         m_knockbackVelocity = Vector3.zero;
@@ -1056,6 +1083,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         if (m_current == Combat && Combat != null)
         {
             Combat.CancelForStagger();
+        }
+        else if (IsAttackingDefenseObjective)
+        {
+            // 목표물 공격도 경직에서 중단하고, 잠금 해제 후 경로가 공격 가능 여부를 다시 판단합니다.
+            TransitionTo(Wander);
         }
 
         StopMoving();
@@ -1669,12 +1701,14 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <param name="next">전이할 상태입니다.</param>
     public void TransitionTo(EnemyStateBase next)
     {
+        if (next == Combat && ShouldDeferSquadCombat()) return;
         if (next == null || next == m_current)
         {
             return;
         }
 
         m_current?.Exit();
+        if (next == Combat || next == Dead) RestoreDefenseApproachSettings();
         m_current = next;
         m_current.Enter();
     }
@@ -1693,14 +1727,15 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     public void OnAttackHitboxOn()
     {
-        if (m_current == Dead)
+        AttackState activeAttack = GetActiveAttackState();
+        if (activeAttack == null || m_isStaggered)
         {
             return;
         }
 
         // Attack은 판정을 담당하는 모듈이고, Combat.Attack은 공격 상태입니다. 이름이 같으니 주의합니다.
         Attack?.SetHitboxActive(true);
-        Combat?.Attack?.NotifyAnimationImpact();
+        activeAttack.NotifyAnimationImpact();
     }
 
     /// <summary>공격 클립의 애니메이션 이벤트에서 호출되어 판정 콜라이더를 끕니다.</summary>
@@ -1725,7 +1760,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
-        Combat?.Attack?.NotifyAnimationImpact();
+        if (!m_isStaggered) GetActiveAttackState()?.NotifyAnimationImpact();
+    }
+
+    private AttackState GetActiveAttackState()
+    {
+        if (IsAttackingDefenseObjective) return m_defenseAttack;
+        return m_current == Combat && Combat.CurrentSub == Combat.Attack ? Combat.Attack : null;
     }
 
     /// <summary>
@@ -1794,7 +1835,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         {
             MoveTo(m_defenseWaypoints[0].position);
         }
-        else if (TryResolveDefenseDestination(out Vector3 destination))
+        else if (TryResolveDefenseDestination(out Vector3 destination, out _))
         {
             MoveTo(destination);
         }
@@ -1804,12 +1845,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <returns>이번 프레임의 이동 판단을 방어전 경로가 처리했으면 true입니다.</returns>
     /// <remarks>
     /// Player First는 Spawn SO 설정에 따라 웨이포인트를 먼저 처리하거나 플레이어 추적을 바로 시작합니다.
-    /// Target First는 이 설정을 무시하고 기존 웨이포인트 경로를 유지합니다. 직접 피격 등으로 교전에 들어가면
-    /// 기존 전투 HFSM에 제어권을 넘기고, 교전 종료 뒤 남은 경로나 방어 목표 이동을 이어갑니다.
+    /// Target First는 피격/하울링에도 스쿼드 추격으로 전환하지 않습니다. Player First의 경로 우선 옵션도
+    /// 남은 웨이포인트가 있는 동안 지키며, 그 뒤에만 기존 스쿼드 전투 HFSM에 제어권을 넘깁니다.
     /// </remarks>
     private bool TickDefenseNavigation()
     {
-        if (!IsDefenseEnemy || !m_defenseNavigationActive || m_current == Dead || m_current == Combat)
+        if (!IsDefenseEnemy || !m_defenseNavigationActive || m_current == Dead || m_current == Combat || IsAttackingDefenseObjective)
         {
             return false;
         }
@@ -1856,11 +1897,38 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             }
         }
 
-        if (!TryResolveDefenseDestination(out Vector3 targetPosition))
+        if (!TryResolveDefenseDestination(out Vector3 targetPosition, out bool usesObjective))
         {
             StopMoving();
             return true;
         }
+
+        // 좌표 도착과 공격 가능 조건은 다릅니다. 목표물은 표면으로 접근하고 기존 공격 타이밍을 재사용합니다.
+        if (usesObjective &&
+            enemyAttack != null && enemyAttack.TryGetDefenseAttackPoint(m_defenseObjective, out Vector3 attackPoint))
+        {
+            if (!m_hasDefenseApproachSettings)
+            {
+                m_defenseApproachStoppingDistance = agent.stoppingDistance;
+                m_hasDefenseApproachSettings = true;
+            }
+            agent.stoppingDistance = Mathf.Min(m_defenseApproachStoppingDistance,
+                Mathf.Max(0.0f, enemyAttack.AttackStartRange * 0.5f));
+            Vector3 direction = attackPoint - transform.position;
+            direction.y = 0f;
+            if (direction.sqrMagnitude > 0.0001f)
+                transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                    Quaternion.LookRotation(direction), RotationSpeed * Time.deltaTime);
+            if (enemyAttack.CanStartDefenseAttack(m_defenseObjective))
+            {
+                TransitionTo(m_defenseAttack);
+                return true;
+            }
+            MoveTo(attackPoint);
+            return true;
+        }
+
+        RestoreDefenseApproachSettings();
 
         if (HasReachedDefensePosition(targetPosition))
         {
@@ -1870,6 +1938,20 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         MoveTo(targetPosition);
         return true;
+    }
+
+    private bool ShouldDeferSquadCombat()
+    {
+        return IsDefenseEnemy && (m_defenseDisposition == EnemyDefenseDisposition.TargetFirst ||
+            (m_defenseNavigationActive && m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst &&
+             m_prioritizeDefenseWaypointsForPlayerFirst && m_defenseWaypointIndex < m_defenseWaypoints.Count));
+    }
+
+    private void RestoreDefenseApproachSettings()
+    {
+        if (!m_hasDefenseApproachSettings) return;
+        if (agent != null) agent.stoppingDistance = m_defenseApproachStoppingDistance;
+        m_hasDefenseApproachSettings = false;
     }
 
     /// <summary>현재 Defense 성향에서 스폰 웨이포인트를 처리해야 하는지 반환합니다.</summary>
@@ -1891,8 +1973,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 현재 조작 캐릭터를 매번 다시 확인합니다. 캐릭터가 전환되어도 새 플레이어를 따라가며, 유효한 플레이어가
     /// 없으면 스폰 포인트가 제공한 목표 위치를 대체 목적지로 사용합니다.
     /// </remarks>
-    private bool TryResolveDefenseDestination(out Vector3 destination)
+    private bool TryResolveDefenseDestination(out Vector3 destination, out bool usesObjective)
     {
+        usesObjective = false;
         if (m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst)
         {
             SquadManager squadManager = SquadManager.Instance;
@@ -1906,6 +1989,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         if (m_defenseTargetPosition != null)
         {
+            usesObjective = true;
             destination = m_defenseTargetPosition.position;
             return true;
         }
@@ -2120,6 +2204,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         NoiseSearch = new NoiseSearchState(this);
         Combat = new CombatState(this);
         Dead = new DeadState(this);
+        m_defenseAttack = new AttackState(this, true);
     }
 
     /// <summary>피해를 받으면 공격자를 인식하고 교전으로 전이합니다.</summary>
@@ -2138,6 +2223,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         {
             return;
         }
+
+        // 피해/경직 자체는 체력 모듈이 처리합니다. 여기서는 경로 정책을 깨는 어그로 전환만 막습니다.
+        if (ShouldDeferSquadCombat()) return;
 
         if (attacker != null && targetSensor != null)
         {

@@ -75,6 +75,27 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("동행 AI의 회피 우선순위 기준값입니다. 멤버 순번을 더해 서로 다른 값을 씁니다. 낮을수록 우선합니다.")]
     [SerializeField] private int m_baseAvoidancePriority = 50;
 
+    [Foldout("Follow Options")]
+    [Tooltip("직접 조작 중인 플레이어가 길을 막고 있는 동료 AI에 닿았을 때, 동료가 옆 또는 뒤로 비켜날 거리(m)입니다.")]
+    [Min(0.1f)]
+    [SerializeField] private float m_playerYieldDistance = 0.9f;
+
+    [Tooltip("플레이어에게 길을 양보하는 상태를 유지할 최대 시간(초)입니다. 목적지에 먼저 닿으면 즉시 원래 AI 로직으로 돌아갑니다.")]
+    [Min(0.05f)]
+    [SerializeField] private float m_playerYieldDuration = 0.55f;
+
+    [Tooltip("플레이어 충돌로 길 양보를 다시 요청할 수 있는 최소 간격(초)입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_playerYieldRequestCooldown = 0.2f;
+
+    [Tooltip("길 양보 후보 위치를 NavMesh로 보정할 때 허용하는 반경(m)입니다.")]
+    [Min(0.05f)]
+    [SerializeField] private float m_playerYieldSampleRadius = 0.45f;
+
+    [Tooltip("길을 양보할 때 사용하는 최소 이동 속도(m/s)입니다. 원래 추종 속도가 더 빠르면 그 값을 유지합니다.")]
+    [Min(0.1f)]
+    [SerializeField] private float m_playerYieldSpeed = 3.5f;
+
     [Foldout("Sight Options")]
     [Tooltip("이 AI가 적을 직접 확인할 수 있는 최대 거리입니다.")]
     [SerializeField] private float m_sightRange = 20.0f;
@@ -277,18 +298,29 @@ public class SquadAIController : MonoBehaviour
     private const float ShootingVisualHold = 0.25f;
 
     // LookY를 -1~1로 정규화할 때 쓰는 최대 상하 각도입니다. ThirdPersonController의 카메라 피치 범위와 맞춥니다.
-    private const float MaxLookPitch = 70.0f;
+    private const float DefaultMaxLookUpPitch = 70.0f;
+    private const float DefaultMaxLookDownPitch = 30.0f;
 
     // 상체 조준 오프셋 파라미터의 감쇠 시간입니다. 즉시 바꾸면 상체가 튑니다.
     private const float LookDamp = 0.1f;
 
     // 상체 조준 리그를 소유한 컴포넌트입니다. AI에서는 꺼져 있고 공개 진입점만 부릅니다.
     private AimController m_aimController;
+    private ThirdPersonController m_thirdPersonController;
 
     // 전투 위치 상태입니다. 주기 사이에 자리가 흔들리지 않도록 들고 있습니다(§10.2).
     private Vector3 m_combatPosition;
     private bool m_hasCombatPosition;
     private float m_nextCombatPositionTime;
+
+    // 직접 조작 멤버에게 길을 비켜 주는 동안에는 일반 추종/전투 목적지가 이 목적지를 덮어쓰지 않게 합니다.
+    private bool m_isYieldingToPlayer;
+    private Vector3 m_playerYieldDestination;
+    private float m_playerYieldEndTime;
+    private float m_nextPlayerYieldRequestTime;
+    private float m_preYieldStoppingDistance;
+    private float m_preYieldSpeed;
+    private int m_preYieldAvoidancePriority;
 
     /// <summary>전투 위치 후보를 몇 방향에서 뽑을지입니다.</summary>
     private const int CombatPositionCandidateCount = 7;
@@ -371,6 +403,26 @@ public class SquadAIController : MonoBehaviour
     /// 꺼집니다. 이 값이 자주 뒤집히면 두 거리가 너무 가깝다는 뜻입니다(공용 문서 §6.2).
     /// </remarks>
     public bool IsJoining => m_isJoining;
+
+    /// <summary>현재 직접 조작 중인 플레이어에게 길을 양보하기 위해 이동 중인지 여부입니다.</summary>
+    public bool IsYieldingToPlayer => m_isYieldingToPlayer;
+
+    /// <summary>현재 상태에서 직접 조작 중인 플레이어에게 길을 양보할 수 있는지 여부입니다.</summary>
+    /// <remarks>구조를 수행 중이거나 NavMesh 밖인 멤버는 플레이어 접촉으로 이동시키지 않습니다.</remarks>
+    public bool CanYieldToPlayer
+    {
+        get
+        {
+            if (!EnsureRequiredReferences())
+            {
+                return false;
+            }
+
+            return m_memberController.IsAlive && !m_memberController.IsDown &&
+                   m_agent.enabled && m_agent.isOnNavMesh &&
+                   m_rescueTarget == null && !m_rescueHoldStarted;
+        }
+    }
 
     /// <summary>합류 실패가 확정된 상태인지입니다(§17).</summary>
     /// <remarks>
@@ -622,10 +674,9 @@ public class SquadAIController : MonoBehaviour
             return;
         }
 
-        m_hasRequiredReferences = true;
         m_agent.updateRotation = false;
-
         ApplyTargetingSettings();
+        m_hasRequiredReferences = m_squadManager != null;
     }
 
     /// <summary>
@@ -862,7 +913,7 @@ public class SquadAIController : MonoBehaviour
                 float flat = new Vector2(delta.x, delta.z).magnitude;
                 if (flat > 0.01f)
                 {
-                    lookY = Mathf.Clamp(Mathf.Atan2(delta.y, flat) * Mathf.Rad2Deg / MaxLookPitch, -1.0f, 1.0f);
+                    lookY = NormalizeLookPitch(Mathf.Atan2(delta.y, flat) * Mathf.Rad2Deg);
                 }
             }
 
@@ -880,6 +931,24 @@ public class SquadAIController : MonoBehaviour
 
             m_aimController.ApplyAiCombatStance(inCombat, shooting);
         }
+    }
+
+    /// <summary>
+    /// Maps AI target pitch to the same asymmetric LookY convention as ThirdPersonController:
+    /// +1 is the configured upward clamp and -1 is the configured downward clamp.
+    /// </summary>
+    private float NormalizeLookPitch(float pitchDegrees)
+    {
+        float maxUp = m_thirdPersonController != null
+            ? Mathf.Max(0.01f, m_thirdPersonController.TopClamp)
+            : DefaultMaxLookUpPitch;
+        float maxDown = m_thirdPersonController != null
+            ? Mathf.Max(0.01f, Mathf.Abs(m_thirdPersonController.BottomClamp))
+            : DefaultMaxLookDownPitch;
+
+        return pitchDegrees >= 0.0f
+            ? Mathf.Clamp01(pitchDegrees / maxUp)
+            : -Mathf.Clamp01(-pitchDegrees / maxDown);
     }
 
     /// <summary>사격 유지 구간과 휴지 구간을 번갈아 갱신합니다(§11.2).</summary>
@@ -922,6 +991,15 @@ public class SquadAIController : MonoBehaviour
             return;
         }
 
+        // AI는 입력을 거치지 않으므로 Gun만 직접 시작하면 탄약 타이머만 돌고 재장전 모션이 빠집니다.
+        // AimController의 공용 재장전 경로로 들어가면 플레이어와 같은 IsReload/DoReload 상태,
+        // 레이어 가중치, 완료 정리까지 함께 적용됩니다.
+        if (m_aimController != null && m_aimController.BeginAiReload())
+        {
+            return;
+        }
+
+        // 리그/애니메이터 참조가 없는 예외 프리팹은 기존처럼 논리 재장전만 유지합니다.
         m_weapon.StartReload();
     }
 
@@ -943,6 +1021,7 @@ public class SquadAIController : MonoBehaviour
     /// </summary>
     private void OnDisable()
     {
+        EndPlayerYield();
         StopAgent();
         UpdateMoveAnimation(Vector3.zero);
         ClearFollowState();
@@ -1028,7 +1107,7 @@ public class SquadAIController : MonoBehaviour
     /// </remarks>
     private void Update()
     {
-        if (!m_hasRequiredReferences)
+        if (!EnsureRequiredReferences())
         {
             return;
         }
@@ -1049,7 +1128,14 @@ public class SquadAIController : MonoBehaviour
         // 구조 판단은 합류·전투보다 위라(§18.1 2) 그 둘보다 먼저 갱신합니다.
         UpdateRescue(canAct);
 
-        bool movementDue = canAct && Time.time >= m_nextUpdateTime;
+        // 양보는 이동만 선점합니다. 구조/행동 제한이 생기면 즉시 원래 이동 설정을 복원하고,
+        // 양보 중에도 아래 타겟·사격·재장전 처리는 매 프레임 계속합니다.
+        if (m_isYieldingToPlayer && (!canAct || !CanYieldToPlayer))
+        {
+            EndPlayerYield();
+        }
+        bool yielding = UpdatePlayerYield();
+        bool movementDue = canAct && !yielding && Time.time >= m_nextUpdateTime;
         if (movementDue)
         {
             m_nextUpdateTime = Time.time + m_updateInterval;
@@ -1064,6 +1150,7 @@ public class SquadAIController : MonoBehaviour
 
         if (m_currentDecision.Kind == SquadAIActionKind.Restricted)
         {
+            EndPlayerYield();
             if (m_currentDecision.HoldPosition)
             {
                 StopAgent();
@@ -1390,10 +1477,37 @@ public class SquadAIController : MonoBehaviour
     {
         m_memberController = GetComponent<SquadMemberController>();
         m_agent = GetComponent<NavMeshAgent>();
-        m_squadManager = FindFirstObjectByType<SquadManager>();
+        // FindFirstObjectByType는 Awake 순서에 따라 곧 제거될 중복 SquadManager를 잡을 수 있습니다.
+        // 싱글턴 접근자를 사용하면 중복 정리가 끝난 뒤에도 현재 유효한 매니저로 다시 연결됩니다.
+        m_squadManager = SquadManager.Instance;
         m_animator = GetComponent<Animator>();
         m_weapon = GetComponentInChildren<Gun>();
         m_aimController = GetComponent<AimController>();
+        m_thirdPersonController = GetComponent<ThirdPersonController>();
+    }
+
+    /// <summary>
+    /// 씬 초기화 순서나 중복 매니저 정리로 무효화된 런타임 참조를 다시 연결합니다.
+    /// </summary>
+    /// <returns>현재 AI 갱신에 필요한 멤버, Agent, SquadManager가 모두 유효하면 true입니다.</returns>
+    /// <remarks>
+    /// 플레이어 프리팹의 Awake가 SquadManager보다 먼저 실행되거나, 싱글턴 중복 정리로 처음 찾은 매니저가
+    /// 파괴될 수 있습니다. 한 번 실패했다고 컴포넌트를 영구 비활성화하지 않고 다음 갱신/접촉에서 재탐색합니다.
+    /// </remarks>
+    private bool EnsureRequiredReferences()
+    {
+        if (m_memberController == null || m_agent == null || m_squadManager == null)
+        {
+            CacheRequiredReferences();
+        }
+
+        m_hasRequiredReferences = m_memberController != null && m_agent != null && m_squadManager != null;
+        if (m_hasRequiredReferences)
+        {
+            m_agent.updateRotation = false;
+        }
+
+        return m_hasRequiredReferences;
     }
 
     /// <summary>
@@ -1413,12 +1527,6 @@ public class SquadAIController : MonoBehaviour
         if (m_agent == null)
         {
             Debug.LogError("[SquadAIController] NavMeshAgent 컴포넌트가 없습니다.", this);
-            isValid = false;
-        }
-
-        if (m_squadManager == null)
-        {
-            Debug.LogError("[SquadAIController] 씬에서 SquadManager를 찾지 못했습니다.", this);
             isValid = false;
         }
 
@@ -2120,6 +2228,182 @@ public class SquadAIController : MonoBehaviour
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// 직접 조작 중인 플레이어가 통로를 지나갈 수 있도록, 이 AI를 짧게 옆 또는 뒤의 빈 NavMesh 위치로 이동시킵니다.
+    /// </summary>
+    /// <param name="playerPosition">충돌을 일으킨 직접 조작 멤버의 현재 위치입니다.</param>
+    /// <param name="playerMoveDirection">직접 조작 멤버가 통로를 지나려는 수평 이동 방향입니다.</param>
+    /// <returns>양보 상태를 시작했거나 이미 양보 중이면 true입니다.</returns>
+    /// <remarks>
+    /// 물리 힘이나 Transform 강제 이동을 쓰지 않습니다. NavMesh 경로, 현재 멤버 간 간격, 다른 AI의 목적지 점유를
+    /// 모두 통과한 후보만 선택하므로 문턱/코너에서 동료를 벽 안으로 밀어 넣지 않습니다.
+    /// </remarks>
+    public bool TryBeginPlayerYield(Vector3 playerPosition, Vector3 playerMoveDirection)
+    {
+        if (!CanYieldToPlayer)
+        {
+            return false;
+        }
+
+        if (m_isYieldingToPlayer)
+        {
+            return true;
+        }
+
+        if (Time.time < m_nextPlayerYieldRequestTime)
+        {
+            return false;
+        }
+
+        m_nextPlayerYieldRequestTime = Time.time + Mathf.Max(0.0f, m_playerYieldRequestCooldown);
+
+        playerMoveDirection.y = 0.0f;
+        if (playerMoveDirection.sqrMagnitude <= MoveDirectionThreshold * MoveDirectionThreshold)
+        {
+            return false;
+        }
+
+        if (!TrySelectPlayerYieldDestination(playerPosition, playerMoveDirection.normalized, out Vector3 destination))
+        {
+            return false;
+        }
+
+        // 기존 추종 목적지의 점유를 먼저 풀어야 새 양보 후보와 다른 AI 목적지가 불필요하게 서로 막히지 않습니다.
+        ClearFollowDestination();
+
+        m_playerYieldDestination = destination;
+        m_playerYieldEndTime = Time.time + Mathf.Max(0.05f, m_playerYieldDuration);
+        m_preYieldStoppingDistance = m_agent.stoppingDistance;
+        m_preYieldSpeed = m_agent.speed;
+        m_preYieldAvoidancePriority = m_agent.avoidancePriority;
+        m_isYieldingToPlayer = true;
+
+        // 큰 숫자는 낮은 우선순위입니다. 지나가는 플레이어가 계속 움직일 수 있도록 회피 우선권을 양보합니다.
+        m_agent.avoidancePriority = 99;
+        // 추종용 정지 반경(예: 1.5m)을 그대로 쓰면 0.9m 옆 목적지는 이미 도착한 것으로 처리됩니다.
+        m_agent.stoppingDistance = Mathf.Max(0.05f, m_agent.radius * 0.25f);
+        m_agent.speed = Mathf.Max(m_agent.speed, m_playerYieldSpeed);
+        m_agent.isStopped = false;
+        if (!m_agent.SetDestination(m_playerYieldDestination))
+        {
+            EndPlayerYield();
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>플레이어 진행 방향의 좌우, 마지막으로 뒤쪽 순서로 안전한 양보 위치를 고릅니다.</summary>
+    private bool TrySelectPlayerYieldDestination(Vector3 playerPosition, Vector3 playerMoveDirection, out Vector3 destination)
+    {
+        destination = transform.position;
+
+        float distance = Mathf.Max(0.1f, m_playerYieldDistance);
+        Vector3 side = Vector3.Cross(Vector3.up, playerMoveDirection).normalized;
+        Vector3[] offsets =
+        {
+            side * distance,
+            -side * distance,
+            -playerMoveDirection * distance
+        };
+
+        bool found = false;
+        float bestPathDistance = float.MaxValue;
+        float minimumPlayerClearance = Mathf.Max(0.2f, m_agent.radius * 2.0f);
+
+        for (int i = 0; i < offsets.Length; i++)
+        {
+            // 좌우 후보가 하나라도 있으면 뒤로 물러나는 후보는 보지 않습니다. 플레이어와 마주친 AI가
+            // 복도 진행축을 따라 후퇴하기보다 통로 옆으로 빠지는 동작을 우선해야 합니다.
+            if (i == 2 && found)
+            {
+                break;
+            }
+
+            Vector3 offset = offsets[i];
+            Vector3 candidate = transform.position + offset;
+            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, m_playerYieldSampleRadius, NavMesh.AllAreas))
+            {
+                continue;
+            }
+
+            Vector3 fromPlayer = hit.position - playerPosition;
+            fromPlayer.y = 0.0f;
+            Vector3 actualOffset = hit.position - transform.position;
+            actualOffset.y = 0.0f;
+
+            // SamplePosition이 현재 자리 쪽으로 되감긴 후보는 실제로 비켜나지 않으므로 제외합니다.
+            float requiredDisplacement = distance * 0.5f;
+            float usefulDisplacement = i < 2
+                ? Mathf.Abs(Vector3.Dot(actualOffset, side))
+                : -Vector3.Dot(actualOffset, playerMoveDirection);
+            if (usefulDisplacement < requiredDisplacement ||
+                fromPlayer.sqrMagnitude < minimumPlayerClearance * minimumPlayerClearance ||
+                !IsPositionClear(hit.position))
+            {
+                continue;
+            }
+
+            float pathDistance = CalculatePathDistance(transform.position, hit.position);
+            if (pathDistance < 0.0f || pathDistance >= bestPathDistance)
+            {
+                continue;
+            }
+
+            bestPathDistance = pathDistance;
+            destination = hit.position;
+            found = true;
+        }
+
+        return found;
+    }
+
+    /// <summary>진행 중인 플레이어 양보 이동을 갱신하고, 끝나면 일반 AI 이동을 즉시 재개할 수 있게 정리합니다.</summary>
+    /// <returns>이번 프레임에 양보 이동이 일반 AI 이동을 대신해야 하면 true입니다.</returns>
+    private bool UpdatePlayerYield()
+    {
+        if (!m_isYieldingToPlayer)
+        {
+            return false;
+        }
+
+        bool agentUsable = m_agent != null && m_agent.enabled && m_agent.isOnNavMesh;
+        // SetDestination 직후 remainingDistance는 경로 계산 전에 0으로 보일 수 있습니다. 실제 Transform이
+        // 양보 목적지에 가까워졌을 때만 도착으로 인정해야 첫 프레임에 이동이 취소되지 않습니다.
+        float arrivalDistance = agentUsable ? Mathf.Max(0.1f, m_agent.radius * 0.5f) : 0.1f;
+        bool arrived = agentUsable && !m_agent.pathPending &&
+                       FlatDistance(transform.position, m_playerYieldDestination) <= arrivalDistance;
+        if (!agentUsable || Time.time >= m_playerYieldEndTime || arrived)
+        {
+            EndPlayerYield();
+            return false;
+        }
+
+        m_agent.avoidancePriority = 99;
+        m_agent.isStopped = false;
+        UpdateMoveAnimation(m_agent.velocity);
+
+        return true;
+    }
+
+    /// <summary>플레이어 양보 상태를 끝내고, 다음 프레임이 아니라 같은 프레임에 일반 추종 계산을 재개합니다.</summary>
+    private void EndPlayerYield()
+    {
+        if (!m_isYieldingToPlayer)
+        {
+            return;
+        }
+
+        m_isYieldingToPlayer = false;
+        if (m_agent != null)
+        {
+            m_agent.stoppingDistance = m_preYieldStoppingDistance;
+            m_agent.speed = m_preYieldSpeed;
+            m_agent.avoidancePriority = m_preYieldAvoidancePriority;
+        }
+        StopAgent();
+        m_nextUpdateTime = Time.time;
     }
 
     /// <summary>

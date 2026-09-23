@@ -5846,6 +5846,7 @@ MonoBehaviour:
   m_balanceSO: {fileID: 0}
   m_currentBullet: 30
   m_maxBullet: 30
+  m_infiniteAmmo: 1
   m_shootDelay: 0.12
   m_reloadTime: 1.5
   m_allowFullMagReload: 0
@@ -5875,6 +5876,7 @@ MonoBehaviour:
   m_hitDetectLayerMask:
     serializedVersion: 2
     m_Bits: 16384
+  m_muzzleOverlapRadius: 0.12
   m_allyBulletPassThrough: 1
   m_hipfireMinSpread: 0
   m_hipfireMaxSpread: 3
@@ -5886,6 +5888,7 @@ MonoBehaviour:
   m_adsMinSpread: 0
   m_adsMaxSpread: 1
   m_adsCurrentSpread: 0
+  m_airborneExtraSpread: 2
   m_adsMinSpreadShotCount: 3
   m_adsSpreadIncreasePerShot: 0.4
   m_adsSpreadRecoveryPerSecond: 8

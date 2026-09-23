@@ -373,6 +373,18 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [FormerlySerializedAs("aimRig")]
     [SerializeField] private Rig m_aimRig;
 
+    [Tooltip("기존 상체 IK 처리 후 총구와 실제 조준 방향의 각도 오차를 보정하는 최대 각도입니다. 0이면 보정하지 않습니다. 가까운 상체 뼈 하나만 돌려 자세가 과도하게 꺾이지 않도록 제한합니다.")]
+    [Range(0.0f, 45.0f)]
+    [SerializeField] private float m_muzzleAlignmentMaxAngle = 30.0f;
+
+    private Transform m_muzzleAlignmentBone;
+    private Quaternion m_preAlignmentLocalRotation;
+    private Quaternion m_muzzleAlignmentOffset = Quaternion.identity;
+    private bool m_hasMuzzleAlignment;
+    private bool m_combatShotPending;
+    private bool m_fireRequested;
+
+    /// <summary>
     [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
     [Clamp(Min = 0)]
     [SerializeField] private float m_stanceBlendDuration = 0.15f;
@@ -434,6 +446,19 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private Camera m_mainCamera;
     private EnemyController m_currentAimEnemy;
     private Vector3 m_currentAimPoint;
+
+    /// <summary>
+    /// 카메라 트레이스가 조준점으로 잡은 대상의 체력 소유자입니다. 대상이 없으면 <c>null</c>입니다.
+    /// </summary>
+    /// <remarks>
+    /// 차단 마커 판정에만 씁니다. 총구와 카메라는 위치가 달라, 같은 대상을 겨눠도 총구 레이가 그 대상의
+    /// 다른 부위(어깨·팔·히트박스)를 조준점보다 앞에서 스칩니다. 대상을 모른 채 거리만 비교하면 그것이
+    /// "중간 장애물"로 잡혀 겨눈 적 위에 차단 마커가 뜹니다. 겨눈 대상 본인은 장애물이 아니므로 제외합니다.
+    ///
+    /// 루트 Transform이 아니라 체력 소유자로 비교합니다. 적이 스폰 풀 자식으로 들어가면 루트가 스폰 포인트라
+    /// 범위가 통째로 넓어집니다. 체력 소유자는 부위 히트박스와 몸통이 같은 하나로 모이는 자연스러운 경계입니다.
+    /// </remarks>
+    private HealthSystemBase m_currentAimTargetHealth;
     private bool m_hasRequiredReferences;
     private bool m_inCombatStance;
     private bool m_isAds;
@@ -1032,6 +1057,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     private void Update()
     {
+        RestoreMuzzleAlignment();
+        m_combatShotPending = false;
+        m_fireRequested = false;
+
         if (!m_hasRequiredReferences)
         {
             return;
@@ -1045,6 +1074,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (m_weaponController != null)
         {
             m_weaponController.SetAirborne(IsAirborne);
+
+            // 앉기도 같은 이유로 무기가 스스로 알 수 없습니다. 자세가 바뀌는 동안 탄퍼짐이 같은 곡선을
+            // 타도록 켜짐/꺼짐이 아니라 보간값을 그대로 넘깁니다.
+            m_weaponController.SetCrouchBlend(m_controller != null ? m_controller.CrouchBlend : 0.0f);
         }
 
         if (m_isPlayerControlled)
@@ -1055,6 +1088,137 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 리그·레이어 보간은 조작 여부와 무관하게 돌아야 합니다. AI가 모는 대원도 자세가 바뀌고,
         // 여기서 멈추면 그 대원의 가중치가 중간값에 얼어붙습니다.
         UpdateStanceWeights();
+    }
+
+    /// <summary>애니메이터와 상체 IK가 끝난 총구를 보정한 뒤, 그 위치에서 표시와 사격을 함께 계산합니다.</summary>
+    private void LateUpdate()
+    {
+        if (!m_inCombatStance || IsReloadInProgress)
+        {
+            m_muzzleAlignmentOffset = Quaternion.identity;
+            return;
+        }
+
+        // AI has an individual LookTarget supplied by SquadAIController. Apply the same
+        // post-rig upper-body/muzzle correction, while leaving its firing to SquadAIController.
+        if (!m_isPlayerControlled)
+        {
+            AlignMuzzleToAimPoint();
+            return;
+        }
+
+        if (!m_combatShotPending)
+        {
+            m_muzzleAlignmentOffset = Quaternion.identity;
+            return;
+        }
+
+        AlignMuzzleToAimPoint();
+        Gun.HitscanShotInfo shotInfo = EvaluateHitscanShot(m_currentAimPoint, m_currentAimTargetHealth);
+        UpdateCurrentAimEnemy(shotInfo);
+        DrawHitscanDebugRay(shotInfo);
+        DrawAimTraceDebugLine(shotInfo);
+        DrawCameraForwardDebugRay(m_lookTarget != null ? m_lookTarget.transform.position : m_currentAimPoint);
+        DrawAimDebugSpheres(m_lookTarget != null ? m_lookTarget.transform.position : m_currentAimPoint, shotInfo);
+        UpdateHitscanBlockMarker(shotInfo);
+
+        if (m_fireRequested && m_weaponController != null
+            && m_weaponController.TryLayShoot(shotInfo, m_isAds, out Gun.HitscanShotInfo firedShot))
+        {
+            SpawnImpactMarker(firedShot);
+            ApplyRecoilAndVisualKick();
+        }
+    }
+
+    /// <summary>양팔과 총을 함께 가진 상체 뼈를 제한적으로 회전시켜 총구를 실제 조준 방향에 맞춥니다.</summary>
+    private void AlignMuzzleToAimPoint()
+    {
+        if (m_muzzleAlignmentMaxAngle <= 0.0f || m_aimRig == null || m_handRig == null
+            || m_weaponController == null || m_weaponController.FirePos == null
+            || (m_input != null && m_input.ThrowMode) || m_animator == null || !m_animator.isHuman)
+        {
+            m_muzzleAlignmentOffset = Quaternion.identity;
+            return;
+        }
+
+        if (m_muzzleAlignmentBone == null)
+        {
+            m_muzzleAlignmentBone = m_animator.GetBoneTransform(HumanBodyBones.UpperChest);
+            if (m_muzzleAlignmentBone == null)
+            {
+                m_muzzleAlignmentBone = m_animator.GetBoneTransform(HumanBodyBones.Chest);
+            }
+        }
+
+        Transform muzzle = m_weaponController.FirePos;
+        if (m_muzzleAlignmentBone == null || !muzzle.IsChildOf(m_muzzleAlignmentBone))
+        {
+            return;
+        }
+
+        float weight = Mathf.Min(m_aimRig.weight, m_handRig.weight);
+        m_preAlignmentLocalRotation = m_muzzleAlignmentBone.localRotation;
+        Quaternion originalRotation = m_muzzleAlignmentBone.rotation;
+
+        // 카메라와 총구 사이의 시차 때문에 근접 조준점에서는 그 점에 수렴하고,
+        // 먼 조준점에서는 카메라 조준축과 평행에 가깝게 유지합니다.
+        Vector3 forward = GetAimForward();
+        bool converge = Vector3.Dot(m_currentAimPoint - m_muzzleAlignmentBone.position, forward) > 1.0f;
+        for (int i = 0; i < 3; i++)
+        {
+            Vector3 direction = converge ? m_currentAimPoint - muzzle.position : forward;
+            if (direction.sqrMagnitude < 0.0001f)
+            {
+                break;
+            }
+
+            Quaternion desired = Quaternion.FromToRotation(muzzle.forward, direction)
+                * m_muzzleAlignmentBone.rotation;
+            m_muzzleAlignmentBone.rotation = Quaternion.RotateTowards(
+                originalRotation,
+                desired,
+                m_muzzleAlignmentMaxAngle);
+        }
+
+        Quaternion offset = Quaternion.Inverse(m_preAlignmentLocalRotation)
+            * m_muzzleAlignmentBone.localRotation;
+        // 반동·앉기 전환은 상체의 기준 자세를 한 프레임 안에서도 크게 바꿉니다. 사격 중에 이전
+        // 자세에서 계산한 로컬 오프셋을 계속 보간하면 총구가 현재 탄착 방향을 한두 프레임 늦게
+        // 따라가므로, 실제 발사 프레임은 방금 계산한 보정을 즉시 사용합니다. 조준만 하는 동안에는
+        // 기존 보간을 유지해 총을 들 때 상체가 갑자기 꺾이지 않게 합니다.
+        if (m_isPlayerControlled && m_fireRequested)
+        {
+            m_muzzleAlignmentOffset = offset;
+        }
+        else
+        {
+            m_muzzleAlignmentOffset = Quaternion.Slerp(
+                m_muzzleAlignmentOffset,
+                offset,
+                1.0f - Mathf.Exp(-18.0f * Time.deltaTime));
+        }
+        m_muzzleAlignmentBone.localRotation = m_preAlignmentLocalRotation
+            * Quaternion.Slerp(Quaternion.identity, m_muzzleAlignmentOffset, weight);
+        m_hasMuzzleAlignment = true;
+    }
+
+    /// <summary>이 프레임의 후처리가 다음 애니메이션 리그 입력에 누적되지 않도록 원래 자세를 복원합니다.</summary>
+    private void RestoreMuzzleAlignment()
+    {
+        if (m_hasMuzzleAlignment && m_muzzleAlignmentBone != null)
+        {
+            m_muzzleAlignmentBone.localRotation = m_preAlignmentLocalRotation;
+        }
+
+        m_hasMuzzleAlignment = false;
+    }
+
+    private void OnDisable()
+    {
+        RestoreMuzzleAlignment();
+        m_muzzleAlignmentOffset = Quaternion.identity;
+        m_combatShotPending = false;
+        m_fireRequested = false;
     }
 
     /// <summary>
@@ -1272,10 +1436,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     private void UpdateAimAndWeapon()
     {
+        // 상체를 따로 쓰는 행동(투척 등)이 들어오면 재장전을 접고 그쪽을 먼저 보냅니다.
+        CancelReloadForUpperBodyAction();
+
         if (HandleReloadInput())
         {
             return;
         }
+
+        // 탄창이 비면 입력 없이 바로 재장전합니다. 위에서 접힌 경우에도, 그 행동이 끝나 조건이 풀리는
+        // 프레임에 여기서 다시 걸립니다. 별도의 "복귀" 상태를 두지 않는 이유입니다.
+        TryAutoReloadWhenEmpty();
 
         if (m_controller.IsReload)
         {
@@ -1459,6 +1630,32 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// AI 대원이 플레이어와 같은 재장전 비주얼과 무기 타이머를 함께 시작합니다.
+    /// </summary>
+    /// <returns>재장전을 새로 시작했으면 <c>true</c>입니다.</returns>
+    /// <remarks>
+    /// 스쿼드 AI는 입력을 거치지 않으므로 <see cref="HandleReloadInput"/>를 호출할 수 없습니다.
+    /// 그렇다고 <see cref="Gun.StartReload"/>만 직접 부르면 탄약 타이머만 돌고 애니메이터의
+    /// <c>IsReload</c>/<c>DoReload</c> 상태가 빠집니다. 플레이어와 같은 <see cref="BeginReload"/>
+    /// 경로로 묶어, 애니메이션 완료 시점과 무기 타이머 완료 시점을 하나의 재장전으로 관리합니다.
+    /// </remarks>
+    public bool BeginAiReload()
+    {
+        if (!m_hasRequiredReferences
+            || m_isPlayerControlled
+            || m_controller == null
+            || m_weaponController == null
+            || m_controller.IsReload
+            || !m_weaponController.CanReload)
+        {
+            return false;
+        }
+
+        BeginReload();
+        return true;
+    }
+
+    /// <summary>
     /// 총을 드는 동안 사격을 막는 구간을 시작합니다.
     /// </summary>
     /// <remarks>
@@ -1609,19 +1806,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         ApplyLookTarget(lookPoint);
 
         // 조준점: 카메라 트레이스가 잡은 실제 사격 목표. 총알이 겨누는 지점입니다.
-        Vector3 aimPoint = ResolveAimPoint(lookPoint);
+        Vector3 aimPoint = ResolveAimPoint(lookPoint, out m_currentAimTargetHealth);
         m_currentAimPoint = aimPoint;
 
-        // 탄착점: 총구에서 조준점으로 가다가 걸리는 지점(shotInfo.EndPoint). 실제 사격이 이 결과를 사용합니다.
-        Gun.HitscanShotInfo shotInfo = EvaluateHitscanShot(aimPoint);
-        UpdateCurrentAimEnemy(shotInfo);
-
-        DrawHitscanDebugRay(shotInfo);
-        DrawAimTraceDebugLine(shotInfo);
-        DrawCameraForwardDebugRay(lookPoint);
-        DrawAimDebugSpheres(lookPoint, shotInfo);
-        UpdateHitscanBlockMarker(shotInfo);
-        UpdateShootState(shotInfo);
+        // Update에서는 애니메이션 입력까지만 준비합니다. 실제 탄착 계산과 발사는 IK가 끝난 LateUpdate에서
+        // 총구 보정을 적용한 뒤 한 번만 수행해 표시와 사격이 같은 총구 위치를 사용하게 합니다.
+        m_combatShotPending = true;
+        UpdateShootState();
         ApplyCombatZoom(false);
         UpdateCrosshair(false);
     }
@@ -1974,10 +2165,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <param name="lookPoint">이번 프레임의 지향점입니다. 카메라 트레이스가 아무것도 못 맞히면 이 먼 지점을 조준점으로 사용합니다.</param>
     /// <returns>카메라가 크로스헤어로 가리키는 실제 월드 지점(미충돌 시 지향점)입니다.</returns>
     /// <remarks>총알은 총구→이 지점으로 향하므로, 가까운 적도 시차 없이 정확히 겨눕니다.</remarks>
-    private Vector3 ResolveAimPoint(Vector3 lookPoint)
+    private Vector3 ResolveAimPoint(Vector3 lookPoint, out HealthSystemBase aimTarget)
     {
+        aimTarget = null;
         Transform cameraTransform = m_mainCamera.transform;
-        float aimDistance = Vector3.Distance(cameraTransform.position, lookPoint);
+        Vector3 direction = GetAimForward().normalized;
+        Vector3 origin = ResolveAimTraceOrigin(cameraTransform.position, direction);
+        float aimDistance = Mathf.Max(0.0f, Vector3.Dot(lookPoint - origin, direction));
 
         // 레이어가 지정돼 있으면 그것을, 아니면 무기 히트스캔 레이어(없으면 전체)에서 소유(본인) 레이어를 제외해
         // 카메라 트레이스가 자기 콜라이더를 조준점으로 잡지 않게 합니다.
@@ -2002,19 +2196,39 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 순간 조준점이 그 등판으로 당겨지면 화면 중앙의 적을 겨누고 있는데도 조준 거리와 차단 표시가 함께 어긋납니다.
         if (m_weaponController != null)
         {
-            return m_weaponController.TryTraceAimPoint(
-                cameraTransform.position, GetAimForward(), aimDistance, mask, out RaycastHit staged)
-                ? staged.point
-                : lookPoint;
+            if (!m_weaponController.TryTraceAimPoint(
+                    origin, direction, aimDistance, mask, out RaycastHit staged))
+            {
+                return lookPoint;
+            }
+
+            aimTarget = ResolveHealthOwner(staged.collider);
+            return staged.point;
         }
 
         // 무기가 없으면 켤 부위도, 마스크를 소유한 주체도 없으므로 단발 트레이스로 돌아갑니다.
-        if (TryTraceAim(cameraTransform.position, GetAimForward(), aimDistance, mask, out RaycastHit hit))
+        if (TryTraceAim(origin, direction, aimDistance, mask, out RaycastHit hit))
         {
+            aimTarget = ResolveHealthOwner(hit.collider);
             return hit.point;
         }
 
         return lookPoint;
+    }
+
+    /// <summary>화면 중앙 레이를 유지하면서 캐릭터와 총구 뒤의 구간을 조준 검색에서 제외합니다.</summary>
+    private Vector3 ResolveAimTraceOrigin(Vector3 cameraPosition, Vector3 direction)
+    {
+        // 거리 자체가 아니라 레이 방향으로 투영한 깊이를 사용해야 숄더 카메라/상하 조준에서도
+        // 같은 화면 중앙선을 유지합니다. 총구보다 뒤의 목표를 잡아 역방향으로 발사하는 것도 막습니다.
+        float depth = Vector3.Dot(transform.position - cameraPosition, direction);
+        if (m_weaponController != null && m_weaponController.FirePos != null)
+        {
+            depth = Mathf.Max(depth, Vector3.Dot(m_weaponController.FirePos.position - cameraPosition, direction));
+        }
+
+        // 이 제외 구간은 카메라 조준에만 적용합니다. 총구에서 나가는 실제 탄착 검사는 그대로 둡니다.
+        return cameraPosition + direction * Mathf.Max(0.0f, depth + 0.01f);
     }
 
     /// <summary>
@@ -2080,7 +2294,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <param name="targetPosition">카메라 트레이스로 계산한 조준점(AimPoint)입니다. 총구가 이 지점을 향해 발사합니다.</param>
     /// <returns>총구 원점, 발사 방향, 탄착점(EndPoint), 충돌 및 중간 장애물 여부를 포함한 사격 정보입니다.</returns>
     /// <remarks>이 결과는 조준 마커 표시와 실제 히트스캔 사격 처리에서 동일하게 사용됩니다.</remarks>
-    private Gun.HitscanShotInfo EvaluateHitscanShot(Vector3 targetPosition)
+    private Gun.HitscanShotInfo EvaluateHitscanShot(Vector3 targetPosition, HealthSystemBase aimTarget)
     {
         Gun.HitscanShotInfo shotInfo = new()
         {
@@ -2117,16 +2331,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return shotInfo;
         }
 
-        if (!Physics.Raycast(
+        if (!m_weaponController.TryTraceAimPoint(
                 origin,
                 direction,
-                out RaycastHit hit,
                 rayDistance,
                 m_weaponController.HitscanLayerMask,
-                // 부위 히트박스가 전부 트리거이므로 트리거 포함을 명시합니다. UseGlobal로 두면
-                // Physics.queriesHitTriggers를 끄는 순간 이 경로가 통째로 아무것도 못 봅니다
-                // (Gun.ResolveShotPath 주석에 같은 이유가 적혀 있고 그쪽은 이미 Collide입니다).
-                QueryTriggerInteraction.Collide))
+                out RaycastHit hit))
         {
             return shotInfo;
         }
@@ -2134,7 +2344,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         shotInfo.HasHit = true;
         shotInfo.Hit = hit;
         shotInfo.EndPoint = hit.point;
-        shotInfo.IsObstructed = aimDistance > 0.0001f
+
+        // 겨눈 대상 본인은 장애물이 아닙니다. 총구와 카메라의 위치 차이 때문에 같은 적의 다른 부위가
+        // 조준점보다 앞에서 맞는 일이 흔하고, 거리만 비교하면 그것이 차단으로 잡힙니다.
+        bool hitIsAimTarget = aimTarget != null && ResolveHealthOwner(hit.collider) == aimTarget;
+
+        shotInfo.IsObstructed = !hitIsAimTarget
+            && aimDistance > 0.0001f
             && hit.distance < aimDistance - Gun.HitscanAimTolerance;
 
         return shotInfo;
@@ -2211,7 +2427,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        Debug.DrawLine(m_mainCamera.transform.position, shotInfo.AimPoint, Color.cyan, 0.0f, false);
+        Debug.DrawLine(ResolveAimTraceOrigin(m_mainCamera.transform.position, GetAimForward().normalized),
+            shotInfo.AimPoint, Color.cyan, 0.0f, false);
     }
 
     /// <summary>
@@ -2350,40 +2567,111 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>
     /// 사격 입력 상태를 애니메이터와 무기 컨트롤러에 반영합니다.
     /// </summary>
-    /// <param name="shotInfo">현재 조준 프레임에서 계산된 히트스캔 사격 정보입니다.</param>
-    private void UpdateShootState(Gun.HitscanShotInfo shotInfo)
+    private void UpdateShootState()
     {
         // 상체 레이어를 사격·재장전에만 올립니다. 조준 포즈는 Base Layer 몫이라 여기서 관여하지 않습니다.
         RefreshWeaponLayerWeight();
 
         // 총을 다 들기 전에는 발사도, 사격 포즈도 내보내지 않습니다. 포즈만 먼저 나가면 총을 드는 도중에
         // 사격 자세로 튀어 "다 들고 나서 쏜다"가 무너집니다.
-        if (m_input.Shoot && IsRaisingWeapon)
+        bool shootPressed = m_input.Shoot;
+
+        if (shootPressed && IsRaisingWeapon)
         {
             m_animator.SetBool(AnimIDShoot, false);
             return;
         }
 
-        if (m_input.Shoot)
+        if (shootPressed)
         {
             m_animator.SetBool(AnimIDShoot, true);
 
-            if (m_weaponController != null)
-            {
-                //m_weaponController.TryShoot(targetPosition); // 오브젝트 풀링
-                bool fired = m_weaponController.TryLayShoot(shotInfo, m_isAds, out Gun.HitscanShotInfo firedShot); // 히트스캔(탄퍼짐 적용)
-
-                if (fired)
-                {
-                    SpawnImpactMarker(firedShot);
-                    ApplyRecoilAndVisualKick();
-                }
-            }
+            m_fireRequested = true;
 
             return;
         }
 
         m_animator.SetBool(AnimIDShoot, false);
+    }
+
+    /// <summary>
+    /// 상체를 따로 쓰는 행동이 시작되면 진행 중인 재장전을 접습니다.
+    /// </summary>
+    /// <remarks>
+    /// 투척은 재장전과 같은 상체를 쓰므로 둘을 겹칠 수 없습니다. 재장전이 자동으로 걸리게 되면서
+    /// 수류탄을 꺼내려는 순간마다 재장전이 먼저 잡고 있을 수 있어, 들어온 쪽을 우선합니다.
+    ///
+    /// 무기 타이머도 함께 끊습니다. 비주얼만 접고 타이머를 두면 아무 동작 없이 탄이 채워집니다.
+    /// 접힌 재장전은 조건이 풀리는 프레임에 <see cref="TryAutoReloadWhenEmpty"/>가 다시 시작합니다.
+    /// </remarks>
+    private void CancelReloadForUpperBodyAction()
+    {
+        if (m_controller == null || !m_controller.IsReload || !IsUpperBodyActionRequested)
+        {
+            return;
+        }
+
+        if (m_weaponController != null)
+        {
+            m_weaponController.CancelReload();
+        }
+
+        FinishReloadVisualState(false);
+    }
+
+    /// <summary>
+    /// 상체를 따로 쓰는 행동이 요청된 상태인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 지금은 투척 모드뿐입니다. 같은 성격의 행동(근접, 아이템 사용 등)이 생기면 여기에 더하면
+    /// 재장전 취소와 자동 재장전 보류가 함께 따라옵니다. 두 곳에서 따로 판단하면 한쪽만 빠집니다.
+    /// </remarks>
+    private bool IsUpperBodyActionRequested => m_input != null && m_input.ThrowMode;
+
+    /// <summary>
+    /// 탄창이 비어 있으면 입력 없이 재장전을 시작합니다.
+    /// </summary>
+    /// <remarks>
+    /// 상체를 따로 쓰는 행동 중에는 걸지 않습니다. 그 행동이 끝나면 이 메서드가 매 프레임 다시
+    /// 조건을 보므로 자동으로 이어집니다.
+    /// </remarks>
+    private void TryAutoReloadWhenEmpty()
+    {
+        if (IsUpperBodyActionRequested)
+        {
+            return;
+        }
+
+        TryReloadOnEmptyFire();
+    }
+
+    /// <summary>
+    /// 탄창이 비어 있으면 재장전을 시작합니다.
+    /// </summary>
+    /// <returns>재장전을 시작했으면 <c>true</c>입니다.</returns>
+    /// <remarks>
+    /// R키 경로(<see cref="HandleReloadInput"/>)와 같은 게이트를 씁니다. 조건을 따로 만들면 한쪽만 바뀌어
+    /// 두 경로의 재장전 가능 여부가 갈립니다.
+    /// </remarks>
+    private bool TryReloadOnEmptyFire()
+    {
+        if (m_weaponController == null || m_weaponController.CurrentBullet > 0)
+        {
+            return false;
+        }
+
+        if (m_controller != null && m_controller.IsReload)
+        {
+            return false;
+        }
+
+        if (!m_weaponController.CanReload)
+        {
+            return false;
+        }
+
+        BeginReload();
+        return true;
     }
 
     /// <summary>
@@ -2708,7 +2996,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_hipfireTimer = inCombat && !isAiming ? m_hipfireHoldDuration : 0.0f;
 
         // 상체 레이어는 사격 중일 때만 올립니다. 조준 자세 자체는 Base Layer가 자세별로 갖고 있습니다.
-        ApplyCombatStanceState(inCombat, isShooting, inCombat && isShooting ? 1.0f : 0.0f);
+        ApplyCombatStanceState(inCombat, isShooting, 0.0f);
 
         if (inCombat)
         {
@@ -3107,7 +3395,23 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     public void ApplyAiLookPoint(Vector3 point)
     {
+        m_currentAimPoint = point;
+
+        // AI 경로는 카메라 트레이스를 타지 않아 조준 대상을 모릅니다. 조작 멤버였을 때의 값이 남아 있으면
+        // 엉뚱한 적을 "겨눈 대상"으로 보고 차단 판정이 어긋나므로 비웁니다.
+        m_currentAimTargetHealth = null;
         ApplyLookTarget(point);
+    }
+
+    /// <summary>
+    /// 콜라이더가 속한 체력 소유자를 찾습니다. 없으면 <c>null</c>입니다.
+    /// </summary>
+    /// <remarks>
+    /// 부위 히트박스는 자식 콜라이더라 자기 자신에는 체력이 없습니다. 부모로 올라가야 몸통과 같은 하나로 모입니다.
+    /// </remarks>
+    private static HealthSystemBase ResolveHealthOwner(Collider collider)
+    {
+        return collider != null ? collider.GetComponentInParent<HealthSystemBase>() : null;
     }
 
     /// <summary>지금 플레이어가 직접 조작 중인지 여부입니다.</summary>

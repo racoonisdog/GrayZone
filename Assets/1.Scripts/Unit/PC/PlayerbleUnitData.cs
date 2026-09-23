@@ -25,7 +25,7 @@ public enum PlayerbleCharacterId
 /// 플레이어 유닛의 공용 상태를 모아두는 공개 데이터 Module입니다.
 /// 외부 시스템은 이 Module을 통해 식별 정보, 신뢰도, 생존 상태, 체력 요약값을 읽습니다.
 /// </summary>
-public class PlayerbleUnitData : MonoBehaviour
+public class PlayerbleUnitData : MonoBehaviour, IAmmoReserve
 {
     [Header("Public Identity")]
     [Tooltip("보유 캐릭터 목록과 필드 결과를 연결하는 영속 정의 ID입니다.")]
@@ -665,6 +665,46 @@ public class PlayerbleUnitData : MonoBehaviour
     }
 
     /// <summary>
+    /// 예비 탄약이 무한으로 취급되는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 무한 여부의 주인은 총기 프리팹 설정(<see cref="Gun.InfiniteAmmo"/>)입니다. 총마다 다를 수 있는
+    /// 성질이라 캐릭터가 아니라 무기에 둡니다. 기존 디버그 토글도 함께 봐서 트레이너로 켰을 때도 통합니다.
+    ///
+    /// UI와 소모 판정이 모두 이 하나를 읽습니다. 각자 두 플래그를 조합하면 표시와 실제가 갈립니다.
+    /// </remarks>
+    public bool HasInfiniteReserveAmmo =>
+        (m_weaponController != null && m_weaponController.InfiniteAmmo)
+        || (m_debugInfiniteReserveAmmo && GameDevMode.DebugFeaturesEnabled);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 무한이면 예비량을 줄이지 않고 요청한 만큼 그대로 공급합니다.
+    /// </remarks>
+    public int ConsumeReserveAmmo(int requestedAmount)
+    {
+        if (requestedAmount <= 0)
+        {
+            return 0;
+        }
+
+        if (HasInfiniteReserveAmmo)
+        {
+            return requestedAmount;
+        }
+
+        int granted = Mathf.Min(requestedAmount, m_reserveAmmo);
+        if (granted <= 0)
+        {
+            return 0;
+        }
+
+        m_reserveAmmo -= granted;
+        NotifyPublicDataChanged();
+        return granted;
+    }
+
+    /// <summary>
     /// 예비 탄약 최대치를 설정합니다.
     /// </summary>
     /// <param name="value">새 예비 탄약 최대치입니다.</param>
@@ -791,6 +831,9 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_weaponController.OnBulletChanged += HandleWeaponBulletChanged;
+
+        // 재장전이 이 캐릭터의 예비 탄약을 소모하도록 공급자를 연결합니다.
+        m_weaponController.AmmoReserve = this;
     }
 
     private void UnsubscribeWeapon()
@@ -801,6 +844,12 @@ public class PlayerbleUnitData : MonoBehaviour
         }
 
         m_weaponController.OnBulletChanged -= HandleWeaponBulletChanged;
+
+        // 총기를 놓을 때 공급자 연결도 끊습니다. 남겨 두면 손을 떠난 총이 이 캐릭터의 탄을 계속 씁니다.
+        if (ReferenceEquals(m_weaponController.AmmoReserve, this))
+        {
+            m_weaponController.AmmoReserve = null;
+        }
     }
 
     private void HandleHpChanged(int currentHp, int maxHp)

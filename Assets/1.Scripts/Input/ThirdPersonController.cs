@@ -112,6 +112,18 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [Clamp(Min = 0, Max = 180)]
     [SerializeField] private float m_sprintForwardAngle = 60.0f;
 
+    [Tooltip("전진 입력에 적용할 이동 속도 배율입니다. 1이면 기본 이동 속도와 같습니다.")]
+    [Range(0.0f, 2.0f)]
+    [SerializeField] private float m_forwardSpeedMultiplier = 1.0f;
+
+    [Tooltip("후진 입력에 적용할 이동 속도 배율입니다. 기본값 0.8은 전진보다 20% 느립니다.")]
+    [Range(0.0f, 2.0f)]
+    [SerializeField] private float m_backwardSpeedMultiplier = 0.8f;
+
+    [Tooltip("좌·우 입력에 공통 적용할 이동 속도 배율입니다. 1이면 기본 이동 속도와 같습니다.")]
+    [Range(0.0f, 2.0f)]
+    [SerializeField] private float m_strafeSpeedMultiplier = 1.0f;
+
     [Tooltip("이미 전력질주 중일 때 이 각도만큼 더 허용합니다. 부채꼴 경계에서 달리기와 걷기가 번갈아 켜지는 것을 막습니다.")]
     [Range(0.0f, 90.0f)]
     [Clamp(Min = 0, Max = 90)]
@@ -173,6 +185,14 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_speedChangeRate = 10.0f;
+
+    [Tooltip("ADS/전투 자세 진입·해제 직후 이동 속도가 목표 속도에 접근하는 반응 속도입니다. 일반 가감속보다 높게 두어 토글감 없이 빠르게 전환합니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_combatSpeedTransitionRate = 16.0f;
+
+    [Tooltip("ADS/전투 자세 속도 전환에 전용 반응 속도를 적용하는 시간(초)입니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_combatSpeedTransitionDuration = 0.18f;
 
 
 
@@ -566,6 +586,14 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>입력값을 유효한 입력으로 간주하기 위한 최소 제곱 크기 기준입니다.</summary>
     private const float Threshold = 0.01f;
 
+    /// <summary>동료 AI에게 길을 양보해 달라고 다시 요청할 수 있는 최소 간격입니다.</summary>
+    private const float SquadYieldRequestInterval = 0.15f;
+
+    /// <summary>가벼운 접촉만으로 동료를 움직이지 않게 하는 최소 진행 입력입니다.</summary>
+    private const float SquadYieldMinimumInput = 0.2f;
+
+    private float m_nextSquadYieldRequestTime;
+
     /// <summary>Animator 컴포넌트가 존재하는지 여부입니다.</summary>
     private bool m_hasAnimator;
 
@@ -584,6 +612,9 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>전투 자세(조준/사격/사격 잔류) 여부입니다. AimController가 통지합니다.</summary>
     /// <remarks>전투 자세는 설정과 무관하게 백뷰로 고정되고, 전력질주가 잠깁니다.</remarks>
     private bool m_isCombatStance;
+
+    /// <summary>ADS/전투 자세 전환 뒤 전용 속도 보간을 유지할 남은 시간입니다.</summary>
+    private float m_combatSpeedTransitionTimer;
 
     /// <summary>이동 입력이 끊긴 뒤 경과한 시간입니다. Idle 시점 전환 판정에 사용합니다.</summary>
     private float m_idleTimer;
@@ -616,8 +647,34 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     public float MoveSpeed => m_moveSpeed;
     /// <summary>전력질주 이동 속도입니다.</summary>
     public float SprintSpeed => m_sprintSpeed;
+    /// <summary>전진 입력에 적용하는 이동 속도 배율입니다.</summary>
+    public float ForwardSpeedMultiplier => m_forwardSpeedMultiplier;
+    /// <summary>후진 입력에 적용하는 이동 속도 배율입니다.</summary>
+    public float BackwardSpeedMultiplier => m_backwardSpeedMultiplier;
+    /// <summary>좌·우 입력에 공통 적용하는 이동 속도 배율입니다.</summary>
+    public float StrafeSpeedMultiplier => m_strafeSpeedMultiplier;
     /// <summary>웅크린 상태의 이동 속도입니다.</summary>
     public float CrouchSpeed => m_crouchSpeed;
+    /// <summary>현재 앉기 정도입니다. 0이면 선 자세, 1이면 완전히 앉은 자세이고 그 사이는 전환 중입니다.</summary>
+    /// <remarks>높이 보간에 쓰는 값을 그대로 내보냅니다. 탄퍼짐처럼 자세에 따라 달라지는 값이 같은 곡선을 타야 합니다.</remarks>
+    public float CrouchBlend => m_crouchBlend;
+
+    /// <summary>
+    /// 앉기가 지금 실제로 적용 중인지 여부입니다. 공중에서는 입력이 눌려 있어도 <c>false</c>입니다.
+    /// </summary>
+    /// <remarks>
+    /// 공중에서 누른 앉기는 <b>예약</b>일 뿐입니다. 발이 땅에 닿기 전에는 이동 속도·캡슐 높이·애니메이션
+    /// 어느 것도 바뀌면 안 됩니다. 입력은 그대로 두므로 착지하는 프레임부터 곧바로 적용됩니다
+    /// (착지 모션 연결은 <see cref="UpdateCrouchLandingTransition"/>가 맡습니다).
+    ///
+    /// 앉기 효과를 쓰는 곳이 이동 속도·애니메이터·무브스테이트·캡슐 높이로 흩어져 있어, 각자
+    /// <c>m_input.Crouch</c>를 직접 읽으면 한 곳만 빠뜨렸을 때 공중에서 일부 효과만 걸립니다.
+    /// 판단을 여기 하나로 모읍니다.
+    ///
+    /// 접지 판정(<c>GroundedCheck</c>)이 <c>Update</c>에서 이 값을 읽는 모든 처리보다 먼저 돌아,
+    /// 착지·이륙하는 프레임에 한 프레임 밀리지 않습니다.
+    /// </remarks>
+    public bool IsCrouchActive => m_grounded && m_input != null && m_input.Crouch;
     /// <summary>이동 방향을 바라보는 회전 보간 시간입니다.</summary>
     public float RotationSmoothTime => m_rotationSmoothTime;
     /// <summary>실제 이동 벡터가 새 입력 방향을 향해 회전하는 최대 각속도(°/s)입니다.</summary>
@@ -710,6 +767,10 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
     public void SetSprintSpeed(float value) => m_sprintSpeed = value;
+
+    public void SetForwardSpeedMultiplier(float value) => m_forwardSpeedMultiplier = Mathf.Max(0.0f, value);
+    public void SetBackwardSpeedMultiplier(float value) => m_backwardSpeedMultiplier = Mathf.Max(0.0f, value);
+    public void SetStrafeSpeedMultiplier(float value) => m_strafeSpeedMultiplier = Mathf.Max(0.0f, value);
     /// <summary>
     /// 웅크림 이동 속도를 설정합니다. 음수는 0으로 보정합니다.
     /// </summary>
@@ -1152,6 +1213,11 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     public void SetCombatStance(bool value)
     {
+        if (m_isCombatStance != value)
+        {
+            m_combatSpeedTransitionTimer = m_combatSpeedTransitionDuration;
+        }
+
         m_isCombatStance = value;
 
         if (value)
@@ -1492,7 +1558,8 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             m_input.CrouchInput(false);
         }
 
-        bool wantsCrouch = m_input.Crouch;
+        // 공중에서는 입력이 눌려 있어도 앉지 않습니다. 예약만 남고 착지 프레임부터 적용됩니다.
+        bool wantsCrouch = IsCrouchActive;
 
         // 천장에 막혀 있으면 일어서지 않습니다. 막힌 자리에서 캡슐을 키우면 CharacterController가
         // 겹침을 풀려고 캐릭터를 밀어내기 때문에 지형을 뚫고 튀어 나갑니다.
@@ -2073,7 +2140,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
         // 웅크리기는 전투 자세보다 뒤에서 덮습니다. 조준하며 웅크려도 웅크림 속도가 유지되어야 하고,
         // 이 순서 덕분에 웅크린 동안은 전력질주가 따로 막지 않아도 자연히 잠깁니다.
-        if (m_input.Crouch)
+        if (IsCrouchActive)
         {
             targetSpeed = m_crouchSpeed;
         }
@@ -2081,6 +2148,10 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         if (m_input.move == Vector2.zero)
         {
             targetSpeed = 0.0f;
+        }
+        else
+        {
+            targetSpeed *= ResolveDirectionalSpeedMultiplier(m_input.move);
         }
 
         // 전환 직후 몇 프레임은 밀려난 속도를 이동 입력으로 오해하지 않도록 잘라 냅니다.
@@ -2102,12 +2173,16 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
         float speedOffset = 0.1f;
         float inputMagnitude = m_input.analogMovement ? m_input.move.magnitude : 1f;
+        float speedChangeRate = m_combatSpeedTransitionTimer > 0.0f
+            ? m_combatSpeedTransitionRate
+            : m_speedChangeRate;
+        m_combatSpeedTransitionTimer = Mathf.Max(0.0f, m_combatSpeedTransitionTimer - Time.deltaTime);
 
         if (currentHorizontalSpeed < targetSpeed - speedOffset ||
             currentHorizontalSpeed > targetSpeed + speedOffset)
         {
             m_speed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed * inputMagnitude,
-                Time.deltaTime * m_speedChangeRate);
+                Time.deltaTime * speedChangeRate);
 
             m_speed = Mathf.Round(m_speed * 1000f) / 1000f;
         }
@@ -2116,7 +2191,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             m_speed = targetSpeed;
         }
 
-        m_animationBlend = Mathf.Lerp(m_animationBlend, targetSpeed, Time.deltaTime * m_speedChangeRate);
+        m_animationBlend = Mathf.Lerp(m_animationBlend, targetSpeed, Time.deltaTime * speedChangeRate);
 
         if (m_animationBlend < 0.01f)
         {
@@ -2139,6 +2214,49 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         UpdateLocomotionAnimator();
+    }
+
+    /// <summary>
+    /// 직접 조작 중인 멤버가 AI 동료와 진행 방향으로 부딪히면, 동료에게 NavMesh 기반 길 양보를 요청합니다.
+    /// </summary>
+    /// <remarks>
+    /// CharacterController는 Rigidbody 질량을 밀어 주지 않으므로, 충돌 처리에서 힘을 더하지 않습니다.
+    /// 동료가 유효한 NavMesh 후보를 찾았을 때만 자신의 AI가 이동하게 하며 벽/다운 동료에는 적용하지 않습니다.
+    /// </remarks>
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (m_input == null || m_input.move.magnitude < SquadYieldMinimumInput ||
+            Time.time < m_nextSquadYieldRequestTime || hit.collider == null)
+        {
+            return;
+        }
+
+        SquadMemberController member = hit.collider.GetComponentInParent<SquadMemberController>();
+        if (member == null || member.gameObject == gameObject)
+        {
+            return;
+        }
+
+        Vector3 moveDirection = hit.moveDirection;
+        moveDirection.y = 0.0f;
+        if (moveDirection.sqrMagnitude <= Threshold * Threshold)
+        {
+            return;
+        }
+
+        // 진행 반대편 면에 실제로 밀고 있을 때만 요청합니다. 옆면을 스치거나 뒤로 물러날 때는 양보시키지 않습니다.
+        if (Vector3.Dot(moveDirection.normalized, -hit.normal) < 0.25f)
+        {
+            return;
+        }
+
+        if (!member.CanYieldToPlayer)
+        {
+            return;
+        }
+
+        member.TryBeginPlayerYield(transform.position, moveDirection);
+        m_nextSquadYieldRequestTime = Time.time + SquadYieldRequestInterval;
     }
 
     /// <summary>
@@ -2305,7 +2423,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
         m_animator.SetBool(m_animIDIsMove, moving);
         m_animator.SetFloat(m_animIDMoveState, UpdateMoveState());
-        m_animator.SetBool(m_animIDCrouch, m_input.Crouch);
+        m_animator.SetBool(m_animIDCrouch, IsCrouchActive);
 
         // IsAim은 ADS만이 아니라 전투 자세 전체입니다. 힙파이어로 쏘는 동안 상체가 총을 내리고 있으면
         // 총알은 나가는데 조준 포즈가 없는 구간이 생깁니다. 백뷰/전력질주 잠금과도 같은 기준입니다.
@@ -2340,7 +2458,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     {
         float target = MoveStateWalk;
 
-        if (m_input.Crouch)
+        if (IsCrouchActive)
         {
             target = MoveStateCrouch;
         }
@@ -2483,6 +2601,27 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// Returns the speed multiplier for the current local input direction.
+    /// Diagonal input continuously blends its forward/backward contribution with the shared strafe value.
+    /// </summary>
+    private float ResolveDirectionalSpeedMultiplier(Vector2 input)
+    {
+        Vector2 direction = input.sqrMagnitude > 1.0f ? input.normalized : input;
+        float verticalWeight = Mathf.Abs(direction.y);
+        float strafeWeight = Mathf.Abs(direction.x);
+        float totalWeight = verticalWeight + strafeWeight;
+        if (totalWeight <= 0.0001f)
+        {
+            return 1.0f;
+        }
+
+        float verticalMultiplier = direction.y >= 0.0f
+            ? m_forwardSpeedMultiplier
+            : m_backwardSpeedMultiplier;
+        return (verticalMultiplier * verticalWeight + m_strafeSpeedMultiplier * strafeWeight) / totalWeight;
+    }
+
+    /// <summary>
     /// 현재 시점 모드에 맞는 목표 yaw로 몸을 회전시킵니다.
     /// </summary>
     /// <remarks>
@@ -2544,6 +2683,11 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             if (m_input.jump && m_jumpTimeoutDelta <= 0.0f)
             {
                 m_verticalVelocity = Mathf.Sqrt(m_jumpHeight * -2f * m_gravity);
+
+                // 점프하면 앉기를 풉니다. 몸을 띄우는 동작이라 웅크린 자세가 그대로 남을 수 없습니다.
+                // 입력을 내려 두므로 공중에서 다시 누르면 착지 웅크림은 그대로 성립합니다
+                // (<see cref="UpdateCrouchLandingTransition"/>). 전력질주 취소와 같은 방식입니다.
+                m_input.CrouchInput(false);
 
                 if (m_hasAnimator)
                 {

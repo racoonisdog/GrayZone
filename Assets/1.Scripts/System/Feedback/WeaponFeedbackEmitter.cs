@@ -103,6 +103,7 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     private SquadMemberController m_ownerMember;
 
     private const float ImpactSurfaceOffset = 0.002f;
+    private static readonly Quaternion MuzzleEffectAxisCorrection = Quaternion.Euler(90.0f, 0.0f, 0.0f);
 
     /// <summary>이 무기에 지정된 개별 피드백 SO입니다. 지정하지 않았으면 <c>null</c>입니다.</summary>
     public WeaponFeedbackSO FeedbackSO => m_feedbackSO;
@@ -202,18 +203,34 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     {
         PlayLocal(m_shotSounds, ref m_lastShotIndex);
 
+        Vector3 tracerDelta = tracerEnd - tracerStart;
+        bool hasShotDirection = tracerDelta.sqrMagnitude > 0.0001f;
+
         if (muzzleSocket != null)
         {
+            // The socket follows the animated weapon, but the visible flash must follow the
+            // actual hitscan direction. Preserve the prefab root's authored rotation, then
+            // turn its longest flash axis +90 degrees around local X so it extends along the
+            // muzzle's +Z shot direction.
+            Quaternion muzzleRotation = hasShotDirection
+                ? Quaternion.LookRotation(tracerDelta.normalized)
+                : muzzleSocket.rotation;
+            if (m_muzzleEffectPrefab != null)
+            {
+                muzzleRotation *= m_muzzleEffectPrefab.transform.localRotation
+                    * MuzzleEffectAxisCorrection;
+            }
+
             SpawnPersonalEffect(
                 m_muzzleEffectPrefab,
                 muzzleSocket.position,
-                muzzleSocket.rotation,
+                muzzleRotation,
                 m_muzzleEffectLifetime,
-                muzzleSocket);
+                muzzleSocket,
+                forceLocalParticleSimulation: true);
         }
 
-        Vector3 tracerDelta = tracerEnd - tracerStart;
-        Quaternion tracerRotation = tracerDelta.sqrMagnitude > 0.0001f
+        Quaternion tracerRotation = hasShotDirection
             ? Quaternion.LookRotation(tracerDelta.normalized)
             : Quaternion.identity;
 
@@ -370,7 +387,8 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
         Vector3 position,
         Quaternion rotation,
         float lifetime,
-        Transform parent = null)
+        Transform parent = null,
+        bool forceLocalParticleSimulation = false)
     {
         EffectPool sharedBudget = FieldManager.Instance != null && FieldManager.Instance.EffectManager != null
             ? FieldManager.Instance.EffectManager.Pool
@@ -382,6 +400,7 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
             rotation,
             lifetime,
             parent,
+            forceLocalParticleSimulation,
             sharedBudget);
     }
 
@@ -420,6 +439,7 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
             Quaternion rotation,
             float lifetime,
             Transform parent,
+            bool forceLocalParticleSimulation,
             EffectPool sharedBudget)
         {
             if (prefab == null)
@@ -436,6 +456,19 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
             Transform instanceTransform = instance.transform;
             instanceTransform.SetParent(parent, false);
             instanceTransform.SetPositionAndRotation(position, rotation);
+
+            // Muzzle flashes are attached to an animated socket. World-space particles stay
+            // at the previous frame's emission position while crouch/recoil moves the gun,
+            // making the flash visibly detach even though its root remains on BulletPoint.
+            if (forceLocalParticleSimulation)
+            {
+                ParticleSystem[] particles = instance.GetComponentsInChildren<ParticleSystem>(true);
+                for (int i = 0; i < particles.Length; i++)
+                {
+                    ParticleSystem.MainModule main = particles[i].main;
+                    main.simulationSpace = ParticleSystemSimulationSpace.Local;
+                }
+            }
 
             instance.SetActive(true);
             FeedbackPlaybackUtility.RestartPlayback(instance);

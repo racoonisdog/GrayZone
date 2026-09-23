@@ -55,6 +55,12 @@ public class EnemySpawnPoint : MonoBehaviour
 
         /// <summary>사망 뒤 래그돌 유지 시간이 끝나기를 기다리는지 여부입니다.</summary>
         public bool IsAwaitingCorpseReturn;
+
+        /// <summary>이 항목이 해당 Spawn SO의 생존 정원을 차지하고 있는지 여부입니다.</summary>
+        public bool OccupiesLiveCapacity;
+
+        /// <summary>시체가 된 순서입니다. 값이 작을수록 먼저 죽은 시체입니다.</summary>
+        public ulong CorpseOrder;
     }
 
     /// <summary>SO 하나에 대응하는 독립 풀, 생산 시각과 활성 수를 보관합니다.</summary>
@@ -72,8 +78,8 @@ public class EnemySpawnPoint : MonoBehaviour
         /// <summary>즉시 재사용할 수 있는 비활성 풀 항목입니다.</summary>
         public readonly List<PoolItem> AvailableItems = new List<PoolItem>();
 
-        /// <summary>현재 살아 있거나 래그돌 유지 중이라 수용량을 점유하는 항목 수입니다.</summary>
-        public int ActiveEnemyCount;
+        /// <summary>현재 살아 있는 적 수입니다. 유지 중인 시체는 포함하지 않습니다.</summary>
+        public int LiveEnemyCount;
 
         /// <summary>다음 배치 생산을 시도할 게임 시간입니다.</summary>
         public float NextProductionTime;
@@ -152,7 +158,7 @@ public class EnemySpawnPoint : MonoBehaviour
     /// <summary>한 프레임에 미리 생성하는 최대 풀 항목 수입니다.</summary>
     public int PoolPrewarmCountPerFrame => m_poolPrewarmCountPerFrame;
 
-    /// <summary>모든 SO 풀에서 현재 수용량을 점유하는 적 수입니다. 래그돌 유지 중인 시체도 반환 전까지 포함합니다.</summary>
+    /// <summary>모든 SO 풀에서 현재 살아 있는 적 수입니다. 유지 중인 시체는 포함하지 않습니다.</summary>
     public int ActiveEnemyCount => GetActiveEnemyCount();
 
     /// <summary>모든 SO 풀의 전체 항목 수입니다. 비활성 대기 적과 활성 적을 모두 포함합니다.</summary>
@@ -184,6 +190,9 @@ public class EnemySpawnPoint : MonoBehaviour
 
     /// <summary>다음 후보 위치에서 최소 거리 검사를 할 직전 성공 스폰 위치입니다.</summary>
     private Vector3 m_lastSpawnPosition;
+
+    /// <summary>풀 전체에서 시체 생성 순서를 안정적으로 비교하기 위한 증가 번호입니다.</summary>
+    private ulong m_nextCorpseOrder;
 
     /// <summary>활성화될 때 SO 변경 이벤트를 연결하고, 재활성화라면 다음 프레임 동기화를 예약합니다.</summary>
     protected virtual void OnEnable()
@@ -237,7 +246,7 @@ public class EnemySpawnPoint : MonoBehaviour
 
             if (runtime.IsRetired)
             {
-                if (runtime.ActiveEnemyCount == 0)
+                if (runtime.LiveEnemyCount == 0)
                 {
                     DisposeRuntime(runtime);
                     m_spawnRuntimes.RemoveAt(i);
@@ -414,6 +423,47 @@ public class EnemySpawnPoint : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 지금 필드에 나와 있는 적과 시체를 모두 자기 풀로 되돌립니다.
+    /// </summary>
+    /// <returns>풀로 되돌린 수입니다.</returns>
+    /// <remarks>
+    /// 죽이는 것이 아니라 없던 일로 하는 것입니다. 사망 연출도 없고 처치 수도 오르지 않습니다.
+    /// <see cref="SetSpawnEnabled"/>는 새 생산만 막고 이미 나온 적은 그대로 두므로, 필드를 비우려면
+    /// 이 메서드가 따로 필요합니다.
+    ///
+    /// 풀로 되돌리므로 생산 정원도 함께 풀립니다. 적을 개별로 파괴하면 정원 계산이 어긋나 이후
+    /// 생산이 막힙니다.
+    /// </remarks>
+    public int DespawnActiveEnemies()
+    {
+        int despawnedCount = 0;
+
+        for (int runtimeIndex = 0; runtimeIndex < m_spawnRuntimes.Count; runtimeIndex++)
+        {
+            SpawnRuntime runtime = m_spawnRuntimes[runtimeIndex];
+            if (runtime == null)
+            {
+                continue;
+            }
+
+            // 뒤에서부터 도는 이유는 ReturnToPool이 항목 목록을 건드릴 수 있기 때문입니다.
+            for (int itemIndex = runtime.PoolItems.Count - 1; itemIndex >= 0; itemIndex--)
+            {
+                PoolItem item = runtime.PoolItems[itemIndex];
+                if (item == null || !item.IsActive)
+                {
+                    continue;
+                }
+
+                ReturnToPool(item);
+                despawnedCount++;
+            }
+        }
+
+        return despawnedCount;
+    }
+
     /// <summary>현재 SO 목록을 읽어 런타임 풀을 추가·유지·퇴역 처리합니다.</summary>
     /// <remarks>
     /// 같은 SO를 목록에 두 번 넣어도 각 목록 칸은 독립 생산 항목으로 취급합니다.
@@ -506,7 +556,7 @@ public class EnemySpawnPoint : MonoBehaviour
             return;
         }
 
-        int remainingCapacity = Mathf.Max(0, runtime.Entry.MaxCapacity - runtime.ActiveEnemyCount);
+        int remainingCapacity = Mathf.Max(0, runtime.Entry.MaxCapacity - runtime.LiveEnemyCount);
         int produceCount = Mathf.Min(runtime.Entry.SpawnCount, remainingCapacity);
 
         for (int i = 0; i < produceCount; i++)
@@ -524,6 +574,13 @@ public class EnemySpawnPoint : MonoBehaviour
                 {
                     runtime.AvailableItems.Remove(item);
                 }
+            }
+
+            // 생존 정원에는 자리가 있지만 물리 풀이 시체로 가득 찬 경우 가장 오래된 시체부터 회수합니다.
+            // 시체는 평소에는 현장에 남고, 다음 생존 적을 만들 공간이 필요할 때만 재사용됩니다.
+            if (item == null && ReclaimOldestCorpse(runtime))
+            {
+                item = TakeAvailableItem(runtime);
             }
 
             if (item == null || !ActivatePoolItem(item, spawnPosition))
@@ -632,7 +689,9 @@ public class EnemySpawnPoint : MonoBehaviour
 
         item.IsActive = true;
         item.IsAwaitingCorpseReturn = false;
-        item.Runtime.ActiveEnemyCount++;
+        item.OccupiesLiveCapacity = true;
+        item.CorpseOrder = 0;
+        item.Runtime.LiveEnemyCount++;
         m_lastSpawnPosition = spawnPosition;
         m_hasLastSpawnPosition = true;
         return true;
@@ -663,12 +722,63 @@ public class EnemySpawnPoint : MonoBehaviour
     }
 
     /// <summary>사망한 적이 종류별 래그돌 유지 시간을 기다리도록 표시합니다.</summary>
-    private static void BeginCorpseRetention(PoolItem item)
+    private void BeginCorpseRetention(PoolItem item)
     {
-        if (item != null && item.IsActive)
+        if (item == null || !item.IsActive || item.IsAwaitingCorpseReturn)
         {
-            item.IsAwaitingCorpseReturn = true;
+            return;
         }
+
+        ReleaseLiveCapacity(item);
+        item.IsAwaitingCorpseReturn = true;
+        item.CorpseOrder = ++m_nextCorpseOrder;
+    }
+
+    /// <summary>물리 풀이 가득 찼을 때 가장 먼저 죽은 시체 하나를 비활성 풀로 돌립니다.</summary>
+    private bool ReclaimOldestCorpse(SpawnRuntime runtime)
+    {
+        if (runtime == null)
+        {
+            return false;
+        }
+
+        PoolItem oldestCorpse = null;
+        for (int i = 0; i < runtime.PoolItems.Count; i++)
+        {
+            PoolItem candidate = runtime.PoolItems[i];
+            if (candidate == null
+                || !candidate.IsActive
+                || !candidate.IsAwaitingCorpseReturn
+                || candidate.Enemy == null)
+            {
+                continue;
+            }
+
+            if (oldestCorpse == null || candidate.CorpseOrder < oldestCorpse.CorpseOrder)
+            {
+                oldestCorpse = candidate;
+            }
+        }
+
+        if (oldestCorpse == null)
+        {
+            return false;
+        }
+
+        ReturnToPool(oldestCorpse);
+        return true;
+    }
+
+    /// <summary>살아 있는 적 정원 점유를 정확히 한 번만 해제합니다.</summary>
+    private static void ReleaseLiveCapacity(PoolItem item)
+    {
+        if (item == null || !item.OccupiesLiveCapacity || item.Runtime == null)
+        {
+            return;
+        }
+
+        item.OccupiesLiveCapacity = false;
+        item.Runtime.LiveEnemyCount = Mathf.Max(0, item.Runtime.LiveEnemyCount - 1);
     }
 
     /// <summary>종류별 시체 유지 시간이 끝났을 때 적을 자신의 SO 풀로 반환합니다.</summary>
@@ -693,7 +803,8 @@ public class EnemySpawnPoint : MonoBehaviour
 
         item.IsActive = false;
         item.IsAwaitingCorpseReturn = false;
-        item.Runtime.ActiveEnemyCount = Mathf.Max(0, item.Runtime.ActiveEnemyCount - 1);
+        item.CorpseOrder = 0;
+        ReleaseLiveCapacity(item);
 
         if (item.Enemy == null)
         {
@@ -719,9 +830,9 @@ public class EnemySpawnPoint : MonoBehaviour
             PoolItem item = runtime.PoolItems[i];
             if (item == null || item.Enemy == null)
             {
-                if (item != null && item.IsActive)
+                if (item != null)
                 {
-                    runtime.ActiveEnemyCount = Mathf.Max(0, runtime.ActiveEnemyCount - 1);
+                    ReleaseLiveCapacity(item);
                 }
 
                 runtime.AvailableItems.Remove(item);
@@ -902,13 +1013,13 @@ public class EnemySpawnPoint : MonoBehaviour
         runtime.MissingPrefabWarningLogged = true;
     }
 
-    /// <summary>모든 SO 풀의 현재 활성 수를 합산합니다.</summary>
+    /// <summary>모든 SO 풀의 현재 생존 적 수를 합산합니다.</summary>
     private int GetActiveEnemyCount()
     {
         int count = 0;
         for (int i = 0; i < m_spawnRuntimes.Count; i++)
         {
-            count += m_spawnRuntimes[i].ActiveEnemyCount;
+            count += m_spawnRuntimes[i].LiveEnemyCount;
         }
 
         return count;
