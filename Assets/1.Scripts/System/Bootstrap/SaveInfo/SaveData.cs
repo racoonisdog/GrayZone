@@ -38,6 +38,8 @@ public class SaveData
         public int shelterStability = 100;
         public bool foodShortagePenaltyActive;
         public bool fuelShortagePenaltyActive;
+        public bool shooter01;
+        public bool shooter02;
         public int totalFieldKillCount;
         public List<int> fieldKillHistory = new List<int>();
         /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>
@@ -97,8 +99,6 @@ public class SaveData
         public string facilityId = string.Empty;
         public bool isUnlocked;
         public int upgradeLevel;
-        public bool shooter01;
-        public bool shooter02;
     }
 
     [Serializable]

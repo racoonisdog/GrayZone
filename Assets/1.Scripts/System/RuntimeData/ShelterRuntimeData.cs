@@ -229,9 +229,7 @@ public sealed class ShelterRuntimeData
                 facilityStates.Add(new FacilityRuntimeState(
                     state.facilityId,
                     state.isUnlocked,
-                    state.upgradeLevel,
-                    state.shooter01,
-                    state.shooter02));
+                    state.upgradeLevel));
         }
     }
 
@@ -493,9 +491,7 @@ public sealed class ShelterRuntimeData
             clone.Add(new FacilityRuntimeState(
                 state.facilityId,
                 state.isUnlocked,
-                state.upgradeLevel,
-                state.shooter01,
-                state.shooter02));
+                state.upgradeLevel));
         }
         return clone;
     }

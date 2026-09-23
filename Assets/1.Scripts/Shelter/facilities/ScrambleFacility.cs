@@ -8,9 +8,6 @@ using VInspector;
 [DisallowMultipleComponent]
 public sealed class ScrambleFacility : MonoBehaviour
 {
-    [Header("Facility")]
-    [SerializeField] private string m_facilityId = "scramble";
-
     [Header("Scene Transition")]
     [SerializeField] private string m_battleSceneName = "CombatPlayTest";
 
@@ -26,24 +23,16 @@ public sealed class ScrambleFacility : MonoBehaviour
     [Min(0)][SerializeField] private int m_shooter01Cost = 1;
     [Min(0)][SerializeField] private int m_shooter02Cost = 1;
 
-    private FacilityRuntimeState m_runtimeState;
-
-    public string FacilityId => m_facilityId?.Trim() ?? string.Empty;
     public string BattleSceneName => m_battleSceneName?.Trim() ?? string.Empty;
     public string UpgradeResourceId => ResourceIds.Normalize(m_upgradeResourceId);
     public int Shooter01Cost => Mathf.Max(0, m_shooter01Cost);
     public int Shooter02Cost => Mathf.Max(0, m_shooter02Cost);
-    public bool Shooter01 => TryGetRuntimeState(out FacilityRuntimeState state) && state.shooter01;
-    public bool Shooter02 => TryGetRuntimeState(out FacilityRuntimeState state) && state.shooter02;
+    public bool Shooter01 => GameDataManager.Instance != null && GameDataManager.Instance.Shooter01;
+    public bool Shooter02 => GameDataManager.Instance != null && GameDataManager.Instance.Shooter02;
 
     public event Action StateChanged;
 
     private StorageFacility Storage => ShelterSceneDataManager.Instance?.Storage;
-
-    private void Awake()
-    {
-        TryGetRuntimeState(out _);
-    }
 
     private void OnValidate()
     {
@@ -70,13 +59,14 @@ public sealed class ScrambleFacility : MonoBehaviour
     /// <summary>시설 자원을 소비하고 첫 번째 슈터를 해금합니다.</summary>
     public bool TryUnlockShooter01()
     {
-        if (!TryGetRuntimeState(out FacilityRuntimeState state) || state.shooter01)
+        GameDataManager gameData = GameDataManager.Instance;
+        if (gameData == null || gameData.Shooter01)
             return false;
 
         if (!TrySpendUpgradeResource(Shooter01Cost))
             return false;
 
-        state.shooter01 = true;
+        gameData.SetShooter01Active(true);
         NotifyStateChanged();
         return true;
     }
@@ -84,13 +74,14 @@ public sealed class ScrambleFacility : MonoBehaviour
     /// <summary>시설 자원을 소비하고 두 번째 슈터를 해금합니다.</summary>
     public bool TryUnlockShooter02()
     {
-        if (!TryGetRuntimeState(out FacilityRuntimeState state) || state.shooter02)
+        GameDataManager gameData = GameDataManager.Instance;
+        if (gameData == null || gameData.Shooter02)
             return false;
 
         if (!TrySpendUpgradeResource(Shooter02Cost))
             return false;
 
-        state.shooter02 = true;
+        gameData.SetShooter02Active(true);
         NotifyStateChanged();
         return true;
     }
@@ -124,27 +115,6 @@ public sealed class ScrambleFacility : MonoBehaviour
 
         SceneTransitionController.LoadScene(sceneName);
         return true;
-    }
-
-    private bool TryGetRuntimeState(out FacilityRuntimeState state)
-    {
-        if (m_runtimeState != null)
-        {
-            state = m_runtimeState;
-            return true;
-        }
-
-        if (string.IsNullOrEmpty(FacilityId) || ShelterSceneDataManager.Instance == null)
-        {
-            state = null;
-            return false;
-        }
-
-        m_runtimeState = ShelterSceneDataManager.Instance.GetOrCreateFacilityState(
-            FacilityId,
-            true);
-        state = m_runtimeState;
-        return state != null;
     }
 
     private bool CanSpendUpgradeResource(int amount)

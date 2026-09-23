@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -44,6 +44,10 @@ public class GameDataManager : MonoBehaviour
     [Tooltip("시설별 해금 여부와 업그레이드 단계입니다.")]
     [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
     [SerializeField] private ManufacturingRuntimeData manufacturing = new();
+
+    [Header("필드배치NPC변수")]
+    [SerializeField] private bool shooter01;
+    [SerializeField] private bool shooter02;
 
     [Header("Last Field Settlement")]
     [Tooltip("마지막으로 정산 반영이 완료된 필드 ID이며 중복 반영 방지 키로 사용합니다.")]
@@ -104,11 +108,25 @@ public class GameDataManager : MonoBehaviour
 
     public bool FuelShortagePenaltyActive => fuelShortagePenaltyActive;
 
+    public bool Shooter01 => shooter01;
+
+    public bool Shooter02 => shooter02;
+
     /// <summary>현재 씬의 ShelterSceneDataManager가 등록되어 있는지 여부입니다.</summary>
     public bool HasActiveShelterSceneDataManager => activeShelterSceneDataManager != null;
 
     /// <summary>현재 세션 또는 저장 데이터에 반영된 최근 필드 결과가 있는지 여부입니다.</summary>
     public bool HasLastFieldResult => !string.IsNullOrWhiteSpace(lastSettledFieldId);
+
+    public void SetShooter01Active(bool isActive)
+    {
+        shooter01 = isActive;
+    }
+
+    public void SetShooter02Active(bool isActive)
+    {
+        shooter02 = isActive;
+    }
 
     /// <summary>마지막으로 정산 반영이 완료된 필드 ID입니다.</summary>
     public string LastSettledFieldId => lastSettledFieldId ?? string.Empty;
@@ -576,6 +594,8 @@ public class GameDataManager : MonoBehaviour
             shelterStability = ShelterStability,
             foodShortagePenaltyActive = FoodShortagePenaltyActive,
             fuelShortagePenaltyActive = FuelShortagePenaltyActive,
+            shooter01 = Shooter01,
+            shooter02 = Shooter02,
             totalFieldKillCount = TotalFieldKillCount,
             fieldKillHistory = new List<int>(fieldKillHistory),
             manufacturing = ManufacturingFacilitySaveDataMapper.FromRuntime(manufacturing)
@@ -645,6 +665,8 @@ public class GameDataManager : MonoBehaviour
         shelterStability = Mathf.Clamp(saveData.shelterStability, 0, 100);
         foodShortagePenaltyActive = saveData.foodShortagePenaltyActive;
         fuelShortagePenaltyActive = saveData.fuelShortagePenaltyActive;
+        shooter01 = saveData.shooter01;
+        shooter02 = saveData.shooter02;
         totalFieldKillCount = Mathf.Max(0, saveData.totalFieldKillCount);
         fieldKillHistory = saveData.fieldKillHistory != null
             ? new List<int>(saveData.fieldKillHistory)
@@ -1118,9 +1140,7 @@ public class GameDataManager : MonoBehaviour
                 clone.Add(new FacilityRuntimeState(
                     state.facilityId,
                     state.isUnlocked,
-                    state.upgradeLevel,
-                    state.shooter01,
-                    state.shooter02));
+                    state.upgradeLevel));
             }
         }
 
