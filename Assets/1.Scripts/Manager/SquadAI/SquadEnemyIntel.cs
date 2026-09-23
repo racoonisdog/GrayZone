@@ -38,6 +38,13 @@ public class SquadEnemyIntel
         /// <summary>이 기록이 가리키는 적입니다.</summary>
         public EnemyController Enemy;
 
+        /// <summary>이 정보가 관찰한 생성 세대입니다. 풀에서 다시 나온 같은 참조와 구분합니다.</summary>
+        public uint SpawnGeneration;
+
+        /// <summary>정보가 현재 활성 상태인 같은 생애의 적을 가리키는지 확인합니다.</summary>
+        public bool IsCurrentLifetime => Enemy != null && Enemy.gameObject.activeInHierarchy &&
+            (Enemy.Health == null || !Enemy.Health.IsDead) && SpawnGeneration == Enemy.SpawnGeneration;
+
         /// <summary>지금 스쿼드원 중 누군가가 직접 확인하고 있는지 여부입니다.</summary>
         public bool HasLivePosition;
 
@@ -53,7 +60,7 @@ public class SquadEnemyIntel
 
         /// <summary>지금 알고 있는 위치입니다. 실시간이면 적의 현재 위치, 아니면 마지막 확인 위치입니다.</summary>
         public Vector3 KnownPosition =>
-            HasLivePosition && Enemy != null ? Enemy.transform.position : LastKnownPosition;
+            HasLivePosition && IsCurrentLifetime ? Enemy.transform.position : LastKnownPosition;
     }
 
     private readonly Dictionary<EnemyController, EnemyIntel> m_intel =
@@ -70,7 +77,7 @@ public class SquadEnemyIntel
             int count = 0;
             foreach (var pair in m_intel)
             {
-                if (pair.Value.HasLivePosition)
+                if (pair.Value.IsCurrentLifetime && pair.Value.HasLivePosition)
                 {
                     count++;
                 }
@@ -95,7 +102,7 @@ public class SquadEnemyIntel
     public bool TryGet(EnemyController enemy, out EnemyIntel intel)
     {
         intel = null;
-        return enemy != null && m_intel.TryGetValue(enemy, out intel);
+        return enemy != null && m_intel.TryGetValue(enemy, out intel) && intel.IsCurrentLifetime;
     }
 
     /// <summary>
@@ -110,7 +117,7 @@ public class SquadEnemyIntel
     /// </remarks>
     public void NotifyDamagedBy(EnemyController attacker, float holdDuration)
     {
-        if (attacker == null || !m_intel.TryGetValue(attacker, out EnemyIntel intel))
+        if (!TryGet(attacker, out EnemyIntel intel))
         {
             return;
         }
@@ -141,7 +148,7 @@ public class SquadEnemyIntel
         foreach (var pair in m_intel)
         {
             EnemyController enemy = pair.Key;
-            if (enemy == null || !engagement.IsEngaged(enemy))
+            if (!pair.Value.IsCurrentLifetime || !engagement.IsEngaged(enemy))
             {
                 m_removeBuffer.Add(enemy);
             }
@@ -155,14 +162,14 @@ public class SquadEnemyIntel
         // 2) 교전 적을 등록하고 확인 여부를 갱신합니다.
         foreach (EnemyController enemy in engagement.EngagedEnemies)
         {
-            if (enemy == null)
+            if (enemy == null || !enemy.gameObject.activeInHierarchy || (enemy.Health != null && enemy.Health.IsDead))
             {
                 continue;
             }
 
             if (!m_intel.TryGetValue(enemy, out EnemyIntel intel))
             {
-                intel = new EnemyIntel { Enemy = enemy };
+                intel = new EnemyIntel { Enemy = enemy, SpawnGeneration = enemy.SpawnGeneration };
                 m_intel.Add(enemy, intel);
             }
 

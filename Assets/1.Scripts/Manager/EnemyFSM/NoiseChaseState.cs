@@ -16,6 +16,10 @@ public class NoiseChaseState : EnemyStateBase
 {
     /// <summary>지금 향하고 있는 소음 위치입니다.</summary>
     private Vector3 m_destination;
+    private Vector3 m_lastProgressPosition;
+    private float m_lastProgressTime;
+    // 완전 경로도 동적 장애물로 멈출 수 있어, 소음 지점에 영구 고정되지 않도록 제한합니다.
+    private const float StalledPathTimeout = 3.0f;
 
     /// <summary>소음 추적 상태를 생성합니다.</summary>
     public NoiseChaseState(EnemyController controller) : base(controller) { }
@@ -89,6 +93,26 @@ public class NoiseChaseState : EnemyStateBase
         {
             Controller.NoiseSearch.SetSearchCenter(m_destination);
             Controller.TransitionTo(Controller.NoiseSearch);
+            return;
+        }
+
+        Vector3 progress = Controller.transform.position - m_lastProgressPosition;
+        progress.y = 0f;
+        if (progress.sqrMagnitude >= 0.01f)
+        {
+            m_lastProgressPosition = Controller.transform.position;
+            m_lastProgressTime = Time.time;
+        }
+
+        bool failedPath = agent.pathStatus == NavMeshPathStatus.PathInvalid ||
+                          (!agent.hasPath && !agent.pathPending);
+        bool partialEnd = agent.pathStatus == NavMeshPathStatus.PathPartial &&
+                          agent.remainingDistance <= agent.stoppingDistance + 0.2f;
+        if (failedPath || partialEnd || Time.time - m_lastProgressTime >= StalledPathTimeout)
+        {
+            // 갈 수 없는 원래 좌표를 다시 목적지로 쓰지 않고 도달한 쪽에서 제한 시간 수색합니다.
+            Controller.NoiseSearch.SetSearchCenter(Controller.transform.position);
+            Controller.TransitionTo(Controller.NoiseSearch);
         }
     }
 
@@ -101,6 +125,8 @@ public class NoiseChaseState : EnemyStateBase
         }
 
         m_destination = position;
+        m_lastProgressPosition = Controller.transform.position;
+        m_lastProgressTime = Time.time;
         Controller.MoveTo(position);
     }
 }

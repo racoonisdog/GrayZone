@@ -238,13 +238,13 @@ public class UIManager : MonoBehaviour
         {
             case FacilityInteractionType.Medical:
                 OpenMedicalUI(interactionPoint);
-                return true;
+                return m_activeUI == ShelterUIType.Medical;
             case FacilityInteractionType.Manufactur:
                 OpenManufacturingUI(interactionPoint);
-                return true;
+                return m_activeUI == ShelterUIType.Manufacturing;
             case FacilityInteractionType.Operations:
                 OpenOperationUI(interactionPoint);
-                return true;
+                return m_activeUI == ShelterUIType.Operations;
             default:
                 return false;
         }

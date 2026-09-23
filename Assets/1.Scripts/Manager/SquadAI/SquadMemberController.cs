@@ -145,6 +145,32 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>현재 멤버가 다운 상태인지 여부입니다.</summary>
     public bool IsDown => m_isDown;
 
+    /// <summary>현재 직접 조작 중인 멤버에게 길을 양보할 수 있는 AI 상태인지 여부입니다.</summary>
+    public bool CanYieldToPlayer =>
+        IsAiSquadMember && m_isAlive && !m_isDown && !m_isInteractionLocked &&
+        m_squadAIController != null && m_squadAIController.isActiveAndEnabled &&
+        m_squadAIController.CanYieldToPlayer;
+
+    /// <summary>
+    /// 직접 조작 중인 동료가 통로를 지나려 할 때, 이 AI 멤버에게 짧은 길 양보 이동을 요청합니다.
+    /// </summary>
+    /// <param name="playerPosition">직접 조작 중인 멤버의 위치입니다.</param>
+    /// <param name="playerMoveDirection">직접 조작 중인 멤버의 수평 진행 방향입니다.</param>
+    /// <returns>AI가 양보 이동을 시작했거나 이미 양보 중이면 true입니다.</returns>
+    /// <remarks>
+    /// 조작권/생존/다운 상태는 멤버가 소유하고, 실제 NavMesh 후보 선택과 이동은 <see cref="SquadAIController"/>가
+    /// 소유합니다. 그래서 입력 컨트롤러가 AI의 목적지나 NavMeshAgent를 직접 변경하지 않습니다.
+    /// </remarks>
+    public bool TryBeginPlayerYield(Vector3 playerPosition, Vector3 playerMoveDirection)
+    {
+        if (!CanYieldToPlayer)
+        {
+            return false;
+        }
+
+        return m_squadAIController.TryBeginPlayerYield(playerPosition, playerMoveDirection);
+    }
+
     /// <summary>카메라가 따라갈 기준 Transform입니다.</summary>
     public Transform CameraTarget => m_cameraTarget != null ? m_cameraTarget : transform;
 

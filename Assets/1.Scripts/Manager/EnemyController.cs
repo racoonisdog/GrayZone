@@ -220,6 +220,16 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>처치 상태입니다.</summary>
     public DeadState Dead { get; private set; }
+    private AttackState m_defenseAttack;
+    private DefenseEventHealth m_defenseObjective;
+    private bool m_hasDefenseApproachSettings;
+    private float m_defenseApproachStoppingDistance;
+
+    /// <summary>스포너의 목표 위치 또는 그 부모에 연결된 방어 목표 체력입니다. 좌표 전용 마커면 null입니다.</summary>
+    public DefenseEventHealth DefenseObjective => m_defenseObjective;
+
+    /// <summary>현재 방어 목표 공격 상태를 실행하고 있는지 여부입니다.</summary>
+    public bool IsAttackingDefenseObjective => m_defenseAttack != null && m_current == m_defenseAttack;
     // 각성 준비(AwakenState)는 슬라이스 2에서 추가.
     // 경직은 상태가 아니라 상태 위에 얹히는 잠금이라 여기 목록에 없습니다(§5.7). HandleStaggered 참고.
 
@@ -252,6 +262,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>이번 생성에서 방어전 진입 경로와 목표 복귀 행동을 적용할지 여부입니다.</summary>
     private bool m_defenseNavigationActive;
+
+    /// <summary>Player First가 플레이어보다 Defense 웨이포인트를 우선할지 여부입니다.</summary>
+    private bool m_prioritizeDefenseWaypointsForPlayerFirst = true;
 
     /// <summary>현재 활성 상태입니다.</summary>
     public EnemyStateBase Current => m_current;
@@ -461,6 +474,156 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>이번 생성에 최종 적용된 개체별 이동 속도입니다. Spawn SO 값이 없으면 Balance/Inspector의 추적 속도를 반환합니다.</summary>
     public float CurrentMoveSpeed => ResolveMoveSpeed(chaseSpeed, true);
 
+    /// <summary>
+    /// 지금 걸려 있는 이동 속도 배율들입니다. 키는 효과를 건 쪽(함정 등)이고 값은 배율입니다.
+    /// </summary>
+    /// <remarks>
+    /// 값을 저장했다 되돌리는 방식을 쓰지 않는 이유는, FSM이 상태가 바뀔 때마다
+    /// <c>agent.speed = CurrentMoveSpeed</c>로 덮어쓰기 때문입니다. 저장해 둔 값은 그 순간 사라집니다.
+    /// 그래서 속도를 구하는 단일 통로인 <see cref="ResolveMoveSpeed"/>에 배율을 걸어, 누가 언제 덮어쓰든
+    /// 감속이 유지되게 합니다.
+    ///
+    /// 리스트가 아니라 키를 쓰는 이유는 겹침 때문입니다. 함정 두 개에 동시에 걸렸다가 하나만 빠져나올 때,
+    /// 어느 것이 빠졌는지 알아야 나머지 하나의 감속을 남길 수 있습니다. 같은 대상이 중복으로 걸어도
+    /// 한 번만 쌓이므로 해제 누락으로 영구 감속이 남는 사고도 줄어듭니다.
+    /// </remarks>
+    private readonly Dictionary<Object, float> m_moveSpeedMultipliers = new Dictionary<Object, float>();
+
+    /// <summary>모든 배율을 곱한 최종 이동 속도 배율입니다. 걸린 효과가 없으면 1입니다.</summary>
+    private float m_moveSpeedMultiplier = 1.0f;
+
+    /// <summary>프리팹이 정한 NavMeshAgent 가속도입니다. 배율을 되돌릴 기준값입니다.</summary>
+    private float m_baseAcceleration;
+
+    /// <summary>프리팹이 정한 NavMeshAgent 회전 속도입니다. 배율을 되돌릴 기준값입니다.</summary>
+    private float m_baseAngularSpeed;
+
+    /// <summary>위 두 기준값을 이미 잡았는지 여부입니다.</summary>
+    private bool m_hasBaseAgentMotion;
+
+    /// <summary>
+    /// 지금 이 개체를 걷기로 묶어 둔 쪽들입니다. 하나라도 있으면 달리지 못합니다.
+    /// </summary>
+    /// <remarks>
+    /// 배율로 속도만 깎으면 애니메이션은 달리기 그대로라 발이 미끄러져 보입니다. 이동량과 발 회전이
+    /// 함께 느려지려면 블렌드 트리가 걷기 구간으로 내려가야 하고, 그러려면 속도 값이 아니라
+    /// "달리기 금지"를 눌러야 합니다.
+    ///
+    /// 배율과 같은 키 방식인 이유도 같습니다. 함정 두 개에 겹쳐 걸렸다가 하나만 빠져나올 때
+    /// 나머지 하나의 구속이 남아야 합니다.
+    /// </remarks>
+    private readonly HashSet<Object> m_forceWalkSources = new HashSet<Object>();
+
+    /// <summary>지금 걷기로 묶여 있는지 여부입니다.</summary>
+    public bool IsForcedToWalk => m_forceWalkSources.Count > 0;
+
+    /// <summary>이 개체를 걷기로 묶습니다. 같은 <paramref name="source"/>로 여러 번 불러도 한 번만 쌓입니다.</summary>
+    /// <param name="source">구속을 건 쪽입니다. 해제할 때 같은 값을 넘겨야 합니다.</param>
+    public void AddForceWalk(Object source)
+    {
+        if (source == null || !m_forceWalkSources.Add(source))
+        {
+            return;
+        }
+
+        RefreshMoveSpeedMultiplier();
+    }
+
+    /// <summary>걸어 둔 걷기 구속을 해제합니다.</summary>
+    /// <param name="source">구속을 걸 때 넘겼던 값입니다.</param>
+    public void RemoveForceWalk(Object source)
+    {
+        if (source == null || !m_forceWalkSources.Remove(source))
+        {
+            return;
+        }
+
+        RefreshMoveSpeedMultiplier();
+    }
+
+    /// <summary>지금 적용 중인 이동 속도 배율입니다.</summary>
+    public float MoveSpeedMultiplier => m_moveSpeedMultiplier;
+
+    /// <summary>
+    /// 이동 속도 배율을 겁니다. 같은 <paramref name="source"/>로 다시 부르면 값만 바뀝니다.
+    /// </summary>
+    /// <param name="source">효과를 건 쪽입니다. 해제할 때 같은 값을 넘겨야 합니다.</param>
+    /// <param name="multiplier">곱할 배율입니다. 0.5면 절반 속도이며 0 미만은 0으로 막습니다.</param>
+    public void AddMoveSpeedMultiplier(Object source, float multiplier)
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        m_moveSpeedMultipliers[source] = Mathf.Max(0.0f, multiplier);
+        RefreshMoveSpeedMultiplier();
+    }
+
+    /// <summary>걸어 둔 이동 속도 배율을 해제합니다. 걸린 적이 없으면 아무 일도 하지 않습니다.</summary>
+    /// <param name="source">효과를 걸 때 넘겼던 값입니다.</param>
+    public void RemoveMoveSpeedMultiplier(Object source)
+    {
+        if (source == null || !m_moveSpeedMultipliers.Remove(source))
+        {
+            return;
+        }
+
+        RefreshMoveSpeedMultiplier();
+    }
+
+    /// <summary>
+    /// 배율 합산값을 다시 구하고 NavMeshAgent에 즉시 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 여기서 바로 <c>agent.speed</c>를 갱신하는 이유는, 다음 상태 전환까지 기다리면 감속이 늦게 걸리기
+    /// 때문입니다. 함정을 밟은 순간 느려져야 하는데 상태가 그대로면 몇 초 뒤에야 반영됩니다.
+    ///
+    /// 최고 속도만 줄이면 감속이 잘 느껴지지 않습니다. 가속도가 그대로면 줄어든 속도에 즉시 도달해
+    /// "느리지만 기민한" 움직임이 됩니다. 회전 속도도 그대로면 제자리에서 홱홱 돌아 발이 묶인 느낌이
+    /// 나지 않습니다. 그래서 세 값을 같은 배율로 함께 줄입니다.
+    ///
+    /// 가속도와 회전 속도는 FSM이 따로 대입하지 않아 여기서 직접 넣고 되돌려야 합니다.
+    /// 속도만 <see cref="ResolveMoveSpeed"/>를 거치는 것과 다른 점입니다.
+    /// </remarks>
+    private void RefreshMoveSpeedMultiplier()
+    {
+        float product = 1.0f;
+        foreach (var pair in m_moveSpeedMultipliers)
+        {
+            product *= pair.Value;
+        }
+
+        m_moveSpeedMultiplier = product;
+
+        if (agent == null || !agent.enabled)
+        {
+            return;
+        }
+
+        if (agent.isOnNavMesh)
+        {
+            agent.speed = CurrentMoveSpeed;
+
+            // 이미 붙어 있던 속도는 최고 속도를 낮춰도 스스로 사라지지 않습니다.
+            // 가속도를 따라 천천히 줄어들 뿐이라, 함정을 밟은 뒤에도 한동안 원래 속도로 미끄러집니다.
+            // NavMeshAgent.velocity는 대입할 수 있으므로 새 상한을 넘는 만큼 즉시 잘라 냅니다.
+            // 방향은 그대로 두고 크기만 줄여야 진행 방향이 튀지 않습니다.
+            Vector3 current = agent.velocity;
+            float limit = agent.speed;
+            if (current.sqrMagnitude > limit * limit)
+            {
+                agent.velocity = current.normalized * limit;
+            }
+        }
+
+        if (m_hasBaseAgentMotion)
+        {
+            agent.acceleration = m_baseAcceleration * m_moveSpeedMultiplier;
+            agent.angularSpeed = m_baseAngularSpeed * m_moveSpeedMultiplier;
+        }
+    }
+
     /// <summary>소음 위치에 도착했다고 볼 거리입니다.</summary>
     public float NoiseArriveDistance => noiseArriveDistance;
 
@@ -536,16 +699,35 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         if (agent != null && agent.enabled && agent.isOnNavMesh)
         {
-            agent.speed = CurrentMoveSpeed;
+            // 재사용에서는 Wander.Enter가 이미 실행됐습니다. SO 데이터는 덮어쓰되
+            // 현재 상태의 걷기/달리기 선택을 바꾸지 않아 첫 생성과 재사용을 일치시킵니다.
+            if (m_defenseNavigationActive)
+            {
+                agent.speed = CurrentMoveSpeed;
+            }
+            else
+            {
+                m_current?.ResumeMovement();
+            }
         }
     }
 
     /// <summary>풀 반환 시 이번 Spawn SO가 주입한 런타임 값만 제거합니다.</summary>
+    /// <remarks>
+    /// 이동 속도 배율도 함께 비웁니다. 함정 안에서 죽어 풀로 돌아가면 <c>OnTriggerExit</c>이 오지 않을 수
+    /// 있는데, 그대로 두면 다음에 재사용될 때 감속이 걸린 채로 나옵니다.
+    /// </remarks>
     public void ClearSpawnConfiguration()
     {
         m_hasSpawnMoveSpeed = false;
         m_spawnWalkSpeed = 0.0f;
         m_spawnRunSpeed = 0.0f;
+
+        if (m_moveSpeedMultipliers.Count > 0)
+        {
+            m_moveSpeedMultipliers.Clear();
+            RefreshMoveSpeedMultiplier();
+        }
     }
 
     /// <summary>
@@ -553,15 +735,19 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </summary>
     /// <param name="waypoints">먼저 순서대로 통과할 웨이포인트 목록입니다.</param>
     /// <param name="targetPosition">경로 통과 후 사용할 외부 방어선 또는 방어 목표 위치입니다.</param>
+    /// <param name="prioritizeWaypointsForPlayerFirst">Player First가 플레이어보다 웨이포인트를 먼저 처리할지 여부입니다. Target First는 이 값을 무시합니다.</param>
     /// <remarks>
     /// 풀에서 활성화되기 전에 호출할 수 있습니다. 웨이포인트 참조는 개체별 목록으로 복사합니다.
     /// </remarks>
     public void ConfigureDefenseSpawn(
         IReadOnlyList<Transform> waypoints,
-        Transform targetPosition)
+        Transform targetPosition,
+        bool prioritizeWaypointsForPlayerFirst)
     {
         m_isDefenseSpawn = true;
         m_defenseTargetPosition = targetPosition;
+        m_defenseObjective = targetPosition != null ? targetPosition.GetComponentInParent<DefenseEventHealth>() : null;
+        m_prioritizeDefenseWaypointsForPlayerFirst = prioritizeWaypointsForPlayerFirst;
         m_defenseWaypoints.Clear();
 
         if (waypoints != null)
@@ -583,11 +769,14 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <remarks>프리팹의 Inspector 설정은 바꾸지 않고 Defense 스폰 포인트가 주입한 런타임 값만 해제합니다.</remarks>
     public void ClearDefenseSpawnConfiguration()
     {
+        RestoreDefenseApproachSettings();
         m_isDefenseSpawn = false;
         m_defenseWaypoints.Clear();
         m_defenseTargetPosition = null;
+        m_defenseObjective = null;
         m_defenseWaypointIndex = 0;
         m_defenseNavigationActive = false;
+        m_prioritizeDefenseWaypointsForPlayerFirst = true;
     }
 
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
@@ -598,6 +787,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>현재 HP입니다. 체력 컴포넌트가 없으면 0을 반환합니다.</summary>
     public int CurrentHP => enemyHealth != null ? enemyHealth.CurrentHP : 0;
+
+    /// <summary>풀 재사용 전후를 관찰자 캐시가 구분할 수 있는 생성 세대입니다.</summary>
+    /// <remarks>인스턴스 참조가 같아도 ResetForSpawn마다 증가하며 저장 데이터에는 쓰지 않습니다.</remarks>
+    public uint SpawnGeneration { get; private set; }
 
     /// <summary>현재 유효한 추적 대상 스쿼드 멤버입니다.</summary>
     public SquadMemberController CurrentTarget => targetSensor != null ? targetSensor.CurrentTarget : null;
@@ -667,6 +860,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     public void ResetForSpawn()
     {
+        unchecked { SpawnGeneration++; }
         CacheReferences();
 
         m_knockbackVelocity = Vector3.zero;
@@ -889,6 +1083,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         if (m_current == Combat && Combat != null)
         {
             Combat.CancelForStagger();
+        }
+        else if (IsAttackingDefenseObjective)
+        {
+            // 목표물 공격도 경직에서 중단하고, 잠금 해제 후 경로가 공격 가능 여부를 다시 판단합니다.
+            TransitionTo(Wander);
         }
 
         StopMoving();
@@ -1151,7 +1350,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         Vector3 velocity = m_staggerRootMotionActive ? Vector3.zero : agent.velocity;
 
         float speed = velocity.magnitude;
-        float animationSpeed = m_alwaysRun && speed > 0.01f
+
+        // 애니메이션은 실제 이동 속도를 그대로 따릅니다. 감속이 걸리면 블렌드 트리가
+        // 느린 구간(Run → Walk)으로 내려가고, 재생 속도(animator.speed)는 건드리지 않습니다.
+        // 공격·피격 모션까지 느려지는 것을 피하기 위해서입니다.
+        float animationSpeed = m_alwaysRun && !IsForcedToWalk && speed > 0.01f
             ? Mathf.Max(speed, ChaseSpeed)
             : speed;
 
@@ -1498,12 +1701,14 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <param name="next">전이할 상태입니다.</param>
     public void TransitionTo(EnemyStateBase next)
     {
+        if (next == Combat && ShouldDeferSquadCombat()) return;
         if (next == null || next == m_current)
         {
             return;
         }
 
         m_current?.Exit();
+        if (next == Combat || next == Dead) RestoreDefenseApproachSettings();
         m_current = next;
         m_current.Enter();
     }
@@ -1522,14 +1727,15 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     public void OnAttackHitboxOn()
     {
-        if (m_current == Dead)
+        AttackState activeAttack = GetActiveAttackState();
+        if (activeAttack == null || m_isStaggered)
         {
             return;
         }
 
         // Attack은 판정을 담당하는 모듈이고, Combat.Attack은 공격 상태입니다. 이름이 같으니 주의합니다.
         Attack?.SetHitboxActive(true);
-        Combat?.Attack?.NotifyAnimationImpact();
+        activeAttack.NotifyAnimationImpact();
     }
 
     /// <summary>공격 클립의 애니메이션 이벤트에서 호출되어 판정 콜라이더를 끕니다.</summary>
@@ -1554,7 +1760,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
-        Combat?.Attack?.NotifyAnimationImpact();
+        if (!m_isStaggered) GetActiveAttackState()?.NotifyAnimationImpact();
+    }
+
+    private AttackState GetActiveAttackState()
+    {
+        if (IsAttackingDefenseObjective) return m_defenseAttack;
+        return m_current == Combat && Combat.CurrentSub == Combat.Attack ? Combat.Attack : null;
     }
 
     /// <summary>
@@ -1574,14 +1786,34 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     }
 
     /// <summary>Spawn SO 값이 있으면 그 값을, 없으면 Always Run 또는 상태별 Balance/Inspector 속도를 반환합니다.</summary>
+    /// <remarks>
+    /// 모든 이동 속도 속성이 이 함수를 거칩니다. 함정 감속 같은 외부 배율도 여기서 곱해야
+    /// 상태가 바뀌어 <c>agent.speed</c>가 다시 대입돼도 효과가 유지됩니다.
+    /// </remarks>
     private float ResolveMoveSpeed(float fallbackSpeed, bool runSpeed)
     {
+        return ResolveRawMoveSpeed(fallbackSpeed, runSpeed) * m_moveSpeedMultiplier;
+    }
+
+    /// <summary>
+    /// 감속 배율을 곱하기 전의 이동 속도입니다.
+    /// </summary>
+    /// <remarks>
+    /// 애니메이터 블렌드 트리에 넣을 값을 구할 때 씁니다. 블렌드 임계값(Idle 0 / Walk 2 / Run 6)은
+    /// 감속을 모르는 상태로 만들어져 있어서, 깎인 속도를 그대로 넣으면 달리던 적이 제자리걸음 구간으로
+    /// 내려가 발만 헛돌게 됩니다. 어떤 동작인지는 감속 전 속도로 고르고, 빠르기는 재생 속도로 맞춥니다.
+    /// </remarks>
+    private float ResolveRawMoveSpeed(float fallbackSpeed, bool runSpeed)
+    {
+        bool forceWalk = IsForcedToWalk;
+
         if (m_hasSpawnMoveSpeed)
         {
-            return m_alwaysRun || runSpeed ? m_spawnRunSpeed : m_spawnWalkSpeed;
+            bool useRun = !forceWalk && (m_alwaysRun || runSpeed);
+            return useRun ? m_spawnRunSpeed : m_spawnWalkSpeed;
         }
 
-        return m_alwaysRun ? chaseSpeed : fallbackSpeed;
+        return forceWalk ? wanderSpeed : (m_alwaysRun ? chaseSpeed : fallbackSpeed);
     }
 
     /// <summary>이번 생성의 방어전 경로 진행도를 처음으로 되돌리고 첫 목적지를 준비합니다.</summary>
@@ -1599,11 +1831,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         }
 
         agent.speed = CurrentMoveSpeed;
-        if (m_defenseWaypoints.Count > 0 && m_defenseWaypoints[0] != null)
+        if (ShouldFollowDefenseWaypoints() && m_defenseWaypoints.Count > 0 && m_defenseWaypoints[0] != null)
         {
             MoveTo(m_defenseWaypoints[0].position);
         }
-        else if (TryResolveDefenseDestination(out Vector3 destination))
+        else if (TryResolveDefenseDestination(out Vector3 destination, out _))
         {
             MoveTo(destination);
         }
@@ -1612,12 +1844,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>웨이포인트를 순서대로 통과한 뒤 방어 성향에 맞는 목표 행동을 수행합니다.</summary>
     /// <returns>이번 프레임의 이동 판단을 방어전 경로가 처리했으면 true입니다.</returns>
     /// <remarks>
-    /// 웨이포인트 이동 중에는 경로 순서를 우선합니다. 직접 피격 등으로 교전에 들어가면 기존 전투 HFSM에
-    /// 제어권을 넘기고, 교전 종료 뒤 남은 경로나 방어 목표 이동을 이어갑니다.
+    /// Player First는 Spawn SO 설정에 따라 웨이포인트를 먼저 처리하거나 플레이어 추적을 바로 시작합니다.
+    /// Target First는 피격/하울링에도 스쿼드 추격으로 전환하지 않습니다. Player First의 경로 우선 옵션도
+    /// 남은 웨이포인트가 있는 동안 지키며, 그 뒤에만 기존 스쿼드 전투 HFSM에 제어권을 넘깁니다.
     /// </remarks>
     private bool TickDefenseNavigation()
     {
-        if (!IsDefenseEnemy || !m_defenseNavigationActive || m_current == Dead || m_current == Combat)
+        if (!IsDefenseEnemy || !m_defenseNavigationActive || m_current == Dead || m_current == Combat || IsAttackingDefenseObjective)
         {
             return false;
         }
@@ -1629,7 +1862,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         agent.speed = CurrentMoveSpeed;
 
-        while (m_defenseWaypointIndex < m_defenseWaypoints.Count)
+        while (ShouldFollowDefenseWaypoints() && m_defenseWaypointIndex < m_defenseWaypoints.Count)
         {
             Transform waypoint = m_defenseWaypoints[m_defenseWaypointIndex];
             if (waypoint == null)
@@ -1664,11 +1897,38 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             }
         }
 
-        if (!TryResolveDefenseDestination(out Vector3 targetPosition))
+        if (!TryResolveDefenseDestination(out Vector3 targetPosition, out bool usesObjective))
         {
             StopMoving();
             return true;
         }
+
+        // 좌표 도착과 공격 가능 조건은 다릅니다. 목표물은 표면으로 접근하고 기존 공격 타이밍을 재사용합니다.
+        if (usesObjective &&
+            enemyAttack != null && enemyAttack.TryGetDefenseAttackPoint(m_defenseObjective, out Vector3 attackPoint))
+        {
+            if (!m_hasDefenseApproachSettings)
+            {
+                m_defenseApproachStoppingDistance = agent.stoppingDistance;
+                m_hasDefenseApproachSettings = true;
+            }
+            agent.stoppingDistance = Mathf.Min(m_defenseApproachStoppingDistance,
+                Mathf.Max(0.0f, enemyAttack.AttackStartRange * 0.5f));
+            Vector3 direction = attackPoint - transform.position;
+            direction.y = 0f;
+            if (direction.sqrMagnitude > 0.0001f)
+                transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                    Quaternion.LookRotation(direction), RotationSpeed * Time.deltaTime);
+            if (enemyAttack.CanStartDefenseAttack(m_defenseObjective))
+            {
+                TransitionTo(m_defenseAttack);
+                return true;
+            }
+            MoveTo(attackPoint);
+            return true;
+        }
+
+        RestoreDefenseApproachSettings();
 
         if (HasReachedDefensePosition(targetPosition))
         {
@@ -1680,6 +1940,31 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         return true;
     }
 
+    private bool ShouldDeferSquadCombat()
+    {
+        return IsDefenseEnemy && (m_defenseDisposition == EnemyDefenseDisposition.TargetFirst ||
+            (m_defenseNavigationActive && m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst &&
+             m_prioritizeDefenseWaypointsForPlayerFirst && m_defenseWaypointIndex < m_defenseWaypoints.Count));
+    }
+
+    private void RestoreDefenseApproachSettings()
+    {
+        if (!m_hasDefenseApproachSettings) return;
+        if (agent != null) agent.stoppingDistance = m_defenseApproachStoppingDistance;
+        m_hasDefenseApproachSettings = false;
+    }
+
+    /// <summary>현재 Defense 성향에서 스폰 웨이포인트를 처리해야 하는지 반환합니다.</summary>
+    /// <remarks>
+    /// 웨이포인트 우선 옵션은 Player First에만 적용합니다. Target First는 플레이어 반응 여부와 무관하게
+    /// 스폰 포인트가 지정한 경로와 목표를 따라야 하므로 항상 true입니다.
+    /// </remarks>
+    private bool ShouldFollowDefenseWaypoints()
+    {
+        return m_defenseDisposition != EnemyDefenseDisposition.PlayerFirst
+            || m_prioritizeDefenseWaypointsForPlayerFirst;
+    }
+
     /// <summary>방어 성향에 따라 웨이포인트 이후의 실시간 이동 목적지를 구합니다.</summary>
     /// <param name="destination">이동할 월드 좌표입니다.</param>
     /// <returns>현재 사용할 수 있는 목적지가 있으면 true입니다.</returns>
@@ -1688,8 +1973,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 현재 조작 캐릭터를 매번 다시 확인합니다. 캐릭터가 전환되어도 새 플레이어를 따라가며, 유효한 플레이어가
     /// 없으면 스폰 포인트가 제공한 목표 위치를 대체 목적지로 사용합니다.
     /// </remarks>
-    private bool TryResolveDefenseDestination(out Vector3 destination)
+    private bool TryResolveDefenseDestination(out Vector3 destination, out bool usesObjective)
     {
+        usesObjective = false;
         if (m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst)
         {
             SquadManager squadManager = SquadManager.Instance;
@@ -1703,6 +1989,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         if (m_defenseTargetPosition != null)
         {
+            usesObjective = true;
             destination = m_defenseTargetPosition.position;
             return true;
         }
@@ -1768,6 +2055,15 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         if (agent == null)
         {
             agent = GetComponent<NavMeshAgent>();
+        }
+
+        // 감속 배율을 걸 때 되돌릴 기준값입니다. 한 번만 잡습니다.
+        // 배율이 걸린 상태에서 다시 잡으면 줄어든 값이 기준이 되어 점점 느려집니다.
+        if (agent != null && !m_hasBaseAgentMotion)
+        {
+            m_baseAcceleration = agent.acceleration;
+            m_baseAngularSpeed = agent.angularSpeed;
+            m_hasBaseAgentMotion = true;
         }
 
         if (animator == null)
@@ -1908,6 +2204,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         NoiseSearch = new NoiseSearchState(this);
         Combat = new CombatState(this);
         Dead = new DeadState(this);
+        m_defenseAttack = new AttackState(this, true);
     }
 
     /// <summary>피해를 받으면 공격자를 인식하고 교전으로 전이합니다.</summary>
@@ -1926,6 +2223,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         {
             return;
         }
+
+        // 피해/경직 자체는 체력 모듈이 처리합니다. 여기서는 경로 정책을 깨는 어그로 전환만 막습니다.
+        if (ShouldDeferSquadCombat()) return;
 
         if (attacker != null && targetSensor != null)
         {

@@ -33,6 +33,18 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     [FormerlySerializedAs("hpText")]
     [SerializeField] protected TextMeshProUGUI m_hpText;
 
+    [Tooltip("월드 공간 HP 바가 항상 카메라를 보게 할지 여부입니다. 파생 클래스는 따로 배선하지 않아도 이 설정을 그대로 씁니다.")]
+    [SerializeField] protected bool m_billboardHpBar = true;
+
+    [Tooltip("빌보드를 적용할 HP 바 루트입니다. 비우면 HP 슬라이더가 붙은 Canvas를, 그것도 없으면 슬라이더 자신을 씁니다.")]
+    [ShowIf(nameof(m_billboardHpBar))]
+    [SerializeField] protected Transform m_hpBarRoot;
+
+    [Tooltip("빌보드를 수평 회전(Yaw)만 적용할지 여부입니다. 끄면 카메라 기울기까지 그대로 따라갑니다.")]
+    [ShowIf(nameof(m_billboardHpBar))]
+    [SerializeField] protected bool m_hpBarBillboardYawOnly = true;
+    [EndIf]
+
 #if UNITY_EDITOR
     private const int DebugDownDamage = 9999;
 
@@ -109,6 +121,60 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     private void Start()
     {
         InitializeHealth();
+        SetupHpBarBillboard();
+    }
+
+    /// <summary>
+    /// HP 바가 항상 카메라를 보도록 <see cref="BillboardUI"/>를 붙여 둡니다.
+    /// </summary>
+    /// <remarks>
+    /// 회전 계산을 여기에 다시 쓰지 않고 기존 <see cref="BillboardUI"/>에 맡깁니다. 같은 규칙을 두 벌 두면
+    /// 한쪽만 고쳐지기 때문입니다. 이미 붙어 있으면(수동 배선한 씬이 있습니다) 그대로 두고 건드리지 않습니다.
+    ///
+    /// 파생 클래스는 아무것도 하지 않아도 이 동작을 물려받습니다. 끄려면 <c>m_billboardHpBar</c>를 내리면 됩니다.
+    /// </remarks>
+    protected void SetupHpBarBillboard()
+    {
+        if (!m_billboardHpBar)
+        {
+            return;
+        }
+
+        Transform root = ResolveHpBarRoot();
+        if (root == null)
+        {
+            return;
+        }
+
+        // 씬에서 이미 배선해 둔 빌보드가 있으면 그 설정을 존중합니다.
+        if (root.GetComponent<BillboardUI>() != null)
+        {
+            return;
+        }
+
+        BillboardUI billboard = root.gameObject.AddComponent<BillboardUI>();
+        billboard.SetYawOnly(m_hpBarBillboardYawOnly);
+    }
+
+    /// <summary>빌보드를 적용할 HP 바 루트를 정합니다. 없으면 <c>null</c>입니다.</summary>
+    /// <remarks>
+    /// 슬라이더 자체가 아니라 그것이 속한 Canvas를 기본으로 삼습니다. 슬라이더만 돌리면 같은 Canvas 안의
+    /// HP 텍스트가 따라 돌지 않아 서로 어긋납니다.
+    /// </remarks>
+    private Transform ResolveHpBarRoot()
+    {
+        if (m_hpBarRoot != null)
+        {
+            return m_hpBarRoot;
+        }
+
+        if (m_hpSlider == null)
+        {
+            return null;
+        }
+
+        Canvas canvas = m_hpSlider.GetComponentInParent<Canvas>();
+        return canvas != null ? canvas.transform : m_hpSlider.transform;
     }
 
 #if UNITY_EDITOR
