@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -23,49 +22,22 @@ public sealed class ShelterFlowController : MonoBehaviour
         [Tooltip("목표를 안내하는 화살표 컨트롤러")]
         [SerializeField] private ObjectiveIndicatorController m_indicator;
 
-        [Tooltip("목표 시설에 속한 상호작용 지점들.")]
-        [SerializeField] private List<FacilityUIInteractable> m_interactionPoints = new();
-
         public void SetIndicatorVisible(bool visible)
         {
-            if (m_indicator != null)
-                m_indicator.SetVisible(visible);
-        }
+            if (m_indicator == null)
+                return;
 
-        public void SetInteractionEnabled(bool enabled)
-        {
-            for (int i = 0; i < m_interactionPoints.Count; i++)
+            if (visible)
             {
-                FacilityUIInteractable interactionPoint = m_interactionPoints[i];
-                if (interactionPoint != null)
-                    interactionPoint.enabled = enabled;
+                m_indicator.gameObject.SetActive(true);
+                m_indicator.SetVisible(true);
+                return;
             }
-        }
 
-        public void Subscribe(Action<FacilityUIInteractable> listener)
-        {
-            for (int i = 0; i < m_interactionPoints.Count; i++)
-            {
-                FacilityUIInteractable interactionPoint = m_interactionPoints[i];
-                if (interactionPoint != null)
-                    interactionPoint.Interacted += listener;
-            }
-        }
-
-        public void Unsubscribe(Action<FacilityUIInteractable> listener)
-        {
-            for (int i = 0; i < m_interactionPoints.Count; i++)
-            {
-                FacilityUIInteractable interactionPoint = m_interactionPoints[i];
-                if (interactionPoint != null)
-                    interactionPoint.Interacted -= listener;
-            }
+            m_indicator.SetVisible(false);
+            m_indicator.gameObject.SetActive(false);
         }
     }
-
-    [Header("Scene Facilities")]
-    [Tooltip("진행 단계에 따라 허용 여부를 바꿀 Scene의 모든 시설 상호작용 지점")]
-    [SerializeField] private List<FacilityUIInteractable> m_allFacilityInteractionPoints = new();
 
     [Header("Objective Steps")]
     [SerializeField] private ObjectiveTarget m_firstFacilityObjective = new();
@@ -86,9 +58,6 @@ public sealed class ShelterFlowController : MonoBehaviour
 
     private void OnEnable()
     {
-        m_firstFacilityObjective.Subscribe(HandleFirstFacilityInteracted);
-        m_returnFacilityObjective.Subscribe(HandleReturnFacilityInteracted);
-
         if (m_hasStarted)
             ApplyCurrentState();
     }
@@ -97,12 +66,6 @@ public sealed class ShelterFlowController : MonoBehaviour
     {
         if (m_startAutomatically && !m_hasStarted)
             StartFlow();
-    }
-
-    private void OnDisable()
-    {
-        m_firstFacilityObjective.Unsubscribe(HandleFirstFacilityInteracted);
-        m_returnFacilityObjective.Unsubscribe(HandleReturnFacilityInteracted);
     }
 
     /// <summary>첫 번째 시설 안내 단계부터 흐름을 시작하거나 초기화합니다.</summary>
@@ -121,8 +84,8 @@ public sealed class ShelterFlowController : MonoBehaviour
         EnterState(FlowState.GuideToReturnFacility);
     }
 
-    /// <summary>첫 번째 목표 시설 상호작용 완료를 외부에서 직접 통지할 때 사용합니다.</summary>
-    public void NotifyFirstFacilityInteracted()
+    /// <summary>플레이어가 첫 번째 목표 시설에 도착했음을 통지합니다.</summary>
+    public void NotifyFirstFacilityReached()
     {
         if (!m_hasStarted || m_currentState != FlowState.GuideToFirstFacility)
             return;
@@ -130,23 +93,13 @@ public sealed class ShelterFlowController : MonoBehaviour
         EnterState(FlowState.WaitingForDefenseCompletion);
     }
 
-    /// <summary>귀환 목표 시설 상호작용 완료를 외부에서 직접 통지할 때 사용합니다.</summary>
-    public void NotifyReturnFacilityInteracted()
+    /// <summary>플레이어가 귀환 목표 시설에 도착했음을 통지합니다.</summary>
+    public void NotifyReturnFacilityReached()
     {
         if (!m_hasStarted || m_currentState != FlowState.GuideToReturnFacility)
             return;
 
         EnterState(FlowState.Completed);
-    }
-
-    private void HandleFirstFacilityInteracted(FacilityUIInteractable interactionPoint)
-    {
-        NotifyFirstFacilityInteracted();
-    }
-
-    private void HandleReturnFacilityInteracted(FacilityUIInteractable interactionPoint)
-    {
-        NotifyReturnFacilityInteracted();
     }
 
     private void EnterState(FlowState nextState, bool forceApply = false)
@@ -161,43 +114,24 @@ public sealed class ShelterFlowController : MonoBehaviour
 
     private void ApplyCurrentState()
     {
-        SetAllFacilityInteractionsEnabled(false);
-        m_firstFacilityObjective.SetInteractionEnabled(false);
-        m_returnFacilityObjective.SetInteractionEnabled(false);
         m_firstFacilityObjective.SetIndicatorVisible(false);
         m_returnFacilityObjective.SetIndicatorVisible(false);
 
         switch (m_currentState)
         {
             case FlowState.GuideToFirstFacility:
-                m_firstFacilityObjective.SetInteractionEnabled(true);
                 m_firstFacilityObjective.SetIndicatorVisible(true);
                 break;
 
             case FlowState.WaitingForDefenseCompletion:
-                m_firstFacilityObjective.SetInteractionEnabled(true);
                 break;
 
             case FlowState.GuideToReturnFacility:
-                m_returnFacilityObjective.SetInteractionEnabled(true);
                 m_returnFacilityObjective.SetIndicatorVisible(true);
                 break;
 
             case FlowState.Completed:
-                SetAllFacilityInteractionsEnabled(true);
-                m_firstFacilityObjective.SetInteractionEnabled(true);
-                m_returnFacilityObjective.SetInteractionEnabled(true);
                 break;
-        }
-    }
-
-    private void SetAllFacilityInteractionsEnabled(bool enabled)
-    {
-        for (int i = 0; i < m_allFacilityInteractionPoints.Count; i++)
-        {
-            FacilityUIInteractable interactionPoint = m_allFacilityInteractionPoints[i];
-            if (interactionPoint != null)
-                interactionPoint.enabled = enabled;
         }
     }
 }

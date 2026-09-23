@@ -226,7 +226,12 @@ public sealed class ShelterRuntimeData
 
             state.EnsureValid();
             if (!string.IsNullOrWhiteSpace(state.facilityId))
-                facilityStates.Add(new FacilityRuntimeState(state.facilityId, state.isUnlocked, state.upgradeLevel));
+                facilityStates.Add(new FacilityRuntimeState(
+                    state.facilityId,
+                    state.isUnlocked,
+                    state.upgradeLevel,
+                    state.shooter01,
+                    state.shooter02));
         }
     }
 
@@ -485,7 +490,12 @@ public sealed class ShelterRuntimeData
             if (state == null)
                 continue;
             state.EnsureValid();
-            clone.Add(new FacilityRuntimeState(state.facilityId, state.isUnlocked, state.upgradeLevel));
+            clone.Add(new FacilityRuntimeState(
+                state.facilityId,
+                state.isUnlocked,
+                state.upgradeLevel,
+                state.shooter01,
+                state.shooter02));
         }
         return clone;
     }

@@ -1115,7 +1115,12 @@ public class GameDataManager : MonoBehaviour
             state.EnsureValid();
             if (!string.IsNullOrWhiteSpace(state.facilityId) && facilityIds.Add(state.facilityId))
             {
-                clone.Add(new FacilityRuntimeState(state.facilityId, state.isUnlocked, state.upgradeLevel));
+                clone.Add(new FacilityRuntimeState(
+                    state.facilityId,
+                    state.isUnlocked,
+                    state.upgradeLevel,
+                    state.shooter01,
+                    state.shooter02));
             }
         }
 

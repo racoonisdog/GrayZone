@@ -27,7 +27,9 @@ public static class FacilitySaveDataMapper
         {
             facilityId = facilityId,
             isUnlocked = definition.UnlockedByDefault,
-            upgradeLevel = 0
+            upgradeLevel = 0,
+            shooter01 = false,
+            shooter02 = false
         };
     }
 
@@ -53,7 +55,9 @@ public static class FacilitySaveDataMapper
         {
             facilityId = runtimeState.facilityId,
             isUnlocked = runtimeState.isUnlocked,
-            upgradeLevel = Mathf.Max(0, runtimeState.upgradeLevel)
+            upgradeLevel = Mathf.Max(0, runtimeState.upgradeLevel),
+            shooter01 = runtimeState.shooter01,
+            shooter02 = runtimeState.shooter02
         };
     }
 
@@ -69,7 +73,12 @@ public static class FacilitySaveDataMapper
             return null;
         }
 
-        return new FacilityRuntimeState(saveData.facilityId, saveData.isUnlocked, saveData.upgradeLevel);
+        return new FacilityRuntimeState(
+            saveData.facilityId,
+            saveData.isUnlocked,
+            saveData.upgradeLevel,
+            saveData.shooter01,
+            saveData.shooter02);
     }
 
     private static string ResolveFacilityId(FacilityDefinition definition)

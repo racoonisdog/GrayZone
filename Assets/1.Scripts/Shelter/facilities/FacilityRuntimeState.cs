@@ -13,6 +13,12 @@ public sealed class FacilityRuntimeState
     /// <summary>현재 시설 업그레이드 레벨</summary>
     public int upgradeLevel;
 
+    /// <summary>전투 씬의 첫 번째 Scramble 슈터 활성 여부</summary>
+    public bool shooter01;
+
+    /// <summary>전투 씬의 두 번째 Scramble 슈터 활성 여부</summary>
+    public bool shooter02;
+
     /// <summary>
     /// Unity 직렬화를 위한 기본 생성자
     /// </summary>
@@ -26,11 +32,18 @@ public sealed class FacilityRuntimeState
     /// <param name="facilityId">시설 고정 식별자</param>
     /// <param name="isUnlocked">초기 해금 여부</param>
     /// <param name="upgradeLevel">초기 업그레이드 레벨</param>
-    public FacilityRuntimeState(string facilityId, bool isUnlocked, int upgradeLevel = 0)
+    public FacilityRuntimeState(
+        string facilityId,
+        bool isUnlocked,
+        int upgradeLevel = 0,
+        bool shooter01 = false,
+        bool shooter02 = false)
     {
         this.facilityId = NormalizeFacilityId(facilityId);
         this.isUnlocked = isUnlocked;
         this.upgradeLevel = System.Math.Max(0, upgradeLevel);
+        this.shooter01 = shooter01;
+        this.shooter02 = shooter02;
     }
 
     /// <summary>

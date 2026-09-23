@@ -32,14 +32,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         [SerializeField] private float m_mainRingThicknessPixels = 2.0f;
 
         [Tooltip("중앙 표시 색상입니다.")]
-        [SerializeField] private Color m_mainColor = new Color(1.0f, 1.0f, 1.0f, 1.0f);
+        [SerializeField] private Color m_mainColor = new Color(1.0f, 1.0f, 1.0f, 0.27450982f);
 
         [Tooltip("중앙 표시 외곽선 두께입니다.")]
         [Min(0.0f)]
         [SerializeField] private float m_mainStrokeThicknessPixels = 1.0f;
 
         [Tooltip("중앙 표시 외곽선 색상입니다.")]
-        [SerializeField] private Color m_mainStrokeColor = Color.black;
+        [SerializeField] private Color m_mainStrokeColor = new Color(0.0f, 0.0f, 0.0f, 0.27450982f);
 
         [Tooltip("보조 표시 형태입니다.")]
         [SerializeField] private CrosshairController.SubShape m_subShape = CrosshairController.SubShape.RoundedCross;
@@ -69,14 +69,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         [SerializeField] private float m_subRingThicknessPixels = 2.0f;
 
         [Tooltip("보조 표시 색상입니다.")]
-        [SerializeField] private Color m_subColor = new Color(1.0f, 1.0f, 1.0f, 1.0f);
+        [SerializeField] private Color m_subColor = new Color(1.0f, 1.0f, 1.0f, 0.27450982f);
 
         [Tooltip("보조 표시 외곽선 두께입니다.")]
         [Min(0.0f)]
         [SerializeField] private float m_subStrokeThicknessPixels = 1.0f;
 
         [Tooltip("보조 표시 외곽선 색상입니다.")]
-        [SerializeField] private Color m_subStrokeColor = Color.black;
+        [SerializeField] private Color m_subStrokeColor = new Color(0.0f, 0.0f, 0.0f, 0.27450982f);
 
         [Tooltip("Rounded Cross 모서리 반지름입니다.")]
         [Min(0.0f)]
@@ -151,16 +151,16 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     [Tooltip("수평 조준 시 투척 시작점보다 올라갈 기준 최고 높이입니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_arcHeight = 4.0f;
+    [SerializeField] private float m_arcHeight = 1.5f;
 
     [Tooltip("포물선을 아래로 휘게 하는 스크립트 가속도입니다. Rigidbody 중력은 사용하지 않습니다.")]
     [Min(0.01f)]
-    [SerializeField] private float m_downwardAcceleration = 9.81f;
+    [SerializeField] private float m_downwardAcceleration = 20.0f;
 
     [Tooltip("포물선의 거리와 높이는 유지하면서 실제 비행 속도만 조절합니다. 1은 기본 속도, 2는 두 배 속도입니다.")]
     [InspectorName("Throw Speed")]
     [Min(0.01f)]
-    [SerializeField] private float m_throwSpeedMultiplier = 1.0f;
+    [SerializeField] private float m_throwSpeedMultiplier = 1.25f;
 
     [Tooltip("LineRenderer로 미리 보여 줄 포물선의 최대 누적 길이입니다. 실제 폭탄 이동은 제한하지 않습니다.")]
     [Min(0.1f)]

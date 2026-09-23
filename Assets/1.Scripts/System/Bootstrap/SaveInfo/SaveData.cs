@@ -97,6 +97,8 @@ public class SaveData
         public string facilityId = string.Empty;
         public bool isUnlocked;
         public int upgradeLevel;
+        public bool shooter01;
+        public bool shooter02;
     }
 
     [Serializable]
