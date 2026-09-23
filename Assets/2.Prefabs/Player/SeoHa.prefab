@@ -379,7 +379,7 @@ PrefabInstance:
     - target: {fileID: 1181764748249198491, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Avatar
       value: 
-      objectReference: {fileID: 9000000, guid: 797d9c355d1315d48b9bd59ecc68ee28, type: 3}
+      objectReference: {fileID: 9000000, guid: c90aca7856e525843b105a15b1dab784, type: 3}
     - target: {fileID: 2255135321720984955, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Data.m_Target
       value: 
@@ -713,6 +713,14 @@ PrefabInstance:
     - target: {fileID: 1106076119055891668, guid: fba62a1f134ffa5499ad5a3f28049635, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2456619735523337000, guid: fba62a1f134ffa5499ad5a3f28049635, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0.01739428
+      objectReference: {fileID: 0}
+    - target: {fileID: 2456619735523337000, guid: fba62a1f134ffa5499ad5a3f28049635, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.032696024
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

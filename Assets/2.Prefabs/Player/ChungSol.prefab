@@ -500,6 +500,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 8042323803606219392}
     m_Modifications:
+    - target: {fileID: 3288321684551827, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -3519951738629953535, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 31283978241539309, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -8884592712571033611, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
     - target: {fileID: 1234514498776227366, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -540,10 +548,58 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1482113354330632091, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -5808903725800729044, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 1588664250790194214, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 6394583160514197404, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 1878809517181570159, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 1897547504539476297, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
     - target: {fileID: 1903387435636622492, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
       propertyPath: m_Name
       value: ChungSol_rig
       objectReference: {fileID: 0}
+    - target: {fileID: 2919224237184260774, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 6302472968787519258, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 3221398697801804872, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -3686917607098654680, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 3847242861683876694, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 3930319325089822782, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 5170638911484822620, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Avatar
+      value:
+      objectReference: {fileID: 9000000, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 5417794780893330451, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -5200277506663877500, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 6887358484627955568, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 4988462184432735083, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 7480183317294956333, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -7069120232049006583, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 8002238491395400715, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 1248443101149830715, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
+    - target: {fileID: 8038590964656237653, guid: 6a45433af12a04b438a582d07299cd1f, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 7350707565829058500, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -608,7 +664,7 @@ PrefabInstance:
     - target: {fileID: 1181764748249198491, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Avatar
       value: 
-      objectReference: {fileID: 9000000, guid: d67c9ceaf01706540a3b22d424c567e4, type: 3}
+      objectReference: {fileID: 9000000, guid: 3763a304b61be234eb7bfd50ac1ad1fd, type: 3}
     - target: {fileID: 1625581596183615561, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_IsActive
       value: 1

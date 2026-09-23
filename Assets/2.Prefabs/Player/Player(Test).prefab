@@ -5109,7 +5109,7 @@ Animator:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4000974284593887393}
   m_Enabled: 1
-  m_Avatar: {fileID: 9000000, guid: 978e7237c8569ad4d9715337673b99fc, type: 3}
+  m_Avatar: {fileID: 9000000, guid: 2f134ebafd3b0654093d7697d9f12af5, type: 3}
   m_Controller: {fileID: 22100000, guid: b474d69f46447824fb0e55ec124441a1, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
@@ -9310,6 +9310,7 @@ MonoBehaviour:
   m_adsMaxSpread: 1
   m_adsCurrentSpread: 0
   m_airborneExtraSpread: 2
+  m_crouchSpreadMultiplier: 0.6
   m_adsMinSpreadShotCount: 3
   m_adsSpreadIncreasePerShot: 0.4
   m_adsSpreadRecoveryPerSecond: 8

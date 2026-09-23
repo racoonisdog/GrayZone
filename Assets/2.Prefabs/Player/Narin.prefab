@@ -510,7 +510,7 @@ PrefabInstance:
     - target: {fileID: 1181764748249198491, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Avatar
       value: 
-      objectReference: {fileID: 9000000, guid: 4619b93171392834dae05da93df17752, type: 3}
+      objectReference: {fileID: 9000000, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
     - target: {fileID: 2255135321720984955, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_Data.m_Target
       value: 
@@ -931,6 +931,26 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 4322448428484548589}
     m_Modifications:
+    - target: {fileID: 613531120174377107, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -4031680640021227589, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
+    - target: {fileID: 613531120174377107, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value:
+      objectReference: {fileID: 2100000, guid: e1e846e50358a854585584e315472646, type: 2}
+    - target: {fileID: 836395481427744558, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -3519951738629953535, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
+    - target: {fileID: 836395481427744558, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value:
+      objectReference: {fileID: 2100000, guid: 526125985b62de14a9510f53775c8a2c, type: 2}
+    - target: {fileID: 836395481427744558, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value:
+      objectReference: {fileID: 2100000, guid: 60e14b5793ecab84b9e061471c642b20, type: 2}
     - target: {fileID: 1295602094228908833, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
       propertyPath: m_Name
       value: Narin_rig
@@ -2971,6 +2991,34 @@ PrefabInstance:
       propertyPath: serializeData2.initData.clothSetupDataList.Array.data[0].transformRotations.Array.data[44].value.z
       value: -0.5157973
       objectReference: {fileID: 0}
+    - target: {fileID: 2707185627188627669, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -1753022549507844464, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
+    - target: {fileID: 2707185627188627669, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value:
+      objectReference: {fileID: 2100000, guid: 1279b145a4e00084d8554c68c52767a4, type: 2}
+    - target: {fileID: 2707185627188627669, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value:
+      objectReference: {fileID: 2100000, guid: 251179320cb026447a71fed090c4c9d3, type: 2}
+    - target: {fileID: 2796625439737045177, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -5017437812508297076, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
+    - target: {fileID: 2796625439737045177, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value:
+      objectReference: {fileID: 2100000, guid: 526125985b62de14a9510f53775c8a2c, type: 2}
+    - target: {fileID: 4034960754535771751, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0.01739423
+      objectReference: {fileID: 0}
+    - target: {fileID: 4034960754535771751, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.032695983
+      objectReference: {fileID: 0}
     - target: {fileID: 5021129920800962449, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
       propertyPath: serializeData2.initData.localHash
       value: 109138
@@ -4991,6 +5039,34 @@ PrefabInstance:
       propertyPath: serializeData2.initData.clothSetupDataList.Array.data[1].transformRotations.Array.data[24].value.z
       value: -0.5157973
       objectReference: {fileID: 0}
+    - target: {fileID: 5499206605763881953, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_Avatar
+      value:
+      objectReference: {fileID: 9000000, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
+    - target: {fileID: 5760970732829586303, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -6686669030262739812, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
+    - target: {fileID: 5760970732829586303, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value:
+      objectReference: {fileID: 2100000, guid: 1279b145a4e00084d8554c68c52767a4, type: 2}
+    - target: {fileID: 5956696276261310046, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0.0173943
+      objectReference: {fileID: 0}
+    - target: {fileID: 5956696276261310046, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0.032696087
+      objectReference: {fileID: 0}
+    - target: {fileID: 9002869628174667726, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: -5522178978445091165, guid: 24b3208dcf735d14f93b81a26429678a, type: 3}
+    - target: {fileID: 9002869628174667726, guid: 37b88029d6c0f8449b040787ddcecea2, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value:
+      objectReference: {fileID: 2100000, guid: 76d973e8a26b53343b4cf3fbd5b18886, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
