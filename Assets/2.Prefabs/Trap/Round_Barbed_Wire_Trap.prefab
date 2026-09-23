@@ -105,7 +105,8 @@ MonoBehaviour:
   m_disableShadowWhileBlueprint: 1
   m_blueprintVisualRoot: {fileID: 0}
   m_builtVisualRoot: {fileID: 0}
-  m_health: 100
+  m_maxHealth: 100
+  m_rebuildPolicy: 1
   m_damage: 1
   m_damageMode: 1
   m_damageTickInterval: 1
@@ -117,6 +118,7 @@ MonoBehaviour:
     m_Bits: 512
   m_moveSpeedMultiplier: 0.1
   m_forceWalk: 0
+  m_durabilityCostPerTarget: 1
 --- !u!65 &4685178966383192677
 BoxCollider:
   m_ObjectHideFlags: 0

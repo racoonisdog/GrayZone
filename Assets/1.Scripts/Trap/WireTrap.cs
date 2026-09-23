@@ -36,6 +36,10 @@ public sealed class WireTrap : Trap
     [Tooltip("켜면 위 배율에 더해 달리기 자체를 막고 걷기 동작으로만 이동하게 합니다.")]
     [SerializeField] private bool m_forceWalk = false;
 
+    [Tooltip("적 하나가 범위에 들어올 때마다 깎을 내구도입니다. 0이면 닳지 않습니다. 내구도가 다 닳으면 재설치 정책에 따라 처리됩니다.")]
+    [Min(0)]
+    [SerializeField] private int m_durabilityCostPerTarget = 1;
+
     /// <summary>지금 범위 안에 있는 적들입니다.</summary>
     private readonly Dictionary<EnemyController, Occupant> m_occupants =
         new Dictionary<EnemyController, Occupant>();
@@ -149,6 +153,11 @@ public sealed class WireTrap : Trap
         {
             damageable.TakeDamage(m_damage, gameObject);
         }
+
+        // 내구도는 머무는 시간이 아니라 걸린 적 수로 깎습니다. 시간으로 깎으면 한 마리가 오래 갇혀
+        // 있는 것만으로 철조망이 없어져, 여럿을 막는다는 이 함정의 역할과 어긋납니다.
+        // 여기서 다 닳으면 OnDepleted가 바로 이어져 방금 넣은 대상까지 함께 풀립니다.
+        TakeDurabilityDamage(m_durabilityCostPerTarget);
     }
 
     private void OnTriggerExit(Collider other)
@@ -241,8 +250,25 @@ public sealed class WireTrap : Trap
         m_removalBuffer.Clear();
     }
 
-    /// <summary>함정이 꺼지거나 부서질 때 걸어 둔 감속을 전부 풉니다.</summary>
-    private void OnDisable()
+    /// <summary>함정이 꺼질 때 걸어 둔 감속을 전부 풉니다.</summary>
+    protected override void OnDisable()
+    {
+        base.OnDisable();
+        ReleaseAll();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 내구도가 다 닳으면 철조망은 더 이상 아무도 붙잡지 않습니다. 이때 풀지 않으면 함정이 꺼졌는데도
+    /// 안에 있던 적이 계속 느린 채로 남습니다.
+    /// </remarks>
+    protected override void OnDepleted()
+    {
+        ReleaseAll();
+    }
+
+    /// <summary>범위 안의 모든 대상에게 걸어 둔 효과를 풀고 목록을 비웁니다.</summary>
+    private void ReleaseAll()
     {
         foreach (EnemyController enemy in m_occupants.Keys)
         {

@@ -1,17 +1,16 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 /// <summary>
 /// 충돌하거나 신관 시간이 끝났을 때 주변 적에게 한 번씩 고정 피해를 주는 폭발 투사체입니다.
 /// </summary>
+/// <remarks>
+/// 실제 폭발 판정은 <see cref="ExplosionDamage"/>가 합니다. 이 컴포넌트는 언제 터질지와
+/// 터진 뒤 자신을 없애는 것만 맡습니다.
+/// </remarks>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(Collider))]
 public class ExplosiveProjectile : MonoBehaviour
 {
-    private const float ExplosionRangeVisualDuration = 1.0f;
-    private const float ExplosionRangeVisualAlpha = 0.2f;
-
     [Tooltip("폭발 범위 안의 각 대상에게 적용할 고정 피해입니다.")]
     [Min(0)]
     [SerializeField] private int m_damage = 10;
@@ -101,121 +100,13 @@ public class ExplosiveProjectile : MonoBehaviour
 
         m_hasExploded = true;
 
-        HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
-        float explosionRadius = Mathf.Max(0.0f, m_explosionRadius);
-        float halfExplosionHeight = Mathf.Max(0.0f, m_explosionHeight) * 0.5f;
-
-        ShowExplosionRangeVisual(
+        ExplosionDamage.DetonateCylinder(
             explosionCenter,
-            explosionRadius,
-            halfExplosionHeight * 2.0f);
-
-        if (explosionRadius > 0.0f && halfExplosionHeight > 0.0f)
-        {
-            Collider[] colliders = Physics.OverlapBox(
-                explosionCenter,
-                new Vector3(explosionRadius, halfExplosionHeight, explosionRadius),
-                Quaternion.identity,
-                m_damageTargetLayers,
-                QueryTriggerInteraction.Collide);
-
-            foreach (Collider targetCollider in colliders)
-            {
-                if (!IntersectsExplosionCylinder(
-                    targetCollider,
-                    explosionCenter,
-                    explosionRadius,
-                    halfExplosionHeight))
-                {
-                    continue;
-                }
-
-                IDamageable target = targetCollider.GetComponentInParent<IDamageable>();
-                if (target == null || !damagedTargets.Add(target))
-                {
-                    continue;
-                }
-
-                target.TakeDamage(m_damage, null);
-            }
-        }
+            m_explosionRadius,
+            m_explosionHeight,
+            m_damage,
+            m_damageTargetLayers);
 
         Destroy(gameObject);
-    }
-
-    private static void ShowExplosionRangeVisual(
-        Vector3 center,
-        float radius,
-        float height)
-    {
-        if (radius <= 0.0f || height <= 0.0f)
-        {
-            return;
-        }
-
-        Shader rangeShader = Shader.Find("Universal Render Pipeline/Unlit");
-        if (rangeShader == null)
-        {
-            return;
-        }
-
-        GameObject rangeVisual = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        rangeVisual.name = "ExplosionDamageRangeVisual";
-        rangeVisual.hideFlags = HideFlags.HideAndDontSave;
-        rangeVisual.transform.position = center;
-        rangeVisual.transform.rotation = Quaternion.identity;
-        rangeVisual.transform.localScale = new Vector3(
-            radius * 2.0f,
-            height * 0.5f,
-            radius * 2.0f);
-
-        Collider rangeCollider = rangeVisual.GetComponent<Collider>();
-        rangeCollider.enabled = false;
-        Destroy(rangeCollider);
-
-        Color rangeColor = new Color(1.0f, 0.35f, 0.05f, ExplosionRangeVisualAlpha);
-        Material rangeMaterial = new Material(rangeShader)
-        {
-            hideFlags = HideFlags.HideAndDontSave,
-            renderQueue = (int)RenderQueue.Transparent
-        };
-        rangeMaterial.SetColor("_BaseColor", rangeColor);
-        rangeMaterial.SetFloat("_Surface", 1.0f);
-        rangeMaterial.SetFloat("_Blend", 0.0f);
-        rangeMaterial.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
-        rangeMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-        rangeMaterial.SetFloat("_ZWrite", 0.0f);
-        rangeMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-
-        Renderer rangeRenderer = rangeVisual.GetComponent<Renderer>();
-        rangeRenderer.sharedMaterial = rangeMaterial;
-        rangeRenderer.shadowCastingMode = ShadowCastingMode.Off;
-        rangeRenderer.receiveShadows = false;
-
-        Destroy(rangeMaterial, ExplosionRangeVisualDuration);
-        Destroy(rangeVisual, ExplosionRangeVisualDuration);
-    }
-
-    private static bool IntersectsExplosionCylinder(
-        Collider targetCollider,
-        Vector3 center,
-        float radius,
-        float halfHeight)
-    {
-        float minY = center.y - halfHeight;
-        float maxY = center.y + halfHeight;
-        float axisY = Mathf.Clamp(targetCollider.bounds.center.y, minY, maxY);
-        Vector3 axisPoint = new Vector3(center.x, axisY, center.z);
-        Vector3 closestPoint = targetCollider.ClosestPoint(axisPoint);
-
-        if (closestPoint.y < minY || closestPoint.y > maxY)
-        {
-            return false;
-        }
-
-        Vector2 horizontalOffset = new Vector2(
-            closestPoint.x - center.x,
-            closestPoint.z - center.z);
-        return horizontalOffset.sqrMagnitude <= radius * radius;
     }
 }
