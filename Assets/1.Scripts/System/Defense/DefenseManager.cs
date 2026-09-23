@@ -73,19 +73,13 @@ public sealed class DefenseManager : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_waveStartMessageFadeDuration = 1.0f;
 
-    [Header("Temporary Start Input")]
-    [Tooltip("방어전 시작 전, 상호작용 대상이 없는 곳에서 상호작용키를 홀드하면 방어전을 임시로 시작합니다.")]
+    [Header("Defense Start Input")]
+    [Tooltip("방어전 시작 전, 현재 스쿼드 조작 멤버가 상호작용 대상이 없는 곳에서 상호작용키를 홀드하면 방어전을 시작합니다.")]
     [SerializeField] private bool m_allowEmptySpaceHoldStart = true;
 
-    [Tooltip("허공 상호작용 홀드로 방어전을 시작하기까지 필요한 시간(초)입니다.")]
+    [Tooltip("현재 스쿼드 조작 멤버가 허공 상호작용 홀드로 방어전을 시작하기까지 필요한 시간(초)입니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_emptySpaceHoldStartDuration = 3.0f;
-
-    [Tooltip("임시 시작 입력을 읽을 플레이어 입력입니다. 비워 두면 활성 플레이어를 런타임에 찾습니다.")]
-    [SerializeField] private PlayerInputController m_startInput;
-
-    [Tooltip("허공 여부를 확인할 상호작용 컨트롤러입니다. 비워 두면 활성 플레이어의 컨트롤러를 런타임에 찾습니다.")]
-    [SerializeField] private InteractionController m_startInteraction;
 
     /// <summary>Defense 게임이 시작될 때 발생합니다. 튜토리얼 안내처럼 시작 시점에 붙는 UI가 구독합니다.</summary>
     /// <remarks>
@@ -418,10 +412,10 @@ public sealed class DefenseManager : MonoBehaviour
             return;
         }
 
-        ResolveStartInputReferences();
-        if (m_startInput == null || !m_startInput.isActiveAndEnabled
-            || (m_startInteraction != null && m_startInteraction.Current != null)
-            || !m_startInput.Interact)
+        if (!TryGetActiveSquadStartInput(out PlayerInputController startInput,
+                out InteractionController startInteraction)
+            || (startInteraction != null && startInteraction.Current != null)
+            || !startInput.Interact)
         {
             m_emptySpaceHoldStartTimer = 0.0f;
             return;
@@ -434,20 +428,29 @@ public sealed class DefenseManager : MonoBehaviour
         }
     }
 
-    /// <summary>Inspector 참조가 비어 있을 때 현재 조작 가능한 플레이어의 입력 컴포넌트를 찾습니다.</summary>
-    private void ResolveStartInputReferences()
+    /// <summary>
+    /// 현재 스쿼드가 직접 조작 중인 멤버에게서 방어전 시작 입력과 상호작용 상태를 가져옵니다.
+    /// </summary>
+    /// <remarks>
+    /// 시작 입력을 Inspector에 고정하면 스쿼드 전환 뒤 비활성 멤버의 입력을 계속 읽게 됩니다.
+    /// 따라서 매 프레임 <see cref="SquadManager.PlayerSquadMember"/>를 정본으로 사용합니다.
+    /// </remarks>
+    private static bool TryGetActiveSquadStartInput(
+        out PlayerInputController startInput,
+        out InteractionController startInteraction)
     {
-        if (m_startInput == null || !m_startInput.isActiveAndEnabled)
+        startInput = null;
+        startInteraction = null;
+
+        SquadMemberController activeMember = SquadManager.Instance?.PlayerSquadMember;
+        if (activeMember == null || !activeMember.IsPlayerSquadMember)
         {
-            m_startInput = FindFirstObjectByType<PlayerInputController>();
+            return false;
         }
 
-        if (m_startInteraction == null || !m_startInteraction.isActiveAndEnabled)
-        {
-            m_startInteraction = m_startInput != null
-                ? m_startInput.GetComponent<InteractionController>()
-                : FindFirstObjectByType<InteractionController>();
-        }
+        startInput = activeMember.GetComponent<PlayerInputController>();
+        startInteraction = activeMember.GetComponent<InteractionController>();
+        return startInput != null && startInput.isActiveAndEnabled;
     }
 
     /// <summary>승리 상태와 동일한 필드 데이터 매니저 참조를 확보합니다.</summary>
