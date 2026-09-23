@@ -385,20 +385,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private bool m_fireRequested;
 
     /// <summary>
-    /// 지난 프레임의 사격 입력 상태입니다. 누른 순간(상승 엣지)만 골라내는 데 씁니다.
-    /// </summary>
-    /// <remarks>
-    /// 탄창이 빈 상태에서 자동 재장전을 "한 번 더 눌렀을 때"만 걸기 위해 필요합니다. 누르고 있는 상태로
-    /// 판단하면 마지막 탄을 쏘느라 방아쇠를 당기고 있던 손가락이 그대로 재장전으로 이어집니다.
-    ///
-    /// 전투 자세 안에서만 갱신하면 자세를 나갔다 들어오는 사이 값이 굳어 첫 클릭을 놓칩니다.
-    /// 그래서 매 프레임 도는 <see cref="UpdateStanceArbitration"/>에서 함께 갱신합니다.
-    /// </remarks>
-    private bool m_shootInputWasPressed;
-
-    /// <summary>이번 프레임에 사격 입력이 새로 눌렸는지 여부입니다.</summary>
-    private bool m_shootJustPressed;
-
     [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
     [Clamp(Min = 0)]
     [SerializeField] private float m_stanceBlendDuration = 0.15f;
@@ -1088,6 +1074,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (m_weaponController != null)
         {
             m_weaponController.SetAirborne(IsAirborne);
+
+            // 앉기도 같은 이유로 무기가 스스로 알 수 없습니다. 자세가 바뀌는 동안 탄퍼짐이 같은 곡선을
+            // 타도록 켜짐/꺼짐이 아니라 보간값을 그대로 넘깁니다.
+            m_weaponController.SetCrouchBlend(m_controller != null ? m_controller.CrouchBlend : 0.0f);
         }
 
         if (m_isPlayerControlled)
@@ -1192,10 +1182,21 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         Quaternion offset = Quaternion.Inverse(m_preAlignmentLocalRotation)
             * m_muzzleAlignmentBone.localRotation;
-        m_muzzleAlignmentOffset = Quaternion.Slerp(
-            m_muzzleAlignmentOffset,
-            offset,
-            1.0f - Mathf.Exp(-18.0f * Time.deltaTime));
+        // 반동·앉기 전환은 상체의 기준 자세를 한 프레임 안에서도 크게 바꿉니다. 사격 중에 이전
+        // 자세에서 계산한 로컬 오프셋을 계속 보간하면 총구가 현재 탄착 방향을 한두 프레임 늦게
+        // 따라가므로, 실제 발사 프레임은 방금 계산한 보정을 즉시 사용합니다. 조준만 하는 동안에는
+        // 기존 보간을 유지해 총을 들 때 상체가 갑자기 꺾이지 않게 합니다.
+        if (m_isPlayerControlled && m_fireRequested)
+        {
+            m_muzzleAlignmentOffset = offset;
+        }
+        else
+        {
+            m_muzzleAlignmentOffset = Quaternion.Slerp(
+                m_muzzleAlignmentOffset,
+                offset,
+                1.0f - Mathf.Exp(-18.0f * Time.deltaTime));
+        }
         m_muzzleAlignmentBone.localRotation = m_preAlignmentLocalRotation
             * Quaternion.Slerp(Quaternion.identity, m_muzzleAlignmentOffset, weight);
         m_hasMuzzleAlignment = true;
@@ -1411,11 +1412,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         bool sprint = m_input.Sprint;
         bool combat = m_input.Aim || m_input.Shoot || m_input.ThrowMode;
 
-        // 사격 입력의 누른 순간을 여기서 잡습니다. 이 메서드는 전투 자세와 무관하게 매 프레임 돕니다.
-        bool shootPressed = m_input.Shoot;
-        m_shootJustPressed = shootPressed && !m_shootInputWasPressed;
-        m_shootInputWasPressed = shootPressed;
-
         if (sprint && !m_sprintWasHeld)
         {
             m_sprintOverridesCombat = true;
@@ -1440,10 +1436,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     private void UpdateAimAndWeapon()
     {
+        // 상체를 따로 쓰는 행동(투척 등)이 들어오면 재장전을 접고 그쪽을 먼저 보냅니다.
+        CancelReloadForUpperBodyAction();
+
         if (HandleReloadInput())
         {
             return;
         }
+
+        // 탄창이 비면 입력 없이 바로 재장전합니다. 위에서 접힌 경우에도, 그 행동이 끝나 조건이 풀리는
+        // 프레임에 여기서 다시 걸립니다. 별도의 "복귀" 상태를 두지 않는 이유입니다.
+        TryAutoReloadWhenEmpty();
 
         if (m_controller.IsReload)
         {
@@ -2579,13 +2582,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        // 빈 탄창에서 다시 누르면 재장전으로 받습니다. 쏘려고 누른 것이 분명한 입력이라 R을 따로 찾게 하지 않습니다.
-        if (m_shootJustPressed && TryReloadOnEmptyFire())
-        {
-            m_animator.SetBool(AnimIDShoot, false);
-            return;
-        }
-
         if (shootPressed)
         {
             m_animator.SetBool(AnimIDShoot, true);
@@ -2599,15 +2595,63 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     }
 
     /// <summary>
-    /// 탄창이 빈 상태에서 사격 입력이 새로 들어왔을 때 재장전을 시작합니다.
+    /// 상체를 따로 쓰는 행동이 시작되면 진행 중인 재장전을 접습니다.
     /// </summary>
-    /// <returns>재장전을 시작했으면 <c>true</c>입니다. 이 프레임 사격은 건너뜁니다.</returns>
+    /// <remarks>
+    /// 투척은 재장전과 같은 상체를 쓰므로 둘을 겹칠 수 없습니다. 재장전이 자동으로 걸리게 되면서
+    /// 수류탄을 꺼내려는 순간마다 재장전이 먼저 잡고 있을 수 있어, 들어온 쪽을 우선합니다.
+    ///
+    /// 무기 타이머도 함께 끊습니다. 비주얼만 접고 타이머를 두면 아무 동작 없이 탄이 채워집니다.
+    /// 접힌 재장전은 조건이 풀리는 프레임에 <see cref="TryAutoReloadWhenEmpty"/>가 다시 시작합니다.
+    /// </remarks>
+    private void CancelReloadForUpperBodyAction()
+    {
+        if (m_controller == null || !m_controller.IsReload || !IsUpperBodyActionRequested)
+        {
+            return;
+        }
+
+        if (m_weaponController != null)
+        {
+            m_weaponController.CancelReload();
+        }
+
+        FinishReloadVisualState(false);
+    }
+
+    /// <summary>
+    /// 상체를 따로 쓰는 행동이 요청된 상태인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 지금은 투척 모드뿐입니다. 같은 성격의 행동(근접, 아이템 사용 등)이 생기면 여기에 더하면
+    /// 재장전 취소와 자동 재장전 보류가 함께 따라옵니다. 두 곳에서 따로 판단하면 한쪽만 빠집니다.
+    /// </remarks>
+    private bool IsUpperBodyActionRequested => m_input != null && m_input.ThrowMode;
+
+    /// <summary>
+    /// 탄창이 비어 있으면 입력 없이 재장전을 시작합니다.
+    /// </summary>
+    /// <remarks>
+    /// 상체를 따로 쓰는 행동 중에는 걸지 않습니다. 그 행동이 끝나면 이 메서드가 매 프레임 다시
+    /// 조건을 보므로 자동으로 이어집니다.
+    /// </remarks>
+    private void TryAutoReloadWhenEmpty()
+    {
+        if (IsUpperBodyActionRequested)
+        {
+            return;
+        }
+
+        TryReloadOnEmptyFire();
+    }
+
+    /// <summary>
+    /// 탄창이 비어 있으면 재장전을 시작합니다.
+    /// </summary>
+    /// <returns>재장전을 시작했으면 <c>true</c>입니다.</returns>
     /// <remarks>
     /// R키 경로(<see cref="HandleReloadInput"/>)와 같은 게이트를 씁니다. 조건을 따로 만들면 한쪽만 바뀌어
     /// 두 경로의 재장전 가능 여부가 갈립니다.
-    ///
-    /// 여기서 시작해 두면 같은 프레임 LateUpdate의 사격 시도는 <c>m_isReloading</c> 때문에 조용히 실패합니다.
-    /// 빈 탄창 딸깍(드라이 파이어) 소리도 그 조건에서 함께 빠지므로, 재장전과 헛방아쇠 소리가 겹치지 않습니다.
     /// </remarks>
     private bool TryReloadOnEmptyFire()
     {

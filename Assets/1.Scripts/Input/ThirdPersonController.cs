@@ -655,6 +655,26 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     public float StrafeSpeedMultiplier => m_strafeSpeedMultiplier;
     /// <summary>웅크린 상태의 이동 속도입니다.</summary>
     public float CrouchSpeed => m_crouchSpeed;
+    /// <summary>현재 앉기 정도입니다. 0이면 선 자세, 1이면 완전히 앉은 자세이고 그 사이는 전환 중입니다.</summary>
+    /// <remarks>높이 보간에 쓰는 값을 그대로 내보냅니다. 탄퍼짐처럼 자세에 따라 달라지는 값이 같은 곡선을 타야 합니다.</remarks>
+    public float CrouchBlend => m_crouchBlend;
+
+    /// <summary>
+    /// 앉기가 지금 실제로 적용 중인지 여부입니다. 공중에서는 입력이 눌려 있어도 <c>false</c>입니다.
+    /// </summary>
+    /// <remarks>
+    /// 공중에서 누른 앉기는 <b>예약</b>일 뿐입니다. 발이 땅에 닿기 전에는 이동 속도·캡슐 높이·애니메이션
+    /// 어느 것도 바뀌면 안 됩니다. 입력은 그대로 두므로 착지하는 프레임부터 곧바로 적용됩니다
+    /// (착지 모션 연결은 <see cref="UpdateCrouchLandingTransition"/>가 맡습니다).
+    ///
+    /// 앉기 효과를 쓰는 곳이 이동 속도·애니메이터·무브스테이트·캡슐 높이로 흩어져 있어, 각자
+    /// <c>m_input.Crouch</c>를 직접 읽으면 한 곳만 빠뜨렸을 때 공중에서 일부 효과만 걸립니다.
+    /// 판단을 여기 하나로 모읍니다.
+    ///
+    /// 접지 판정(<c>GroundedCheck</c>)이 <c>Update</c>에서 이 값을 읽는 모든 처리보다 먼저 돌아,
+    /// 착지·이륙하는 프레임에 한 프레임 밀리지 않습니다.
+    /// </remarks>
+    public bool IsCrouchActive => m_grounded && m_input != null && m_input.Crouch;
     /// <summary>이동 방향을 바라보는 회전 보간 시간입니다.</summary>
     public float RotationSmoothTime => m_rotationSmoothTime;
     /// <summary>실제 이동 벡터가 새 입력 방향을 향해 회전하는 최대 각속도(°/s)입니다.</summary>
@@ -1538,7 +1558,8 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             m_input.CrouchInput(false);
         }
 
-        bool wantsCrouch = m_input.Crouch;
+        // 공중에서는 입력이 눌려 있어도 앉지 않습니다. 예약만 남고 착지 프레임부터 적용됩니다.
+        bool wantsCrouch = IsCrouchActive;
 
         // 천장에 막혀 있으면 일어서지 않습니다. 막힌 자리에서 캡슐을 키우면 CharacterController가
         // 겹침을 풀려고 캐릭터를 밀어내기 때문에 지형을 뚫고 튀어 나갑니다.
@@ -2119,7 +2140,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
         // 웅크리기는 전투 자세보다 뒤에서 덮습니다. 조준하며 웅크려도 웅크림 속도가 유지되어야 하고,
         // 이 순서 덕분에 웅크린 동안은 전력질주가 따로 막지 않아도 자연히 잠깁니다.
-        if (m_input.Crouch)
+        if (IsCrouchActive)
         {
             targetSpeed = m_crouchSpeed;
         }
@@ -2402,7 +2423,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
         m_animator.SetBool(m_animIDIsMove, moving);
         m_animator.SetFloat(m_animIDMoveState, UpdateMoveState());
-        m_animator.SetBool(m_animIDCrouch, m_input.Crouch);
+        m_animator.SetBool(m_animIDCrouch, IsCrouchActive);
 
         // IsAim은 ADS만이 아니라 전투 자세 전체입니다. 힙파이어로 쏘는 동안 상체가 총을 내리고 있으면
         // 총알은 나가는데 조준 포즈가 없는 구간이 생깁니다. 백뷰/전력질주 잠금과도 같은 기준입니다.
@@ -2437,7 +2458,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     {
         float target = MoveStateWalk;
 
-        if (m_input.Crouch)
+        if (IsCrouchActive)
         {
             target = MoveStateCrouch;
         }
@@ -2662,6 +2683,11 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             if (m_input.jump && m_jumpTimeoutDelta <= 0.0f)
             {
                 m_verticalVelocity = Mathf.Sqrt(m_jumpHeight * -2f * m_gravity);
+
+                // 점프하면 앉기를 풉니다. 몸을 띄우는 동작이라 웅크린 자세가 그대로 남을 수 없습니다.
+                // 입력을 내려 두므로 공중에서 다시 누르면 착지 웅크림은 그대로 성립합니다
+                // (<see cref="UpdateCrouchLandingTransition"/>). 전력질주 취소와 같은 방식입니다.
+                m_input.CrouchInput(false);
 
                 if (m_hasAnimator)
                 {

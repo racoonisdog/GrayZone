@@ -263,6 +263,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_airborneExtraSpread = 2.0f;
 
+    [Tooltip("앉은 자세에서 방사각에 곱할 배율입니다. 1이면 선 자세와 같고, 작을수록 탄착군이 좁아집니다. 최소·최대에 함께 곱하므로 상한도 같은 비율로 내려갑니다.")]
+    [BalanceField]
+    [Clamp(Min = 0.0f, Max = 1.0f)]
+    [SerializeField] private float m_crouchSpreadMultiplier = 0.6f;
+
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
@@ -472,6 +477,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>이 무기를 든 대상이 공중에 떠 있는지 여부입니다. <see cref="SetAirborne"/>가 매 프레임 씁니다.</summary>
     private bool m_isAirborne;
 
+    /// <summary>이 무기를 든 대상의 앉기 정도(0~1)입니다. <see cref="SetCrouchBlend"/>가 매 프레임 씁니다.</summary>
+    private float m_crouchBlend;
+
     /// <summary>발사 입력 홀드로 spread 회복을 막을 마지막 프레임입니다. AimController가 매 프레임 연장합니다.</summary>
     private int m_spreadRecoveryBlockUntilFrame = -1;
     private int m_hipfireShotsInBurst;
@@ -645,7 +653,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             ? GetCurrentSpread(m_adsMinSpread, m_adsMaxSpread, m_adsCurrentSpreadAdd)
             : GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
 
-        return spread + CurrentAirborneExtraSpread;
+        // 자세로 좁힌 뒤 공중 페널티를 얹습니다. 공중이면 앉기 배율은 1이라 페널티만 남습니다.
+        return spread * CurrentCrouchSpreadScale + CurrentAirborneExtraSpread;
     }
 
     /// <summary>공중에 떠 있는 동안 더해지는 방사각(도)입니다.</summary>
@@ -663,6 +672,46 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 별개의 불안정 요인이기 때문입니다. 누적에 섞으면 착지 후에도 회복 곡선을 타면서 남습니다.
     /// </remarks>
     private float CurrentAirborneExtraSpread => m_isAirborne ? Mathf.Max(0.0f, m_airborneExtraSpread) : 0.0f;
+
+    /// <summary>앉은 자세에서 방사각에 곱할 배율입니다.</summary>
+    public float CrouchSpreadMultiplier => m_crouchSpreadMultiplier;
+
+    /// <summary>지금 적용 중인 앉기 정도입니다. 0이면 선 자세, 1이면 완전히 앉은 자세입니다.</summary>
+    public float CrouchBlend => m_crouchBlend;
+
+    /// <summary>
+    /// 지금 실제로 방사각에 곱해지는 배율입니다. 선 자세면 1입니다.
+    /// </summary>
+    /// <remarks>
+    /// 켜짐/꺼짐이 아니라 앉기 보간값을 따라갑니다. 자세가 바뀌는 동안 탄착군도 같이 좁혀져야
+    /// 앉는 도중에 방사각만 계단처럼 튀지 않습니다.
+    ///
+    /// 공중 추가 방사각과 달리 곱셈인 이유는 방향이 반대이기 때문입니다. 공중은 자세와 무관하게 얹히는
+    /// 불안정 요인이라 더하고, 앉기는 자세 자체가 안정되는 것이라 콘 전체를 비율로 좁힙니다.
+    /// 곱셈이라 최소·최대가 같은 비율로 내려가, 상한을 따로 관리하지 않아도 됩니다.
+    ///
+    /// <b>공중에서는 앉기를 적용하지 않습니다.</b> 발이 떠 있으면 앉은 자세가 주는 안정이 없습니다.
+    /// 입력이나 애니메이션 상으로 웅크림이 남아 있어도 공중이 우선입니다.
+    /// </remarks>
+    private float CurrentCrouchSpreadScale => m_isAirborne
+        ? 1.0f
+        : Mathf.Lerp(1.0f, Mathf.Clamp01(m_crouchSpreadMultiplier), Mathf.Clamp01(m_crouchBlend));
+
+    /// <summary>
+    /// 이 무기를 든 대상의 앉기 정도를 전달합니다.
+    /// </summary>
+    /// <param name="value">0이면 선 자세, 1이면 완전히 앉은 자세입니다.</param>
+    /// <remarks>
+    /// 무기는 자세의 소유자가 아니므로 스스로 알 수 없습니다. <see cref="SetAirborne"/>와 같은 이유로
+    /// <see cref="AimController"/>가 매 프레임 전달합니다.
+    /// </remarks>
+    public void SetCrouchBlend(float value)
+    {
+        m_crouchBlend = Mathf.Clamp01(value);
+    }
+
+    /// <summary>앉기 방사각 배율을 설정합니다. 0~1로 보정합니다.</summary>
+    public void SetCrouchSpreadMultiplier(float value) => m_crouchSpreadMultiplier = Mathf.Clamp01(value);
 
     /// <summary>
     /// 이 무기를 든 대상의 접지 여부를 전달합니다.
@@ -689,6 +738,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     {
         minSpread = Mathf.Max(0.0f, isAds ? m_adsMinSpread : m_hipfireMinSpread);
         maxSpread = Mathf.Max(minSpread, isAds ? m_adsMaxSpread : m_hipfireMaxSpread);
+
+        // 앉은 자세는 콘 전체를 비율로 좁힙니다. 최소·최대에 함께 곱해야 상한도 같이 내려갑니다.
+        float crouchScale = CurrentCrouchSpreadScale;
+        minSpread *= crouchScale;
+        maxSpread *= crouchScale;
 
         // 공중에서는 콘 전체가 통째로 올라갑니다. 최소에만 더하면 크로스헤어가 상한에 눌려 벌어지지 않습니다.
         float extra = CurrentAirborneExtraSpread;
@@ -1735,7 +1789,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <returns>최소 방사각 + 누적 증가값으로 계산한 이번 사격의 방사각(도)입니다.</returns>
     private float ResolveShotSpread(bool isAds)
     {
-        return CurrentAirborneExtraSpread + (isAds
+        // 누적 결과가 이미 [min, max]로 제한된 뒤라, 여기에 곱하면 상한도 같은 비율로 내려갑니다.
+        return CurrentAirborneExtraSpread + CurrentCrouchSpreadScale * (isAds
             ? ResolveShotSpread(
                 m_adsMinSpread,
                 m_adsMaxSpread,
