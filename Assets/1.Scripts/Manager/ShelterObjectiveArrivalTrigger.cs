@@ -9,8 +9,9 @@ public sealed class ShelterObjectiveArrivalTrigger : MonoBehaviour
 {
     public enum ObjectiveStep
     {
-        FirstFacility,
-        ReturnFacility,
+        ManufacturingFacility = 0,
+        OperationFacility = 1,
+        MedicalFacility = 2,
     }
 
     [SerializeField] private ShelterFlowController m_flowController;
@@ -44,24 +45,34 @@ public sealed class ShelterObjectiveArrivalTrigger : MonoBehaviour
 
         switch (m_objectiveStep)
         {
-            case ObjectiveStep.FirstFacility:
+            case ObjectiveStep.ManufacturingFacility:
                 if (m_flowController.CurrentState
-                    != ShelterFlowController.FlowState.GuideToFirstFacility)
+                    != ShelterFlowState.GuideToManufacturing)
                 {
                     return;
                 }
 
-                m_flowController.NotifyFirstFacilityReached();
+                m_flowController.NotifyManufacturingFacilityReached();
                 break;
 
-            case ObjectiveStep.ReturnFacility:
+            case ObjectiveStep.OperationFacility:
                 if (m_flowController.CurrentState
-                    != ShelterFlowController.FlowState.GuideToReturnFacility)
+                    != ShelterFlowState.GuideToOperation)
                 {
                     return;
                 }
 
-                m_flowController.NotifyReturnFacilityReached();
+                m_flowController.NotifyOperationFacilityReached();
+                break;
+
+            case ObjectiveStep.MedicalFacility:
+                if (m_flowController.CurrentState
+                    != ShelterFlowState.GuideToMedical)
+                {
+                    return;
+                }
+
+                m_flowController.NotifyMedicalFacilityReached();
                 break;
         }
 

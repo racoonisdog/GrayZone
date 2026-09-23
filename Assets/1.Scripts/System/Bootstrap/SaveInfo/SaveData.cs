@@ -59,6 +59,7 @@ public class SaveData
     public class ShelterSaveData
     {
         public int currentDay = 1;
+        public ShelterFlowState flowState = ShelterFlowState.NotStarted;
         /// <summary>schemaVersion 7 이상에서 사용하는 출전 캐릭터 런타임 ID 목록입니다.</summary>
         public List<string> battleSquadRuntimeIds = new List<string>();
         /// <summary>schemaVersion 6 이하 정의 ID 기반 출전 목록입니다.</summary>

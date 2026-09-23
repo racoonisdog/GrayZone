@@ -35,6 +35,8 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private List<CharacterSnapshotData> characters = new();
 
     [Header("Shelter")]
+    [Tooltip("셸터 씬이 마지막으로 동기화한 안내 진행 단계입니다.")]
+    [SerializeField] private ShelterFlowState shelterFlowState = ShelterFlowState.NotStarted;
     [Tooltip("현재 출전 대상으로 선택된 캐릭터 런타임 ID 목록입니다. 최대 3명입니다.")]
     [FormerlySerializedAs("battleSquadNpcDefinitionIds")]
     [FormerlySerializedAs("playableSquadDefinitionIds")]
@@ -103,6 +105,9 @@ public class GameDataManager : MonoBehaviour
 
     /// <summary>현재 셸터 진행 일차입니다.</summary>
     public int CurrentDay => Mathf.Max(1, currentDay);
+
+    /// <summary>마지막 셸터 동기화 시점의 안내 진행 단계입니다.</summary>
+    public ShelterFlowState ShelterFlowState => shelterFlowState;
 
     public bool FoodShortagePenaltyActive => foodShortagePenaltyActive;
 
@@ -210,6 +215,7 @@ public class GameDataManager : MonoBehaviour
         EnsureRuntimeState();
         ShelterRuntimeData packet = new ShelterRuntimeData();
         packet.SetShelterStability(shelterStability);
+        packet.SetFlowState(shelterFlowState);
         packet.SetResourceShortagePenaltyState(
             foodShortagePenaltyActive,
             fuelShortagePenaltyActive);
@@ -252,6 +258,7 @@ public class GameDataManager : MonoBehaviour
         packet.EnsureRuntimeContainers();
         shelterStability = packet.ShelterStability;
         currentDay = packet.CurrentDay;
+        shelterFlowState = packet.FlowState;
         foodShortagePenaltyActive = packet.FoodShortagePenaltyActive;
         fuelShortagePenaltyActive = packet.FuelShortagePenaltyActive;
         playableSquadRuntimeIds = new List<string>(packet.FieldSquadRuntimeIds);
@@ -629,6 +636,7 @@ public class GameDataManager : MonoBehaviour
         SaveData.ShelterSaveData saveData = new SaveData.ShelterSaveData
         {
             currentDay = CurrentDay,
+            flowState = ShelterFlowState,
             battleSquadRuntimeIds = new List<string>(playableSquadRuntimeIds)
         };
 
@@ -716,6 +724,7 @@ public class GameDataManager : MonoBehaviour
     private void ApplyShelterSaveData(SaveData.ShelterSaveData saveData)
     {
         currentDay = Mathf.Max(1, saveData.currentDay);
+        shelterFlowState = saveData.flowState;
         itemStorageEntries = new List<ItemStorageEntry>();
         IEnumerable<string> savedSquadIds = saveData.battleSquadRuntimeIds != null
             && saveData.battleSquadRuntimeIds.Count > 0

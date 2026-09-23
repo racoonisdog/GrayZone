@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.Rendering;
+using System.Collections.Generic;
 
 /// <summary>
 /// 플레이어의 투척 모드와 좌클릭 입력을 받아 폭발탄 경로를 표시하고 투척합니다.
@@ -132,8 +133,18 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
-    [Tooltip("투척할 ExplosiveProjectile Prefab입니다.")]
-    [SerializeField] private ExplosiveProjectile m_projectilePrefab;
+    [Tooltip("Q/E 또는 마우스 휠로 순환 선택할 ExplosiveProjectile Prefab 목록입니다.")]
+    [SerializeField] private List<ExplosiveProjectile> m_projectilePrefabs = new List<ExplosiveProjectile>();
+
+    [UnityEngine.Serialization.FormerlySerializedAs("m_projectilePrefab")]
+    [SerializeField, HideInInspector] private ExplosiveProjectile m_legacyProjectilePrefab;
+
+    [Tooltip("현재 선택된 투척물 목록 인덱스입니다.")]
+    [Min(0)]
+    [SerializeField] private int m_selectedProjectileIndex;
+
+    [Tooltip("G 투척 모드에서 현재 선택된 투척물 아이콘을 표시할 UI입니다. 비어 있으면 Scene에서 자동으로 찾습니다.")]
+    [SerializeField] private GrenadeSelectionUI m_grenadeSelectionUI;
 
     [Tooltip("G 투척 모드에서 수치 프리셋을 적용할 크로스헤어입니다. 비어 있으면 AimController 또는 Scene에서 자동으로 찾습니다.")]
     [SerializeField] private CrosshairController m_defaultCrosshair;
@@ -214,9 +225,11 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void Awake()
     {
+        MigrateLegacyProjectile();
         m_input = GetComponent<PlayerInputController>();
         m_aimController = GetComponent<AimController>();
         m_sourceCollider = GetComponent<Collider>();
+        ResolveGrenadeSelectionUI();
         CreateTrajectoryLine();
         ApplyCrosshairMode(m_input != null && m_input.ThrowMode);
     }
@@ -228,12 +241,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
         if (m_input == null || m_aimController == null || !throwModeActive)
         {
+            UpdateGrenadeSelectionUI(false);
             HideTrajectory();
             m_wasThrowModeActive = false;
             m_throwWasHeld = false;
             return;
         }
 
+        CycleProjectile(m_input.ConsumeThrowSelectionDelta());
+        UpdateGrenadeSelectionUI(true);
         bool throwHeld = m_input.Throw;
 
         if (m_input.Sprint)
@@ -270,6 +286,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void OnDisable()
     {
+        UpdateGrenadeSelectionUI(false);
         ApplyCrosshairMode(false);
         m_crosshairModeInitialized = false;
         HideTrajectory();
@@ -282,6 +299,85 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         if (m_runtimeLineMaterial != null)
         {
             Destroy(m_runtimeLineMaterial);
+        }
+    }
+
+    private void OnValidate()
+    {
+        MigrateLegacyProjectile();
+    }
+
+    private void MigrateLegacyProjectile()
+    {
+        if (m_projectilePrefabs == null)
+        {
+            m_projectilePrefabs = new List<ExplosiveProjectile>();
+        }
+
+        if (m_projectilePrefabs.Count == 0 && m_legacyProjectilePrefab != null)
+        {
+            m_projectilePrefabs.Add(m_legacyProjectilePrefab);
+            m_legacyProjectilePrefab = null;
+        }
+
+        m_selectedProjectileIndex = WrapIndex(m_selectedProjectileIndex, m_projectilePrefabs.Count);
+    }
+
+    private void CycleProjectile(int selectionDelta)
+    {
+        if (selectionDelta == 0 || m_projectilePrefabs == null || m_projectilePrefabs.Count == 0)
+        {
+            return;
+        }
+
+        m_selectedProjectileIndex = WrapIndex(
+            m_selectedProjectileIndex + selectionDelta,
+            m_projectilePrefabs.Count);
+    }
+
+    private ExplosiveProjectile GetSelectedProjectile()
+    {
+        if (m_projectilePrefabs == null || m_projectilePrefabs.Count == 0)
+        {
+            return m_legacyProjectilePrefab;
+        }
+
+        m_selectedProjectileIndex = WrapIndex(m_selectedProjectileIndex, m_projectilePrefabs.Count);
+        return m_projectilePrefabs[m_selectedProjectileIndex];
+    }
+
+    private int GetProjectileCollisionLayers(ExplosiveProjectile projectile)
+    {
+        int excludedLayers = projectile != null
+            ? projectile.ContactExplosionExcludeLayers.value
+            : 0;
+        return m_collisionLayers.value & ~excludedLayers;
+    }
+
+    private static int WrapIndex(int index, int count)
+    {
+        if (count <= 0)
+        {
+            return 0;
+        }
+
+        return (index % count + count) % count;
+    }
+
+    private void ResolveGrenadeSelectionUI()
+    {
+        if (m_grenadeSelectionUI == null)
+        {
+            m_grenadeSelectionUI = FindFirstObjectByType<GrenadeSelectionUI>(FindObjectsInactive.Include);
+        }
+    }
+
+    private void UpdateGrenadeSelectionUI(bool visible)
+    {
+        ResolveGrenadeSelectionUI();
+        if (m_grenadeSelectionUI != null)
+        {
+            m_grenadeSelectionUI.SetState(this, visible, GetSelectedProjectile());
         }
     }
 
@@ -401,8 +497,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         float targetSegmentLength = previewDistance / segmentCount;
         float accumulatedDistance = 0.0f;
         float throwSpeedMultiplier = Mathf.Max(0.01f, m_throwSpeedMultiplier);
-        float trajectoryTimeLimit = m_projectilePrefab != null
-            ? Mathf.Max(0.0f, m_projectilePrefab.FuseTime) * throwSpeedMultiplier
+        ExplosiveProjectile selectedProjectile = GetSelectedProjectile();
+        float trajectoryTimeLimit = selectedProjectile != null
+            ? Mathf.Max(0.0f, selectedProjectile.FuseTime) * throwSpeedMultiplier
             : float.PositiveInfinity;
 
         if (trajectoryTimeLimit <= 0.0f)
@@ -499,7 +596,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private bool ThrowProjectile()
     {
-        if (m_projectilePrefab == null)
+        ExplosiveProjectile selectedProjectile = GetSelectedProjectile();
+        if (selectedProjectile == null)
         {
             Debug.LogWarning($"[{name}] 투척할 폭발 투사체 Prefab이 없습니다.", this);
             return false;
@@ -509,7 +607,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             ? Quaternion.LookRotation(m_initialVelocity.normalized, Vector3.up)
             : transform.rotation;
 
-        ExplosiveProjectile projectile = Instantiate(m_projectilePrefab, m_throwStart, rotation);
+        ExplosiveProjectile projectile = Instantiate(selectedProjectile, m_throwStart, rotation);
         Collider[] projectileColliders = projectile.GetComponentsInChildren<Collider>(true);
         foreach (Collider projectileCollider in projectileColliders)
         {
@@ -534,7 +632,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_plannedCollisionTime,
             m_plannedCollisionPosition,
             m_collisionRadius,
-            m_collisionLayers,
+            GetProjectileCollisionLayers(selectedProjectile),
             transform);
 
         return true;
@@ -557,7 +655,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             movement / distance,
             m_previewHits,
             distance,
-            m_collisionLayers,
+            GetProjectileCollisionLayers(GetSelectedProjectile()),
             QueryTriggerInteraction.Ignore);
 
         float nearestDistance = float.PositiveInfinity;
@@ -628,14 +726,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void DrawExplosionPreview()
     {
-        if (!m_hasExplosionPreview || m_projectilePrefab == null)
+        ExplosiveProjectile selectedProjectile = GetSelectedProjectile();
+        if (!m_hasExplosionPreview || selectedProjectile == null)
         {
             m_explosionPreviewLine.enabled = false;
             m_explosionPreviewLine.positionCount = 0;
             return;
         }
 
-        float radius = Mathf.Max(0.0f, m_projectilePrefab.ExplosionRadius);
+        float radius = Mathf.Max(0.0f, selectedProjectile.ExplosionRadius);
         if (radius <= 0.0f)
         {
             m_explosionPreviewLine.enabled = false;

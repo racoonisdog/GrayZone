@@ -1,21 +1,15 @@
 ﻿using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 셸터 목표의 현재 단계와 단계 전이만 관리하는 씬 흐름 컨트롤러입니다.
 /// 시설 UI, 방어전, 목표 표시의 세부 동작은 각 시스템에 위임합니다.
 /// </summary>
 [DisallowMultipleComponent]
+[DefaultExecutionOrder(100)]
 public sealed class ShelterFlowController : MonoBehaviour
 {
-    public enum FlowState
-    {
-        GuideToFirstFacility,
-        WaitingForDefenseCompletion,
-        GuideToReturnFacility,
-        Completed,
-    }
-
     [Serializable]
     private sealed class ObjectiveTarget
     {
@@ -40,21 +34,30 @@ public sealed class ShelterFlowController : MonoBehaviour
     }
 
     [Header("Objective Steps")]
-    [SerializeField] private ObjectiveTarget m_firstFacilityObjective = new();
-    [SerializeField] private ObjectiveTarget m_returnFacilityObjective = new();
+    [FormerlySerializedAs("m_firstFacilityObjective")]
+    [SerializeField] private ObjectiveTarget m_manufacturingObjective = new();
+    [FormerlySerializedAs("m_returnFacilityObjective")]
+    [SerializeField] private ObjectiveTarget m_operationObjective = new();
+    [SerializeField] private ObjectiveTarget m_medicalObjective = new();
 
     [Header("Startup")]
-    [Tooltip("Scene 시작 시 첫 번째 시설 안내 단계부터 자동으로 시작함")]
+    [Tooltip("Scene 시작 시 제조 시설 안내 단계부터 자동으로 시작함")]
     [SerializeField] private bool m_startAutomatically = true;
 
     private bool m_hasStarted;
-    private FlowState m_currentState;
+    private ShelterFlowState m_currentState;
+    private ShelterSceneDataManager m_shelterDataManager;
 
     /// <summary>현재 셸터 목표 진행 단계입니다.</summary>
-    public FlowState CurrentState => m_currentState;
+    public ShelterFlowState CurrentState => m_currentState;
 
     /// <summary>진행 단계가 변경되었을 때 발생합니다.</summary>
-    public event Action<FlowState> StateChanged;
+    public event Action<ShelterFlowState> StateChanged;
+
+    private void Awake()
+    {
+        CacheShelterDataManager();
+    }
 
     private void OnEnable()
     {
@@ -64,74 +67,146 @@ public sealed class ShelterFlowController : MonoBehaviour
 
     private void Start()
     {
+        ShelterFlowState savedState = CacheShelterDataManager() != null
+            ? m_shelterDataManager.FlowState
+            : ShelterFlowState.NotStarted;
+
+        if (savedState != ShelterFlowState.NotStarted)
+        {
+            m_hasStarted = true;
+            if (savedState == ShelterFlowState.WaitingForFirstDefenseResult
+                && HasSuccessfulFieldResult())
+            {
+                NotifyFirstDefenseSucceededAndReturned();
+            }
+            else
+            {
+                EnterState(savedState, true);
+            }
+
+            return;
+        }
+
         if (m_startAutomatically && !m_hasStarted)
             StartFlow();
     }
 
-    /// <summary>첫 번째 시설 안내 단계부터 흐름을 시작하거나 초기화합니다.</summary>
+    /// <summary>컷신이 없는 현재 흐름에서 제조 시설 안내 단계부터 시작하거나 초기화합니다.</summary>
     public void StartFlow()
     {
         m_hasStarted = true;
-        EnterState(FlowState.GuideToFirstFacility, true);
+        EnterState(ShelterFlowState.GuideToManufacturing, true);
     }
 
-    /// <summary>방어전 시스템이 전투 완료 시 호출할 진입점입니다.</summary>
-    public void NotifyDefenseCompleted()
+    /// <summary>컷신 또는 첫 상호작용이 끝났음을 통지합니다.</summary>
+    public void NotifyIntroCompleted()
     {
-        if (!m_hasStarted || m_currentState != FlowState.WaitingForDefenseCompletion)
+        if (m_hasStarted && m_currentState != ShelterFlowState.NotStarted)
             return;
 
-        EnterState(FlowState.GuideToReturnFacility);
+        StartFlow();
     }
 
-    /// <summary>플레이어가 첫 번째 목표 시설에 도착했음을 통지합니다.</summary>
-    public void NotifyFirstFacilityReached()
+    /// <summary>플레이어가 제조 시설 안내 Trigger에 도착했음을 통지합니다.</summary>
+    public void NotifyManufacturingFacilityReached()
     {
-        if (!m_hasStarted || m_currentState != FlowState.GuideToFirstFacility)
+        if (!m_hasStarted || m_currentState != ShelterFlowState.GuideToManufacturing)
             return;
 
-        EnterState(FlowState.WaitingForDefenseCompletion);
+        EnterState(ShelterFlowState.WaitingForFirstCraft);
     }
 
-    /// <summary>플레이어가 귀환 목표 시설에 도착했음을 통지합니다.</summary>
-    public void NotifyReturnFacilityReached()
+    /// <summary>첫 제작이 성공했음을 통지합니다.</summary>
+    public void NotifyFirstCraftCompleted()
     {
-        if (!m_hasStarted || m_currentState != FlowState.GuideToReturnFacility)
+        if (!m_hasStarted || m_currentState != ShelterFlowState.WaitingForFirstCraft)
             return;
 
-        EnterState(FlowState.Completed);
+        EnterState(ShelterFlowState.GuideToOperation);
     }
 
-    private void EnterState(FlowState nextState, bool forceApply = false)
+    /// <summary>플레이어가 출격 시설 안내 Trigger에 도착했음을 통지합니다.</summary>
+    public void NotifyOperationFacilityReached()
+    {
+        if (!m_hasStarted || m_currentState != ShelterFlowState.GuideToOperation)
+            return;
+
+        EnterState(ShelterFlowState.WaitingForFirstDefenseResult);
+    }
+
+    /// <summary>첫 방어전 성공 결과가 반영된 뒤 셸터에 귀환했음을 통지합니다.</summary>
+    public void NotifyFirstDefenseSucceededAndReturned()
+    {
+        m_hasStarted = true;
+        EnterState(ShelterFlowState.GuideToMedical, true);
+    }
+
+    /// <summary>플레이어가 의료 시설 안내 Trigger에 도착했음을 통지합니다.</summary>
+    public void NotifyMedicalFacilityReached()
+    {
+        if (!m_hasStarted || m_currentState != ShelterFlowState.GuideToMedical)
+            return;
+
+        EnterState(ShelterFlowState.Completed);
+    }
+
+    private void EnterState(ShelterFlowState nextState, bool forceApply = false)
     {
         if (!forceApply && m_currentState == nextState)
             return;
 
         m_currentState = nextState;
+        CacheShelterDataManager()?.SetFlowState(nextState);
         ApplyCurrentState();
         StateChanged?.Invoke(m_currentState);
     }
 
     private void ApplyCurrentState()
     {
-        m_firstFacilityObjective.SetIndicatorVisible(false);
-        m_returnFacilityObjective.SetIndicatorVisible(false);
+        m_manufacturingObjective.SetIndicatorVisible(false);
+        m_operationObjective.SetIndicatorVisible(false);
+        m_medicalObjective.SetIndicatorVisible(false);
 
         switch (m_currentState)
         {
-            case FlowState.GuideToFirstFacility:
-                m_firstFacilityObjective.SetIndicatorVisible(true);
+            case ShelterFlowState.GuideToManufacturing:
+                m_manufacturingObjective.SetIndicatorVisible(true);
                 break;
 
-            case FlowState.WaitingForDefenseCompletion:
+            case ShelterFlowState.WaitingForFirstCraft:
                 break;
 
-            case FlowState.GuideToReturnFacility:
-                m_returnFacilityObjective.SetIndicatorVisible(true);
+            case ShelterFlowState.GuideToOperation:
+                m_operationObjective.SetIndicatorVisible(true);
                 break;
 
-            case FlowState.Completed:
+            case ShelterFlowState.WaitingForFirstDefenseResult:
+                break;
+
+            case ShelterFlowState.GuideToMedical:
+                m_medicalObjective.SetIndicatorVisible(true);
+                break;
+
+            case ShelterFlowState.NotStarted:
+            case ShelterFlowState.Completed:
                 break;
         }
+    }
+
+    private ShelterSceneDataManager CacheShelterDataManager()
+    {
+        if (m_shelterDataManager == null)
+            m_shelterDataManager = ShelterSceneDataManager.Instance;
+
+        if (m_shelterDataManager == null)
+            m_shelterDataManager = FindFirstObjectByType<ShelterSceneDataManager>();
+
+        return m_shelterDataManager;
+    }
+
+    private static bool HasSuccessfulFieldResult()
+    {
+        FieldResultData result = GameDataManager.Instance?.CreateLastFieldResultSnapshot();
+        return result != null && result.Outcome == FieldOutcome.Success;
     }
 }
