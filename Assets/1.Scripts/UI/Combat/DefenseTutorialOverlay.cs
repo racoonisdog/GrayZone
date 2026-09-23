@@ -41,17 +41,7 @@ public class DefenseTutorialOverlay : MonoBehaviour
         "감염체가 몰려옵니다.\n거점을 지키세요.\n\n라운드가 끝나면 잠시 휴식이 주어집니다.";
 
     [Tooltip("닫기 안내 문구입니다. 표시할 키 이름은 여기서 직접 적습니다.")]
-    [SerializeField] private string m_hint = "[E] 닫기";
-
-    [Header("Behaviour")]
-    [Tooltip("Defense가 다시 시작돼도 이미 한 번 본 뒤라면 띄우지 않습니다.")]
-    [SerializeField] private bool m_showOnlyOnce = true;
-
-    /// <summary>안내를 이미 한 번 표시했는지 여부입니다.</summary>
-    private bool m_hasShown;
-
-    /// <summary>닫기 입력을 읽을 조작 멤버의 입력 컴포넌트입니다. 조작 멤버가 바뀌므로 매 프레임 다시 찾습니다.</summary>
-    private SquadManager m_squadManager;
+    [SerializeField] private string m_hint = "[E] 3초 유지 — 방어전 시작";
 
     /// <summary>안내가 현재 표시 중인지 여부입니다.</summary>
     public bool IsShown => m_panelRoot != null && m_panelRoot.activeSelf;
@@ -72,13 +62,7 @@ public class DefenseTutorialOverlay : MonoBehaviour
     {
         AutoFindReferences();
         Subscribe();
-
-        // UI 루트가 꺼진 채 씬이 시작되면 OnEnable이 늦게 돌아 시작 이벤트를 놓칩니다.
-        // 이벤트만 믿지 않고, 이미 시작된 상태면 여기서 판단합니다.
-        if (m_roundManager != null && m_roundManager.IsGameStarted)
-        {
-            HandleDefenseStarted();
-        }
+        RefreshVisibility();
     }
 
     private void OnDisable()
@@ -86,22 +70,25 @@ public class DefenseTutorialOverlay : MonoBehaviour
         Unsubscribe();
     }
 
-    private void Update()
+    /// <summary>
+    /// 방어전이 아직 시작되지 않았으면 안내를 띄우고, 시작된 뒤면 감춥니다.
+    /// </summary>
+    /// <remarks>
+    /// 안내는 "시작하는 방법"을 알려주는 것이라 시작 전에 떠 있어야 합니다. 시작되면 역할이 끝나므로 내립니다.
+    ///
+    /// 시작 이벤트만 믿지 않고 여기서 현재 상태도 함께 봅니다. UI 루트가 꺼진 채 씬이 시작되면
+    /// <c>OnEnable</c>이 늦게 돌아 그 사이의 시작 이벤트를 놓치기 때문입니다.
+    /// </remarks>
+    private void RefreshVisibility()
     {
-        if (!IsShown)
+        bool started = m_roundManager != null && m_roundManager.IsGameStarted;
+        if (started)
         {
+            Hide();
             return;
         }
 
-        PlayerInputController input = ResolveControlledInput();
-        if (input == null || !input.TutorialClosePressed)
-        {
-            return;
-        }
-
-        // 같은 키를 쓰는 상호작용이 이어서 발동하지 않도록, 닫으면서 함께 막습니다.
-        input.SuppressInteractUntilRelease();
-        Hide();
+        Show();
     }
 
     /// <summary>안내를 표시합니다.</summary>
@@ -110,7 +97,6 @@ public class DefenseTutorialOverlay : MonoBehaviour
         AutoFindReferences();
         ApplyTexts();
         SetVisible(true);
-        m_hasShown = true;
     }
 
     /// <summary>안내를 감춥니다.</summary>
@@ -138,37 +124,10 @@ public class DefenseTutorialOverlay : MonoBehaviour
         }
     }
 
+    /// <summary>방어전이 시작되면 안내를 내립니다. 시작 방법을 알려주는 안내라 역할이 끝납니다.</summary>
     private void HandleDefenseStarted()
     {
-        if (m_showOnlyOnce && m_hasShown)
-        {
-            return;
-        }
-
-        Show();
-    }
-
-    /// <summary>
-    /// 지금 조작 중인 대원의 입력 컴포넌트를 반환합니다. 없으면 <c>null</c>입니다.
-    /// </summary>
-    /// <remarks>
-    /// 캐시하지 않는 이유는 안내가 떠 있는 동안에도 대원 전환이 일어날 수 있기 때문입니다.
-    /// 전환 뒤에도 닫기 입력이 먹혀야 합니다.
-    /// </remarks>
-    private PlayerInputController ResolveControlledInput()
-    {
-        if (m_squadManager == null)
-        {
-            m_squadManager = FindFirstObjectByType<SquadManager>();
-        }
-
-        if (m_squadManager == null)
-        {
-            return null;
-        }
-
-        SquadMemberController member = m_squadManager.PlayerSquadMember;
-        return member != null ? member.GetComponent<PlayerInputController>() : null;
+        Hide();
     }
 
     private void AutoFindReferences()

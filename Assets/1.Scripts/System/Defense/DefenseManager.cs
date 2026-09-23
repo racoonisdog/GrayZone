@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using VInspector;
 
 /// <summary>
 /// Defense 라운드의 플레이/휴식 상태와 스폰 포인트 활성화를 관리합니다.
@@ -30,17 +31,8 @@ public sealed class DefenseManager : MonoBehaviour
     [SerializeField] private List<EnemySpawnPoint> m_spawnPoints = new List<EnemySpawnPoint>();
 
     [Header("Victory Return Zone")]
-    [Tooltip("귀환 구역을 배치할 기준점입니다. 비어 있으면 현재 DefenseEventHealth 거점을 사용합니다.")]
-    [SerializeField] private Transform m_returnPointAnchor;
-
-    [Tooltip("기준점의 로컬 좌표계에서 귀환 구역을 생성할 위치 오프셋입니다. z 양수는 거점 앞 방향입니다.")]
-    [SerializeField] private Vector3 m_returnPointLocalOffset = new Vector3(0.0f, 0.0f, 3.0f);
-
-    [Tooltip("생성할 귀환 구역의 트리거 크기입니다.")]
-    [SerializeField] private Vector3 m_returnPointTriggerSize = new Vector3(4.0f, 2.0f, 4.0f);
-
-    [Tooltip("선택한 프리팹이 있으면 이를 생성합니다. 비워 두면 EscapeSystem이 든 기본 트리거 구역을 런타임에 만듭니다.")]
-    [SerializeField] private GameObject m_returnPointPrefab;
+    [Tooltip("씬에 미리 배치해 둔 귀환 구역입니다. 평소에는 꺼 두고, 마지막 웨이브를 막으면 켭니다. 위치는 씬에서 이 오브젝트를 직접 옮겨 정합니다.")]
+    [SerializeField] private GameObject m_returnPoint;
 
     [Tooltip("방어전 승리 상태를 기록할 필드 데이터 매니저입니다. 비워 두면 런타임에 찾습니다.")]
     [SerializeField] private FieldSceneDataManager m_fieldSceneDataManager;
@@ -48,6 +40,21 @@ public sealed class DefenseManager : MonoBehaviour
     [Header("Defense HUD")]
     [Tooltip("전투 또는 휴식의 남은 시간을 분:초로 표시할 텍스트입니다. 비어 있으면 타이머 표시는 생략합니다.")]
     [SerializeField] private TMP_Text m_timerText;
+
+    [Tooltip("지금이 전투 구간인지 휴식 구간인지 표시할 텍스트입니다. 비어 있으면 구간 표시는 생략합니다.")]
+    [SerializeField] private TMP_Text m_phaseLabelText;
+
+    [Tooltip("남은 웨이브 수를 표시할 텍스트입니다. 비어 있으면 남은 웨이브 표시는 생략합니다.")]
+    [SerializeField] private TMP_Text m_remainingWaveText;
+
+    [Tooltip("남은 웨이브 표시 형식입니다. {0}에 남은 수, {1}에 전체 수가 들어갑니다.")]
+    [SerializeField] private string m_remainingWaveFormat = "남은 라운드 {0}";
+
+    [Tooltip("전투 구간에 표시할 문구입니다.")]
+    [SerializeField] private string m_combatPhaseLabel = "전투시간";
+
+    [Tooltip("휴식 구간에 표시할 문구입니다.")]
+    [SerializeField] private string m_restPhaseLabel = "휴식시간";
 
     [Tooltip("웨이브 시작 알림을 표시할 텍스트입니다. 비어 있으면 시작 알림은 생략합니다.")]
     [SerializeField] private TMP_Text m_waveStartMessageText;
@@ -87,6 +94,13 @@ public sealed class DefenseManager : MonoBehaviour
     /// </remarks>
     public event Action OnDefenseStarted;
 
+    /// <summary>플레이 라운드가 끝나고 휴식 구간이 시작될 때 발생합니다.</summary>
+    /// <remarks>
+    /// 휴식 동안에만 할 수 있는 정비 행동이 구독합니다. 예를 들어 다 쓴 함정은 이 시점에 다시
+    /// 설치할 수 있게 됩니다. 마지막 웨이브 뒤에는 휴식으로 넘어가지 않으므로 발생하지 않습니다.
+    /// </remarks>
+    public event Action OnRestStarted;
+
     /// <summary>마지막 웨이브를 막아 귀환 구역이 준비되었을 때 발생합니다.</summary>
     public event Action OnDefenseVictoryReady;
 
@@ -114,8 +128,6 @@ public sealed class DefenseManager : MonoBehaviour
     /// <summary>현재 실행 중인 웨이브 번호입니다. 첫 웨이브는 1입니다.</summary>
     private int m_currentWave;
 
-    /// <summary>승리 후 런타임에 만든 귀환 구역 인스턴스입니다.</summary>
-    private GameObject m_activeReturnPoint;
 
     /// <summary>Defense 게임이 시작되었는지 여부입니다.</summary>
     public bool IsGameStarted => m_isGameStarted;
@@ -223,7 +235,7 @@ public sealed class DefenseManager : MonoBehaviour
         m_isVictoryReady = false;
         m_emptySpaceHoldStartTimer = 0.0f;
         m_currentWave = 0;
-        DestroyActiveReturnPoint();
+        SetReturnPointActive(false);
         BeginRound();
         OnDefenseStarted?.Invoke();
     }
@@ -246,10 +258,99 @@ public sealed class DefenseManager : MonoBehaviour
         m_restTimer = 0.0f;
         m_emptySpaceHoldStartTimer = 0.0f;
         m_currentWave = 0;
-        DestroyActiveReturnPoint();
+        SetReturnPointActive(false);
         SetSpawnPointsEnabled(false);
         RefreshTimerText();
         HideWaveStartMessage();
+    }
+
+    [Foldout("Debug")]
+    [Button("라운드 스킵")]
+    /// <summary>
+    /// 지금 구간의 남은 시간을 무시하고 다음 구간으로 넘어갑니다.
+    /// </summary>
+    /// <remarks>
+    /// 검증용입니다. 전투 중이면 휴식으로(마지막 웨이브였다면 승리로), 휴식 중이면 다음 전투로 넘어갑니다.
+    /// 타이머가 자연히 끝났을 때와 같은 경로를 타므로 <see cref="OnRestStarted"/> 같은 알림도 똑같이
+    /// 발생합니다. 따로 처리했다면 버튼으로 넘어갈 때와 시간으로 넘어갈 때가 달라져 검증이 무의미해집니다.
+    ///
+    /// 방어전이 시작되지 않았거나 이미 승리 상태면 아무 일도 하지 않습니다.
+    /// </remarks>
+    public void SkipRound()
+    {
+        if (!Application.isPlaying)
+        {
+            Debug.LogWarning("[DefenseManager] 라운드 스킵은 Play Mode에서만 동작합니다.", this);
+            return;
+        }
+
+        if (!m_isGameStarted)
+        {
+            Debug.LogWarning("[DefenseManager] 방어전이 시작되지 않아 건너뛸 라운드가 없습니다.", this);
+            return;
+        }
+
+        if (m_isVictoryReady)
+        {
+            Debug.LogWarning("[DefenseManager] 이미 마지막 웨이브를 끝낸 상태라 건너뛸 라운드가 없습니다.", this);
+            return;
+        }
+
+        if (m_debugSkipClearsEnemies)
+        {
+            int despawnedCount = DespawnManagedEnemies();
+            Debug.Log($"[DefenseManager] 라운드 스킵: 남은 적 {despawnedCount}마리를 치웠습니다.", this);
+        }
+
+        if (m_isPlaying)
+        {
+            m_roundTimer = 0.0f;
+            if (m_currentWave >= m_totalWaveCount)
+            {
+                BeginVictory();
+                return;
+            }
+
+            BeginRest();
+            return;
+        }
+
+        m_restTimer = 0.0f;
+        BeginRound();
+    }
+
+    [Foldout("Debug")]
+    [Tooltip("켜면 라운드 스킵이 필드에 남은 적을 함께 치웁니다. 끄면 적을 둔 채로 구간만 넘깁니다. 휴식으로 넘어갔는데 지난 전투의 적이 돌아다니는 상태를 피하려면 켜 두세요.")]
+    [SerializeField] private bool m_debugSkipClearsEnemies = true;
+
+    /// <summary>
+    /// 이 매니저가 제어하는 스폰 포인트가 내보낸 적을 모두 풀로 되돌립니다.
+    /// </summary>
+    /// <returns>치운 적의 수입니다.</returns>
+    /// <remarks>
+    /// 죽이는 것이 아니라 없던 일로 하는 것이라 처치 수가 오르지 않습니다. 목록 밖 스폰 포인트가
+    /// 내보낸 적은 이 매니저 소유가 아니므로 건드리지 않습니다.
+    /// </remarks>
+    private int DespawnManagedEnemies()
+    {
+        if (m_spawnPoints == null)
+        {
+            return 0;
+        }
+
+        int despawnedCount = 0;
+        for (int i = 0; i < m_spawnPoints.Count; i++)
+        {
+            EnemySpawnPoint spawnPoint = m_spawnPoints[i];
+            if (spawnPoint == null)
+            {
+                continue;
+            }
+
+            despawnedCount += spawnPoint.DespawnActiveEnemies();
+        }
+
+        return despawnedCount;
     }
 
     /// <summary>다음 플레이 라운드를 시작합니다.</summary>
@@ -272,6 +373,7 @@ public sealed class DefenseManager : MonoBehaviour
         m_restTimer = Mathf.Max(0.01f, m_restDuration);
         SetSpawnPointsEnabled(false);
         RefreshTimerText();
+        OnRestStarted?.Invoke();
     }
 
     /// <summary>마지막 웨이브를 완료하고, 정산 전 귀환 구역 진입 대기 상태로 전환합니다.</summary>
@@ -286,7 +388,7 @@ public sealed class DefenseManager : MonoBehaviour
         HideWaveStartMessage();
 
         ResolveFieldSceneDataManager()?.SetMissionCompleted(true);
-        CreateReturnPoint();
+        SetReturnPointActive(true);
         OnDefenseVictoryReady?.Invoke();
     }
 
@@ -359,92 +461,38 @@ public sealed class DefenseManager : MonoBehaviour
         return m_fieldSceneDataManager;
     }
 
-    /// <summary>승리 시 귀환 정산을 시작할 EscapeSystem 트리거 구역을 생성합니다.</summary>
-    private void CreateReturnPoint()
+    /// <summary>미리 배치해 둔 귀환 구역을 켭니다.</summary>
+    /// <remarks>
+    /// 런타임에 만들지 않고 씬 오브젝트를 켜고 끄기만 합니다. 위치·크기·모양을 씬에서 눈으로 보고
+    /// 끌어다 맞출 수 있어야 하는데, 생성 방식은 기준점과 오프셋 숫자로만 정해져 실제 자리가 실행 전에는
+    /// 보이지 않았습니다. 트리거 구성도 프리팹이 이미 갖고 있으므로 코드가 다시 보장할 이유가 없습니다.
+    /// </remarks>
+    private void SetReturnPointActive(bool isActive)
     {
-        DestroyActiveReturnPoint();
-
-        Transform anchor = ResolveReturnPointAnchor();
-        Vector3 position = anchor.TransformPoint(m_returnPointLocalOffset);
-        Quaternion rotation = Quaternion.Euler(0.0f, anchor.eulerAngles.y, 0.0f);
-
-        m_activeReturnPoint = m_returnPointPrefab != null
-            ? Instantiate(m_returnPointPrefab, position, rotation)
-            : CreateDefaultReturnPoint(position, rotation);
-
-        EnsureReturnPointComponents(m_activeReturnPoint);
-    }
-
-    /// <summary>Inspector 기준점이 비어 있으면 현재 방어 거점을 귀환 구역 기준점으로 사용합니다.</summary>
-    private Transform ResolveReturnPointAnchor()
-    {
-        if (m_returnPointAnchor != null)
+        if (m_returnPoint == null)
         {
-            return m_returnPointAnchor;
-        }
+            if (isActive)
+            {
+                Debug.LogWarning("[DefenseManager] 귀환 구역이 비어 있어 켜지 못했습니다. 인스펙터에서 지정하세요.", this);
+            }
 
-        DefenseEventHealth defenseTarget = FindFirstObjectByType<DefenseEventHealth>();
-        return defenseTarget != null ? defenseTarget.transform : transform;
-    }
-
-    /// <summary>별도 프리팹이 없을 때 기본 귀환 트리거를 구성합니다.</summary>
-    private GameObject CreateDefaultReturnPoint(Vector3 position, Quaternion rotation)
-    {
-        GameObject returnPoint = new GameObject("Defense Return Zone");
-        returnPoint.transform.SetPositionAndRotation(position, rotation);
-        return returnPoint;
-    }
-
-    /// <summary>프리팹/기본 생성물 어느 쪽이든 탈출 정산에 필요한 최소 컴포넌트를 보장합니다.</summary>
-    private void EnsureReturnPointComponents(GameObject returnPoint)
-    {
-        if (returnPoint == null)
-        {
             return;
         }
 
-        Collider trigger = returnPoint.GetComponentInChildren<Collider>();
-        if (trigger == null)
+        if (m_returnPoint.activeSelf != isActive)
         {
-            BoxCollider boxCollider = returnPoint.AddComponent<BoxCollider>();
-            boxCollider.isTrigger = true;
-            boxCollider.size = m_returnPointTriggerSize;
+            m_returnPoint.SetActive(isActive);
         }
-        else
-        {
-            trigger.isTrigger = true;
-        }
-
-        Rigidbody body = returnPoint.GetComponent<Rigidbody>();
-        if (body == null)
-        {
-            body = returnPoint.AddComponent<Rigidbody>();
-        }
-
-        body.isKinematic = true;
-        body.useGravity = false;
-
-        if (returnPoint.GetComponentInChildren<EscapeSystem>() == null)
-        {
-            returnPoint.AddComponent<EscapeSystem>();
-        }
-    }
-
-    /// <summary>이 매니저가 이전에 만든 귀환 구역 인스턴스만 정리합니다.</summary>
-    private void DestroyActiveReturnPoint()
-    {
-        if (m_activeReturnPoint == null)
-        {
-            return;
-        }
-
-        Destroy(m_activeReturnPoint);
-        m_activeReturnPoint = null;
     }
 
     /// <summary>현재 전투 또는 휴식의 남은 시간을 분:초 형식으로 HUD에 반영합니다.</summary>
     private void RefreshTimerText()
     {
+        // 구간 라벨과 남은 웨이브도 여기서 함께 갱신합니다. 호출부가 일곱 곳이라 따로 부르게 두면 새 경로가
+        // 생길 때마다 한쪽만 빠져 표시가 어긋납니다. 타이머 참조가 없어도 둘은 갱신해야 하므로 null 검사보다 앞입니다.
+        RefreshPhaseLabel();
+        RefreshRemainingWaveText();
+
         if (m_timerText == null)
         {
             return;
@@ -466,6 +514,65 @@ public sealed class DefenseManager : MonoBehaviour
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
         m_timerText.text = $"{minutes:00}:{seconds:00}";
+    }
+
+    /// <summary>
+    /// 지금이 전투 구간인지 휴식 구간인지 표시합니다.
+    /// </summary>
+    /// <remarks>
+    /// 타이머와 표시 조건을 같게 둡니다. 숫자만 남고 무엇을 세는 시간인지 사라지거나, 반대로 라벨만
+    /// 남는 상태가 생기지 않게 하기 위함입니다. 그래서 <see cref="RefreshTimerText"/>와 같은 곳에서 함께 부릅니다.
+    /// </remarks>
+    private void RefreshPhaseLabel()
+    {
+        if (m_phaseLabelText == null)
+        {
+            return;
+        }
+
+        bool shouldShow = m_isGameStarted && !m_isVictoryReady;
+        if (m_phaseLabelText.gameObject.activeSelf != shouldShow)
+        {
+            m_phaseLabelText.gameObject.SetActive(shouldShow);
+        }
+
+        if (!shouldShow)
+        {
+            return;
+        }
+
+        m_phaseLabelText.text = m_isPlaying ? m_combatPhaseLabel : m_restPhaseLabel;
+    }
+
+    /// <summary>
+    /// 남은 웨이브 수를 표시합니다.
+    /// </summary>
+    /// <remarks>
+    /// 진행 중인 웨이브를 아직 남은 것으로 셉니다. 1/3 전투 중에 "남은 라운드 2"가 되면 지금 막고 있는
+    /// 웨이브가 셈에서 빠져 하나 적게 보입니다. 휴식 구간에서는 그 웨이브가 이미 끝났으므로 자연히 줄어듭니다.
+    ///
+    /// 타이머·구간 라벨과 표시 조건을 같게 둡니다. 셋이 한 줄에 놓이는데 조건이 갈리면 일부만 남습니다.
+    /// </remarks>
+    private void RefreshRemainingWaveText()
+    {
+        if (m_remainingWaveText == null)
+        {
+            return;
+        }
+
+        bool shouldShow = m_isGameStarted && !m_isVictoryReady;
+        if (m_remainingWaveText.gameObject.activeSelf != shouldShow)
+        {
+            m_remainingWaveText.gameObject.SetActive(shouldShow);
+        }
+
+        if (!shouldShow)
+        {
+            return;
+        }
+
+        int remaining = Mathf.Max(0, m_totalWaveCount - m_currentWave + (m_isPlaying ? 1 : 0));
+        m_remainingWaveText.text = string.Format(m_remainingWaveFormat, remaining, m_totalWaveCount);
     }
 
     /// <summary>웨이브 시작 알림을 표시하고 설정된 유지·페이드 시간을 시작합니다.</summary>
@@ -557,8 +664,5 @@ public sealed class DefenseManager : MonoBehaviour
         m_waveStartMessageHoldDuration = Mathf.Max(0.0f, m_waveStartMessageHoldDuration);
         m_waveStartMessageFadeDuration = Mathf.Max(0.0f, m_waveStartMessageFadeDuration);
         m_emptySpaceHoldStartDuration = Mathf.Max(0.01f, m_emptySpaceHoldStartDuration);
-        m_returnPointTriggerSize.x = Mathf.Max(0.01f, m_returnPointTriggerSize.x);
-        m_returnPointTriggerSize.y = Mathf.Max(0.01f, m_returnPointTriggerSize.y);
-        m_returnPointTriggerSize.z = Mathf.Max(0.01f, m_returnPointTriggerSize.z);
     }
 }

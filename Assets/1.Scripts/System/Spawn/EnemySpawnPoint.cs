@@ -423,6 +423,47 @@ public class EnemySpawnPoint : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 지금 필드에 나와 있는 적과 시체를 모두 자기 풀로 되돌립니다.
+    /// </summary>
+    /// <returns>풀로 되돌린 수입니다.</returns>
+    /// <remarks>
+    /// 죽이는 것이 아니라 없던 일로 하는 것입니다. 사망 연출도 없고 처치 수도 오르지 않습니다.
+    /// <see cref="SetSpawnEnabled"/>는 새 생산만 막고 이미 나온 적은 그대로 두므로, 필드를 비우려면
+    /// 이 메서드가 따로 필요합니다.
+    ///
+    /// 풀로 되돌리므로 생산 정원도 함께 풀립니다. 적을 개별로 파괴하면 정원 계산이 어긋나 이후
+    /// 생산이 막힙니다.
+    /// </remarks>
+    public int DespawnActiveEnemies()
+    {
+        int despawnedCount = 0;
+
+        for (int runtimeIndex = 0; runtimeIndex < m_spawnRuntimes.Count; runtimeIndex++)
+        {
+            SpawnRuntime runtime = m_spawnRuntimes[runtimeIndex];
+            if (runtime == null)
+            {
+                continue;
+            }
+
+            // 뒤에서부터 도는 이유는 ReturnToPool이 항목 목록을 건드릴 수 있기 때문입니다.
+            for (int itemIndex = runtime.PoolItems.Count - 1; itemIndex >= 0; itemIndex--)
+            {
+                PoolItem item = runtime.PoolItems[itemIndex];
+                if (item == null || !item.IsActive)
+                {
+                    continue;
+                }
+
+                ReturnToPool(item);
+                despawnedCount++;
+            }
+        }
+
+        return despawnedCount;
+    }
+
     /// <summary>현재 SO 목록을 읽어 런타임 풀을 추가·유지·퇴역 처리합니다.</summary>
     /// <remarks>
     /// 같은 SO를 목록에 두 번 넣어도 각 목록 칸은 독립 생산 항목으로 취급합니다.
