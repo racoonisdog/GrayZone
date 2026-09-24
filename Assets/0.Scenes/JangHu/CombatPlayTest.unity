@@ -36873,7 +36873,7 @@ PrefabInstance:
     - target: {fileID: 1294966282692387780, guid: cb39875d6fd7adf4391498b5c93601a6, type: 3}
       propertyPath: m_Mesh
       value: 
-      objectReference: {fileID: -5503142162925835272, guid: 7e6d6dc3974e98349a2f3642e30202c1, type: 3}
+      objectReference: {fileID: -8305400721757926095, guid: 6ce9d855827a55d46beea49082dda519, type: 3}
     - target: {fileID: 2644337924908843311, guid: cb39875d6fd7adf4391498b5c93601a6, type: 3}
       propertyPath: m_Name
       value: Enemy_01_DormantSeed_Solo

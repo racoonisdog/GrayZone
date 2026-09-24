@@ -11,18 +11,26 @@ using UnityEngine;
 /// </remarks>
 public static class EnemyMeleeWiring
 {
-    private const string PrefabPath = "Assets/2.Prefabs/Enemy/Howler.prefab";
-    private const string DefensePlayerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab";
-    private const string DefenseRunPlayerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Run_Player).prefab";
+    private static readonly string[] PrefabPaths =
+    {
+        "Assets/2.Prefabs/Enemy/Howler.prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Scratcher(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Stalker(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Bloater(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Crusher(Defense_Run_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab",
+    };
     private const string BalancePath = "Assets/5.Data/ScriptableObject/Enemy/ZombieAttackBalance.asset";
     private static readonly string[] HitboxNames = { "AttackPoint_L", "AttackPoint_R" };
 
     [MenuItem("GrayZone/Enemy/근접 판정 배선")]
     public static void Wire()
     {
-        WirePrefab(PrefabPath);
-        WirePrefab(DefensePlayerPrefabPath);
-        WirePrefab(DefenseRunPlayerPrefabPath);
+        foreach (string prefabPath in PrefabPaths)
+        {
+            WirePrefab(prefabPath);
+        }
+
         AssetDatabase.Refresh();
     }
 

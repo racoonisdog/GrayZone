@@ -64,6 +64,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Round_Barbed_Wire_Trap
       objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_Layer
+      value: 18
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -92,7 +96,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 323b042da3b4c7c46aaa728e99391afa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
-  m_startAsBlueprint: 1
+  m_startPlaced: 0
   m_buildCostResourceId: upgrade_part_material
   m_buildCostAmount: 1
   m_buildPrompt: "\uC124\uCE58"
@@ -101,10 +105,11 @@ MonoBehaviour:
   m_disableShadowWhileBlueprint: 1
   m_blueprintVisualRoot: {fileID: 0}
   m_builtVisualRoot: {fileID: 0}
-  m_health: 100
+  m_maxHealth: 100
+  m_rebuildPolicy: 1
   m_damage: 1
   m_damageMode: 1
-  m_damageTickRate: 1
+  m_damageTickInterval: 1
   m_drawRangeGizmo: 1
   m_idleGizmoColor: {r: 0.2, g: 0.9, b: 1, a: 0.5}
   m_activeGizmoColor: {r: 1, g: 0.15, b: 0.1, a: 0.8}
@@ -113,6 +118,7 @@ MonoBehaviour:
     m_Bits: 512
   m_moveSpeedMultiplier: 0.1
   m_forceWalk: 0
+  m_durabilityCostPerTarget: 1
 --- !u!65 &4685178966383192677
 BoxCollider:
   m_ObjectHideFlags: 0

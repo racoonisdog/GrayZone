@@ -10,6 +10,9 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class NormalHudPlayerStatusBinder : MonoBehaviour
 {
+    /// <summary>예비 탄약이 무한일 때 숫자 대신 표시할 기호입니다.</summary>
+    private const string InfiniteAmmoSymbol = "∞";
+
     /// <summary>초상화 오브젝트 이름입니다. PlayerStatus와 SquadStatus 슬롯이 같은 이름을 씁니다.</summary>
     private const string PortraitName = "PlayerbleProfile";
 
@@ -418,7 +421,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
         if (m_magAllText != null)
         {
-            m_magAllText.text = (m_playerSquadMemberData != null ? m_playerSquadMemberData.ReserveAmmo : 0).ToString();
+            m_magAllText.text = ResolveReserveAmmoText();
         }
 
         UpdatePortrait();
@@ -446,6 +449,25 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         {
             m_portraitImage.gameObject.SetActive(sprite != null);
         }
+    }
+
+    /// <summary>
+    /// 예비 탄약 표시 문자열을 만듭니다. 무한이면 숫자 대신 무한 기호를 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 무한 여부는 <see cref="PlayerbleUnitData.HasInfiniteReserveAmmo"/> 하나만 읽습니다. 총기 설정과
+    /// 디버그 토글을 여기서 다시 조합하면 표시와 실제 소모 판정이 갈립니다.
+    /// </remarks>
+    private string ResolveReserveAmmoText()
+    {
+        if (m_playerSquadMemberData == null)
+        {
+            return "0";
+        }
+
+        return m_playerSquadMemberData.HasInfiniteReserveAmmo
+            ? InfiniteAmmoSymbol
+            : m_playerSquadMemberData.ReserveAmmo.ToString();
     }
 
     /// <summary>

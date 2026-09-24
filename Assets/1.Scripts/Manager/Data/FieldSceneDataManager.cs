@@ -998,6 +998,18 @@ public class FieldSceneDataManager : MonoBehaviour
     /// <summary>스쿼드 전멸 상태를 고정하고 정산 없이 게임오버 화면 전환을 요청합니다.</summary>
     private void HandleSquadEliminated()
     {
+        RequestGameOver();
+    }
+
+    /// <summary>
+    /// 정산 없이 게임오버 화면 전환을 요청합니다. 이미 게임오버나 정산이 끝났으면 아무것도 하지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 스쿼드 전멸 외의 패배 사유도 이 경로를 씁니다. 방어전 거점(정문) 파괴가 그 예이며,
+    /// <see cref="DefenseEventHealth"/>가 호출합니다. 어느 사유든 상태를 고정하고 결과값은 만들지 않습니다.
+    /// </remarks>
+    public void RequestGameOver()
+    {
         if (IsFinalized || m_runtimeData == null)
         {
             return;

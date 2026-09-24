@@ -7,6 +7,13 @@ public class BillboardUI : MonoBehaviour
     [SerializeField] private bool m_yawOnly;
     [SerializeField] private bool m_findMainCameraOnEnable = true;
 
+    /// <summary>수평 회전만 적용할지 여부를 설정합니다.</summary>
+    /// <remarks>코드로 이 컴포넌트를 붙이는 쪽(예: <see cref="HealthSystemBase"/>)이 씁니다.</remarks>
+    public void SetYawOnly(bool yawOnly)
+    {
+        m_yawOnly = yawOnly;
+    }
+
     private void OnEnable()
     {
         if (m_targetCamera == null && m_findMainCameraOnEnable)

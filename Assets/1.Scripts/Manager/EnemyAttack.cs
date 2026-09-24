@@ -65,6 +65,12 @@ public class EnemyAttack : MonoBehaviour
 
     /// <summary>실제로 사용할 판정 차단 레이어입니다. 지정이 없으면 기본값으로 채웁니다.</summary>
     private int m_resolvedObstacleMask;
+    private EnemyController m_owner;
+    private DefenseEventHealth m_cachedObjective;
+    private readonly List<Collider> m_objectiveColliders = new List<Collider>();
+
+    /// <summary>목표물 접근 이동의 정지 반경 상한을 정할 때 쓰는 공격 시작 거리입니다.</summary>
+    public float AttackStartRange => m_attackRange;
 
     /// <summary>한 번의 공격에서 성립한 적중 하나입니다.</summary>
     private readonly struct SwingHit
@@ -73,12 +79,12 @@ public class EnemyAttack : MonoBehaviour
         public readonly Melee Source;
 
         /// <summary>피해를 입은 캐릭터입니다.</summary>
-        public readonly SquadMemberController Member;
+        public readonly Component Member;
 
         /// <summary>피해를 발생시킨 무기와 피해를 입은 캐릭터를 묶습니다.</summary>
         /// <param name="source">피해를 발생시킨 근접 무기입니다.</param>
         /// <param name="member">피해를 입은 캐릭터입니다.</param>
-        public SwingHit(Melee source, SquadMemberController member)
+        public SwingHit(Melee source, Component member)
         {
             Source = source;
             Member = member;
@@ -124,6 +130,7 @@ public class EnemyAttack : MonoBehaviour
 
     private void Awake()
     {
+        m_owner = GetComponentInParent<EnemyController>();
         // 공격 주체의 진영을 소유 HealthSystemBase에서 가져옵니다. 없으면 Enemy로 가정합니다.
         HealthSystemBase ownerHealth = GetComponentInParent<HealthSystemBase>();
         m_ownerFaction = ownerHealth != null ? ownerHealth.Faction : Faction.Enemy;
@@ -161,7 +168,46 @@ public class EnemyAttack : MonoBehaviour
             return false;
         }
 
-        Vector3 delta = target.transform.position - transform.position;
+        return CanStartAttackAt(target.transform.position);
+    }
+
+    /// <summary>지정된 방어 목표의 살아 있는 콜라이더 표면이 공격 시작 범위에 있는지 확인합니다.</summary>
+    public bool CanStartDefenseAttack(DefenseEventHealth target)
+    {
+        return TryGetDefenseAttackPoint(target, out Vector3 point) && CanStartAttackAt(point);
+    }
+
+    /// <summary>큰 목표물의 중심 대신 가장 가까운 유효 콜라이더 표면을 접근/회전 지점으로 제공합니다.</summary>
+    /// <remarks>콜라이더가 없는 좌표 마커는 공격 대상으로 만들지 않습니다. 캐시는 목표 교체 때 갱신합니다.</remarks>
+    public bool TryGetDefenseAttackPoint(DefenseEventHealth target, out Vector3 point)
+    {
+        point = default;
+        if (target == null || target.IsDead || !target.isActiveAndEnabled) return false;
+        if (m_cachedObjective != target)
+        {
+            m_cachedObjective = target;
+            m_objectiveColliders.Clear();
+            target.GetComponentsInChildren(true, m_objectiveColliders);
+        }
+        float best = float.PositiveInfinity;
+        foreach (Collider candidate in m_objectiveColliders)
+        {
+            if (candidate == null || !candidate.enabled || !candidate.gameObject.activeInHierarchy ||
+                candidate.isTrigger || candidate.GetComponentInParent<DefenseEventHealth>() != target) continue;
+            Vector3 candidatePoint = candidate.ClosestPoint(transform.position);
+            float distance = (candidatePoint - transform.position).sqrMagnitude;
+            if (distance < best)
+            {
+                best = distance;
+                point = candidatePoint;
+            }
+        }
+        return !float.IsPositiveInfinity(best);
+    }
+
+    private bool CanStartAttackAt(Vector3 point)
+    {
+        Vector3 delta = point - transform.position;
         delta.y = 0f;
 
         if (delta.sqrMagnitude > m_attackRange * m_attackRange)
@@ -256,7 +302,7 @@ public class EnemyAttack : MonoBehaviour
     /// </remarks>
     public bool TryApplyDamageTo(Melee source, Collider other)
     {
-        if (source == null || other == null || IsSwingConsumed)
+        if (source == null || other == null || !IsHitboxActive || IsSwingConsumed)
         {
             return false;
         }
@@ -268,12 +314,25 @@ public class EnemyAttack : MonoBehaviour
         }
 
         SquadMemberController member = other.GetComponentInParent<SquadMemberController>();
-        if (!IsAliveMember(member) || IsAlreadyHit(source, member))
+        Component victim = member;
+        if (member != null)
+        {
+            if (!IsAliveMember(member) || (m_owner != null && m_owner.IsDefenseEnemy &&
+                m_owner.DefenseDisposition == EnemyDefenseDisposition.TargetFirst)) return false;
+        }
+        else
+        {
+            DefenseEventHealth objective = other.GetComponentInParent<DefenseEventHealth>();
+            if (objective == null || objective.IsDead || m_owner == null ||
+                !m_owner.IsAttackingDefenseObjective || m_owner.DefenseObjective != objective) return false;
+            victim = objective;
+        }
+        if (IsAlreadyHit(source, victim))
         {
             return false;
         }
 
-        if (CountDistinctMembersHit() >= m_attackMaxTargets && !IsMemberAlreadyCounted(member))
+        if (CountDistinctMembersHit() >= m_attackMaxTargets && !IsMemberAlreadyCounted(victim))
         {
             return false;
         }
@@ -318,7 +377,7 @@ public class EnemyAttack : MonoBehaviour
 
         ApplyMeleeKnockback(source, other);
 
-        m_swingHits.Add(new SwingHit(source, member));
+        m_swingHits.Add(new SwingHit(source, victim));
         return true;
     }
 
@@ -374,7 +433,7 @@ public class EnemyAttack : MonoBehaviour
     /// 스윙당 1회 고정이면 출처와 무관하게 같은 캐릭터를 다시 때리지 않습니다.
     /// 손별 독립이면 같은 손이 같은 캐릭터를 다시 때리는 것만 막고, 반대 손은 따로 판정합니다.
     /// </remarks>
-    private bool IsAlreadyHit(Melee source, SquadMemberController member)
+    private bool IsAlreadyHit(Melee source, Component member)
     {
         for (int i = 0; i < m_swingHits.Count; i++)
         {
@@ -425,7 +484,7 @@ public class EnemyAttack : MonoBehaviour
 
     /// <summary>이 캐릭터가 이번 공격에서 이미 한 번이라도 맞았는지 확인합니다.</summary>
     /// <remarks>이미 센 캐릭터라면 다중 대상 수를 넘겼더라도 반대 손의 추가 적중은 허용합니다.</remarks>
-    private bool IsMemberAlreadyCounted(SquadMemberController member)
+    private bool IsMemberAlreadyCounted(Component member)
     {
         for (int i = 0; i < m_swingHits.Count; i++)
         {
@@ -453,7 +512,13 @@ public class EnemyAttack : MonoBehaviour
             return false;
         }
 
-        return Physics.Raycast(origin, delta / distance, distance, m_resolvedObstacleMask, QueryTriggerInteraction.Ignore);
+        if (!Physics.Raycast(origin, delta / distance, out RaycastHit hit, distance,
+            m_resolvedObstacleMask, QueryTriggerInteraction.Ignore)) return false;
+
+        // 방어 목표 자체가 환경 레이어여도 자기 표면을 '앞을 가로막는 벽'으로 취급하지 않습니다.
+        if (hit.collider == targetCollider) return false;
+        DefenseEventHealth objective = targetCollider.GetComponentInParent<DefenseEventHealth>();
+        return objective == null || hit.collider.GetComponentInParent<DefenseEventHealth>() != objective;
     }
 
     /// <summary>공격 대상으로 삼을 수 있는 살아 있는 스쿼드 캐릭터인지 확인합니다.</summary>

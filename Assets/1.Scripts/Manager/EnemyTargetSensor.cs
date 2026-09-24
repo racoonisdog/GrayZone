@@ -293,7 +293,8 @@ public class EnemyTargetSensor : MonoBehaviour
         // 없애려는 것은 갱신마다 도는 전역 탐색이지 최초 1회 캐싱이 아닙니다.
         if (m_squadManager == null)
         {
-            m_squadManager = FindFirstObjectByType<SquadManager>();
+            m_squadManager = SquadManager.Instance != null
+                ? SquadManager.Instance : FindFirstObjectByType<SquadManager>();
         }
     }
 
@@ -341,6 +342,7 @@ public class EnemyTargetSensor : MonoBehaviour
     /// </remarks>
     public void SetEngaged(bool engaged)
     {
+        EnsureSquadManager();
         if (m_isEngaged == engaged)
         {
             return;
@@ -356,6 +358,7 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <param name="engaged">교전 중이면 true입니다.</param>
     private void SyncSquadEngagement(bool engaged)
     {
+        EnsureSquadManager();
         SquadEngagement engagement = m_squadManager != null ? m_squadManager.Engagement : null;
         if (engagement == null)
         {
@@ -429,7 +432,9 @@ public class EnemyTargetSensor : MonoBehaviour
     public void ReevaluateTarget(bool force = false)
     {
         bool currentLost = !IsValidTarget(FindInfo(m_currentTarget));
-        if (!force && !currentLost && Time.time < m_nextReevaluateTime)
+        // 방금 잃은 대상은 즉시 재평가하되, 계속 대상이 없는 실패 경로는 주기를 지킵니다.
+        bool justLost = m_currentTarget != null && currentLost;
+        if (!force && !justLost && Time.time < m_nextReevaluateTime)
         {
             return;
         }
@@ -1069,6 +1074,7 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <remarks>슬롯은 인원수만큼만 유지하며 매 갱신마다 새로 만들지 않습니다.</remarks>
     private void SyncSquadMembers()
     {
+        EnsureSquadManager();
         IReadOnlyList<SquadMemberController> members = m_squadManager != null ? m_squadManager.SquadMembers : null;
         if (members == null)
         {
@@ -1101,6 +1107,26 @@ public class EnemyTargetSensor : MonoBehaviour
         }
 
         m_currentTarget = null;
+    }
+
+    /// <summary>중복 매니저 제거나 늦은 생성 뒤에도 감지/교전 공유가 같은 매니저를 바라보게 복구합니다.</summary>
+    private void EnsureSquadManager()
+    {
+        SquadManager canonical = SquadManager.Instance;
+        if (canonical == null || canonical == m_squadManager)
+        {
+            return;
+        }
+
+        if (m_squadManager != null)
+        {
+            m_squadManager.Engagement?.UnregisterEngagedEnemy(this);
+        }
+        m_squadManager = canonical;
+        if (m_isEngaged && isActiveAndEnabled)
+        {
+            m_squadManager.Engagement?.RegisterEngagedEnemy(this);
+        }
     }
 
     /// <summary>이 캐릭터를 지금 직접 보고 있다고 기록합니다.</summary>

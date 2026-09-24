@@ -27,7 +27,14 @@ public class AttackState : EnemyStateBase
     private float m_impactTime;
 
     /// <summary>공격 상태를 생성합니다.</summary>
-    public AttackState(EnemyController controller) : base(controller) { }
+    /// <param name="controller">공격 애니메이션과 상태를 소유한 적입니다.</param>
+    /// <param name="defenseObjective">true면 스쿼드 대신 스포너가 연결한 방어 목표를 공격합니다.</param>
+    public AttackState(EnemyController controller, bool defenseObjective = false) : base(controller)
+    {
+        m_defenseObjective = defenseObjective;
+    }
+
+    private readonly bool m_defenseObjective;
 
     /// <summary>
     /// 이번 공격이 하울링 전 공격인지 여부입니다.
@@ -94,6 +101,16 @@ public class AttackState : EnemyStateBase
     /// </remarks>
     public override void Tick()
     {
+        // PlayerFirst의 목표물 공격은 대체 행동입니다. 플레이어를 다시 찾으면 기존 교전으로 돌려줍니다.
+        if (m_defenseObjective && Controller.DefenseDisposition == EnemyDefenseDisposition.PlayerFirst)
+        {
+            Controller.Sensor?.UpdatePerception();
+            if (Controller.Sensor != null && Controller.Sensor.HasAnyValidTarget)
+            {
+                Controller.TransitionTo(Controller.Combat);
+                return;
+            }
+        }
         float elapsed = Time.time - m_startTime;
 
         if (!m_impactDone)
@@ -180,7 +197,9 @@ public class AttackState : EnemyStateBase
         }
 
         SquadMemberController target = Controller.Sensor != null ? Controller.Sensor.CurrentTarget : null;
-        bool canAttackAgain = target != null && Controller.Attack != null && Controller.Attack.CanStartAttack(target);
+        bool canAttackAgain = Controller.Attack != null && (m_defenseObjective
+            ? Controller.Attack.CanStartDefenseAttack(Controller.DefenseObjective)
+            : target != null && Controller.Attack.CanStartAttack(target));
 
         if (canAttackAgain && m_comboStep < MaxComboStep)
         {
@@ -203,13 +222,22 @@ public class AttackState : EnemyStateBase
             return;
         }
 
-        Controller.Combat.SetSubState(Controller.Combat.Chase);
+        if (m_defenseObjective)
+            Controller.TransitionTo(Controller.Wander);
+        else
+            Controller.Combat.SetSubState(Controller.Combat.Chase);
     }
 
     /// <summary>공격 준비 중 현재 대상을 향해 회전합니다.</summary>
     /// <remarks>회전 방식은 추격과 공유합니다(<see cref="EnemyStateBase.FaceTowards"/>).</remarks>
     private void FaceCurrentTarget()
     {
+        if (m_defenseObjective)
+        {
+            if (Controller.Attack != null && Controller.Attack.TryGetDefenseAttackPoint(
+                Controller.DefenseObjective, out Vector3 point)) FaceTowards(point);
+            return;
+        }
         SquadMemberController target = Controller.Sensor != null ? Controller.Sensor.CurrentTarget : null;
         if (target == null)
         {

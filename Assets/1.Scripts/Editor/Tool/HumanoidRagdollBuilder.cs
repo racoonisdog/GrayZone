@@ -14,23 +14,30 @@ using UnityEngine;
 /// </remarks>
 public static class HumanoidRagdollBuilder
 {
-    private const string HowlerPrefabPath = "Assets/2.Prefabs/Enemy/Howler.prefab";
-    private const string DefensePlayerHowlerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab";
-    private const string DefenseRunPlayerHowlerPrefabPath = "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Run_Player).prefab";
+    private static readonly string[] EnemyPrefabPaths =
+    {
+        "Assets/2.Prefabs/Enemy/Howler.prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Scratcher(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Stalker(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Bloater(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Crusher(Defense_Run_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab",
+    };
 
-    /// <summary>현재 Howler 프리팹을 새 Humanoid 골격 기준으로 다시 구성합니다.</summary>
-    [MenuItem("GrayZone/Enemy/Howler 래그돌 재구성")]
-    public static void RebuildHowlerPrefab()
+    /// <summary>현재 Enemy 프리팹들을 각 Humanoid 골격 기준으로 다시 구성합니다.</summary>
+    [MenuItem("GrayZone/Enemy/Enemy 래그돌 재구성")]
+    public static void RebuildEnemyPrefabs()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
         {
-            Debug.LogWarning("Play Mode를 종료한 뒤 Howler 래그돌을 재구성하십시오.");
+            Debug.LogWarning("Play Mode를 종료한 뒤 Enemy 래그돌을 재구성하십시오.");
             return;
         }
 
-        RebuildPrefab(HowlerPrefabPath);
-        RebuildPrefab(DefensePlayerHowlerPrefabPath);
-        RebuildPrefab(DefenseRunPlayerHowlerPrefabPath);
+        foreach (string prefabPath in EnemyPrefabPaths)
+        {
+            RebuildPrefab(prefabPath);
+        }
     }
 
     /// <summary>지정한 프리팹 하나의 래그돌을 현재 Humanoid Avatar에 맞춰 저장합니다.</summary>
@@ -39,7 +46,7 @@ public static class HumanoidRagdollBuilder
         GameObject root = PrefabUtility.LoadPrefabContents(prefabPath);
         if (root == null)
         {
-            Debug.LogError($"Howler 프리팹을 열지 못했습니다: {prefabPath}");
+            Debug.LogError($"Enemy 프리팹을 열지 못했습니다: {prefabPath}");
             return false;
         }
 
@@ -48,13 +55,13 @@ public static class HumanoidRagdollBuilder
         {
             if (!Build(root, log))
             {
-                Debug.LogError("[Howler Ragdoll] 구성 실패\n" + string.Join("\n", log));
+                Debug.LogError("[Enemy Ragdoll] 구성 실패\n" + string.Join("\n", log));
                 return false;
             }
 
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[Howler Ragdoll] 구성 완료: {prefabPath}\n" + string.Join("\n", log));
+            Debug.Log($"[Enemy Ragdoll] 구성 완료: {prefabPath}\n" + string.Join("\n", log));
             return true;
         }
         finally

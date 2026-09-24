@@ -75,6 +75,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private int m_maxBullet = 30;
 
+    [Tooltip("켜면 재장전할 때 예비 탄약을 소모하지 않습니다. 예비 탄약 표시도 숫자 대신 무한 기호가 됩니다.")]
+    [SerializeField] private bool m_infiniteAmmo = true;
+
     [Tooltip("사격 후 다음 사격이 가능해질 때까지의 지연 시간입니다.")]
     [FormerlySerializedAs("shootDelay")]
     [BalanceField]
@@ -182,12 +185,16 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_stoppingPower = 0.0f;
 
-    [Tooltip("사격 판정이 걸릴 레이어입니다. 기본값은 전부이며, 여기서 제외한 레이어는 탄이 그대로 통과합니다.")]
+    [Tooltip("사격 판정이 걸릴 레이어입니다. 기본값은 전부이며, 여기서 제외한 레이어는 탄이 그대로 통과합니다. 플레이어 사격은 Trap 레이어를 항상 제외합니다.")]
     [SerializeField] private LayerMask m_hitscanLayerMask = ~0;
 
     [Tooltip("부위 히트박스를 켤 대상을 찾는 1차 탐지 레이어입니다. HitDetectVolume의 EnemyHitDetect 레이어를 지정합니다. 비우면 부위 히트박스를 열 수 없어 해당 대상은 사격 피해를 받지 않습니다.")]
     [FormerlySerializedAs("m_bodyDetectLayerMask")]
     [SerializeField] private LayerMask m_hitDetectLayerMask = 0;
+
+    [Tooltip("총구가 적 부위 히트박스 안쪽에 들어간 근접 사격을 보정하는 구체 반경(m)입니다. 0이면 보정을 사용하지 않습니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_muzzleOverlapRadius = 0.12f;
 
     [Tooltip("탄이 아군 유닛의 몸을 통과할지 여부입니다. 끄면 앞을 막고 선 팀원이 탄을 막습니다.")]
     [SerializeField] private bool m_allyBulletPassThrough = true;
@@ -255,6 +262,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_airborneExtraSpread = 2.0f;
+
+    [Tooltip("앉은 자세에서 방사각에 곱할 배율입니다. 1이면 선 자세와 같고, 작을수록 탄착군이 좁아집니다. 최소·최대에 함께 곱하므로 상한도 같은 비율로 내려갑니다.")]
+    [BalanceField]
+    [Clamp(Min = 0.0f, Max = 1.0f)]
+    [SerializeField] private float m_crouchSpreadMultiplier = 0.6f;
 
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
     [BalanceField]
@@ -401,6 +413,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </remarks>
     private readonly RaycastHit[] m_traceBuffer = new RaycastHit[TraceBufferSize];
 
+    /// <summary>총구 주변 감지와 부위 오버랩 결과를 재사용하는 버퍼입니다.</summary>
+    private readonly Collider[] m_overlapBuffer = new Collider[TraceBufferSize];
+
     /// <summary>사격 트레이스 버퍼 크기입니다.</summary>
     private const int TraceBufferSize = 24;
 
@@ -408,7 +423,35 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     private readonly List<RaycastHit> m_blockingHits = new List<RaycastHit>(TraceBufferSize);
 
     /// <summary>이번 사격이 피해를 줄 대상을 가까운 순서대로 담은 목록입니다. 재사용합니다.</summary>
-    private readonly List<RaycastHit> m_shotPath = new List<RaycastHit>(TraceBufferSize);
+    private readonly List<ShotPathHit> m_shotPath = new List<ShotPathHit>(TraceBufferSize);
+
+    /// <summary>레이캐스트와 총구 오버랩 명중을 같은 피해 경로에서 처리하기 위한 내부 명중 정보입니다.</summary>
+    private readonly struct ShotPathHit
+    {
+        public readonly Collider Collider;
+        public readonly Vector3 Point;
+        public readonly Vector3 Normal;
+        public readonly float Distance;
+        public readonly Rigidbody Rigidbody;
+
+        public ShotPathHit(in RaycastHit hit)
+        {
+            Collider = hit.collider;
+            Point = hit.point;
+            Normal = hit.normal;
+            Distance = hit.distance;
+            Rigidbody = hit.rigidbody;
+        }
+
+        public ShotPathHit(Collider collider, Vector3 point, Vector3 normal, float distance)
+        {
+            Collider = collider;
+            Point = point;
+            Normal = normal;
+            Distance = distance;
+            Rigidbody = collider != null ? collider.attachedRigidbody : null;
+        }
+    }
 
     /// <summary>탄이 최종적으로 박힌 지형 충돌입니다. 지형에서 멈추지 않았으면 유효하지 않습니다.</summary>
     /// <remarks>
@@ -433,6 +476,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     /// <summary>이 무기를 든 대상이 공중에 떠 있는지 여부입니다. <see cref="SetAirborne"/>가 매 프레임 씁니다.</summary>
     private bool m_isAirborne;
+
+    /// <summary>이 무기를 든 대상의 앉기 정도(0~1)입니다. <see cref="SetCrouchBlend"/>가 매 프레임 씁니다.</summary>
+    private float m_crouchBlend;
 
     /// <summary>발사 입력 홀드로 spread 회복을 막을 마지막 프레임입니다. AimController가 매 프레임 연장합니다.</summary>
     private int m_spreadRecoveryBlockUntilFrame = -1;
@@ -460,6 +506,24 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     /// <summary>최대 탄약 수입니다.</summary>
     public int MaxBullet => m_maxBullet;
+
+    /// <summary>이 총기가 예비 탄약을 소모하지 않는지 여부입니다.</summary>
+    /// <remarks>
+    /// 총기 프리팹 설정입니다. 소모하지 않는 총기는 예비 탄약이 0이어도 항상 재장전할 수 있고,
+    /// UI는 예비 탄약 자리에 숫자 대신 무한 기호를 표시합니다.
+    /// </remarks>
+    public bool InfiniteAmmo => m_infiniteAmmo;
+
+    /// <summary>
+    /// 이 총기에 예비 탄약을 공급하는 주체입니다. 없으면 예비 탄약 제한 없이 재장전합니다.
+    /// </summary>
+    /// <remarks>
+    /// 예비 탄약의 주인은 총기가 아니라 캐릭터(<see cref="PlayerbleUnitData"/>)입니다. 총기가 자기 예비량을
+    /// 따로 들면 같은 값이 두 벌이 되고 세이브도 갈립니다. 그래서 총기는 "얼마나 받을 수 있는지"만 묻습니다.
+    ///
+    /// 공급자가 없는 총기(방어 NPC 등)는 지금까지처럼 제한 없이 재장전합니다. 이 훅을 넣기 전 동작과 같습니다.
+    /// </remarks>
+    public IAmmoReserve AmmoReserve { get; set; }
 
     /// <summary>현재 사격 가능한 상태인지 여부입니다.</summary>
     public bool CanShoot => m_canShoot;
@@ -494,7 +558,17 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 지금 재장전을 시작할 수 있는 상태인지 여부입니다.
     /// </summary>
     /// <remarks>필수 참조를 갖추고, 재장전 중이 아니며, 탄약이 최대치 미만일 때만 <c>true</c>입니다. 풀 탄창 재장전 진입을 막는 데 사용합니다. <see cref="AllowFullMagReload"/>가 켜져 있으면 풀 탄창에서도 <c>true</c>입니다.</remarks>
-    public bool CanReload => m_hasRequiredReferences && !m_isReloading && (m_allowFullMagReload || m_currentBullet < m_maxBullet);
+    public bool CanReload => m_hasRequiredReferences && !m_isReloading
+        && (m_allowFullMagReload || m_currentBullet < m_maxBullet)
+        && HasAmmoToReload;
+
+    /// <summary>재장전에 쓸 탄약이 남아 있는지 여부입니다.</summary>
+    /// <remarks>
+    /// 예비 탄약을 쓰지 않는 총기이거나 공급자가 없으면 항상 참입니다. 공급자가 있으면 남은 예비량을 봅니다.
+    /// 이것을 <see cref="CanReload"/>에 함께 두는 이유는, 재장전 경로가 모두 그 하나를 게이트로 쓰기 때문입니다.
+    /// 여기에 넣지 않으면 예비 0에서도 재장전 모션과 조작 잠금만 돌고 탄은 안 채워집니다.
+    /// </remarks>
+    public bool HasAmmoToReload => m_infiniteAmmo || AmmoReserve == null || AmmoReserve.ReserveAmmo > 0;
 
     /// <summary>탄약이 최대치일 때도 재장전을 허용할지 여부입니다. 기본값은 <c>false</c>이며 디버그 용도입니다.</summary>
     public bool AllowFullMagReload => m_allowFullMagReload;
@@ -532,8 +606,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>헤드샷 히트박스에 명중했을 때 이 무기가 적용할 피해 배율입니다.</summary>
     public float HeadshotDamageMultiplier => m_headshotDamageMultiplier;
 
-    /// <summary>히트스캔 레이캐스트가 충돌 검사할 레이어 마스크입니다.</summary>
-    public LayerMask HitscanLayerMask => m_hitscanLayerMask;
+    /// <summary>히트스캔 레이캐스트가 충돌 검사할 유효 레이어 마스크입니다.</summary>
+    public LayerMask HitscanLayerMask => GetEffectiveHitscanLayerMask();
 
     /// <summary>부위별 히트박스를 열 후보를 찾는 1차 감지 레이어 마스크입니다.</summary>
     public LayerMask HitDetectLayerMask => m_hitDetectLayerMask;
@@ -579,7 +653,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             ? GetCurrentSpread(m_adsMinSpread, m_adsMaxSpread, m_adsCurrentSpreadAdd)
             : GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
 
-        return spread + CurrentAirborneExtraSpread;
+        // 자세로 좁힌 뒤 공중 페널티를 얹습니다. 공중이면 앉기 배율은 1이라 페널티만 남습니다.
+        return spread * CurrentCrouchSpreadScale + CurrentAirborneExtraSpread;
     }
 
     /// <summary>공중에 떠 있는 동안 더해지는 방사각(도)입니다.</summary>
@@ -597,6 +672,46 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 별개의 불안정 요인이기 때문입니다. 누적에 섞으면 착지 후에도 회복 곡선을 타면서 남습니다.
     /// </remarks>
     private float CurrentAirborneExtraSpread => m_isAirborne ? Mathf.Max(0.0f, m_airborneExtraSpread) : 0.0f;
+
+    /// <summary>앉은 자세에서 방사각에 곱할 배율입니다.</summary>
+    public float CrouchSpreadMultiplier => m_crouchSpreadMultiplier;
+
+    /// <summary>지금 적용 중인 앉기 정도입니다. 0이면 선 자세, 1이면 완전히 앉은 자세입니다.</summary>
+    public float CrouchBlend => m_crouchBlend;
+
+    /// <summary>
+    /// 지금 실제로 방사각에 곱해지는 배율입니다. 선 자세면 1입니다.
+    /// </summary>
+    /// <remarks>
+    /// 켜짐/꺼짐이 아니라 앉기 보간값을 따라갑니다. 자세가 바뀌는 동안 탄착군도 같이 좁혀져야
+    /// 앉는 도중에 방사각만 계단처럼 튀지 않습니다.
+    ///
+    /// 공중 추가 방사각과 달리 곱셈인 이유는 방향이 반대이기 때문입니다. 공중은 자세와 무관하게 얹히는
+    /// 불안정 요인이라 더하고, 앉기는 자세 자체가 안정되는 것이라 콘 전체를 비율로 좁힙니다.
+    /// 곱셈이라 최소·최대가 같은 비율로 내려가, 상한을 따로 관리하지 않아도 됩니다.
+    ///
+    /// <b>공중에서는 앉기를 적용하지 않습니다.</b> 발이 떠 있으면 앉은 자세가 주는 안정이 없습니다.
+    /// 입력이나 애니메이션 상으로 웅크림이 남아 있어도 공중이 우선입니다.
+    /// </remarks>
+    private float CurrentCrouchSpreadScale => m_isAirborne
+        ? 1.0f
+        : Mathf.Lerp(1.0f, Mathf.Clamp01(m_crouchSpreadMultiplier), Mathf.Clamp01(m_crouchBlend));
+
+    /// <summary>
+    /// 이 무기를 든 대상의 앉기 정도를 전달합니다.
+    /// </summary>
+    /// <param name="value">0이면 선 자세, 1이면 완전히 앉은 자세입니다.</param>
+    /// <remarks>
+    /// 무기는 자세의 소유자가 아니므로 스스로 알 수 없습니다. <see cref="SetAirborne"/>와 같은 이유로
+    /// <see cref="AimController"/>가 매 프레임 전달합니다.
+    /// </remarks>
+    public void SetCrouchBlend(float value)
+    {
+        m_crouchBlend = Mathf.Clamp01(value);
+    }
+
+    /// <summary>앉기 방사각 배율을 설정합니다. 0~1로 보정합니다.</summary>
+    public void SetCrouchSpreadMultiplier(float value) => m_crouchSpreadMultiplier = Mathf.Clamp01(value);
 
     /// <summary>
     /// 이 무기를 든 대상의 접지 여부를 전달합니다.
@@ -623,6 +738,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     {
         minSpread = Mathf.Max(0.0f, isAds ? m_adsMinSpread : m_hipfireMinSpread);
         maxSpread = Mathf.Max(minSpread, isAds ? m_adsMaxSpread : m_hipfireMaxSpread);
+
+        // 앉은 자세는 콘 전체를 비율로 좁힙니다. 최소·최대에 함께 곱해야 상한도 같이 내려갑니다.
+        float crouchScale = CurrentCrouchSpreadScale;
+        minSpread *= crouchScale;
+        maxSpread *= crouchScale;
 
         // 공중에서는 콘 전체가 통째로 올라갑니다. 최소에만 더하면 크로스헤어가 상한에 눌려 벌어지지 않습니다.
         float extra = CurrentAirborneExtraSpread;
@@ -1098,6 +1218,26 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// 현재 소유자 기준으로 실제 사격에 사용할 레이어 마스크를 반환합니다.
+    /// </summary>
+    /// <remarks>
+    /// 트랩은 적 감지를 위해 트리거 콜라이더를 유지해야 하므로 콜라이더 자체를 끄지 않습니다.
+    /// 대신 플레이어의 카메라 조준선과 총구 히트스캔에서 Trap 레이어를 공통으로 제외해,
+    /// 개별 무기 프리팹의 마스크가 잘못 설정돼도 트랩이 탄을 막지 않게 합니다.
+    /// </remarks>
+    private LayerMask GetEffectiveHitscanLayerMask()
+    {
+        int mask = m_hitscanLayerMask.value;
+        if (m_ownerFaction != Faction.Player)
+        {
+            return mask;
+        }
+
+        int trapLayer = LayerMask.NameToLayer("Trap");
+        return trapLayer >= 0 ? mask & ~(1 << trapLayer) : mask;
+    }
+
+    /// <summary>
     /// 사격 경로를 훑어 피해를 줄 대상 목록과 탄이 멈추는 지점을 정합니다.
     /// </summary>
     /// <param name="origin">추적 시작 위치입니다.</param>
@@ -1123,9 +1263,32 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
         try
         {
+            IDamageable muzzleOverlapUnit = null;
+            int penetrationsUsed = 0;
+
+            // 레이는 시작점이 콜라이더 안쪽이면 그 콜라이더를 반환하지 않을 수 있습니다.
+            // 총구 주변의 실제 Hitbox를 먼저 검사해 가장 가까운 적을 첫 명중으로 확정합니다.
+            if (TryResolveNearestMuzzleHit(origin, direction, out ShotPathHit muzzleHit, out muzzleOverlapUnit))
+            {
+                fired.HasHit = true;
+                fired.EndPoint = muzzleHit.Point;
+                m_shotPath.Add(muzzleHit);
+
+                LogTwoStageTrace(
+                    $"총구 오버랩 명중 | 부위={muzzleHit.Collider.name} 거리={muzzleHit.Distance:F3}m");
+
+                // 비관통탄은 총구에서 겹친 첫 대상을 맞힌 것으로 사격 경로를 끝냅니다.
+                if (!m_penetration.CanPenetrate(penetrationsUsed))
+                {
+                    return;
+                }
+
+                penetrationsUsed++;
+            }
+
             // 2차: 방금 연 대상들의 EnemyHitbox만 포함하는 실제 사격 마스크로 같은 탄도를 다시 검사합니다.
             int count = Physics.RaycastNonAlloc(
-                origin, direction, m_traceBuffer, distance, m_hitscanLayerMask, QueryTriggerInteraction.Collide);
+                origin, direction, m_traceBuffer, distance, GetEffectiveHitscanLayerMask(), QueryTriggerInteraction.Collide);
 
             CollectBlockingHits(m_traceBuffer, count, m_ownerFaction, m_allyBulletPassThrough, m_blockingHits);
 
@@ -1136,11 +1299,16 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
                     ? $" 부위={m_blockingHits[0].collider.name}"
                     : " (빗나감 - 켠 부위 사이를 통과했습니다)"));
 
-            int penetrationsUsed = 0;
-
             for (int i = 0; i < m_blockingHits.Count; i++)
             {
                 RaycastHit current = m_blockingHits[i];
+                IDamageable currentUnit = current.collider.GetComponentInParent<IDamageable>();
+
+                // 오버랩으로 이미 맞힌 유닛의 다른 부위가 전방 레이에 다시 잡혀도 한 발에 두 번 피해를 주지 않습니다.
+                if (muzzleOverlapUnit != null && ReferenceEquals(currentUnit, muzzleOverlapUnit))
+                {
+                    continue;
+                }
 
                 if (!fired.HasHit)
                 {
@@ -1150,7 +1318,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
                 fired.EndPoint = current.point;
 
-                bool isUnit = current.collider.GetComponentInParent<IDamageable>() != null;
+                bool isUnit = currentUnit != null;
 
                 if (!isUnit)
                 {
@@ -1160,7 +1328,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
                     return;
                 }
 
-                m_shotPath.Add(current);
+                m_shotPath.Add(new ShotPathHit(current));
 
                 if (!m_penetration.CanPenetrate(penetrationsUsed))
                 {
@@ -1210,6 +1378,30 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return;
         }
 
+        int overlapCount = 0;
+        if (m_muzzleOverlapRadius > 0.0f)
+        {
+            overlapCount = Physics.OverlapSphereNonAlloc(
+                origin,
+                m_muzzleOverlapRadius,
+                m_overlapBuffer,
+                m_hitDetectLayerMask,
+                QueryTriggerInteraction.Collide);
+
+            WarnIfOverlapBufferFull(overlapCount);
+
+            for (int i = 0; i < overlapCount; i++)
+            {
+                Collider collider = m_overlapBuffer[i];
+                if (!CombatDamage.BlocksShot(collider, m_ownerFaction, m_allyBulletPassThrough))
+                {
+                    continue;
+                }
+
+                TryOpenHitboxGroup(collider);
+            }
+        }
+
         int count = Physics.RaycastNonAlloc(
             origin, direction, m_traceBuffer, distance, m_hitDetectLayerMask, QueryTriggerInteraction.Collide);
 
@@ -1217,30 +1409,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
         for (int i = 0; i < m_blockingHits.Count; i++)
         {
-            Collider collider = m_blockingHits[i].collider;
-
-            // EnemyHitDetect 레이어에는 IDamageable의 자식 HitDetectVolume만 있어야 합니다.
-            // 잘못 배치된 지형 콜라이더가 들어왔으면 그 충돌은 후보로 쓰지 않습니다.
-            if (collider.GetComponentInParent<IDamageable>() == null)
-            {
-                continue;
-            }
-
-            HitboxGroup group = collider.GetComponentInParent<HitboxGroup>();
-            if (group == null || !group.IsUsable)
-            {
-                continue;
-            }
-
-            group.SetHitboxesEnabled(true);
-            m_openedHitboxGroups.Add(group);
+            TryOpenHitboxGroup(m_blockingHits[i].collider);
         }
 
         if (logStages)
         {
             // 1차: 사격 레이가 HitDetectVolume을 지났는지. 여기서 0이면 그 대상은 아예 후보가 아닙니다.
             LogTwoStageTrace(
-                $"1차 감지 | HitDetectVolume {m_blockingHits.Count}개 통과 (레이 원시 히트 {count}개)"
+                $"1차 감지 | HitDetectVolume 오버랩 {overlapCount}개 / 레이 {m_blockingHits.Count}개 통과 (레이 원시 히트 {count}개)"
                 + (m_blockingHits.Count > 0 ? $" 최근접={m_blockingHits[0].collider.name}" : string.Empty));
 
             // 2차: 그 결과로 어떤 대상의 부위 히트박스를 켰는지.
@@ -1253,6 +1429,115 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         {
             // 켠 콜라이더를 최신 뼈 위치로 옮겨 놓습니다. 이 호출이 빠지면 2차 레이가 옛 위치를 때립니다.
             Physics.SyncTransforms();
+        }
+    }
+
+    /// <summary>HitDetectVolume이 속한 유닛의 부위 히트박스를 이번 판정 동안 한 번만 켭니다.</summary>
+    private void TryOpenHitboxGroup(Collider collider)
+    {
+        // EnemyHitDetect 레이어에는 IDamageable의 자식 HitDetectVolume만 있어야 합니다.
+        // 잘못 배치된 지형 콜라이더가 들어왔으면 후보로 사용하지 않습니다.
+        if (collider == null || collider.GetComponentInParent<IDamageable>() == null)
+        {
+            return;
+        }
+
+        HitboxGroup group = collider.GetComponentInParent<HitboxGroup>();
+        if (group == null || !group.IsUsable || m_openedHitboxGroups.Contains(group))
+        {
+            return;
+        }
+
+        group.SetHitboxesEnabled(true);
+        m_openedHitboxGroups.Add(group);
+    }
+
+    /// <summary>총구 구체와 겹친 실제 부위 히트박스 중 가장 가까운 적 대상을 찾습니다.</summary>
+    private bool TryResolveNearestMuzzleHit(
+        Vector3 origin,
+        Vector3 direction,
+        out ShotPathHit hit,
+        out IDamageable damageable)
+    {
+        hit = default;
+        damageable = null;
+
+        int hitscanMask = GetEffectiveHitscanLayerMask().value;
+        if (m_muzzleOverlapRadius <= 0.0f || hitscanMask == 0)
+        {
+            return false;
+        }
+
+        int count = Physics.OverlapSphereNonAlloc(
+            origin,
+            m_muzzleOverlapRadius,
+            m_overlapBuffer,
+            hitscanMask,
+            QueryTriggerInteraction.Collide);
+
+        WarnIfOverlapBufferFull(count);
+
+        float nearestDistanceSqr = float.PositiveInfinity;
+        float nearestCenterDistanceSqr = float.PositiveInfinity;
+        bool found = false;
+
+        for (int i = 0; i < count; i++)
+        {
+            Collider candidate = m_overlapBuffer[i];
+            if (candidate == null
+                || candidate.GetComponent<Hitbox>() == null
+                || !CombatDamage.BlocksShot(candidate, m_ownerFaction, m_allyBulletPassThrough))
+            {
+                continue;
+            }
+
+            IDamageable candidateDamageable = candidate.GetComponentInParent<IDamageable>();
+            if (candidateDamageable == null)
+            {
+                continue;
+            }
+
+            Vector3 point = candidate.ClosestPoint(origin);
+            float distanceSqr = (point - origin).sqrMagnitude;
+            float centerDistanceSqr = (candidate.bounds.center - origin).sqrMagnitude;
+
+            // 시작점이 여러 부위 안에 동시에 있으면 ClosestPoint가 모두 origin이 됩니다.
+            // 그때는 콜라이더 중심이 더 가까운 부위를 골라 결과를 결정적으로 유지합니다.
+            if (distanceSqr > nearestDistanceSqr
+                || (Mathf.Approximately(distanceSqr, nearestDistanceSqr)
+                    && centerDistanceSqr >= nearestCenterDistanceSqr))
+            {
+                continue;
+            }
+
+            Vector3 normal = origin - point;
+            if (normal.sqrMagnitude <= Mathf.Epsilon)
+            {
+                normal = -direction;
+            }
+            else
+            {
+                normal.Normalize();
+            }
+
+            nearestDistanceSqr = distanceSqr;
+            nearestCenterDistanceSqr = centerDistanceSqr;
+            hit = new ShotPathHit(candidate, point, normal, Mathf.Sqrt(distanceSqr));
+            damageable = candidateDamageable;
+            found = true;
+        }
+
+        return found;
+    }
+
+    /// <summary>NonAlloc 오버랩 버퍼가 가득 차 결과 일부가 누락될 가능성을 경고합니다.</summary>
+    private void WarnIfOverlapBufferFull(int count)
+    {
+        if (count >= m_overlapBuffer.Length)
+        {
+            Debug.LogWarning(
+                $"[Gun] 총구 오버랩 버퍼({m_overlapBuffer.Length})가 가득 찼습니다. 일부 충돌은 버려졌을 수 있습니다.",
+                this);
         }
     }
 
@@ -1445,7 +1730,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     private bool TryTraceShot(Vector3 origin, Vector3 direction, float distance, out RaycastHit hit)
     {
         int count = Physics.RaycastNonAlloc(
-            origin, direction, m_traceBuffer, distance, m_hitscanLayerMask, QueryTriggerInteraction.Collide);
+            origin, direction, m_traceBuffer, distance, GetEffectiveHitscanLayerMask(), QueryTriggerInteraction.Collide);
 
         return TryResolveNearestBlocking(
             m_traceBuffer, count, m_ownerFaction, m_allyBulletPassThrough, out hit);
@@ -1504,7 +1789,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <returns>최소 방사각 + 누적 증가값으로 계산한 이번 사격의 방사각(도)입니다.</returns>
     private float ResolveShotSpread(bool isAds)
     {
-        return CurrentAirborneExtraSpread + (isAds
+        // 누적 결과가 이미 [min, max]로 제한된 뒤라, 여기에 곱하면 상한도 같은 비율로 내려갑니다.
+        return CurrentAirborneExtraSpread + CurrentCrouchSpreadScale * (isAds
             ? ResolveShotSpread(
                 m_adsMinSpread,
                 m_adsMaxSpread,
@@ -1691,7 +1977,18 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     public void CompleteReload()
     {
         CancelInvoke(nameof(CompleteReload));
-        m_currentBullet = m_maxBullet;
+
+        int missing = Mathf.Max(0, m_maxBullet - m_currentBullet);
+        if (missing > 0)
+        {
+            // 예비 탄약을 쓰는 총기만 공급자에게 묻습니다. 공급자가 없으면 지금까지처럼 가득 채웁니다.
+            int granted = m_infiniteAmmo || AmmoReserve == null
+                ? missing
+                : AmmoReserve.ConsumeReserveAmmo(missing);
+
+            m_currentBullet = Mathf.Min(m_maxBullet, m_currentBullet + granted);
+        }
+
         m_isReloading = false;
         UpdateBulletUI();
         OnReloadCompleted?.Invoke();
@@ -1796,11 +2093,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
         for (int i = 0; i < m_shotPath.Count; i++)
         {
-            RaycastHit target = m_shotPath[i];
+            ShotPathHit target = m_shotPath[i];
 
             // 거리 감쇠는 무기가 소유합니다. 총이 쏜 거리는 총이 아는 정보이고,
             // 공용 피해 경로(CombatDamage)에 거리 개념을 넣으면 근접 공격이 쓰지 않는 인자가 생깁니다.
-            int damage = ResolveDistanceAdjustedDamage(target.distance);
+            int damage = ResolveDistanceAdjustedDamage(target.Distance);
 
             // 관통 감쇠는 거리 감쇠 위에 얹습니다. 두 감쇠는 서로 다른 이유로 걸리므로 함께 적용됩니다.
             damage = m_penetration.ResolveDamage(i, damage);
@@ -1813,7 +2110,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             // 저지력은 거리·관통 감쇠를 받지 않습니다. 감쇠는 "얼마나 아픈가"의 규칙이고
             // 경직은 "얼마나 휘청이는가"라서, 관통한 두 번째 대상도 같은 충격을 받는 편이 맞습니다.
             CombatDamage.HitFeedback feedback = CombatDamage.ResolveHit(
-                target.collider,
+                target.Collider,
                 m_ownerFaction,
                 damage,
                 m_headshotDamageMultiplier,
@@ -1823,12 +2120,12 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
             if (feedback.Applied)
             {
-                LogTwoStageTrace($"4차 피해 적용 | 부위={target.collider.name} 피해={damage}");
+                LogTwoStageTrace($"4차 피해 적용 | 부위={target.Collider.name} 피해={damage}");
                 OnHitFeedback?.Invoke(feedback);
                 ApplyHitscanKnockback(target, shotInfo);
 
-                EnemyController enemy = target.collider.GetComponentInParent<EnemyController>();
-                enemy?.PlayHitFeedback(target.point, target.normal, target.collider.transform);
+                EnemyController enemy = target.Collider.GetComponentInParent<EnemyController>();
+                enemy?.PlayHitFeedback(target.Point, target.Normal, target.Collider.transform);
             }
 
             if (i == 0)
@@ -1859,9 +2156,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </remarks>
     /// <param name="hit">넉백을 받을 충돌입니다. 관통이면 대상마다 따로 부릅니다.</param>
     /// <param name="shotInfo">이번 사격의 발사 지점과 방향을 읽습니다.</param>
-    private void ApplyHitscanKnockback(in RaycastHit hit, in HitscanShotInfo shotInfo)
+    private void ApplyHitscanKnockback(in ShotPathHit hit, in HitscanShotInfo shotInfo)
     {
-        Collider hitCollider = hit.collider;
+        Collider hitCollider = hit.Collider;
         if (hitCollider == null)
         {
             return;
@@ -1873,7 +2170,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return;
         }
 
-        Vector3 direction = hit.point - shotInfo.Origin;
+        Vector3 direction = hit.Point - shotInfo.Origin;
         if (direction.sqrMagnitude <= Mathf.Epsilon)
         {
             // 사격 지점과 피격 지점이 겹치는 밀착 사격입니다. 조준 방향을 그대로 씁니다.
@@ -1882,9 +2179,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
         receiver.ApplyKnockback(
             direction,
-            hit.point,
+            hit.Point,
             m_knockbackImpulse,
-            hit.rigidbody);
+            hit.Rigidbody);
     }
 
     /// <summary>
