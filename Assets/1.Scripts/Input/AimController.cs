@@ -3180,6 +3180,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         float aimTarget = ResolveAirborneAdjustedRigTarget(m_rigWeightTarget);
         float handTarget = ResolveAirborneAdjustedRigTarget(m_handRigWeightTarget);
 
+        // 수류탄 전용 전신 모션 위에 총기 조준/손 IK가 다시 적용되면 손이 총기 그립으로 끌려간다.
+        // ThrowMode 동안에는 두 리그를 함께 내려 Animator의 수류탄 포즈를 그대로 사용한다.
+        if (m_input != null && m_input.ThrowMode)
+        {
+            aimTarget = 0.0f;
+            handTarget = 0.0f;
+        }
+
         m_rigWeight = Mathf.MoveTowards(m_rigWeight, aimTarget, step);
         m_handRigWeight = Mathf.MoveTowards(m_handRigWeight, handTarget, step);
         m_weaponLayerWeight = Mathf.MoveTowards(m_weaponLayerWeight, m_weaponLayerTarget, step);

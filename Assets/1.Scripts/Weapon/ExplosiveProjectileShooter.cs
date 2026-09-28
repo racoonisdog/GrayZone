@@ -10,6 +10,11 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private const int MaxTrajectoryPointCount = 65;
     private const int ExplosionPreviewSegmentCount = 48;
     private const float ExplosionPreviewHeightOffset = 0.03f;
+    private const string GrenadeActionLayerName = "Grenade Action Layer";
+    private static readonly int AnimIDGrenadeMode = Animator.StringToHash("IsGrenadeMode");
+    private static readonly int AnimIDThrow = Animator.StringToHash("DoThrow");
+    private static readonly int AnimStateGrenadeThrow = Animator.StringToHash("Grenade Throw");
+    private static readonly int AnimStateGrenadeCrouchThrow = Animator.StringToHash("Grenade Crouch Throw");
 
     [System.Serializable]
     private sealed class CrosshairPreset
@@ -152,7 +157,23 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Tooltip("G 투척 모드에서 기존 크로스헤어에 임시로 적용할 수치 프리셋입니다.")]
     [SerializeField] private CrosshairPreset m_throwCrosshairPreset = new CrosshairPreset();
 
-    [Tooltip("플레이어 Collider 중심을 기준으로 한 로컬 투척 시작 위치입니다.")]
+    [Header("Held Grenade Visual")]
+    [Tooltip("G 투척 모드 동안 오른손에 표시할 수류탄 Visual Prefab입니다.")]
+    [SerializeField] private GameObject m_heldGrenadeVisualPrefab;
+
+    [Tooltip("수류탄 Visual을 배치할 손 장착 소켓입니다. 비어 있으면 Humanoid 오른손 본을 사용합니다.")]
+    [SerializeField] private Transform m_heldGrenadeSocket;
+
+    [Tooltip("오른손 본을 기준으로 한 수류탄 위치입니다.")]
+    [SerializeField] private Vector3 m_heldGrenadeLocalPosition = Vector3.zero;
+
+    [Tooltip("오른손 본을 기준으로 한 수류탄 회전입니다.")]
+    [SerializeField] private Vector3 m_heldGrenadeLocalEulerAngles = Vector3.zero;
+
+    [Tooltip("손에 표시할 수류탄 Visual의 크기입니다.")]
+    [SerializeField] private Vector3 m_heldGrenadeLocalScale = Vector3.one * 0.25f;
+
+    [Tooltip("Grenade Hand IK 소켓이 없을 때만 사용할 Collider 중심 기준 fallback 투척 시작 위치입니다.")]
     [SerializeField] private Vector3 m_throwOriginOffset = new Vector3(0.0f, 0.2f, 1.0f);
 
     [Tooltip("수평 조준 시 폭탄이 같은 높이로 돌아올 때의 기준 투척 거리입니다. 실제 비행 종료점은 아닙니다.")]
@@ -164,9 +185,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_arcHeight = 1.5f;
 
-    [Tooltip("포물선을 아래로 휘게 하는 스크립트 가속도입니다. Rigidbody 중력은 사용하지 않습니다.")]
+    [Tooltip("투척 시작부터 최고점까지 포물선을 아래로 휘게 하는 가속도입니다. 낮을수록 상승 구간이 완만해집니다.")]
+    [UnityEngine.Serialization.FormerlySerializedAs("m_downwardAcceleration")]
     [Min(0.01f)]
-    [SerializeField] private float m_downwardAcceleration = 20.0f;
+    [SerializeField] private float m_ascentDownwardAcceleration = 8.0f;
+
+    [Tooltip("최고점 이후 포물선을 아래로 휘게 하는 가속도입니다. 높을수록 빠르게 떨어집니다.")]
+    [Min(0.01f)]
+    [SerializeField] private float m_descentDownwardAcceleration = 24.0f;
 
     [Tooltip("포물선의 거리와 높이는 유지하면서 실제 비행 속도만 조절합니다. 1은 기본 속도, 2는 두 배 속도입니다.")]
     [InspectorName("Throw Speed")]
@@ -204,6 +230,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private PlayerInputController m_input;
     private AimController m_aimController;
+    private Animator m_animator;
     private Collider m_sourceCollider;
     private LineRenderer m_trajectoryLine;
     private LineRenderer m_explosionPreviewLine;
@@ -221,6 +248,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private float m_nextThrowReadyTime;
     private bool m_crosshairModeInitialized;
     private bool m_throwCrosshairActive;
+    private bool m_hasGrenadeModeParameter;
+    private bool m_hasThrowParameter;
+    private int m_grenadeActionLayerIndex = -1;
+    private GameObject m_heldGrenadeVisualInstance;
+    private Renderer[] m_weaponRenderers;
+    private bool[] m_weaponRendererEnabledStates;
+    private bool m_grenadeEquipmentVisible;
     private CrosshairPreset m_savedCrosshairPreset;
 
     private void Awake()
@@ -228,6 +262,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         MigrateLegacyProjectile();
         m_input = GetComponent<PlayerInputController>();
         m_aimController = GetComponent<AimController>();
+        m_animator = GetComponent<Animator>();
+        CacheGrenadeAnimationParameters();
+        InitializeGrenadeEquipmentVisuals();
         m_sourceCollider = GetComponent<Collider>();
         ResolveGrenadeSelectionUI();
         CreateTrajectoryLine();
@@ -237,6 +274,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private void LateUpdate()
     {
         bool throwModeActive = m_input != null && m_input.ThrowMode;
+        SetGrenadeAnimationMode(throwModeActive);
+        SetGrenadeEquipmentVisible(throwModeActive);
+        SetHeldGrenadeVisible(throwModeActive && !IsGrenadeThrowAnimationActive());
         ApplyCrosshairMode(throwModeActive);
 
         if (m_input == null || m_aimController == null || !throwModeActive)
@@ -271,6 +311,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
             if (!enteredThrowModeThisFrame && throwHeld && !m_throwWasHeld && ThrowProjectile())
             {
+                PlayThrowAnimation();
                 m_nextThrowReadyTime = Time.time + m_throwCooldown;
                 HideTrajectory();
             }
@@ -286,6 +327,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void OnDisable()
     {
+        SetGrenadeAnimationMode(false);
+        SetGrenadeEquipmentVisible(false);
+        if (m_hasThrowParameter)
+        {
+            m_animator.ResetTrigger(AnimIDThrow);
+        }
+
         UpdateGrenadeSelectionUI(false);
         ApplyCrosshairMode(false);
         m_crosshairModeInitialized = false;
@@ -296,6 +344,11 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (m_heldGrenadeVisualInstance != null)
+        {
+            Destroy(m_heldGrenadeVisualInstance);
+        }
+
         if (m_runtimeLineMaterial != null)
         {
             Destroy(m_runtimeLineMaterial);
@@ -305,6 +358,178 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private void OnValidate()
     {
         MigrateLegacyProjectile();
+    }
+
+    private void CacheGrenadeAnimationParameters()
+    {
+        m_hasGrenadeModeParameter = false;
+        m_hasThrowParameter = false;
+        m_grenadeActionLayerIndex = -1;
+
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        m_grenadeActionLayerIndex = m_animator.GetLayerIndex(GrenadeActionLayerName);
+
+        foreach (AnimatorControllerParameter parameter in m_animator.parameters)
+        {
+            if (parameter.nameHash == AnimIDGrenadeMode
+                && parameter.type == AnimatorControllerParameterType.Bool)
+            {
+                m_hasGrenadeModeParameter = true;
+            }
+            else if (parameter.nameHash == AnimIDThrow
+                     && parameter.type == AnimatorControllerParameterType.Trigger)
+            {
+                m_hasThrowParameter = true;
+            }
+        }
+    }
+
+    private void SetGrenadeAnimationMode(bool active)
+    {
+        if (m_hasGrenadeModeParameter)
+        {
+            m_animator.SetBool(AnimIDGrenadeMode, active);
+        }
+    }
+
+    private void PlayThrowAnimation()
+    {
+        if (m_hasThrowParameter)
+        {
+            SetHeldGrenadeVisible(false);
+            m_animator.SetTrigger(AnimIDThrow);
+        }
+    }
+
+    /// <summary>
+    /// Grenade Action Layer가 서기 또는 웅크리기 투척 상태를 재생 중인지 확인합니다.
+    /// </summary>
+    private bool IsGrenadeThrowAnimationActive()
+    {
+        if (m_animator == null || m_grenadeActionLayerIndex < 0
+                               || m_grenadeActionLayerIndex >= m_animator.layerCount)
+        {
+            return false;
+        }
+
+        AnimatorStateInfo current = m_animator.GetCurrentAnimatorStateInfo(m_grenadeActionLayerIndex);
+        if (IsGrenadeThrowState(current))
+        {
+            return true;
+        }
+
+        return m_animator.IsInTransition(m_grenadeActionLayerIndex)
+               && IsGrenadeThrowState(m_animator.GetNextAnimatorStateInfo(m_grenadeActionLayerIndex));
+    }
+
+    private static bool IsGrenadeThrowState(AnimatorStateInfo state)
+    {
+        return state.shortNameHash == AnimStateGrenadeThrow
+               || state.shortNameHash == AnimStateGrenadeCrouchThrow;
+    }
+
+    /// <summary>
+    /// 총기 표시 상태는 유지하고 손에 든 수류탄 Visual만 전환합니다.
+    /// </summary>
+    private void SetHeldGrenadeVisible(bool visible)
+    {
+        if (m_heldGrenadeVisualInstance != null
+            && m_heldGrenadeVisualInstance.activeSelf != visible)
+        {
+            m_heldGrenadeVisualInstance.SetActive(visible);
+        }
+    }
+
+    /// <summary>
+    /// 손에 표시할 수류탄과 숨길 총기 Renderer를 한 번 준비합니다.
+    /// </summary>
+    private void InitializeGrenadeEquipmentVisuals()
+    {
+        Gun weapon = GetComponentInChildren<Gun>(true);
+        if (weapon != null)
+        {
+            m_weaponRenderers = weapon.GetComponentsInChildren<Renderer>(true);
+            m_weaponRendererEnabledStates = new bool[m_weaponRenderers.Length];
+        }
+
+        if (m_heldGrenadeVisualPrefab == null)
+        {
+            return;
+        }
+
+        Transform heldSocket = m_heldGrenadeSocket;
+        if (heldSocket == null && m_animator != null && m_animator.isHuman)
+        {
+            heldSocket = m_animator.GetBoneTransform(HumanBodyBones.RightHand);
+        }
+
+        if (heldSocket == null)
+        {
+            Debug.LogWarning($"[{name}] 수류탄 Visual을 연결할 손 장착 소켓을 찾지 못했습니다.", this);
+            return;
+        }
+
+        m_heldGrenadeVisualInstance = Instantiate(m_heldGrenadeVisualPrefab, heldSocket, false);
+        m_heldGrenadeVisualInstance.name = $"{m_heldGrenadeVisualPrefab.name} (Held)";
+
+        Transform heldTransform = m_heldGrenadeVisualInstance.transform;
+        heldTransform.localPosition = m_heldGrenadeLocalPosition;
+        heldTransform.localRotation = Quaternion.Euler(m_heldGrenadeLocalEulerAngles);
+        heldTransform.localScale = m_heldGrenadeLocalScale;
+        m_heldGrenadeVisualInstance.SetActive(false);
+    }
+
+    /// <summary>
+    /// 수류탄 모드에서는 총기 메시를 숨기고 오른손 수류탄 Visual을 표시합니다.
+    /// </summary>
+    private void SetGrenadeEquipmentVisible(bool visible)
+    {
+        if (m_grenadeEquipmentVisible == visible)
+        {
+            return;
+        }
+
+        m_grenadeEquipmentVisible = visible;
+
+        if (visible)
+        {
+            for (int i = 0; m_weaponRenderers != null && i < m_weaponRenderers.Length; i++)
+            {
+                Renderer weaponRenderer = m_weaponRenderers[i];
+                if (weaponRenderer == null)
+                {
+                    continue;
+                }
+
+                m_weaponRendererEnabledStates[i] = weaponRenderer.enabled;
+                weaponRenderer.enabled = false;
+            }
+
+            if (m_heldGrenadeVisualInstance != null)
+            {
+                m_heldGrenadeVisualInstance.SetActive(true);
+            }
+
+            return;
+        }
+
+        if (m_heldGrenadeVisualInstance != null)
+        {
+            m_heldGrenadeVisualInstance.SetActive(false);
+        }
+
+        for (int i = 0; m_weaponRenderers != null && i < m_weaponRenderers.Length; i++)
+        {
+            Renderer weaponRenderer = m_weaponRenderers[i];
+            if (weaponRenderer != null)
+            {
+                weaponRenderer.enabled = m_weaponRendererEnabledStates[i];
+            }
+        }
     }
 
     private void MigrateLegacyProjectile()
@@ -427,8 +652,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void ResolveTrajectory()
     {
-        Vector3 origin = m_sourceCollider != null ? m_sourceCollider.bounds.center : transform.position;
-        m_throwStart = origin + transform.TransformDirection(m_throwOriginOffset);
+        m_throwStart = ResolveThrowStartPosition();
 
         Vector3 aimDirection = m_aimController.CurrentAimPoint - m_throwStart;
         if (aimDirection.sqrMagnitude < 0.0001f)
@@ -446,13 +670,18 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
         horizontalDirection.Normalize();
 
-        float downwardAcceleration = Mathf.Max(0.01f, m_downwardAcceleration);
+        float ascentDownwardAcceleration = Mathf.Max(0.01f, m_ascentDownwardAcceleration);
+        float descentDownwardAcceleration = Mathf.Max(0.01f, m_descentDownwardAcceleration);
         float upwardSpeed = m_arcHeight > 0.0f
-            ? Mathf.Sqrt(2.0f * downwardAcceleration * m_arcHeight)
+            ? Mathf.Sqrt(2.0f * ascentDownwardAcceleration * m_arcHeight)
             : 0.0f;
-        float referenceFlightTime = upwardSpeed > 0.0f
-            ? 2.0f * upwardSpeed / downwardAcceleration
-            : 1.0f;
+        float ascentTime = upwardSpeed > 0.0f
+            ? upwardSpeed / ascentDownwardAcceleration
+            : 0.0f;
+        float descentTime = m_arcHeight > 0.0f
+            ? Mathf.Sqrt(2.0f * m_arcHeight / descentDownwardAcceleration)
+            : 0.0f;
+        float referenceFlightTime = Mathf.Max(0.01f, ascentTime + descentTime);
         float horizontalSpeed = m_referenceThrowDistance / referenceFlightTime;
         float launchSpeed = Mathf.Sqrt(horizontalSpeed * horizontalSpeed + upwardSpeed * upwardSpeed);
         float baseLaunchAngle = Mathf.Atan2(upwardSpeed, horizontalSpeed);
@@ -465,6 +694,19 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_initialVelocity =
             horizontalDirection * (Mathf.Cos(launchAngle) * launchSpeed) +
             Vector3.up * (Mathf.Sin(launchAngle) * launchSpeed);
+    }
+
+    private Vector3 ResolveThrowStartPosition()
+    {
+        if (m_heldGrenadeSocket != null)
+        {
+            return m_heldGrenadeSocket.position;
+        }
+
+        Vector3 origin = m_sourceCollider != null
+            ? m_sourceCollider.bounds.center
+            : transform.position;
+        return origin + transform.TransformDirection(m_throwOriginOffset);
     }
 
     private void DrawTrajectory()
@@ -512,7 +754,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         {
             Vector3 currentVelocity = ParabolicProjectileMover.EvaluateVelocity(
                 m_initialVelocity,
-                m_downwardAcceleration,
+                m_ascentDownwardAcceleration,
+                m_descentDownwardAcceleration,
                 previousTime);
             float sampleInterval = Mathf.Clamp(
                 targetSegmentLength / Mathf.Max(currentVelocity.magnitude, 1.0f),
@@ -528,7 +771,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             Vector3 next = ParabolicProjectileMover.EvaluatePosition(
                 m_throwStart,
                 m_initialVelocity,
-                m_downwardAcceleration,
+                m_ascentDownwardAcceleration,
+                m_descentDownwardAcceleration,
                 currentTime);
             Vector3 segment = next - previous;
             float segmentDistance = segment.magnitude;
@@ -542,7 +786,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                 next = ParabolicProjectileMover.EvaluatePosition(
                     m_throwStart,
                     m_initialVelocity,
-                    m_downwardAcceleration,
+                    m_ascentDownwardAcceleration,
+                    m_descentDownwardAcceleration,
                     currentTime);
                 segment = next - previous;
                 segmentDistance = segment.magnitude;
@@ -559,7 +804,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                 m_plannedCollisionPosition = ParabolicProjectileMover.EvaluatePosition(
                     m_throwStart,
                     m_initialVelocity,
-                    m_downwardAcceleration,
+                    m_ascentDownwardAcceleration,
+                    m_descentDownwardAcceleration,
                     m_plannedCollisionTime);
                 m_hasExplosionPreview = true;
                 m_explosionPreviewCenter = m_plannedCollisionPosition;
@@ -626,7 +872,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             projectile,
             m_throwStart,
             m_initialVelocity,
-            m_downwardAcceleration,
+            m_ascentDownwardAcceleration,
+            m_descentDownwardAcceleration,
             m_throwSpeedMultiplier,
             m_hasPlannedCollision,
             m_plannedCollisionTime,

@@ -33,6 +33,14 @@ public class ExplosiveProjectile : MonoBehaviour
     [Tooltip("접촉 폭발과 투척 경로 충돌 판정에서 무시할 상대 Layer입니다.")]
     [SerializeField] private LayerMask m_contactExplosionExcludeLayers;
 
+    [Header("Explosion VFX")]
+    [Tooltip("Prefab spawned at the explosion position.")]
+    [SerializeField] private GameObject m_explosionVfxPrefab;
+
+    [Tooltip("Time before the spawned explosion VFX is destroyed.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_explosionVfxLifetime = 4.0f;
+
     private float m_elapsedTime;
     private bool m_hasExploded;
     private Rigidbody m_rigidbody;
@@ -108,8 +116,34 @@ public class ExplosiveProjectile : MonoBehaviour
             m_explosionRadius,
             m_explosionHeight,
             m_damage,
-            m_damageTargetLayers);
+            m_damageTargetLayers,
+            null,
+            false);
+
+        SpawnExplosionVfx(explosionCenter);
 
         Destroy(gameObject);
+    }
+
+    private void SpawnExplosionVfx(Vector3 explosionCenter)
+    {
+        if (m_explosionVfxPrefab == null)
+        {
+            return;
+        }
+
+        GameObject explosionVfx = Instantiate(
+            m_explosionVfxPrefab,
+            explosionCenter,
+            Quaternion.identity);
+
+        ParticleSystem[] particleSystems = explosionVfx.GetComponentsInChildren<ParticleSystem>(true);
+        foreach (ParticleSystem particleSystem in particleSystems)
+        {
+            ParticleSystem.MainModule main = particleSystem.main;
+            main.loop = false;
+        }
+
+        Destroy(explosionVfx, m_explosionVfxLifetime);
     }
 }
