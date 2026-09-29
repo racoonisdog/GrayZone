@@ -13,6 +13,10 @@ public class GameDataManager : MonoBehaviour
     /// <summary>현재 GameManager 자식에서 활성화된 전역 데이터 매니저 인스턴스입니다.</summary>
     public static GameDataManager Instance { get; private set; }
 
+    [Header("Shelter Bootstrap")]
+    [Tooltip("활성화하면 Shelter 진입 시 테스트용 DefaultSaveData를 적용합니다. 실제 게임 플레이에서는 비활성화합니다.")]
+    [SerializeField] private bool useDefaultSaveDataOnShelterStart;
+
     [Header("Progress")]
     [Tooltip("마지막으로 진행한 스테이지의 영속 ID입니다.")]
     [SerializeField] private string lastStageId = string.Empty;
@@ -93,6 +97,9 @@ public class GameDataManager : MonoBehaviour
     public int CharacterCount => characters?.Count ?? 0;
     public IReadOnlyList<CharacterSnapshotData> Characters => characters;
     public IReadOnlyList<ItemStorageEntry> ItemStorageEntries => itemStorageEntries;
+
+    /// <summary>Shelter 진입 시 테스트용 기본 데이터를 적용할지 여부입니다.</summary>
+    public bool UseDefaultSaveDataOnShelterStart => useDefaultSaveDataOnShelterStart;
 
     /// <summary>플레이어블 캐릭터와 비플레이어 NPC를 합한 전체 보유 수입니다.</summary>
     public int TotalOwnedCharacterCount => CharacterCount;

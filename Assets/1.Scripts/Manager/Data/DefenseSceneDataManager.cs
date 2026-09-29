@@ -146,7 +146,7 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     {
         if (!HasEntryData)
         {
-            InitializeEntry(CreateSceneEntryData());
+            //InitializeEntry(CreateSceneEntryData());
         }
 
         // FieldSceneDataManager가 Awake 이후에 늦게 잡히는 경우를 대비해 한 번 더 붙입니다.
@@ -172,7 +172,7 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     {
         if (!HasEntryData)
         {
-            InitializeEntry(CreateSceneEntryData());
+            //InitializeEntry(CreateSceneEntryData());
         }
 
         m_finalResult = null;
@@ -341,17 +341,18 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     }
 
     /// <summary>GameDataManager의 Scramble 시설 값과 현재 씬 이름으로 입장 데이터를 만듭니다.</summary>
-    private static DefenseEntryData CreateSceneEntryData()
-    {
-        GameDataManager gameData = GameDataManager.Instance;
-        if (gameData == null)
-        {
-            Debug.LogWarning("[DefenseSceneDataManager] GameDataManager가 없어 슈터를 모두 비활성으로 시작합니다.");
-            return CreateEmptyEntryData();
-        }
+    //private static DefenseEntryData CreateSceneEntryData()
+    //{
+    //    GameDataManager gameData = GameDataManager.Instance;
+    //    if (gameData == null)
+    //    {
+    //        Debug.LogWarning("[DefenseSceneDataManager] GameDataManager가 없어 슈터를 모두 비활성으로 시작합니다.");
+    //        return CreateEmptyEntryData();
+    //    }
 
-        return new DefenseEntryData(GetActiveSceneName(), gameData.Shooter01, gameData.Shooter02);
-    }
+    //    return new DefenseEntryData(GetActiveSceneName(), gameData.Shooter01, gameData.Shooter02);
+    //    return;
+    //}
 
     private static DefenseEntryData CreateEmptyEntryData()
     {

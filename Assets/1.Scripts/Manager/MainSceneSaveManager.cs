@@ -21,11 +21,19 @@ public class MainSceneSaveManager : MonoBehaviour
 
     private void Start()
     {
-        // Temporary test hook. Remove when the main menu flow calls this explicitly.
-        if (!StartNewGame())
+        if (GameDataManager.Instance == null)
+        {
+            Debug.LogWarning("[MainSceneSaveManager] GameDataManager.Instance is null.");
+            return;
+        }
+
+        if (!GameDataManager.Instance.UseDefaultSaveDataOnShelterStart)
         {
             return;
         }
+
+        // Temporary test hook for launching the Shelter scene directly.
+        StartNewGame();
     }
 
     private void OnDestroy()

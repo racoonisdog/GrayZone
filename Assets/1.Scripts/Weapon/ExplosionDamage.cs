@@ -37,6 +37,10 @@ public static class ExplosionDamage
     /// 정하는 데 쓰이므로, 설치물처럼 주인이 분명하면 넘기는 편이 낫습니다.
     /// </param>
     /// <param name="showRangeVisual">폭발 범위를 잠깐 그려 보여 줄지 여부입니다.</param>
+    /// <param name="playerDamage">
+    /// Player 진영 대상에게 적용할 피해입니다. 음수면 <paramref name="damage"/>와 같은 피해를 적용합니다.
+    /// </param>
+    /// <param name="onTargetDamaged">피해가 실제로 적용된 대상을 즉시 전달할 선택 콜백입니다.</param>
     /// <returns>실제로 피해를 준 대상의 수입니다.</returns>
     public static int DetonateCylinder(
         Vector3 center,
@@ -45,7 +49,9 @@ public static class ExplosionDamage
         int damage,
         LayerMask targetLayers,
         GameObject attacker = null,
-        bool showRangeVisual = true)
+        bool showRangeVisual = true,
+        int playerDamage = -1,
+        Action<IDamageable> onTargetDamaged = null)
     {
         float explosionRadius = Mathf.Max(0.0f, radius);
         float halfHeight = Mathf.Max(0.0f, height) * 0.5f;
@@ -72,7 +78,9 @@ public static class ExplosionDamage
             colliders,
             targetCollider => IntersectsCylinder(targetCollider, center, explosionRadius, halfHeight),
             damage,
-            attacker);
+            playerDamage >= 0 ? playerDamage : damage,
+            attacker,
+            onTargetDamaged);
     }
 
     /// <summary>
@@ -151,7 +159,9 @@ public static class ExplosionDamage
                 halfFarWidth,
                 halfHeight),
             damage,
-            attacker);
+            damage,
+            attacker,
+            null);
     }
 
     /// <summary>범위 판정을 통과한 대상에게 한 번씩 피해를 넣습니다.</summary>
@@ -162,7 +172,9 @@ public static class ExplosionDamage
         Collider[] colliders,
         Func<Collider, bool> isInsideRange,
         int damage,
-        GameObject attacker)
+        int playerDamage,
+        GameObject attacker,
+        Action<IDamageable> onTargetDamaged)
     {
         HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
         int damagedCount = 0;
@@ -180,7 +192,21 @@ public static class ExplosionDamage
                 continue;
             }
 
-            target.TakeDamage(damage, attacker);
+            int targetDamage = target.Faction == Faction.Player
+                ? playerDamage
+                : damage;
+
+            if (targetDamage <= 0)
+            {
+                continue;
+            }
+
+            if (!target.TakeDamage(targetDamage, attacker))
+            {
+                continue;
+            }
+
+            onTargetDamaged?.Invoke(target);
             damagedCount++;
         }
 

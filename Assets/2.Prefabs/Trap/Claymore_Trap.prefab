@@ -429,10 +429,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f7ca5fd07fea90804eb612af273f8dea, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ClaymoreTrap
   m_startPlaced: 0
-  m_buildCostResourceId: upgrade_part_material
+  m_buildCostResourceId: upgrade_material
   m_buildCostAmount: 1
   m_buildPrompt: "?\u317C\uD282"
   m_buildHoldDuration: 1
@@ -441,6 +441,7 @@ MonoBehaviour:
   m_blueprintVisualRoot: {fileID: 0}
   m_builtVisualRoot: {fileID: 0}
   m_maxHealth: 100
+  m_currentHealth: 0
   m_rebuildPolicy: 1
   m_damage: 60
   m_damageMode: 0
