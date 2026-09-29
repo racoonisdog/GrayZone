@@ -41,6 +41,7 @@ public sealed class ShelterInventoryUI : MonoBehaviour
 
     public bool IsOpen => m_viewRoot != null && m_viewRoot.activeSelf;
     public int VisibleEntryCount => m_visibleKeys.Count;
+    public ResourceDefinitionCatalog ResourceCatalog => m_resourceCatalog;
 
     public event Action Closed;
 

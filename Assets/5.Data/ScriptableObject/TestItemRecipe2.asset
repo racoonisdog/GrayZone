@@ -20,5 +20,5 @@ MonoBehaviour:
   m_requiredFacilityLevel: 2
   m_unitWork: 3
   m_unitCosts:
-  - m_resourceId: weapon_part_material
+  - m_resourceId: crafting_material
     m_amount: 5

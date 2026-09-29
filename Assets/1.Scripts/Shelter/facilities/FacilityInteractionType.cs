@@ -14,4 +14,7 @@ public enum FacilityInteractionType
 
     /// <summary>출격 시설 UI를 열기.</summary>
     Operations,
+
+    /// <summary>방어전 출격 시설 UI를 열기.</summary>
+    Scramble
 }

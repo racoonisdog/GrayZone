@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2624f6159e17e174b9d972e2f08b2ba2, type: 3}
+  m_Name: Firebomb_Definition
+  m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
+  m_itemDefinitionId: Firebomb_01
+  m_maxStackQuantity: 99
+  m_displayName: "\uD654\uC5FC\uBCD1"
+  m_info: "\uC9C0\uC5ED\uC5D0 \uD070 \uB370\uBBF8\uC9C0\uB97C \uC900\uB2E4"
+  m_icon: {fileID: 21300000, guid: c498fce26fe7ff94f8fe911a3966f5af, type: 3}
+  m_category: 2

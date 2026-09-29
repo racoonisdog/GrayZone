@@ -1,34 +1,65 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 using VInspector;
 
+public enum ScrambleUpgradeType
+{
+    Trap,
+    Spike,
+    Explosive,
+    Shooter,
+    Wire
+}
+
 /// <summary>
-/// Scramble 시설의 전투 씬 이동과 독립 슈터 해금 상태를 관리합니다.
+/// Scramble 시설의 전투 씬 이동과 필드 배치 업그레이드를 관리합니다.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class ScrambleFacility : MonoBehaviour
 {
     [Header("Scene Transition")]
     [SerializeField] private string m_battleSceneName = "CombatPlayTest";
+    [SerializeField] private ShelterSceneDataManager m_shelterSceneDataManager;
 
-    [Header("Shooter Upgrade Cost")]
+    [Header("Upgrade Resource")]
     [Variants(
-        ResourceIds.Food,
-        ResourceIds.Fuel,
-        ResourceIds.FacilityUpgradePart,
-        ResourceIds.UpgradePartMaterial,
-        ResourceIds.WeaponPartMaterial,
-        ResourceIds.MedicineMaterial)]
-    [SerializeField] private string m_upgradeResourceId = ResourceIds.FacilityUpgradePart;
-    [Min(0)][SerializeField] private int m_shooter01Cost = 1;
-    [Min(0)][SerializeField] private int m_shooter02Cost = 1;
+        ResourceIds.UpgradeMaterial,
+        ResourceIds.CraftingMaterial,
+        ResourceIds.TrapMaterial)]
+    [SerializeField] private string m_upgradeResourceId = ResourceIds.UpgradeMaterial;
+
+    [Header("Upgrade Cost Per Level")]
+    [Min(0)][SerializeField] private int m_trapUpgradeCost = 1;
+    [Min(0)][SerializeField] private int m_spikeUpgradeCost = 1;
+    [Min(0)][SerializeField] private int m_explosiveUpgradeCost = 1;
+    [FormerlySerializedAs("m_shooter01Cost")]
+    [Min(0)][SerializeField] private int m_shooterUpgradeCost = 1;
+    [Min(0)][SerializeField] private int m_wireUpgradeCost = 1;
+
+    [Header("Max Upgrade Level")]
+    [Min(0)][SerializeField] private int m_trapMaxLevel = 1;
+    [Min(0)][SerializeField] private int m_spikeMaxLevel = 1;
+    [Min(0)][SerializeField] private int m_explosiveMaxLevel = 1;
+    [Min(0)][SerializeField] private int m_shooterMaxLevel = 2;
+    [Min(0)][SerializeField] private int m_wireMaxLevel = 1;
 
     public string BattleSceneName => m_battleSceneName?.Trim() ?? string.Empty;
     public string UpgradeResourceId => ResourceIds.Normalize(m_upgradeResourceId);
-    public int Shooter01Cost => Mathf.Max(0, m_shooter01Cost);
-    public int Shooter02Cost => Mathf.Max(0, m_shooter02Cost);
-    public bool Shooter01 => GameDataManager.Instance != null && GameDataManager.Instance.Shooter01;
-    public bool Shooter02 => GameDataManager.Instance != null && GameDataManager.Instance.Shooter02;
+    public int TrapUpgradeCost => Mathf.Max(0, m_trapUpgradeCost);
+    public int SpikeUpgradeCost => Mathf.Max(0, m_spikeUpgradeCost);
+    public int ExplosiveUpgradeCost => Mathf.Max(0, m_explosiveUpgradeCost);
+    public int ShooterUpgradeCost => Mathf.Max(0, m_shooterUpgradeCost);
+    public int WireUpgradeCost => Mathf.Max(0, m_wireUpgradeCost);
+    public int TrapUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Trap);
+    public int SpikeUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Spike);
+    public int ExplosiveUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Explosive);
+    public int ShooterUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Shooter);
+    public int WireUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Wire);
+    public bool Shooter01 =>
+        ShooterUpgradeLevel >= 1;
+    public bool Shooter02 =>
+        ShooterUpgradeLevel >= 2;
 
     public event Action StateChanged;
 
@@ -36,8 +67,16 @@ public sealed class ScrambleFacility : MonoBehaviour
 
     private void OnValidate()
     {
-        m_shooter01Cost = Mathf.Max(0, m_shooter01Cost);
-        m_shooter02Cost = Mathf.Max(0, m_shooter02Cost);
+        m_trapUpgradeCost = Mathf.Max(0, m_trapUpgradeCost);
+        m_spikeUpgradeCost = Mathf.Max(0, m_spikeUpgradeCost);
+        m_explosiveUpgradeCost = Mathf.Max(0, m_explosiveUpgradeCost);
+        m_shooterUpgradeCost = Mathf.Max(0, m_shooterUpgradeCost);
+        m_wireUpgradeCost = Mathf.Max(0, m_wireUpgradeCost);
+        m_trapMaxLevel = Mathf.Max(0, m_trapMaxLevel);
+        m_spikeMaxLevel = Mathf.Max(0, m_spikeMaxLevel);
+        m_explosiveMaxLevel = Mathf.Max(0, m_explosiveMaxLevel);
+        m_shooterMaxLevel = Mathf.Max(0, m_shooterMaxLevel);
+        m_wireMaxLevel = Mathf.Max(0, m_wireMaxLevel);
     }
 
     /// <summary>현재 보유한 시설 업그레이드 자원 수량을 반환합니다.</summary>
@@ -48,42 +87,69 @@ public sealed class ScrambleFacility : MonoBehaviour
 
     public bool CanUnlockShooter01()
     {
-        return !Shooter01 && CanSpendUpgradeResource(Shooter01Cost);
+        return ShooterUpgradeLevel == 0 && CanUpgrade(ScrambleUpgradeType.Shooter);
     }
 
     public bool CanUnlockShooter02()
     {
-        return !Shooter02 && CanSpendUpgradeResource(Shooter02Cost);
+        return ShooterUpgradeLevel == 1 && CanUpgrade(ScrambleUpgradeType.Shooter);
+    }
+
+    public bool CanUpgrade(ScrambleUpgradeType upgradeType)
+    {
+        if (GameDataManager.Instance == null)
+            return false;
+
+        int currentLevel = GetUpgradeLevel(upgradeType);
+        int maxLevel = GetMaxUpgradeLevel(upgradeType);
+
+        return currentLevel < maxLevel
+            && CanSpendUpgradeResource(GetUpgradeCost(upgradeType));
+    }
+
+    public bool TryUpgradeTrap() => TryUpgrade(ScrambleUpgradeType.Trap);
+
+    public bool TryUpgradeSpike() => TryUpgrade(ScrambleUpgradeType.Spike);
+
+    public bool TryUpgradeExplosive() => TryUpgrade(ScrambleUpgradeType.Explosive);
+
+    public bool TryUpgradeShooter() => TryUpgrade(ScrambleUpgradeType.Shooter);
+
+    public bool TryUpgradeWire() => TryUpgrade(ScrambleUpgradeType.Wire);
+
+    /// <summary>자원을 소비하고 지정한 필드 배치 업그레이드 레벨을 1 올립니다.</summary>
+    public bool TryUpgrade(ScrambleUpgradeType upgradeType)
+    {
+        GameDataManager gameData = GameDataManager.Instance;
+        int currentLevel = GetUpgradeLevel(upgradeType);
+        int maxLevel = GetMaxUpgradeLevel(upgradeType);
+        if (gameData == null || currentLevel >= maxLevel)
+            return false;
+
+        if (!TrySpendUpgradeResource(GetUpgradeCost(upgradeType)))
+            return false;
+
+        SetUpgradeLevel(gameData, upgradeType, currentLevel + 1);
+        NotifyStateChanged();
+        return true;
     }
 
     /// <summary>시설 자원을 소비하고 첫 번째 슈터를 해금합니다.</summary>
     public bool TryUnlockShooter01()
     {
-        GameDataManager gameData = GameDataManager.Instance;
-        if (gameData == null || gameData.Shooter01)
+        if (ShooterUpgradeLevel != 0)
             return false;
 
-        if (!TrySpendUpgradeResource(Shooter01Cost))
-            return false;
-
-        gameData.SetShooter01Active(true);
-        NotifyStateChanged();
-        return true;
+        return TryUpgradeShooter();
     }
 
     /// <summary>시설 자원을 소비하고 두 번째 슈터를 해금합니다.</summary>
     public bool TryUnlockShooter02()
     {
-        GameDataManager gameData = GameDataManager.Instance;
-        if (gameData == null || gameData.Shooter02)
+        if (ShooterUpgradeLevel != 1)
             return false;
 
-        if (!TrySpendUpgradeResource(Shooter02Cost))
-            return false;
-
-        gameData.SetShooter02Active(true);
-        NotifyStateChanged();
-        return true;
+        return TryUpgradeShooter();
     }
 
     /// <summary>현재 셸터 작업 데이터를 전역 데이터에 동기화한 뒤 전투 씬으로 이동합니다.</summary>
@@ -104,7 +170,7 @@ public sealed class ScrambleFacility : MonoBehaviour
             return false;
         }
 
-        ShelterSceneDataManager shelterData = ShelterSceneDataManager.Instance;
+        ShelterSceneDataManager shelterData = CacheShelterSceneDataManager();
         if (shelterData == null || !shelterData.PushToDataManager())
         {
             Debug.LogWarning(
@@ -115,6 +181,17 @@ public sealed class ScrambleFacility : MonoBehaviour
 
         SceneTransitionController.LoadScene(sceneName);
         return true;
+    }
+
+    private ShelterSceneDataManager CacheShelterSceneDataManager()
+    {
+        if (m_shelterSceneDataManager == null)
+            m_shelterSceneDataManager = ShelterSceneDataManager.Instance;
+
+        if (m_shelterSceneDataManager == null)
+            m_shelterSceneDataManager = FindFirstObjectByType<ShelterSceneDataManager>();
+
+        return m_shelterSceneDataManager;
     }
 
     private bool CanSpendUpgradeResource(int amount)
@@ -144,6 +221,74 @@ public sealed class ScrambleFacility : MonoBehaviour
 
         return storage.TrySpendResource(
             new ResourceCost(UpgradeResourceId, amount));
+    }
+
+    public int GetUpgradeLevel(ScrambleUpgradeType upgradeType)
+    {
+        GameDataManager gameData = GameDataManager.Instance;
+        if (gameData == null)
+            return 0;
+
+        return upgradeType switch
+        {
+            ScrambleUpgradeType.Trap => gameData.TrapUpgradeLevel,
+            ScrambleUpgradeType.Spike => gameData.SpikeUpgradeLevel,
+            ScrambleUpgradeType.Explosive => gameData.ExplosiveUpgradeLevel,
+            ScrambleUpgradeType.Shooter => gameData.ShooterUpgradeLevel,
+            ScrambleUpgradeType.Wire => gameData.WireUpgradeLevel,
+            _ => 0
+        };
+    }
+
+    public int GetUpgradeCost(ScrambleUpgradeType upgradeType)
+    {
+        return upgradeType switch
+        {
+            ScrambleUpgradeType.Trap => TrapUpgradeCost,
+            ScrambleUpgradeType.Spike => SpikeUpgradeCost,
+            ScrambleUpgradeType.Explosive => ExplosiveUpgradeCost,
+            ScrambleUpgradeType.Shooter => ShooterUpgradeCost,
+            ScrambleUpgradeType.Wire => WireUpgradeCost,
+            _ => 0
+        };
+    }
+
+    public int GetMaxUpgradeLevel(ScrambleUpgradeType upgradeType)
+    {
+        return upgradeType switch
+        {
+            ScrambleUpgradeType.Trap => m_trapMaxLevel,
+            ScrambleUpgradeType.Spike => m_spikeMaxLevel,
+            ScrambleUpgradeType.Explosive => m_explosiveMaxLevel,
+            ScrambleUpgradeType.Shooter => m_shooterMaxLevel,
+            ScrambleUpgradeType.Wire => m_wireMaxLevel,
+            _ => 0
+        };
+    }
+
+    private static void SetUpgradeLevel(
+        GameDataManager gameData,
+        ScrambleUpgradeType upgradeType,
+        int level)
+    {
+        switch (upgradeType)
+        {
+            case ScrambleUpgradeType.Trap:
+                gameData.SetTrapUpgradeLevel(level);
+                break;
+            case ScrambleUpgradeType.Spike:
+                gameData.SetSpikeUpgradeLevel(level);
+                break;
+            case ScrambleUpgradeType.Explosive:
+                gameData.SetExplosiveUpgradeLevel(level);
+                break;
+            case ScrambleUpgradeType.Shooter:
+                gameData.SetShooterUpgradeLevel(level);
+                break;
+            case ScrambleUpgradeType.Wire:
+                gameData.SetWireUpgradeLevel(level);
+                break;
+        }
     }
 
     private void NotifyStateChanged()

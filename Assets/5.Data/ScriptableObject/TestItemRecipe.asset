@@ -20,5 +20,5 @@ MonoBehaviour:
   m_requiredFacilityLevel: 1
   m_unitWork: 3
   m_unitCosts:
-  - m_resourceId: medicine_material
+  - m_resourceId: crafting_material
     m_amount: 5

@@ -6,9 +6,10 @@
 public enum ItemCategory
 {
     None = 0,
-    MedicalSupply = 1,
-    WeaponPart = 2,
-    Miscellaneous = 3
+    Potion = 1,
+    Firebomb = 2,
+    Grenade = 3,
+    Miscellaneous = 4
 }
 
 /// <summary>

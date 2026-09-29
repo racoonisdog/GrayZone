@@ -38,8 +38,11 @@ public class SaveData
         public int shelterStability = 100;
         public bool foodShortagePenaltyActive;
         public bool fuelShortagePenaltyActive;
-        public bool shooter01;
-        public bool shooter02;
+        public int trapUpgradeLevel;
+        public int spikeUpgradeLevel;
+        public int explosiveUpgradeLevel;
+        public int shooterUpgradeLevel;
+        public int wireUpgradeLevel;
         public int totalFieldKillCount;
         public List<int> fieldKillHistory = new List<int>();
         /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>
