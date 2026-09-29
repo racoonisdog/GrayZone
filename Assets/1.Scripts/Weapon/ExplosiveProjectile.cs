@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 충돌하거나 신관 시간이 끝났을 때 주변 적에게 한 번씩 고정 피해를 주는 폭발 투사체입니다.
+/// 충돌하거나 신관 시간이 끝났을 때 범위 안의 대상에게 진영별 고정 피해를 주는 폭발 투사체입니다.
 /// </summary>
 /// <remarks>
 /// 실제 폭발 판정은 <see cref="ExplosionDamage"/>가 합니다. 이 컴포넌트는 언제 터질지와
@@ -9,13 +9,17 @@ using UnityEngine;
 /// </remarks>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(Collider))]
-public class ExplosiveProjectile : MonoBehaviour
+public class ExplosiveProjectile : ProjectileBase
 {
-    [Tooltip("폭발 범위 안의 각 대상에게 적용할 고정 피해입니다.")]
+    [Tooltip("폭발 범위 안의 Enemy 진영 대상에게 적용할 고정 피해입니다.")]
     [Min(0)]
     [SerializeField] private int m_damage = 10;
 
-    [Tooltip("폭발 순간 적을 검색할 원통의 수평 반지름입니다.")]
+    [Tooltip("폭발 범위 안의 Player 진영 대상에게 적용할 고정 피해입니다.")]
+    [Min(0)]
+    [SerializeField] private int m_playerDamage = 10;
+
+    [Tooltip("폭발 순간 대상을 검색할 원통의 수평 반지름입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_explosionRadius = 5.0f;
 
@@ -54,9 +58,18 @@ public class ExplosiveProjectile : MonoBehaviour
     /// <summary>접촉 폭발과 투척 경로 충돌에서 무시할 Layer입니다.</summary>
     public LayerMask ContactExplosionExcludeLayers => m_contactExplosionExcludeLayers;
 
+    /// <inheritdoc />
+    public override float FlightTimeLimit => m_fuseTime;
+
+    /// <inheritdoc />
+    public override float ImpactPreviewRadius => m_explosionRadius;
+
+    /// <inheritdoc />
+    public override LayerMask ContactExcludeLayers => m_contactExplosionExcludeLayers;
+
     private void Reset()
     {
-        m_damageTargetLayers = LayerMask.GetMask("Enemy", "EnemyHitbox");
+        m_damageTargetLayers = LayerMask.GetMask("Player", "Enemy");
     }
 
     private void Awake()
@@ -65,7 +78,7 @@ public class ExplosiveProjectile : MonoBehaviour
 
         if (m_damageTargetLayers.value == 0)
         {
-            m_damageTargetLayers = LayerMask.GetMask("Enemy", "EnemyHitbox");
+            m_damageTargetLayers = LayerMask.GetMask("Player", "Enemy");
         }
     }
 
@@ -87,7 +100,20 @@ public class ExplosiveProjectile : MonoBehaviour
             return;
         }
 
-        Detonate();
+        Vector3 projectilePosition = m_rigidbody != null
+            ? m_rigidbody.position
+            : transform.position;
+        Vector3 contactPoint = projectilePosition;
+        Vector3 surfaceNormal = Vector3.up;
+
+        if (collision.contactCount > 0)
+        {
+            ContactPoint contact = collision.GetContact(0);
+            contactPoint = contact.point;
+            surfaceNormal = contact.normal;
+        }
+
+        ImpactAt(projectilePosition, contactPoint, surfaceNormal);
     }
 
     /// <summary>
@@ -110,6 +136,10 @@ public class ExplosiveProjectile : MonoBehaviour
         }
 
         m_hasExploded = true;
+        ExplosionDeathForce deathForce = GetComponent<ExplosionDeathForce>();
+        System.Action<IDamageable> onTargetDamaged = deathForce != null
+            ? target => deathForce.TryApply(target, explosionCenter)
+            : null;
 
         ExplosionDamage.DetonateCylinder(
             explosionCenter,
@@ -118,11 +148,22 @@ public class ExplosiveProjectile : MonoBehaviour
             m_damage,
             m_damageTargetLayers,
             null,
-            false);
+            false,
+            m_playerDamage,
+            onTargetDamaged);
 
         SpawnExplosionVfx(explosionCenter);
 
         Destroy(gameObject);
+    }
+
+    /// <inheritdoc />
+    public override void ImpactAt(
+        Vector3 projectilePosition,
+        Vector3 contactPoint,
+        Vector3 surfaceNormal)
+    {
+        DetonateAt(projectilePosition);
     }
 
     private void SpawnExplosionVfx(Vector3 explosionCenter)

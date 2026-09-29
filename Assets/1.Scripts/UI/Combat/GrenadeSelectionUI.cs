@@ -12,12 +12,12 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
     private sealed class IconBinding
     {
         [Tooltip("아이콘을 연결할 투척물 Prefab입니다.")]
-        [SerializeField] private ExplosiveProjectile m_projectilePrefab;
+        [SerializeField] private ProjectileBase m_projectilePrefab;
 
         [Tooltip("해당 투척물이 선택됐을 때 표시할 Sprite입니다.")]
         [SerializeField] private Sprite m_icon;
 
-        public ExplosiveProjectile ProjectilePrefab => m_projectilePrefab;
+        public ProjectileBase ProjectilePrefab => m_projectilePrefab;
         public Sprite Icon => m_icon;
     }
 
@@ -31,7 +31,7 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
     [SerializeField] private List<IconBinding> m_iconBindings = new List<IconBinding>();
 
     private ExplosiveProjectileShooter m_owner;
-    private ExplosiveProjectile m_displayedProjectile;
+    private ProjectileBase m_displayedProjectile;
 
     private void Awake()
     {
@@ -50,7 +50,7 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
     public void SetState(
         ExplosiveProjectileShooter owner,
         bool visible,
-        ExplosiveProjectile selectedProjectile)
+        ProjectileBase selectedProjectile)
     {
         if (owner == null)
         {
@@ -104,7 +104,7 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
         }
     }
 
-    private void RefreshIcon(ExplosiveProjectile projectile)
+    private void RefreshIcon(ProjectileBase projectile)
     {
         if (m_selectedIcon == null)
         {
@@ -117,7 +117,7 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
         m_selectedIcon.enabled = icon != null;
     }
 
-    private Sprite FindIcon(ExplosiveProjectile projectile)
+    private Sprite FindIcon(ProjectileBase projectile)
     {
         if (projectile == null || m_iconBindings == null)
         {
