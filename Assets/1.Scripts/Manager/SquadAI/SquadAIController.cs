@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Serialization;
@@ -95,6 +95,11 @@ public class SquadAIController : MonoBehaviour
     [Tooltip("길을 양보할 때 사용하는 최소 이동 속도(m/s)입니다. 원래 추종 속도가 더 빠르면 그 값을 유지합니다.")]
     [Min(0.1f)]
     [SerializeField] private float m_playerYieldSpeed = 3.5f;
+
+    [Foldout("Order Options")]
+    [Tooltip("플레이어가 지정한 사수 위치까지 이 거리(m) 안에 들어오면 도착한 것으로 보고 멈춥니다.")]
+    [Min(0.1f)]
+    [SerializeField] private float m_moveOrderArriveDistance = 0.6f;
 
     [Foldout("Sight Options")]
     [Tooltip("이 AI가 적을 직접 확인할 수 있는 최대 거리입니다.")]
@@ -264,6 +269,10 @@ public class SquadAIController : MonoBehaviour
 
     // 마지막으로 확정한 행동 요청입니다. 실행과 진단이 같은 값을 봐야 어긋나지 않습니다.
     private SquadAIDecision.Result m_currentDecision;
+
+    // 플레이어가 내린 이동·사수 명령입니다. 켜져 있으면 합류·동행·전투 위치 조정 대신 이 자리로 가서 지킵니다.
+    private bool m_hasMoveOrder;
+    private Vector3 m_moveOrderPosition;
 
     // 지금 구조하려는 대상과 그 상호작용 지점입니다(§16). 선점은 SquadManager가 중재합니다.
     private SquadMemberController m_rescueTarget;
@@ -458,6 +467,52 @@ public class SquadAIController : MonoBehaviour
     /// <see cref="SquadAIDecision.Result.Step"/>에 문서 번호로 들어 있습니다.
     /// </remarks>
     public SquadAIDecision.Result CurrentDecision => m_currentDecision;
+
+    /// <summary>플레이어의 이동·사수 명령을 수행 중인지입니다.</summary>
+    public bool HasMoveOrder => m_hasMoveOrder;
+
+    /// <summary>플레이어가 지정한 사수 위치입니다. <see cref="HasMoveOrder"/>가 false면 의미가 없습니다.</summary>
+    public Vector3 MoveOrderPosition => m_moveOrderPosition;
+
+    /// <summary>
+    /// 지정한 위치로 이동해 그 자리를 지키라는 명령을 내립니다.
+    /// </summary>
+    /// <param name="position">NavMesh 위로 보정된 사수 위치입니다.</param>
+    /// <remarks>
+    /// 명령 중에는 합류(§18.1 4)와 전투 위치 조정(5)을 하지 않고, 자동 구조(2)도 시작하지 않습니다.
+    /// 조준·사격·재장전은 그대로 합니다. 플레이어가 멀리 가도 따라가지 않는 것이 명령의 목적이기 때문입니다.
+    /// 다시 부르면 위치만 바꿉니다.
+    /// </remarks>
+    public void IssueMoveOrder(Vector3 position)
+    {
+        m_hasMoveOrder = true;
+        m_moveOrderPosition = position;
+
+        // 합류 판단을 접습니다. 명령 중에는 UpdateJoinState가 돌지 않으므로 여기서 내리지 않으면
+        // 합류 상태와 복구 누적이 명령이 끝날 때까지 얼어붙습니다.
+        m_isJoining = false;
+        ResetJoinRecovery();
+        m_hasJoinProgressPosition = false;
+        m_lastJoinCheckTime = -1.0f;
+
+        // 다음 프레임에 바로 출발하도록 이동 갱신 주기를 당깁니다.
+        m_nextUpdateTime = 0.0f;
+    }
+
+    /// <summary>
+    /// 이동·사수 명령을 취소하고 평소 동행으로 돌아갑니다.
+    /// </summary>
+    public void CancelMoveOrder()
+    {
+        if (!m_hasMoveOrder)
+        {
+            return;
+        }
+
+        m_hasMoveOrder = false;
+        ClearFollowDestination();
+        m_nextUpdateTime = 0.0f;
+    }
 
     /// <summary>지금 자동 구조하려는 대상입니다. 없으면 null입니다(§16).</summary>
     public SquadMemberController RescueTarget => m_rescueTarget;
@@ -1038,6 +1093,10 @@ public class SquadAIController : MonoBehaviour
     {
         m_isJoining = false;
 
+        // 이동·사수 명령도 내립니다. 이 멤버를 직접 조작하게 되면 명령은 의미가 없고,
+        // 남겨 두면 다시 AI가 됐을 때 예전 자리로 혼자 돌아갑니다.
+        m_hasMoveOrder = false;
+
         // 찜도 함께 놓습니다. AI에서 벗어난 멤버의 찜이 남아 있으면 남은 AI가 그 자리를 못 씁니다.
         ClearFollowDestination();
 
@@ -1126,7 +1185,8 @@ public class SquadAIController : MonoBehaviour
         bool canAct = canFollow && !selfIsLeader;
 
         // 구조 판단은 합류·전투보다 위라(§18.1 2) 그 둘보다 먼저 갱신합니다.
-        UpdateRescue(canAct);
+        // 이동·사수 명령 중에는 자리를 지켜야 하므로 자동 구조를 시작하지 않고, 하던 구조도 접습니다.
+        UpdateRescue(canAct && !m_hasMoveOrder);
 
         // 양보는 이동만 선점합니다. 구조/행동 제한이 생기면 즉시 원래 이동 설정을 복원하고,
         // 양보 중에도 아래 타겟·사격·재장전 처리는 매 프레임 계속합니다.
@@ -1139,7 +1199,9 @@ public class SquadAIController : MonoBehaviour
         if (movementDue)
         {
             m_nextUpdateTime = Time.time + m_updateInterval;
-            movementDue = UpdateJoinState(leader);
+
+            // 명령 중에는 플레이어와의 거리를 보지 않습니다. 합류 판단이 돌면 멀어졌다고 다시 달려옵니다.
+            movementDue = m_hasMoveOrder || UpdateJoinState(leader);
         }
 
         // --- 2. 판정 ---
@@ -1450,6 +1512,7 @@ public class SquadAIController : MonoBehaviour
         {
             CanAct = canAct,
             HoldPosition = holdPosition,
+            HasMoveOrder = m_hasMoveOrder,
 
             // 대상 선정과 선점 중재는 UpdateRescue가 이미 끝냈습니다(§16).
             RescueRequested = m_rescueTarget != null,
@@ -1898,6 +1961,24 @@ public class SquadAIController : MonoBehaviour
             return;
         }
 
+        // 이동·사수 명령은 지정한 자리만 봅니다. 도착하면 멈춰 서고, 밀려나면 다음 갱신에 되돌아갑니다.
+        if (kind == SquadAIActionKind.MoveOrder)
+        {
+            if (FlatDistance(transform.position, m_moveOrderPosition) <= m_moveOrderArriveDistance)
+            {
+                StopAgent();
+                ClearFollowDestination();
+                ApplyFollowSpeed(leader, false);
+                return;
+            }
+
+            SetFollowDestination(m_moveOrderPosition);
+            ApplyFollowSpeed(leader, m_currentDecision.Sprint);
+            m_agent.isStopped = false;
+            m_agent.SetDestination(m_moveOrderPosition);
+            return;
+        }
+
         if (kind == SquadAIActionKind.Combat && TryResolveCombatPosition(leader, out Vector3 combatPosition))
         {
             SetFollowDestination(combatPosition);
@@ -2072,7 +2153,7 @@ public class SquadAIController : MonoBehaviour
             if (tooClose && FlatDistance(hit.position, enemyPos) <= currentDistance)
             {
                 // 물러나려는 것이므로 더 가까워지는 자리는 의미가 없습니다.
-                continue;
+                continue; 
             }
 
             if (!HasFiringLineFrom(hit.position, target))
