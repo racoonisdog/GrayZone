@@ -34,8 +34,8 @@ public sealed class DefenseManager : MonoBehaviour
     [Tooltip("씬에 미리 배치해 둔 귀환 구역입니다. 평소에는 꺼 두고, 마지막 웨이브를 막으면 켭니다. 위치는 씬에서 이 오브젝트를 직접 옮겨 정합니다.")]
     [SerializeField] private GameObject m_returnPoint;
 
-    [Tooltip("방어전 승리 상태를 기록할 필드 데이터 매니저입니다. 비워 두면 런타임에 찾습니다.")]
-    [SerializeField] private FieldSceneDataManager m_fieldSceneDataManager;
+    [Tooltip("웨이브 진행과 방어전 결과를 기록할 방어전 데이터 매니저입니다. 비워 두면 런타임에 찾습니다.")]
+    [SerializeField] private DefenseSceneDataManager m_defenseSceneDataManager;
 
     [Header("Defense HUD")]
     [Tooltip("전투 또는 휴식의 남은 시간을 분:초로 표시할 텍스트입니다. 비어 있으면 타이머 표시는 생략합니다.")]
@@ -167,6 +167,12 @@ public sealed class DefenseManager : MonoBehaviour
         HideWaveStartMessage();
     }
 
+    private void Start()
+    {
+        // DefenseSceneDataManager는 실행 순서상 먼저 Awake를 마쳤으므로 여기서 웨이브 설정을 넘깁니다.
+        ResolveDefenseSceneDataManager()?.ConfigureWaves(m_totalWaveCount);
+    }
+
     private void Update()
     {
         UpdateWaveStartMessage();
@@ -230,6 +236,8 @@ public sealed class DefenseManager : MonoBehaviour
         m_emptySpaceHoldStartTimer = 0.0f;
         m_currentWave = 0;
         SetReturnPointActive(false);
+        // 재시작이면 앞 판의 웨이브 기록을 비우고 다시 시작합니다.
+        ResolveDefenseSceneDataManager()?.ConfigureWaves(m_totalWaveCount);
         BeginRound();
         OnDefenseStarted?.Invoke();
     }
@@ -357,6 +365,7 @@ public sealed class DefenseManager : MonoBehaviour
         SetSpawnPointsEnabled(true);
         RefreshTimerText();
         ShowWaveStartMessage();
+        ResolveDefenseSceneDataManager()?.RecordWaveStarted(m_currentWave);
     }
 
     /// <summary>플레이 라운드를 끝내고 휴식 구간을 시작합니다.</summary>
@@ -367,6 +376,7 @@ public sealed class DefenseManager : MonoBehaviour
         m_restTimer = Mathf.Max(0.01f, m_restDuration);
         SetSpawnPointsEnabled(false);
         RefreshTimerText();
+        ResolveDefenseSceneDataManager()?.RecordRestStarted();
         OnRestStarted?.Invoke();
     }
 
@@ -381,7 +391,7 @@ public sealed class DefenseManager : MonoBehaviour
         RefreshTimerText();
         HideWaveStartMessage();
 
-        ResolveFieldSceneDataManager()?.SetMissionCompleted(true);
+        RecordVictory();
         SetReturnPointActive(true);
         OnDefenseVictoryReady?.Invoke();
     }
@@ -453,15 +463,39 @@ public sealed class DefenseManager : MonoBehaviour
         return startInput != null && startInput.isActiveAndEnabled;
     }
 
-    /// <summary>승리 상태와 동일한 필드 데이터 매니저 참조를 확보합니다.</summary>
-    private FieldSceneDataManager ResolveFieldSceneDataManager()
+    /// <summary>웨이브 진행을 기록할 방어전 데이터 매니저 참조를 확보합니다.</summary>
+    private DefenseSceneDataManager ResolveDefenseSceneDataManager()
     {
-        if (m_fieldSceneDataManager == null)
+        if (m_defenseSceneDataManager == null)
         {
-            m_fieldSceneDataManager = FindFirstObjectByType<FieldSceneDataManager>();
+            m_defenseSceneDataManager = DefenseSceneDataManager.Instance != null
+                ? DefenseSceneDataManager.Instance
+                : FindFirstObjectByType<DefenseSceneDataManager>();
         }
 
-        return m_fieldSceneDataManager;
+        return m_defenseSceneDataManager;
+    }
+
+    /// <summary>방어전 승리를 데이터 매니저에 기록합니다.</summary>
+    /// <remarks>
+    /// 임무 완료 표시는 <see cref="DefenseSceneDataManager.CompleteVictory"/>가 필드 데이터 매니저로 넘깁니다.
+    /// 방어전 데이터 매니저가 아직 씬에 배치되지 않은 동안에는 예전처럼 필드 데이터 매니저에 직접 표시해,
+    /// 귀환 정산이 Success로 나오는 기존 동작을 유지합니다.
+    /// </remarks>
+    private void RecordVictory()
+    {
+        DefenseSceneDataManager defenseData = ResolveDefenseSceneDataManager();
+        if (defenseData != null)
+        {
+            defenseData.CompleteVictory();
+            return;
+        }
+
+        Debug.LogWarning("[DefenseManager] DefenseSceneDataManager가 없어 필드 데이터 매니저에 임무 완료만 표시합니다.", this);
+        FieldSceneDataManager fieldData = FieldSceneDataManager.Instance != null
+            ? FieldSceneDataManager.Instance
+            : FindFirstObjectByType<FieldSceneDataManager>();
+        fieldData?.SetMissionCompleted(true);
     }
 
     /// <summary>미리 배치해 둔 귀환 구역을 켭니다.</summary>

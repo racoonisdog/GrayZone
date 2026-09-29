@@ -20,6 +20,10 @@ public enum SquadAIActionKind
 
     /// <summary>일반 동행입니다(§18.1 7).</summary>
     Follow,
+
+    /// <summary>플레이어가 지정한 위치로 이동해 그 자리를 지킵니다.</summary>
+    /// <remarks>공용 문서 §18.1에 아직 없는 행동입니다. 우선순위는 재장전(3)과 합류(4) 사이입니다.</remarks>
+    MoveOrder,
 }
 
 /// <summary>이번 프레임에 요청하는 재장전입니다.</summary>
@@ -61,6 +65,9 @@ public enum SquadAIDecisionStep
 
     /// <summary>7. 일반 동행과 자세 동조.</summary>
     Follow = 7,
+
+    /// <summary>플레이어의 이동·사수 명령. 문서에 번호가 없어 뒤에 붙였고, 실제 우선순위는 3과 4 사이입니다.</summary>
+    PlayerOrder = 8,
 }
 
 /// <summary>
@@ -116,6 +123,10 @@ public class SquadAIDecision
         /// 전자는 멈출 대상이 없고 후자는 명시적으로 세워야 합니다.
         /// </remarks>
         public bool HoldPosition;
+
+        /// <summary>플레이어의 이동·사수 명령을 수행 중인지입니다.</summary>
+        /// <remarks>켜져 있으면 호출자가 자동 구조를 시작하지 않으므로 <see cref="RescueRequested"/>는 false로 들어옵니다.</remarks>
+        public bool HasMoveOrder;
 
         /// <summary>자동 구조를 수행할 대상이 정해졌는지입니다(§18.1 2, §16).</summary>
         /// <remarks>
@@ -242,6 +253,22 @@ public class SquadAIDecision
         //    보류된 재장전(빈 탄창)은 3번이라 합류·전투보다 위이고, 전술 재장전은 6번이라 그 아래입니다.
         //    두 판단이 같은 조건 묶음을 공유하므로 한 함수로 뽑되 우선순위 차이는 그 안에서 지킵니다.
         result.Reload = ResolveReload(in context);
+
+        // 플레이어의 이동·사수 명령(문서 번호 없음, 3과 4 사이).
+        //    플레이어가 직접 정한 자리이므로 합류(4)와 전투 위치 조정(5)을 이깁니다. 대신 조준·사격은 그대로 해서
+        //    그 자리에서 싸웁니다. 달리기는 적이 없을 때만 켭니다 - 전투 중 이동은 걷기라는 §10.3과 맞춥니다.
+        //    도착 여부는 실행 계층이 거리로 보고 멈춰 세웁니다.
+        if (context.HasMoveOrder)
+        {
+            result.Kind = SquadAIActionKind.MoveOrder;
+            result.Aim = context.HasAimPoint;
+            result.Fire = context.FiringEnabled && context.HasTarget && context.HasAimPoint && context.CanFireAtTarget;
+            result.Sprint = !context.HasTarget && !context.IsReloading && result.Reload == SquadAIReloadIntent.None;
+            result.Step = result.Reload == SquadAIReloadIntent.EmptyMagazine
+                ? SquadAIDecisionStep.PendingReload
+                : SquadAIDecisionStep.PlayerOrder;
+            return result;
+        }
 
         // 4. 합류와 경로 복구.
         //    합류가 전투 위치 조정을 이깁니다. 조준·사격 요청은 이미 종료된 상태로 들어옵니다

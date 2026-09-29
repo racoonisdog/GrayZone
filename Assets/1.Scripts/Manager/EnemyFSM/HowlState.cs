@@ -13,7 +13,7 @@ using UnityEngine;
 ///
 /// <b>기회 소모는 전파 시점에 확정됩니다.</b> 전파 전에 경직으로 끊기면 주변에 아무것도 전달되지 않았으므로
 /// "하려고 했다"로 보고 다시 설 수 있게 둡니다. 다만 무한 재시도는 경직으로 저지하는 플레이를 무의미하게 만들어,
-/// 정해진 횟수를 넘긴 취소에서 기회가 닫힙니다(<see cref="CombatState.NotifyHowlCanceled"/>).
+/// 정해진 횟수를 넘긴 취소에서 기회가 닫힙니다. 기회와 취소 횟수는 <see cref="HowlAbility"/>가 소유합니다.
 /// 기획 결정(2026-08-07)이며 공용 문서 §5.5.1의 "전파 전 취소도 재시도하지 않는다"와 어긋나 문서 갱신이 필요합니다.
 /// 설계 근거: 공용 `적 시스템` v0.2 §5.5, `변이체 잡몹 1 콘텐츠` §7.
 /// </remarks>
@@ -25,8 +25,16 @@ public class HowlState : EnemyStateBase
     /// <summary>이번 하울링에서 전파를 이미 수행했는지 여부입니다.</summary>
     private bool m_broadcastDone;
 
+    /// <summary>하울링 수치와 기회 기록을 가진 능력입니다.</summary>
+    private readonly HowlAbility m_ability;
+
     /// <summary>하울링 상태를 생성합니다.</summary>
-    public HowlState(EnemyController controller) : base(controller) { }
+    /// <param name="controller">하울링하는 적입니다.</param>
+    /// <param name="ability">하울링 수치와 기회 기록을 가진 능력입니다.</param>
+    public HowlState(EnemyController controller, HowlAbility ability) : base(controller)
+    {
+        m_ability = ability;
+    }
 
     /// <summary>하울링 연출을 시작하고 전파 시점과 행동 종료 시점을 잡습니다.</summary>
     /// <remarks>
@@ -41,7 +49,7 @@ public class HowlState : EnemyStateBase
         // 양발을 지지하고 이동을 멈춥니다(콘텐츠 §7.3).
         Controller.StopMoving();
 
-        Controller.PlayHowlAnimation();
+        m_ability.PlayHowlAnimation();
     }
 
     /// <summary>전파 시점에 주변 변이체를 합류시키고, 행동이 끝나면 다음 행동을 고릅니다.</summary>
@@ -53,12 +61,12 @@ public class HowlState : EnemyStateBase
     {
         float elapsed = Time.time - m_startTime;
 
-        if (!m_broadcastDone && elapsed >= Controller.HowlBroadcastTime)
+        if (!m_broadcastDone && elapsed >= m_ability.HowlBroadcastTime)
         {
             DoBroadcast();
         }
 
-        if (elapsed >= Controller.HowlDuration)
+        if (elapsed >= m_ability.HowlDuration)
         {
             FinishHowl();
         }
@@ -67,7 +75,7 @@ public class HowlState : EnemyStateBase
     /// <summary>하울링 연출과 전파 대기 상태를 정리합니다.</summary>
     public override void Exit()
     {
-        Controller.EndHowlAnimation();
+        m_ability.EndHowlAnimation();
     }
 
     /// <summary>
@@ -101,7 +109,7 @@ public class HowlState : EnemyStateBase
 
         // 전파가 실제로 일어난 이 시점에 기회를 소모합니다. 진입 시점에 소모하면 전파 전에 끊긴 개체가
         // 아무것도 전달하지 못하고도 기회를 잃습니다.
-        Controller.Combat.MarkHowlBroadcast();
+        m_ability.MarkHowlBroadcast();
 
         EnemyTargetSensor sensor = Controller.Sensor;
         if (sensor == null)
@@ -117,13 +125,8 @@ public class HowlState : EnemyStateBase
         // "송신자가 빠졌나" 의심하지 않게 하려는 것입니다.
         sensor.ApplyOwnHowl(members);
 
-        int applied = HowlSystem.Broadcast(
-            sensor,
-            Controller.transform.position,
-            Controller.HowlRadius,
-            members);
-
-        Controller.NotifyHowlBroadcast(applied, members.Count);
+        // 전파와 하울링 버프는 능력이 함께 처리합니다. 버프를 건 대상을 능력이 기억해야 사망 시 해제할 수 있습니다.
+        m_ability.BroadcastHowl(members);
     }
 
     /// <summary>하울링이 끝난 뒤 다음 행동을 고릅니다.</summary>

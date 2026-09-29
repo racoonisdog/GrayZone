@@ -46,7 +46,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Tooltip("이 프리팹이 기본적으로 Defense 전용 적인지 여부입니다. EnemyDefenseSpawnPoint에서 생성되면 런타임에도 true로 설정됩니다.")]
     [SerializeField] private bool m_isDefenseEnemy;
 
-    [Tooltip("방어전 경로 이후 행동입니다. Player First는 현재 조작 플레이어, Target First는 스폰 포인트의 목표 위치로 향합니다.")]
+    [Tooltip("방어전 경로 이후 행동입니다. Player First는 현재 조작 플레이어, Target First는 스폰 포인트의 목표 위치로 향합니다. Spawn SO로 생성되면 SO 값이 우선합니다.")]
     [SerializeField] private EnemyDefenseDisposition m_defenseDisposition = EnemyDefenseDisposition.Default;
 
     [EndFoldout]
@@ -73,7 +73,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Tooltip("추적 상태에서 사용할 NavMeshAgent 이동 속도(m/s)입니다.")]
     [SerializeField] private float chaseSpeed = 3.2f;
 
-    [Tooltip("활성화하면 이동 상태에서 걷기 속도와 걷기 모션을 사용하지 않고 항상 달리기 속도와 달리기 모션을 사용합니다. 정지 상태의 Idle은 유지합니다.")]
+    [Tooltip("활성화하면 이동 상태에서 걷기 속도와 걷기 모션을 사용하지 않고 항상 달리기 속도와 달리기 모션을 사용합니다. 정지 상태의 Idle은 유지합니다. Spawn SO로 생성되면 SO 값이 우선합니다.")]
     [SerializeField] private bool m_alwaysRun;
 
     [Tooltip("대상을 향해 몸을 돌리는 최대 각속도(도/초)입니다. 200이면 180도 도는 데 약 0.9초가 걸립니다. 값이 클수록 고개가 튕기듯 돌아갑니다.")]
@@ -116,16 +116,6 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Tooltip("교전 수색 중 배회할 반경(m)입니다. 마지막 확인 위치가 기준입니다.")]
     [SerializeField] private float combatSearchRadius = 6f;
 
-    [Header("Howl")]
-    [Tooltip("하울링이 전달되는 고정 반경(m)입니다. 벽이나 엄폐물은 판정에 쓰지 않습니다.")]
-    [SerializeField] private float howlRadius = 25f;
-
-    [Tooltip("하울링 시작 후 전파가 확정되는 시점(초)입니다. 이 시점 전에 사망하면 전파가 취소됩니다.")]
-    [SerializeField] private float howlBroadcastTime = 1.2f;
-
-    [Tooltip("하울링 행동 전체 길이(초)입니다. 끝나면 다음 행동을 고릅니다.")]
-    [SerializeField] private float howlDuration = 3f;
-
     [Header("Target")]
     [Tooltip("현재 대상을 다시 고를지 판단하는 주기(초)입니다. 이 주기가 곧 대상의 최소 유지 시간이 됩니다.")]
     [SerializeField] private float targetReevaluateInterval = 1f;
@@ -164,9 +154,6 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [SerializeField] private float attackRecoveryDuration = 0.75f;
 
     [Foldout("Debug")]
-    [Tooltip("이 개체를 선택했을 때 하울링 전파 반경을 Scene 뷰에 원으로 표시합니다. 벽은 판정에 쓰지 않으므로 원 안이면 그대로 전달됩니다.")]
-    [SerializeField] private bool m_debugDrawHowlRadius = true;
-
     [Tooltip("이 개체를 선택했을 때 배회 반경과 소음 수색 반경을 Scene 뷰에 표시합니다. 배회는 스폰 지점, 수색은 현재 위치가 기준입니다.")]
     [SerializeField] private bool m_debugDrawWanderRadius = false;
 
@@ -239,14 +226,20 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     // Start가 한 번 실행된 뒤에만 풀 재사용 시 초기 상태 전이를 직접 수행합니다.
     private bool m_hasStarted;
 
-    /// <summary>현재 Spawn SO에서 주입한 개체별 이동 속도가 있는지 여부입니다.</summary>
-    private bool m_hasSpawnMoveSpeed;
+    /// <summary>현재 Spawn SO에서 주입한 이동 속도, Always Run, 방어전 성향이 있는지 여부입니다.</summary>
+    private bool m_hasSpawnConfiguration;
 
     /// <summary>이번 생성에서 선정되어 사망 또는 풀 반환까지 유지되는 Spawn SO 걷기 속도(m/s)입니다.</summary>
     private float m_spawnWalkSpeed;
 
     /// <summary>이번 생성에서 선정되어 사망 또는 풀 반환까지 유지되는 Spawn SO 달리기 속도(m/s)입니다.</summary>
     private float m_spawnRunSpeed;
+
+    /// <summary>이번 생성에서 Spawn SO가 지정한 Always Run 값입니다. 프리팹 값보다 우선합니다.</summary>
+    private bool m_spawnAlwaysRun;
+
+    /// <summary>이번 생성에서 Spawn SO가 지정한 방어전 성향입니다. Defense 적일 때만 프리팹 값보다 우선합니다.</summary>
+    private EnemyDefenseDisposition m_spawnDefenseDisposition;
 
     /// <summary>현재 개체가 EnemyDefenseSpawnPoint에서 생성됐는지 나타내는 런타임 표식입니다.</summary>
     private bool m_isDefenseSpawn;
@@ -268,6 +261,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>현재 활성 상태입니다.</summary>
     public EnemyStateBase Current => m_current;
+
+    /// <summary>이 적에 붙은 특수 능력입니다. Awake에서 한 번 수집합니다.</summary>
+    private EnemyAbility[] m_abilities = System.Array.Empty<EnemyAbility>();
+
+    /// <summary>이 적에 붙은 특수 능력 목록입니다. 능력이 없는 적은 빈 목록입니다.</summary>
+    /// <remarks>교전 상태가 분기점마다 이 순서대로 묻습니다(<see cref="EnemyAbility"/>).</remarks>
+    public IReadOnlyList<EnemyAbility> Abilities => m_abilities;
 
     /// <summary>
     /// 종류별 시체 유지 시간이 끝났을 때 풀 소유자가 개체를 회수할 기회를 받는 콜백입니다.
@@ -463,7 +463,8 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     public float ChaseSpeed => ResolveMoveSpeed(chaseSpeed, true);
 
     /// <summary>이동 중 걷기 단계 없이 항상 달리기 속도와 모션을 사용할지 여부입니다.</summary>
-    public bool AlwaysRun => m_alwaysRun;
+    /// <remarks>Spawn SO로 생성된 개체는 SO 값을, 그 밖에는 프리팹 Inspector 값을 사용합니다.</remarks>
+    public bool AlwaysRun => m_hasSpawnConfiguration ? m_spawnAlwaysRun : m_alwaysRun;
 
     /// <summary>대상 방향 회전 보간 속도입니다.</summary>
     public float RotationSpeed => rotationSpeed;
@@ -560,6 +561,29 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         RefreshMoveSpeedMultiplier();
     }
 
+    /// <summary>이 적에게 걸린 버프 목록입니다. 처음 쓸 때 만듭니다.</summary>
+    private EnemyBuffSet m_buffs;
+
+    /// <summary>버프 목록입니다. 다른 적의 Awake 순서와 무관하게 쓸 수 있도록 처음 접근할 때 만듭니다.</summary>
+    private EnemyBuffSet Buffs => m_buffs ??= new EnemyBuffSet(this);
+
+    /// <summary>
+    /// 버프를 겁니다. 같은 종류가 이미 걸려 있으면 새 버프 기준으로 교체하고 지속 시간을 다시 셉니다.
+    /// </summary>
+    /// <param name="buff">걸 버프 종류입니다.</param>
+    /// <remarks>한 번 걸면 지속 시간이 끝날 때까지 유지합니다. 건 쪽이 먼저 죽어도 풀리지 않습니다.</remarks>
+    public void ApplyBuff(EnemyBuffSO buff)
+    {
+        Buffs.Apply(buff);
+    }
+
+    /// <summary>지정한 종류의 버프가 걸려 있는지 확인합니다.</summary>
+    /// <param name="buff">확인할 버프 종류입니다.</param>
+    public bool HasBuff(EnemyBuffSO buff)
+    {
+        return m_buffs != null && m_buffs.Has(buff);
+    }
+
     /// <summary>걸어 둔 이동 속도 배율을 해제합니다. 걸린 적이 없으면 아무 일도 하지 않습니다.</summary>
     /// <param name="source">효과를 걸 때 넘겼던 값입니다.</param>
     public void RemoveMoveSpeedMultiplier(Object source)
@@ -639,15 +663,6 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>교전 수색 중 배회할 반경입니다.</summary>
     public float CombatSearchRadius => combatSearchRadius;
 
-    /// <summary>하울링이 전달되는 고정 반경입니다.</summary>
-    public float HowlRadius => howlRadius;
-
-    /// <summary>하울링 전파가 확정되는 시점입니다.</summary>
-    public float HowlBroadcastTime => howlBroadcastTime;
-
-    /// <summary>하울링 행동 전체 길이입니다. 전파 시점보다 짧아지지 않습니다.</summary>
-    public float HowlDuration => Mathf.Max(howlBroadcastTime, howlDuration);
-
     /// <summary>각성 준비(경계) 시간입니다.</summary>
     public float AlertDuration => alertDuration;
 
@@ -679,23 +694,33 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     public EnemyType EnemyType => m_enemyType;
 
     /// <summary>이 감염체가 방어전에서 우선시할 대상 성향입니다.</summary>
-    /// <remarks>방어전 생성 경로 통과 후 플레이어 탐색과 외부 방어선 이동의 우선순위를 결정합니다.</remarks>
-    public EnemyDefenseDisposition DefenseDisposition => m_defenseDisposition;
+    /// <remarks>
+    /// 방어전 생성 경로 통과 후 플레이어 탐색과 외부 방어선 이동의 우선순위를 결정합니다.
+    /// Spawn SO로 생성된 Defense 적은 SO 값을, 그 밖에는 프리팹 Inspector 값을 사용합니다.
+    /// Defense 여부를 읽는 시점에 확인하므로 <see cref="ConfigureSpawn"/>과
+    /// <see cref="ConfigureDefenseSpawn"/>의 호출 순서와 관계없이 같은 값이 나옵니다.
+    /// </remarks>
+    public EnemyDefenseDisposition DefenseDisposition =>
+        m_hasSpawnConfiguration && IsDefenseEnemy ? m_spawnDefenseDisposition : m_defenseDisposition;
 
     /// <summary>프리팹 설정 또는 현재 생성 경로에 의해 Defense 전용 적으로 활성화됐는지 여부입니다.</summary>
     public bool IsDefenseEnemy => m_isDefenseEnemy || m_isDefenseSpawn;
 
     /// <summary>
-    /// 스폰 포인트가 Inspector/Balance 결과보다 우선할 이번 생성의 이동 속도를 주입합니다.
+    /// 스폰 포인트가 Inspector/Balance 결과보다 우선할 이번 생성의 이동 속도, Always Run, 방어전 성향을 주입합니다.
     /// </summary>
     /// <param name="walkSpeed">생성 시 한 번 선정된 개체별 걷기 이동 속도(m/s)입니다.</param>
     /// <param name="runSpeed">생성 시 한 번 선정된 개체별 달리기 이동 속도(m/s)입니다.</param>
+    /// <param name="alwaysRun">이동 중 항상 달리기 속도와 모션을 사용할지 여부입니다.</param>
+    /// <param name="defenseDisposition">Defense 적일 때 사용할 방어전 성향입니다. Defense 적이 아니면 쓰이지 않습니다.</param>
     /// <remarks>프리팹 활성화 전에 호출해도 되며, 풀 반환 전까지 모든 이동 상태에서 유지됩니다.</remarks>
-    public void ConfigureSpawn(float walkSpeed, float runSpeed)
+    public void ConfigureSpawn(float walkSpeed, float runSpeed, bool alwaysRun, EnemyDefenseDisposition defenseDisposition)
     {
-        m_hasSpawnMoveSpeed = true;
+        m_hasSpawnConfiguration = true;
         m_spawnWalkSpeed = Mathf.Max(0.0f, walkSpeed);
         m_spawnRunSpeed = Mathf.Max(0.0f, runSpeed);
+        m_spawnAlwaysRun = alwaysRun;
+        m_spawnDefenseDisposition = defenseDisposition;
 
         if (agent != null && agent.enabled && agent.isOnNavMesh)
         {
@@ -719,15 +744,21 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     public void ClearSpawnConfiguration()
     {
-        m_hasSpawnMoveSpeed = false;
+        m_hasSpawnConfiguration = false;
         m_spawnWalkSpeed = 0.0f;
         m_spawnRunSpeed = 0.0f;
+        m_spawnAlwaysRun = false;
+        m_spawnDefenseDisposition = EnemyDefenseDisposition.Default;
 
         if (m_moveSpeedMultipliers.Count > 0)
         {
             m_moveSpeedMultipliers.Clear();
             RefreshMoveSpeedMultiplier();
         }
+
+        // 버프 배율은 위에서 함께 비워졌으므로 기록만 지웁니다. 남기면 재사용된 개체가 이전 생애의 버프를
+        // 가진 것으로 보이고, 같은 종류를 다시 받을 때도 기록이 어긋납니다.
+        m_buffs?.ClearRecordsOnly();
     }
 
     /// <summary>
@@ -799,8 +830,23 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     private void Awake()
     {
         CacheReferences();
+        CollectAbilities();
         CreateStates();
         ApplyBalance(m_balanceSO);
+    }
+
+    /// <summary>같은 GameObject에 붙은 특수 능력을 모아 이 적에 연결합니다.</summary>
+    /// <remarks>
+    /// 밸런스 적용보다 먼저 해야 능력도 밸런스 값을 받습니다. 능력은 런타임에 붙이거나 떼지 않는다고 보고
+    /// 한 번만 수집합니다.
+    /// </remarks>
+    private void CollectAbilities()
+    {
+        m_abilities = GetComponents<EnemyAbility>();
+        for (int i = 0; i < m_abilities.Length; i++)
+        {
+            m_abilities[i].Initialize(this);
+        }
     }
 
     /// <summary>
@@ -833,9 +879,6 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         noiseSearchRadius = balance.NoiseSearchRadius;
         combatSearchDuration = balance.CombatSearchDuration;
         combatSearchRadius = balance.CombatSearchRadius;
-        howlRadius = balance.HowlRadius;
-        howlBroadcastTime = balance.HowlBroadcastTime;
-        howlDuration = balance.HowlDuration;
         alertDuration = balance.AlertDuration;
         loseSightDelay = balance.LoseSightDelay;
         targetReevaluateInterval = balance.TargetReevaluateInterval;
@@ -849,6 +892,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         enemyAttack?.ApplyBalance(balance);
         enemyHealth?.SetMaxHP(balance.MaxHp);
         enemyHealth?.ApplyBalance(balance);
+
+        for (int i = 0; i < m_abilities.Length; i++)
+        {
+            m_abilities[i].ApplyBalance(balance);
+        }
     }
 
     /// <summary>
@@ -952,6 +1000,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private void Update()
     {
+        // 버프 만료는 경직이나 사망과 관계없이 시간으로만 진행합니다.
+        m_buffs?.Tick();
+
         UpdateLocomotionAnimator();
         UpdateKnockback();
 
@@ -1354,7 +1405,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         // 애니메이션은 실제 이동 속도를 그대로 따릅니다. 감속이 걸리면 블렌드 트리가
         // 느린 구간(Run → Walk)으로 내려가고, 재생 속도(animator.speed)는 건드리지 않습니다.
         // 공격·피격 모션까지 느려지는 것을 피하기 위해서입니다.
-        float animationSpeed = m_alwaysRun && !IsForcedToWalk && speed > 0.01f
+        float animationSpeed = AlwaysRun && !IsForcedToWalk && speed > 0.01f
             ? Mathf.Max(speed, ChaseSpeed)
             : speed;
 
@@ -1425,12 +1476,6 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>소음 인지 게이지의 진행도입니다. 두리번 강도 블렌드에 쓰는 선택 파라미터입니다.</summary>
     private static readonly int AnimAlertLevel = Animator.StringToHash("AlertLevel");
-
-    /// <summary>하울링을 시작하는 트리거입니다. 클립은 `WW_Howl`을 씁니다.</summary>
-    private static readonly int AnimHowl = Animator.StringToHash("DoHowl");
-
-    /// <summary>하울링 스테이트를 유지하는 조건입니다.</summary>
-    private static readonly int AnimIsHowl = Animator.StringToHash("IsHowl");
 
     /// <summary>경직을 시작하는 트리거입니다. 클립은 `WW_Stagger_Large01`을 씁니다.</summary>
     private static readonly int AnimStagger = Animator.StringToHash("DoStagger");
@@ -1549,40 +1594,43 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     }
 
     /// <summary>
-    /// 하울링 애니메이션을 시작합니다.
+    /// 능력 행동의 애니메이션을 시작합니다. 진입 트리거와 유지 bool을 함께 세웁니다.
     /// </summary>
+    /// <param name="triggerHash">스테이트로 진입시키는 트리거 파라미터 해시입니다(예: `DoHowl`).</param>
+    /// <param name="boolHash">스테이트를 유지하는 bool 파라미터 해시입니다(예: `IsHowl`).</param>
     /// <remarks>
-    /// `DoHowl`과 `IsHowl`은 애니메이터에 이미 선언돼 있으나 지금까지 코드가 부르지 않았습니다.
-    /// 파라미터가 없어도 동작해야 하므로 존재를 확인합니다 - 전파 자체는 타이머로 진행되며
-    /// 애니메이션은 표현입니다.
+    /// 하울링·두리번·경직과 같은 규약입니다. bool만 세우면 스테이트에 들어가지 못하고, 트리거만 쏘면
+    /// 탈출 조건이 즉시 성립해 한 프레임 만에 빠져나옵니다.
+    /// 파라미터가 없어도 동작해야 하므로 존재를 확인합니다. 행동 진행은 능력의 타이머가 맡고 애니메이션은 표현입니다.
     /// </remarks>
-    public void PlayHowlAnimation()
+    public void PlayActionAnimation(int triggerHash, int boolHash)
     {
         if (animator == null)
         {
             return;
         }
 
-        if (HasAnimatorParameter(AnimIsHowl))
+        if (HasAnimatorParameter(boolHash))
         {
-            animator.SetBool(AnimIsHowl, true);
+            animator.SetBool(boolHash, true);
         }
 
-        if (HasAnimatorParameter(AnimHowl))
+        if (HasAnimatorParameter(triggerHash))
         {
-            animator.SetTrigger(AnimHowl);
+            animator.SetTrigger(triggerHash);
         }
     }
 
-    /// <summary>하울링 상태에서 빠져나왔음을 애니메이터에 알립니다.</summary>
-    public void EndHowlAnimation()
+    /// <summary>능력 행동의 스테이트에서 빠져나왔음을 애니메이터에 알립니다.</summary>
+    /// <param name="boolHash">스테이트를 유지하던 bool 파라미터 해시입니다.</param>
+    public void EndActionAnimation(int boolHash)
     {
-        if (animator == null || !HasAnimatorParameter(AnimIsHowl))
+        if (animator == null || !HasAnimatorParameter(boolHash))
         {
             return;
         }
 
-        animator.SetBool(AnimIsHowl, false);
+        animator.SetBool(boolHash, false);
     }
 
     /// <summary>경직 애니메이션을 시작합니다.</summary>
@@ -1635,43 +1683,6 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         animator.SetBool(AnimIsStagger, false);
     }
-
-    /// <summary>
-    /// 클립의 하울링 전파 이벤트를 상태로 넘깁니다.
-    /// </summary>
-    /// <remarks>
-    /// 애니메이션 이벤트가 이 이름으로 이 컴포넌트를 부릅니다. 문서 확정본의 이벤트 이름은
-    /// `HowlBroadcast`이며, 클립에 이벤트를 넣을 때 이 메서드를 가리키게 합니다.
-    /// 하울링 중이 아닐 때 들어오면 무시합니다.
-    /// </remarks>
-    public void HowlBroadcast()
-    {
-        if (m_current == Combat && Combat.CurrentSub == Combat.Howl)
-        {
-            Combat.Howl.NotifyAnimationBroadcast();
-        }
-    }
-
-    /// <summary>
-    /// 하울링 전파 결과를 진단용으로 남깁니다.
-    /// </summary>
-    /// <param name="appliedCount">실제로 하울링을 적용한 주변 변이체 수입니다.</param>
-    /// <param name="memberCount">위치를 제공한 스쿼드 캐릭터 수입니다.</param>
-    /// <remarks>
-    /// 하울링은 눈에 보이는 결과가 "주변 개체가 몰려온다"뿐이라 전파가 실제로 됐는지 판단하기 어렵습니다.
-    /// 반경 밖이어서 0인 것과 배선이 끊겨 0인 것을 구분하려면 숫자가 필요합니다.
-    /// </remarks>
-    public void NotifyHowlBroadcast(int appliedCount, int memberCount)
-    {
-        LastHowlAppliedCount = appliedCount;
-        LastHowlMemberCount = memberCount;
-    }
-
-    /// <summary>가장 최근 하울링이 적용된 주변 변이체 수입니다. 진단용입니다.</summary>
-    public int LastHowlAppliedCount { get; private set; } = -1;
-
-    /// <summary>가장 최근 하울링이 위치를 제공한 스쿼드 캐릭터 수입니다. 진단용입니다.</summary>
-    public int LastHowlMemberCount { get; private set; } = -1;
 
     /// <summary>지정한 파라미터가 현재 애니메이터에 선언되어 있는지 확인합니다.</summary>
     /// <remarks>
@@ -1807,13 +1818,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     {
         bool forceWalk = IsForcedToWalk;
 
-        if (m_hasSpawnMoveSpeed)
+        if (m_hasSpawnConfiguration)
         {
-            bool useRun = !forceWalk && (m_alwaysRun || runSpeed);
+            bool useRun = !forceWalk && (AlwaysRun || runSpeed);
             return useRun ? m_spawnRunSpeed : m_spawnWalkSpeed;
         }
 
-        return forceWalk ? wanderSpeed : (m_alwaysRun ? chaseSpeed : fallbackSpeed);
+        return forceWalk ? wanderSpeed : (AlwaysRun ? chaseSpeed : fallbackSpeed);
     }
 
     /// <summary>이번 생성의 방어전 경로 진행도를 처음으로 되돌리고 첫 목적지를 준비합니다.</summary>
@@ -1823,7 +1834,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_defenseNavigationActive = IsDefenseEnemy
             && (m_defenseWaypoints.Count > 0
             || m_defenseTargetPosition != null
-            || m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst);
+            || DefenseDisposition == EnemyDefenseDisposition.PlayerFirst);
 
         if (!m_defenseNavigationActive || agent == null || !agent.enabled || !agent.isOnNavMesh)
         {
@@ -1881,13 +1892,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return true;
         }
 
-        if (m_defenseDisposition == EnemyDefenseDisposition.Default)
+        if (DefenseDisposition == EnemyDefenseDisposition.Default)
         {
             FinishDefenseNavigation();
             return false;
         }
 
-        if (m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst && targetSensor != null)
+        if (DefenseDisposition == EnemyDefenseDisposition.PlayerFirst && targetSensor != null)
         {
             targetSensor.UpdatePerception();
             if (targetSensor.HasAnyValidTarget)
@@ -1942,8 +1953,8 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     private bool ShouldDeferSquadCombat()
     {
-        return IsDefenseEnemy && (m_defenseDisposition == EnemyDefenseDisposition.TargetFirst ||
-            (m_defenseNavigationActive && m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst &&
+        return IsDefenseEnemy && (DefenseDisposition == EnemyDefenseDisposition.TargetFirst ||
+            (m_defenseNavigationActive && DefenseDisposition == EnemyDefenseDisposition.PlayerFirst &&
              m_prioritizeDefenseWaypointsForPlayerFirst && m_defenseWaypointIndex < m_defenseWaypoints.Count));
     }
 
@@ -1961,7 +1972,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// </remarks>
     private bool ShouldFollowDefenseWaypoints()
     {
-        return m_defenseDisposition != EnemyDefenseDisposition.PlayerFirst
+        return DefenseDisposition != EnemyDefenseDisposition.PlayerFirst
             || m_prioritizeDefenseWaypointsForPlayerFirst;
     }
 
@@ -1976,7 +1987,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     private bool TryResolveDefenseDestination(out Vector3 destination, out bool usesObjective)
     {
         usesObjective = false;
-        if (m_defenseDisposition == EnemyDefenseDisposition.PlayerFirst)
+        if (DefenseDisposition == EnemyDefenseDisposition.PlayerFirst)
         {
             SquadManager squadManager = SquadManager.Instance;
             SquadMemberController player = squadManager != null ? squadManager.PlayerSquadMember : null;
@@ -2243,24 +2254,17 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 선택했을 때 반경 계열 수치를 Scene 뷰에 그립니다.
     /// </summary>
     /// <remarks>
-    /// 반경은 숫자만 봐서는 넓이가 잡히지 않아 튜닝이 감으로 흐릅니다. 특히 하울링은 한 마리가 얼마나 많은
-    /// 동료를 끌어들이는지를 결정하는데, 그 결과는 전파가 일어난 뒤에야 드러나서 값만으로는 판단하기 어렵습니다.
+    /// 반경은 숫자만 봐서는 넓이가 잡히지 않아 튜닝이 감으로 흐릅니다.
     ///
     /// 시야 반경·각도는 <see cref="EnemyTargetSensor"/>가 이미 그리므로 여기서 중복해서 그리지 않습니다.
-    /// 공격 시작 거리도 <see cref="EnemyAttack"/>가 소유합니다. 각 수치를 소유한 컴포넌트가 자기 것을 그립니다.
+    /// 공격 시작 거리는 <see cref="EnemyAttack"/>가, 하울링 반경은 <see cref="HowlAbility"/>가 소유합니다.
+    /// 각 수치를 소유한 컴포넌트가 자기 것을 그립니다.
     ///
     /// <see cref="OnDrawGizmos"/>가 아니라 선택 시에만 그립니다. 씬에 개체가 14마리 넘게 있어 상시로 그리면
     /// 원이 겹쳐 아무것도 못 읽습니다.
     /// </remarks>
     private void OnDrawGizmosSelected()
     {
-        if (m_debugDrawHowlRadius)
-        {
-            // 하울링은 벽을 통과합니다. 원 안이면 그대로 전달되므로 차폐를 반영한 표시를 하지 않습니다.
-            Gizmos.color = new Color(1.0f, 0.55f, 0.0f, 0.9f);
-            Gizmos.DrawWireSphere(transform.position, howlRadius);
-        }
-
         if (!m_debugDrawWanderRadius)
         {
             return;

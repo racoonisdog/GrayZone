@@ -37,27 +37,27 @@ public class AttackState : EnemyStateBase
     private readonly bool m_defenseObjective;
 
     /// <summary>
-    /// 이번 공격이 하울링 전 공격인지 여부입니다.
+    /// 이번 공격이 능력이 요청한 선행 공격인지 여부입니다.
     /// </summary>
     /// <remarks>
-    /// 하울링 전 공격은 B-1 한 번으로 끝내고 B-2까지 연계하지 않으며, 끝나면 하울링으로 갑니다
-    /// (콘텐츠 §7.2). 그래서 보통의 공격과 종료 처리가 다릅니다.
+    /// 선행 공격은 B-1 한 번으로 끝내고 B-2까지 연계하지 않으며, 끝나면 요청한 능력에 흐름을 돌려줍니다.
+    /// 하울링 전 공격(콘텐츠 §7.2)이 이 경로를 씁니다. 그래서 보통의 공격과 종료 처리가 다릅니다.
     /// </remarks>
-    private bool m_isPreHowlAttack;
+    private bool m_isLeadInAttack;
 
-    /// <summary>지금 진행 중인 공격이 하울링 전 공격인지 여부입니다.</summary>
+    /// <summary>지금 진행 중인 공격이 능력이 요청한 선행 공격인지 여부입니다.</summary>
     /// <remarks>
-    /// 경직으로 공격이 끊겼을 때 하울링으로 이어갈지(§5.5.2) 판단하려면 <b>Exit 전에</b> 읽어야 합니다.
+    /// 경직으로 공격이 끊겼을 때 능력이 이어갈 행동을 판단하려면(§5.5.2) <b>Exit 전에</b> 읽어야 합니다.
     /// </remarks>
-    public bool IsPreHowlAttack => m_isPreHowlAttack;
+    public bool IsLeadInAttack => m_isLeadInAttack;
 
     /// <summary>
-    /// 다음 진입을 하울링 전 공격으로 표시합니다.
+    /// 다음 진입을 선행 공격으로 표시합니다.
     /// </summary>
-    /// <remarks><see cref="CombatState"/>가 하위 상태를 바꾸기 직전에 부릅니다.</remarks>
-    public void BeginAsPreHowlAttack()
+    /// <remarks><see cref="CombatState.BeginLeadInAttack"/>가 하위 상태를 바꾸기 직전에 부릅니다.</remarks>
+    public void BeginAsLeadInAttack()
     {
-        m_isPreHowlAttack = true;
+        m_isLeadInAttack = true;
     }
 
     /// <summary>공격 애니메이션을 시작하고 방향 고정·판정·후딜레이 시점을 잡습니다.</summary>
@@ -148,9 +148,9 @@ public class AttackState : EnemyStateBase
         // 다만 클립이 중간에 끊기면 그 이벤트가 오지 않으므로, 상태를 벗어날 때 반드시 다시 끕니다.
         Controller.Attack?.SetHitboxActive(false);
 
-        // 하울링 전 공격 표시는 이 공격에만 유효합니다. 정상 종료(FinishSwing)가 아니라 경직 등으로 끊겨서
-        // 나가면 표시가 남아, 다음 평범한 공격이 하울링 전 공격으로 오인되어 끝나고 하울링으로 빠집니다.
-        m_isPreHowlAttack = false;
+        // 선행 공격 표시는 이 공격에만 유효합니다. 정상 종료(FinishSwing)가 아니라 경직 등으로 끊겨서
+        // 나가면 표시가 남아, 다음 평범한 공격이 선행 공격으로 오인되어 끝나고 능력(예: 하울링)으로 빠집니다.
+        m_isLeadInAttack = false;
     }
 
     /// <summary>
@@ -187,12 +187,12 @@ public class AttackState : EnemyStateBase
     /// <remarks>아직 칠 수 있으면 다시 공격하고, 아니면 추격으로 돌아갑니다.</remarks>
     private void FinishSwing()
     {
-        // 하울링 전 공격은 B-1 한 번으로 끝내고 B-2까지 연계하지 않습니다(콘텐츠 §7.2).
-        // 대상을 다시 칠 수 있는지와 무관하게 하울링으로 넘어갑니다.
-        if (m_isPreHowlAttack)
+        // 선행 공격은 B-1 한 번으로 끝내고 B-2까지 연계하지 않습니다(콘텐츠 §7.2).
+        // 대상을 다시 칠 수 있는지와 무관하게 요청한 능력(예: 하울링)에 흐름을 돌려줍니다.
+        if (m_isLeadInAttack)
         {
-            m_isPreHowlAttack = false;
-            Controller.Combat.ContinueToHowlAfterPreAttack();
+            m_isLeadInAttack = false;
+            Controller.Combat.ContinueAfterLeadInAttack();
             return;
         }
 

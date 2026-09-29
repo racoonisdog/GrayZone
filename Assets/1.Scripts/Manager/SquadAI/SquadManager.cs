@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 using VInspector;
@@ -118,6 +119,22 @@ public class SquadManager : MonoBehaviour
     [FormerlySerializedAs("member3Key")]
     [SerializeField] private Key m_member3Key = Key.Digit3;
 
+    [Tooltip("AI 팀원 1(조작 중이 아닌 멤버 중 목록 순서상 첫째)에게 명령하는 키입니다. 짧게 누르면 조준점으로 이동해 사수하고, 길게 누르면 명령을 취소합니다.")]
+    [SerializeField] private Key m_orderMember1Key = Key.Q;
+
+    [Tooltip("AI 팀원 2(조작 중이 아닌 멤버 중 목록 순서상 둘째)에게 명령하는 키입니다. 짧게 누르면 조준점으로 이동해 사수하고, 길게 누르면 명령을 취소합니다.")]
+    [SerializeField] private Key m_orderMember2Key = Key.E;
+
+    [Tooltip("명령 키를 이 시간(초) 이상 누르고 있으면 이동·사수 명령을 취소합니다. 이보다 짧게 누르고 떼면 이동 명령입니다.")]
+    [Min(0.1f)]
+    [SerializeField] private float m_orderCancelHoldDuration = 0.5f;
+
+    [Tooltip("조준점을 찾을 때 화면 중앙에서 쏘는 광선의 최대 거리(m)입니다.")]
+    [SerializeField] private float m_orderMaxDistance = 60.0f;
+
+    [Tooltip("조준점 근처에서 NavMesh 위 자리를 찾을 반경(m)입니다. 이 안에 걸을 수 있는 자리가 없으면 명령하지 않습니다.")]
+    [SerializeField] private float m_orderNavMeshSampleRadius = 2.0f;
+
     [Foldout("Enemy Intel Options")]
     [Tooltip("교전 적을 지금 보고 있는지 다시 판정하는 주기입니다. 짧을수록 반응이 빠르지만 시야 판정 비용이 늘어납니다.")]
     [SerializeField] private float m_enemyIntelInterval = 0.2f;
@@ -146,6 +163,28 @@ public class SquadManager : MonoBehaviour
 
     /// <summary>전환 입력을 다시 받을 수 있는 시각입니다.</summary>
     private float m_nextSwitchInputTime;
+
+    /// <summary>팀원 명령 키 하나의 누름 상태입니다. 짧게 누름과 길게 누름을 가르기 위해 들고 있습니다.</summary>
+    private struct OrderKeyState
+    {
+        /// <summary>지금 누르고 있는 중인지입니다.</summary>
+        public bool Pressing;
+
+        /// <summary>누르기 시작한 시각입니다.</summary>
+        public float PressStartTime;
+
+        /// <summary>이번 누름에서 이미 취소를 실행했는지입니다. 켜져 있으면 뗄 때 이동 명령을 내지 않습니다.</summary>
+        public bool Cancelled;
+
+        /// <summary>누르기 시작할 때 정한 명령 대상입니다. 누르는 사이 멤버 전환으로 순번이 바뀌어도 대상은 그대로입니다.</summary>
+        public SquadMemberController Target;
+    }
+
+    private OrderKeyState m_orderMember1State;
+    private OrderKeyState m_orderMember2State;
+
+    // 조준점 광선 버퍼입니다. 매번 새로 만들면 명령마다 할당이 생깁니다.
+    private readonly RaycastHit[] m_orderRayHits = new RaycastHit[16];
 
     /// <summary>다음 적 정보 갱신 시각입니다.</summary>
     private float m_nextEnemyIntelTime;
@@ -326,7 +365,233 @@ public class SquadManager : MonoBehaviour
         }
 
         HandleSwitchInput();
+        HandleOrderInput();
         UpdateEnemyIntel();
+    }
+
+    /// <summary>
+    /// Q/E 팀원 명령 입력을 처리합니다.
+    /// </summary>
+    /// <remarks>
+    /// 짧게 눌렀다 떼면 그 팀원이 화면 중앙 조준점으로 가서 자리를 지키고, <see cref="m_orderCancelHoldDuration"/>
+    /// 이상 누르고 있으면 그 순간 명령을 취소해 평소 동행으로 돌아갑니다. 판정을 뗄 때 하는 이유는,
+    /// 누른 순간에는 길게 누를지 알 수 없어 이동 명령을 먼저 내면 취소할 때 한 번 헛걸음을 하기 때문입니다.
+    /// <para>
+    /// 조작 멤버의 입력이 막혀 있거나(UI 커서 모드) 투척 모드이면 받지 않습니다. 투척 모드에서는
+    /// 같은 Q/E가 투척물 선택입니다.
+    /// </para>
+    /// </remarks>
+    private void HandleOrderInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            return;
+        }
+
+        bool inputAllowed = IsOrderInputAllowed();
+        UpdateOrderKey(keyboard, m_orderMember1Key, 0, inputAllowed, ref m_orderMember1State);
+        UpdateOrderKey(keyboard, m_orderMember2Key, 1, inputAllowed, ref m_orderMember2State);
+    }
+
+    /// <summary>명령 키 하나의 누름·유지·뗌을 처리합니다.</summary>
+    /// <param name="keyboard">현재 키보드입니다.</param>
+    /// <param name="key">처리할 명령 키입니다.</param>
+    /// <param name="aiOrder">명령할 AI 팀원의 순번입니다. 0이 팀원 1입니다.</param>
+    /// <param name="inputAllowed">지금 명령 입력을 받을 수 있는지입니다.</param>
+    /// <param name="state">이 키의 누름 상태입니다.</param>
+    private void UpdateOrderKey(Keyboard keyboard, Key key, int aiOrder, bool inputAllowed, ref OrderKeyState state)
+    {
+        if (key == Key.None)
+        {
+            return;
+        }
+
+        // 입력이 막히면 진행 중인 누름을 버립니다. 막힌 사이 뗀 것을 이동 명령으로 처리하지 않기 위해서입니다.
+        if (!inputAllowed)
+        {
+            state = default;
+            return;
+        }
+
+        var control = keyboard[key];
+
+        if (control.wasPressedThisFrame)
+        {
+            state = new OrderKeyState
+            {
+                Pressing = true,
+                PressStartTime = Time.time,
+                Cancelled = false,
+                Target = ResolveAiMemberByOrder(aiOrder),
+            };
+            return;
+        }
+
+        if (!state.Pressing)
+        {
+            return;
+        }
+
+        if (control.isPressed)
+        {
+            if (!state.Cancelled && Time.time - state.PressStartTime >= m_orderCancelHoldDuration)
+            {
+                state.Cancelled = true;
+                SquadAIController ai = ResolveOrderableAi(state.Target);
+                if (ai != null)
+                {
+                    ai.CancelMoveOrder();
+                }
+            }
+
+            return;
+        }
+
+        // 뗐습니다. 길게 눌러 이미 취소했으면 아무것도 하지 않습니다.
+        bool issueMove = !state.Cancelled;
+        SquadMemberController target = state.Target;
+        state = default;
+
+        if (!issueMove)
+        {
+            return;
+        }
+
+        SquadAIController targetAi = ResolveOrderableAi(target);
+        if (targetAi == null)
+        {
+            return;
+        }
+
+        if (!TryResolveOrderPoint(out Vector3 point))
+        {
+            if (m_logSwitchDebug)
+            {
+                Debug.Log($"[SquadManager] 팀원 {aiOrder + 1} 명령: 조준점에서 이동할 수 있는 자리를 찾지 못했습니다.", this);
+            }
+
+            return;
+        }
+
+        targetAi.IssueMoveOrder(point);
+    }
+
+    /// <summary>지금 팀원 명령 입력을 받을 수 있는지 확인합니다.</summary>
+    /// <returns>조작 멤버의 입력이 열려 있고 투척 모드가 아니면 true입니다.</returns>
+    private bool IsOrderInputAllowed()
+    {
+        SquadMemberController player = PlayerSquadMember;
+        if (player == null)
+        {
+            return false;
+        }
+
+        PlayerInputController input = player.GetComponent<PlayerInputController>();
+        return input != null && input.IsInputEnabled && !input.ThrowMode;
+    }
+
+    /// <summary>조작 중이 아닌 멤버 중 목록 순서상 지정한 순번의 멤버를 찾습니다.</summary>
+    /// <param name="aiOrder">0부터 시작하는 AI 순번입니다.</param>
+    /// <returns>해당 멤버입니다. 없으면 null입니다.</returns>
+    /// <remarks>순번은 <see cref="SquadAIController"/>가 회피 우선순위에 쓰는 순번과 같은 방식으로 셉니다.</remarks>
+    private SquadMemberController ResolveAiMemberByOrder(int aiOrder)
+    {
+        if (m_squadMembers == null)
+        {
+            return null;
+        }
+
+        int order = 0;
+        for (int i = 0; i < m_squadMembers.Count; i++)
+        {
+            SquadMemberController member = m_squadMembers[i];
+            if (member == null || member.IsPlayerSquadMember)
+            {
+                continue;
+            }
+
+            if (order == aiOrder)
+            {
+                return member;
+            }
+
+            order++;
+        }
+
+        return null;
+    }
+
+    /// <summary>명령을 받을 수 있는 상태인 멤버의 AI를 돌려줍니다.</summary>
+    /// <param name="member">명령 대상 멤버입니다.</param>
+    /// <returns>살아 있고 AI가 조작 중이면 그 AI입니다. 아니면 null입니다.</returns>
+    /// <remarks>누르는 사이 그 멤버로 조작을 전환했으면 AI가 꺼져 있으므로 명령하지 않습니다.</remarks>
+    private static SquadAIController ResolveOrderableAi(SquadMemberController member)
+    {
+        if (member == null || member.IsPlayerSquadMember || !member.IsAlive)
+        {
+            return null;
+        }
+
+        SquadAIController ai = member.GetComponent<SquadAIController>();
+        return ai != null && ai.isActiveAndEnabled ? ai : null;
+    }
+
+    /// <summary>화면 중앙 조준점이 가리키는 걸을 수 있는 자리를 찾습니다.</summary>
+    /// <param name="point">NavMesh 위로 보정한 자리입니다.</param>
+    /// <returns>자리를 찾았으면 true입니다.</returns>
+    /// <remarks>
+    /// 스쿼드 멤버의 콜라이더는 건너뜁니다. 3인칭 카메라라 광선이 조작 캐릭터 어깨에 먼저 걸릴 수 있습니다.
+    /// 트리거는 보지 않습니다. 감지 범위 같은 보이지 않는 영역에 명령 지점이 찍히면 안 되기 때문입니다.
+    /// </remarks>
+    private bool TryResolveOrderPoint(out Vector3 point)
+    {
+        point = default;
+
+        Camera camera = Camera.main;
+        if (camera == null)
+        {
+            return false;
+        }
+
+        Ray ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0.0f));
+        int count = Physics.RaycastNonAlloc(
+            ray, m_orderRayHits, Mathf.Max(0.0f, m_orderMaxDistance),
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+
+        bool found = false;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < count; i++)
+        {
+            RaycastHit hit = m_orderRayHits[i];
+            if (hit.distance >= bestDistance)
+            {
+                continue;
+            }
+
+            if (hit.collider.GetComponentInParent<SquadMemberController>() != null)
+            {
+                continue;
+            }
+
+            bestDistance = hit.distance;
+            point = hit.point;
+            found = true;
+        }
+
+        if (!found)
+        {
+            return false;
+        }
+
+        if (!NavMesh.SamplePosition(point, out NavMeshHit navHit,
+                Mathf.Max(0.1f, m_orderNavMeshSampleRadius), NavMesh.AllAreas))
+        {
+            return false;
+        }
+
+        point = navHit.position;
+        return true;
     }
 
     /// <summary>

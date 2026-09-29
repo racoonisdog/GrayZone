@@ -77,9 +77,10 @@ public abstract class Trap : MonoBehaviour, IInteractable
     [Tooltip("청사진 상태에서 UI에 표시할 문구입니다. 비용은 뒤에 자동으로 붙습니다.")]
     [SerializeField] private string m_buildPrompt = "설치";
 
-    [Tooltip("설치에 필요한 홀드 시간(초)입니다. 0이면 누르는 즉시 설치됩니다.")]
+    [Tooltip("설치에 필요한 홀드 시간(초)입니다. 0이면 누르는 즉시 설치됩니다. " +
+             "기본 1초인 이유: 튜토리얼 넘김이 상호작용 단일 탭이라, 설치를 홀드로 두어 두 입력을 구분합니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_buildHoldDuration = 0.0f;
+    [SerializeField] private float m_buildHoldDuration = 1.0f;
 
     [Foldout("Build Visual")]
     [Tooltip("청사진 상태 동안 이 함정의 모든 렌더러에 입힐 머테리얼입니다. 비워 두면 외형이 바뀌지 않습니다.")]

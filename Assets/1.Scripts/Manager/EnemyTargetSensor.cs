@@ -222,10 +222,6 @@ public class EnemyTargetSensor : MonoBehaviour
     // 하울링
     // =========================
 
-    /// <summary>이 교전에서 하울링 위치 정보를 이미 적용했는지 여부입니다.</summary>
-    /// <remarks>추가 하울링을 무시하는 근거입니다(§5.5.4). 교전 종료 시 초기화합니다(§5.8.4).</remarks>
-    private bool m_hasAppliedHowl;
-
     /// <summary>이 교전에서 하울링을 수신한 적이 있는지 여부입니다.</summary>
     /// <remarks>§5.8.4의 "하울링 수신 기록"입니다.</remarks>
     private bool m_hasReceivedHowl;
@@ -915,8 +911,9 @@ public class EnemyTargetSensor : MonoBehaviour
     /// 시간으로 만료하지 않고 교전이 끝날 때만 지웁니다 - 하울링으로 합류한 개체가 플레이어에게
     /// 닿기 전에 돌아서면 하울링이 무의미해지기 때문입니다(기획 확정 2026-08-04).
     ///
-    /// <b>한 교전에서 처음 적용한 하울링만 씁니다</b>(§5.5.4). 그래서 만료가 없어도 문제가 되지 않습니다 -
-    /// 두 번째 하울링은 애초에 적용되지 않으므로 개체가 많아도 상태가 겹쳐 쌓이지 않습니다.
+    /// <b>마지막으로 받은 하울링으로 덮어씁니다.</b> 새 하울링이 오면 이전 하울링 위치 정보를 지우고 새 목록으로
+    /// 채우므로, 만료가 없어도 여러 하울링의 정보가 겹쳐 쌓이지 않습니다.
+    /// 기획 결정(2026-09-28)이며 공용 문서 §5.5.4의 "추가 하울링은 적용하지 않는다"와 달라 문서 갱신이 필요합니다.
     ///
     /// 이미 독립적으로 교전 중인 변이체도 정보는 받습니다. 현재 행동을 취소하지 않는 것은 상태 쪽 규칙입니다(§5.5.6).
     /// </remarks>
@@ -947,14 +944,29 @@ public class EnemyTargetSensor : MonoBehaviour
     /// <summary>하울링 위치 정보를 적용하는 공통 경로입니다.</summary>
     /// <param name="members">위치를 제공받을 캐릭터 목록입니다.</param>
     /// <param name="fromOther">다른 변이체의 하울링이면 true, 자신이 수행한 것이면 false입니다.</param>
+    /// <remarks>
+    /// 이전 하울링 정보는 새 하울링이 위치를 하나 이상 줄 수 있을 때만 지웁니다. 줄 수 있는 캐릭터가 없는 하울링
+    /// (모두 다운 등)으로 기존 정보를 비우면, 하울링을 받고도 오히려 대상을 잃습니다.
+    /// </remarks>
     private bool ApplyHowl(IReadOnlyList<SquadMemberController> members, bool fromOther)
     {
-        if (members == null || m_hasAppliedHowl)
+        if (members == null)
         {
             return false;
         }
 
         SyncSquadMembers();
+
+        if (!HasAnyHowlGrantable(members))
+        {
+            return false;
+        }
+
+        // 마지막 하울링으로 덮어씁니다. 이전 하울링에만 있던 캐릭터의 하울링 위치를 먼저 지웁니다.
+        for (int i = 0; i < m_infos.Count; i++)
+        {
+            m_infos[i].HasHowlPosition = false;
+        }
 
         int granted = 0;
 
@@ -993,8 +1005,6 @@ public class EnemyTargetSensor : MonoBehaviour
             return false;
         }
 
-        m_hasAppliedHowl = true;
-
         // 남의 하울링을 받은 것만 기록합니다. 자기 하울링은 맞하울링 판단 대상이 아닙니다(§5.5.1).
         if (fromOther)
         {
@@ -1002,6 +1012,23 @@ public class EnemyTargetSensor : MonoBehaviour
         }
 
         return true;
+    }
+
+    /// <summary>하울링 목록에 위치를 줄 수 있는 캐릭터가 하나라도 있는지 확인합니다.</summary>
+    /// <param name="members">하울링이 제공한 캐릭터 목록입니다.</param>
+    /// <remarks><see cref="ApplyHowl"/>의 적용 조건과 같은 기준입니다. 한쪽을 바꾸면 다른 쪽도 함께 바꿉니다.</remarks>
+    private bool HasAnyHowlGrantable(IReadOnlyList<SquadMemberController> members)
+    {
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController member = members[i];
+            if (IsAliveMember(member) && FindInfo(member) != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1063,8 +1090,7 @@ public class EnemyTargetSensor : MonoBehaviour
         m_lastLostTarget = null;
         m_nextReevaluateTime = 0f;
 
-        // 하울링 수신·적용 기록 초기화(§5.8.4).
-        m_hasAppliedHowl = false;
+        // 하울링 수신 기록 초기화(§5.8.4). 하울링 위치 정보는 위의 대상 정보 초기화에서 함께 지워집니다.
         m_hasReceivedHowl = false;
     }
 

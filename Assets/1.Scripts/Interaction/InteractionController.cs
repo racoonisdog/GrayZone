@@ -78,6 +78,9 @@ public class InteractionController : MonoBehaviour
     private readonly RaycastHit[] m_rayHits = new RaycastHit[MaxHits];
     private int m_resolvedNonBlockingMask;
 
+    // 튜토리얼 조건이 상호작용 입력일 때 대상 탐지를 멈춥니다. 조작 멤버가 바뀌어도 유지돼야 해서 정적으로 둡니다.
+    private static bool s_targetingSuppressed;
+
     private IInteractable m_current;
     private bool m_prevPressed;
     private bool m_consumed;
@@ -93,7 +96,32 @@ public class InteractionController : MonoBehaviour
     /// <summary>현재 상호작용 대상이 바뀔 때 발생합니다(없어지면 <c>null</c>). UI 프롬프트 갱신에 사용합니다.</summary>
     public event Action<IInteractable> OnCurrentChanged;
 
-    private Vector3 Origin => (m_originOverride != null ? m_originOverride : transform).position;
+    /// <summary>상호작용 대상 탐지가 멈춰 있는지 여부입니다.</summary>
+    public static bool IsTargetingSuppressed => s_targetingSuppressed;
+
+    /// <summary>
+    /// 상호작용 대상 탐지를 멈추거나 다시 켭니다. 모든 멤버에게 같이 적용됩니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TutorialManager"/>가 씁니다. 튜토리얼 조건이 상호작용 입력(탭, 방어전 시작 홀드)인 페이지에서는
+    /// 그 입력이 트랩 설치 같은 다른 상호작용으로 가지 않고 튜토리얼 조건에 먼저 쓰여야 하기 때문입니다.
+    /// 멈춰 있는 동안에는 <see cref="Current"/>가 null이므로 프롬프트도 뜨지 않고,
+    /// "대상이 없을 때만" 동작하는 방어전 시작 홀드는 조준 방향과 관계없이 동작합니다.
+    /// 입력 자체(<see cref="PlayerInputController.Interact"/>)는 막지 않습니다.
+    /// </remarks>
+    public static void SetTargetingSuppressed(bool suppressed)
+    {
+        s_targetingSuppressed = suppressed;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticSuppression()
+    {
+        // 도메인 리로드를 끈 상태에서 Play Mode를 다시 들어가면 이전 값이 남기 때문에 비웁니다.
+        s_targetingSuppressed = false;
+    }
+
+    private Vector3 Origin =>(m_originOverride != null ? m_originOverride : transform).position;
 
     private Vector3 Facing => m_camera != null ? m_camera.transform.forward : transform.forward;
 
@@ -134,6 +162,16 @@ public class InteractionController : MonoBehaviour
     {
         // 조작 멤버(입력 활성)일 때만 상호작용합니다. 그 외에는 상태를 정리합니다.
         if (m_input == null || !m_input.enabled)
+        {
+            if (m_current != null || m_holdTimer > 0.0f)
+            {
+                ResetState();
+            }
+            return;
+        }
+
+        // 튜토리얼이 상호작용 입력을 쓰는 동안에는 대상을 잡지 않습니다. 진행 중이던 홀드도 취소됩니다.
+        if (s_targetingSuppressed)
         {
             if (m_current != null || m_holdTimer > 0.0f)
             {
