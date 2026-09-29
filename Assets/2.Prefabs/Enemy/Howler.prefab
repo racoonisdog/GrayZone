@@ -1849,6 +1849,7 @@ GameObject:
   - component: {fileID: 770378352016190678}
   - component: {fileID: 6582405716747375709}
   - component: {fileID: 8215177168001985325}
+  - component: {fileID: 4670076583294018279}
   m_Layer: 9
   m_Name: Howler
   m_TagString: Untagged
@@ -2030,9 +2031,6 @@ MonoBehaviour:
   noiseSearchRadius: 5
   combatSearchDuration: 6
   combatSearchRadius: 6
-  howlRadius: 25
-  howlBroadcastTime: 1.2
-  howlDuration: 3
   targetReevaluateInterval: 1
   targetSwitchPathDistanceDelta: 2
   m_knockbackMass: 60
@@ -2043,7 +2041,6 @@ MonoBehaviour:
   attackDirectionLockTime: 0.25
   attackImpactTime: 0.45
   attackRecoveryDuration: 0.75
-  m_debugDrawHowlRadius: 1
   m_debugDrawWanderRadius: 0
   m_debugLogStagger: 1
 --- !u!195 &6567124513096988904
@@ -2133,6 +2130,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HitboxGroup
   m_hitboxes: []
   m_disableOnStart: 1
+--- !u!114 &4670076583294018279
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2644337924908843311}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cff0e1b6394c0274da46d94c9f3b46de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HowlAbility
+  m_howlRadius: 25
+  m_howlBroadcastTime: 1.2
+  m_howlDuration: 3
+  m_howlBuff: {fileID: 11400000, guid: 51d7eb4f8bc505b41a5a7fa13c1be09d, type: 2}
+  m_debugDrawHowlRadius: 1
 --- !u!1 &2657728724699594717
 GameObject:
   m_ObjectHideFlags: 0

@@ -21,3 +21,5 @@ MonoBehaviour:
   m_walkSpeedMax: 3.2
   m_runSpeedMin: 6.5
   m_runSpeedMax: 8
+  m_alwaysRun: 1
+  m_defenseDisposition: 1
