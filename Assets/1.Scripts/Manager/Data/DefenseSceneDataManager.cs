@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using VInspector;
@@ -22,12 +22,9 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     {
         [Tooltip("지급할 자원입니다. 셸터에 이미 정의된 자원 중에서 고릅니다.")]
         [Variants(
-            ResourceIds.Food,
-            ResourceIds.Fuel,
-            ResourceIds.FacilityUpgradePart,
-            ResourceIds.UpgradePartMaterial,
-            ResourceIds.WeaponPartMaterial,
-            ResourceIds.MedicineMaterial)]
+            ResourceIds.UpgradeMaterial,
+            ResourceIds.CraftingMaterial,
+            ResourceIds.TrapMaterial)]
         public string ResourceId;
 
         [Tooltip("지급할 수량입니다. 0이면 지급하지 않습니다.")]
