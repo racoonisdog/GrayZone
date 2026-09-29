@@ -7,15 +7,16 @@ using VInspector;
 /// 방어전에서 하나의 적 프리팹을 어떤 생산 규칙으로 운용할지 정의하는 전용 설정 에셋입니다.
 /// </summary>
 /// <remarks>
-/// 적의 방어전 성향, AI, 밸런스와 래그돌 설정은 <see cref="EnemyController"/> 프리팹이 소유합니다.
-/// 이 에셋은 해당 프리팹의 생산 수량, 주기, 최대 수용량, 생성별 Walk/Run 속도 범위와
-/// Player First의 웨이포인트 우선 여부를 정의합니다.
+/// 적의 AI, 밸런스와 래그돌 설정은 <see cref="EnemyController"/> 프리팹이 소유합니다.
+/// 이 에셋은 해당 프리팹의 생산 수량, 주기, 최대 수용량, 생성별 Walk/Run 속도 범위, Always Run,
+/// 방어전 성향과 Player First의 웨이포인트 우선 여부를 정의합니다.
+/// Walk/Run 속도, Always Run, 방어전 성향은 생성 시 프리팹 값을 덮어씁니다.
 /// </remarks>
 [CreateAssetMenu(fileName = "EnemyDefenseSO_Name_Type", menuName = "GrayZone/Defense/Enemy Defense Spawn Config")]
 public sealed class EnemySpawnEntrySO : ScriptableObject
 {
     [Header("Enemy")]
-    [Tooltip("이 생산 항목이 풀링하고 생성할 EnemyController 프리팹입니다. 성향과 전투 설정은 프리팹의 직렬화 값을 그대로 사용합니다.")]
+    [Tooltip("이 생산 항목이 풀링하고 생성할 EnemyController 프리팹입니다. 이동 속도, Always Run, 방어전 성향을 제외한 전투 설정은 프리팹의 직렬화 값을 그대로 사용합니다.")]
     [SerializeField] private EnemyController m_enemyPrefab;
 
     [Header("Production")]
@@ -69,7 +70,13 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
     [Min(0.0f)]
     [SerializeField] private float m_runSpeedMax = 3.2f;
 
+    [Tooltip("활성화하면 이동 상태에서 걷기 속도와 걷기 모션을 사용하지 않고 항상 달리기 속도와 달리기 모션을 사용합니다. 프리팹의 Always Run 값보다 우선합니다.")]
+    [SerializeField] private bool m_alwaysRun;
+
     [Header("Defense Route")]
+    [Tooltip("방어전 경로 이후 행동입니다. Player First는 현재 조작 플레이어, Target First는 스폰 포인트의 목표 위치로 향합니다. Defense 적에게만 적용되며 프리팹의 성향 값보다 우선합니다.")]
+    [SerializeField] private EnemyDefenseDisposition m_defenseDisposition = EnemyDefenseDisposition.Default;
+
     [Tooltip("Player First 적이 플레이어를 향하기 전에 스폰 포인트의 웨이포인트를 모두 통과할지 여부입니다. 끄면 웨이포인트를 건너뛰고 플레이어 추적을 우선합니다. Target First에는 적용되지 않습니다.")]
     [SerializeField] private bool m_prioritizeWaypointsForPlayerFirst = true;
 
@@ -112,6 +119,12 @@ public sealed class EnemySpawnEntrySO : ScriptableObject
 
     /// <summary>개체별 달리기 이동 속도 범위의 최댓값(m/s)입니다.</summary>
     public float RunSpeedMax => m_runSpeedMax;
+
+    /// <summary>생성된 적이 이동 중 항상 달리기 속도와 모션을 사용할지 여부입니다.</summary>
+    public bool AlwaysRun => m_alwaysRun;
+
+    /// <summary>생성된 Defense 적이 웨이포인트 통과 후 우선시할 대상 성향입니다.</summary>
+    public EnemyDefenseDisposition DefenseDisposition => m_defenseDisposition;
 
     /// <summary>Player First 적이 플레이어보다 스폰 웨이포인트를 우선할지 여부입니다.</summary>
     /// <remarks>Target First 적은 이 설정을 무시하고 기존 Defense 경로 규칙을 유지합니다.</remarks>

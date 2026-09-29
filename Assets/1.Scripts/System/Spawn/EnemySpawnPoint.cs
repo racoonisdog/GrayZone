@@ -858,7 +858,11 @@ public class EnemySpawnPoint : MonoBehaviour
             return;
         }
 
-        enemy.ConfigureSpawn(entry.SampleWalkSpeed(), entry.SampleRunSpeed());
+        enemy.ConfigureSpawn(
+            entry.SampleWalkSpeed(),
+            entry.SampleRunSpeed(),
+            entry.AlwaysRun,
+            entry.DefenseDisposition);
     }
 
     /// <summary>풀 반환 시 이번 생성에서 주입한 Spawn SO 런타임 값만 제거합니다.</summary>
