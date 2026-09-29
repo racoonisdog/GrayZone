@@ -79,11 +79,16 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     /// <summary>현재 진행 단계입니다.</summary>
     public DefensePhase Phase => m_runtimeData?.Phase ?? DefensePhase.Uninitialized;
 
-    /// <summary>이번 방어전에 첫 번째 슈터를 배치할지 여부입니다.</summary>
-    public bool Shooter01Active => m_entryData != null && m_entryData.Shooter01Active;
-
-    /// <summary>이번 방어전에 두 번째 슈터를 배치할지 여부입니다.</summary>
-    public bool Shooter02Active => m_entryData != null && m_entryData.Shooter02Active;
+    /// <summary>
+    /// 지정한 Scramble 업그레이드의 이번 방어전 레벨입니다. 입장 데이터가 없으면 0입니다.
+    /// </summary>
+    /// <remarks>
+    /// 업그레이드 효과를 적용할 쪽이 읽을 값입니다. 출격 시점 값으로 고정되므로, 씬 도착 뒤 전역 데이터가 바뀌어도 이번 판에는 영향이 없습니다.
+    /// </remarks>
+    public int GetUpgradeLevel(ScrambleUpgradeType type)
+    {
+        return m_entryData?.Upgrades.GetLevel(type) ?? 0;
+    }
 
     private void Reset()
     {
@@ -340,22 +345,22 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
         }
     }
 
-    /// <summary>GameDataManager의 Scramble 시설 값과 현재 씬 이름으로 입장 데이터를 만듭니다.</summary>
+    /// <summary>GameDataManager의 Scramble 업그레이드 레벨과 현재 씬 이름으로 입장 데이터를 만듭니다.</summary>
     private static DefenseEntryData CreateSceneEntryData()
     {
         GameDataManager gameData = GameDataManager.Instance;
         if (gameData == null)
         {
-            Debug.LogWarning("[DefenseSceneDataManager] GameDataManager가 없어 슈터를 모두 비활성으로 시작합니다.");
+            Debug.LogWarning("[DefenseSceneDataManager] GameDataManager가 없어 업그레이드를 모두 0레벨로 시작합니다.");
             return CreateEmptyEntryData();
         }
 
-        return new DefenseEntryData(GetActiveSceneName(), gameData.Shooter01, gameData.Shooter02);
+        return new DefenseEntryData(GetActiveSceneName(), DefenseUpgradeLevels.FromGameData(gameData));
     }
 
     private static DefenseEntryData CreateEmptyEntryData()
     {
-        return new DefenseEntryData(GetActiveSceneName(), false, false);
+        return new DefenseEntryData(GetActiveSceneName(), DefenseUpgradeLevels.None);
     }
 
     private static string GetActiveSceneName()

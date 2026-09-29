@@ -56,10 +56,6 @@ public sealed class ScrambleFacility : MonoBehaviour
     public int ExplosiveUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Explosive);
     public int ShooterUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Shooter);
     public int WireUpgradeLevel => GetUpgradeLevel(ScrambleUpgradeType.Wire);
-    public bool Shooter01 =>
-        ShooterUpgradeLevel >= 1;
-    public bool Shooter02 =>
-        ShooterUpgradeLevel >= 2;
 
     public event Action StateChanged;
 
@@ -83,16 +79,6 @@ public sealed class ScrambleFacility : MonoBehaviour
     public int GetOwnedUpgradeResourceAmount()
     {
         return Storage?.GetResourceAmount(UpgradeResourceId) ?? 0;
-    }
-
-    public bool CanUnlockShooter01()
-    {
-        return ShooterUpgradeLevel == 0 && CanUpgrade(ScrambleUpgradeType.Shooter);
-    }
-
-    public bool CanUnlockShooter02()
-    {
-        return ShooterUpgradeLevel == 1 && CanUpgrade(ScrambleUpgradeType.Shooter);
     }
 
     public bool CanUpgrade(ScrambleUpgradeType upgradeType)
@@ -132,24 +118,6 @@ public sealed class ScrambleFacility : MonoBehaviour
         SetUpgradeLevel(gameData, upgradeType, currentLevel + 1);
         NotifyStateChanged();
         return true;
-    }
-
-    /// <summary>시설 자원을 소비하고 첫 번째 슈터를 해금합니다.</summary>
-    public bool TryUnlockShooter01()
-    {
-        if (ShooterUpgradeLevel != 0)
-            return false;
-
-        return TryUpgradeShooter();
-    }
-
-    /// <summary>시설 자원을 소비하고 두 번째 슈터를 해금합니다.</summary>
-    public bool TryUnlockShooter02()
-    {
-        if (ShooterUpgradeLevel != 1)
-            return false;
-
-        return TryUpgradeShooter();
     }
 
     /// <summary>현재 셸터 작업 데이터를 전역 데이터에 동기화한 뒤 전투 씬으로 이동합니다.</summary>
