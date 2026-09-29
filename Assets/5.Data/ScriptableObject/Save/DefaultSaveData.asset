@@ -17,17 +17,11 @@ MonoBehaviour:
   startStageId: 
   shelterStability: 100
   startingResources:
-  - resourceId: food
+  - resourceId: upgrade_material
     amount: 9999
-  - resourceId: fuel
+  - resourceId: crafting_material
     amount: 9999
-  - resourceId: facility_upgrade_part
-    amount: 9999
-  - resourceId: upgrade_part_material
-    amount: 9999
-  - resourceId: weapon_part_material
-    amount: 9999
-  - resourceId: medicine_material
+  - resourceId: trap_material
     amount: 9999
   startingCharacterDefinitions:
   - {fileID: 11400000, guid: d9fa4f3014d8cc64ba58aebb2a6827c2, type: 2}

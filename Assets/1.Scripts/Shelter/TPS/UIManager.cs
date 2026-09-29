@@ -24,7 +24,10 @@ public enum ShelterUIType
     Inventory,
 
     /// <summary>출격 준비 UI가 열려 있음</summary>
-    Operations
+    Operations,
+
+    /// <summary>방어전 출격 UI가 열려 있음</summary>
+    Scramble
 }
 
 /// <summary>
@@ -44,6 +47,9 @@ public class UIManager : MonoBehaviour
 
     [Header("Operations UI")]
     [SerializeField] private OperationUI m_operationUI;
+
+    [Header("Scramble UI")]
+    [SerializeField] private ScrambleFacilityUI m_scrambleUI;
 
     [Header("Facility Upgrade UI")]
     [SerializeField] private FacilityUpgradeUI m_facilityUpgradeUI;
@@ -75,6 +81,7 @@ public class UIManager : MonoBehaviour
     {
         CacheManufacturingUI();
         CacheInventoryUI();
+        CacheScrambleUI();
 
         // The manager object should stay active; only the assigned UI object is hidden.
         if (m_hideInteractionUIOnAwake)
@@ -114,6 +121,11 @@ public class UIManager : MonoBehaviour
                 if (operationUI == null || !operationUI.TryHandleEscape())
                     CloseOperationUI();
                 return true;
+            case ShelterUIType.Scramble:
+                ScrambleFacilityUI scrambleUI = CacheScrambleUI();
+                if (scrambleUI == null || !scrambleUI.TryHandleEscape())
+                    CloseScrambleUI();
+                return true;
             case ShelterUIType.FacilityUpgrade:
                 CloseFacilityUpgradeUI();
                 return true;
@@ -138,6 +150,10 @@ public class UIManager : MonoBehaviour
         if (operationUI != null)
             operationUI.Closed += HandleOperationUIClosed;
 
+        ScrambleFacilityUI scrambleUI = CacheScrambleUI();
+        if (scrambleUI != null)
+            scrambleUI.Closed += HandleScrambleUIClosed;
+
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed += HandleFacilityUpgradeUIClosed;
 
@@ -156,6 +172,9 @@ public class UIManager : MonoBehaviour
 
         if (m_operationUI != null)
             m_operationUI.Closed -= HandleOperationUIClosed;
+
+        if (m_scrambleUI != null)
+            m_scrambleUI.Closed -= HandleScrambleUIClosed;
 
         if (m_facilityUpgradeUI != null)
             m_facilityUpgradeUI.Closed -= HandleFacilityUpgradeUIClosed;
@@ -245,6 +264,9 @@ public class UIManager : MonoBehaviour
             case FacilityInteractionType.Operations:
                 OpenOperationUI(interactionPoint);
                 return m_activeUI == ShelterUIType.Operations;
+            case FacilityInteractionType.Scramble:
+                OpenScrambleUI(interactionPoint);
+                return m_activeUI == ShelterUIType.Scramble;
             default:
                 return false;
         }
@@ -362,6 +384,42 @@ public class UIManager : MonoBehaviour
         SetActiveUI(ShelterUIType.None);
     }
 
+    /// <summary>방어전 출격 시설 상호작용 지점에서 Scramble UI를 엽니다.</summary>
+    public void OpenScrambleUI(FacilityInteractionPoint interactionPoint)
+    {
+        ScrambleFacilityUI scrambleUI = CacheScrambleUI();
+        if (scrambleUI == null)
+        {
+            Debug.LogWarning("[UI] Scramble UI is not assigned.", this);
+            return;
+        }
+
+        if (interactionPoint == null)
+            return;
+
+        if (!interactionPoint.TryGetFacility(out ScrambleFacility scrambleFacility))
+        {
+            Debug.LogWarning("[UI] ScrambleFacility is not found.", interactionPoint);
+            return;
+        }
+
+        SetInteractionUIActive(false);
+        scrambleUI.Open(scrambleFacility);
+        SetActiveUI(ShelterUIType.Scramble);
+
+        if (m_logMessages)
+            Debug.Log($"[UI] Open Scramble UI : {interactionPoint.name}", interactionPoint);
+    }
+
+    /// <summary>방어전 출격 UI를 닫고 활성 UI 상태를 비웁니다.</summary>
+    public void CloseScrambleUI()
+    {
+        if (m_scrambleUI != null)
+            m_scrambleUI.Close();
+
+        SetActiveUI(ShelterUIType.None);
+    }
+
     /// <summary>
     /// 다른 차단형 UI가 없을 때 셸터 공용 인벤토리를 엽니다.
     /// </summary>
@@ -451,6 +509,12 @@ public class UIManager : MonoBehaviour
             SetActiveUI(ShelterUIType.None);
     }
 
+    private void HandleScrambleUIClosed()
+    {
+        if (m_activeUI == ShelterUIType.Scramble)
+            SetActiveUI(ShelterUIType.None);
+    }
+
     private void HandleFacilityUpgradeUIClosed()
     {
         if (m_activeUI == ShelterUIType.FacilityUpgrade)
@@ -491,6 +555,8 @@ public class UIManager : MonoBehaviour
             CloseManufacturingUI();
         else if (m_activeUI == ShelterUIType.Operations)
             CloseOperationUI();
+        else if (m_activeUI == ShelterUIType.Scramble)
+            CloseScrambleUI();
         else if (m_activeUI == ShelterUIType.Inventory)
             CloseInventoryUI();
     }
@@ -527,6 +593,17 @@ public class UIManager : MonoBehaviour
         }
 
         return m_operationUI;
+    }
+
+    private ScrambleFacilityUI CacheScrambleUI()
+    {
+        if (m_scrambleUI == null)
+        {
+            m_scrambleUI =
+                FindFirstObjectByType<ScrambleFacilityUI>(FindObjectsInactive.Include);
+        }
+
+        return m_scrambleUI;
     }
 
     private void SetInteractionUIActive(bool active)

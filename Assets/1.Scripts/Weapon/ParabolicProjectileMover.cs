@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 물리 중력 대신 하나의 결정적 포물선 수식으로 폭발 투사체를 이동시킵니다.
+/// 물리 중력 대신 상승/하강 구간이 분리된 결정적 포물선 수식으로 폭발 투사체를 이동시킵니다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class ParabolicProjectileMover : MonoBehaviour
@@ -13,7 +13,8 @@ public class ParabolicProjectileMover : MonoBehaviour
     private Transform m_owner;
     private Vector3 m_start;
     private Vector3 m_initialVelocity;
-    private float m_downwardAcceleration;
+    private float m_ascentDownwardAcceleration;
+    private float m_descentDownwardAcceleration;
     private float m_speedMultiplier;
     private bool m_hasPlannedCollision;
     private float m_plannedCollisionTime;
@@ -29,23 +30,73 @@ public class ParabolicProjectileMover : MonoBehaviour
     public static Vector3 EvaluatePosition(
         Vector3 start,
         Vector3 initialVelocity,
-        float downwardAcceleration,
+        float ascentDownwardAcceleration,
+        float descentDownwardAcceleration,
         float elapsedTime)
     {
         float time = Mathf.Max(0.0f, elapsedTime);
-        return start +
-            initialVelocity * time +
-            Vector3.down * (0.5f * Mathf.Max(0.0f, downwardAcceleration) * time * time);
+        float ascentAcceleration = Mathf.Max(0.0f, ascentDownwardAcceleration);
+        float descentAcceleration = Mathf.Max(0.0f, descentDownwardAcceleration);
+        float apexTime = GetApexTime(initialVelocity.y, ascentAcceleration);
+
+        if (apexTime <= 0.0f)
+        {
+            return start +
+                initialVelocity * time +
+                Vector3.down * (0.5f * descentAcceleration * time * time);
+        }
+
+        if (time <= apexTime)
+        {
+            return start +
+                initialVelocity * time +
+                Vector3.down * (0.5f * ascentAcceleration * time * time);
+        }
+
+        Vector3 apexPosition = start +
+            initialVelocity * apexTime +
+            Vector3.down * (0.5f * ascentAcceleration * apexTime * apexTime);
+        Vector3 horizontalVelocity = Vector3.ProjectOnPlane(initialVelocity, Vector3.up);
+        float descentTime = time - apexTime;
+        return apexPosition +
+            horizontalVelocity * descentTime +
+            Vector3.down * (0.5f * descentAcceleration * descentTime * descentTime);
     }
 
     /// <summary>지정한 경과 시간의 포물선 속도를 계산합니다.</summary>
     public static Vector3 EvaluateVelocity(
         Vector3 initialVelocity,
-        float downwardAcceleration,
+        float ascentDownwardAcceleration,
+        float descentDownwardAcceleration,
         float elapsedTime)
     {
         float time = Mathf.Max(0.0f, elapsedTime);
-        return initialVelocity + Vector3.down * (Mathf.Max(0.0f, downwardAcceleration) * time);
+        float ascentAcceleration = Mathf.Max(0.0f, ascentDownwardAcceleration);
+        float descentAcceleration = Mathf.Max(0.0f, descentDownwardAcceleration);
+        float apexTime = GetApexTime(initialVelocity.y, ascentAcceleration);
+
+        if (apexTime <= 0.0f)
+        {
+            return initialVelocity + Vector3.down * (descentAcceleration * time);
+        }
+
+        if (time <= apexTime)
+        {
+            return initialVelocity + Vector3.down * (ascentAcceleration * time);
+        }
+
+        Vector3 horizontalVelocity = Vector3.ProjectOnPlane(initialVelocity, Vector3.up);
+        return horizontalVelocity + Vector3.down * (descentAcceleration * (time - apexTime));
+    }
+
+    private static float GetApexTime(float initialVerticalSpeed, float ascentDownwardAcceleration)
+    {
+        if (initialVerticalSpeed <= 0.0f || ascentDownwardAcceleration <= 0.0f)
+        {
+            return 0.0f;
+        }
+
+        return initialVerticalSpeed / ascentDownwardAcceleration;
     }
 
     /// <summary>생성 직후 이동에 필요한 경로와 충돌 조건을 설정합니다.</summary>
@@ -53,7 +104,8 @@ public class ParabolicProjectileMover : MonoBehaviour
         ExplosiveProjectile projectile,
         Vector3 start,
         Vector3 initialVelocity,
-        float downwardAcceleration,
+        float ascentDownwardAcceleration,
+        float descentDownwardAcceleration,
         float speedMultiplier,
         bool hasPlannedCollision,
         float plannedCollisionTime,
@@ -67,7 +119,8 @@ public class ParabolicProjectileMover : MonoBehaviour
         m_owner = owner;
         m_start = start;
         m_initialVelocity = initialVelocity;
-        m_downwardAcceleration = Mathf.Max(0.0f, downwardAcceleration);
+        m_ascentDownwardAcceleration = Mathf.Max(0.0f, ascentDownwardAcceleration);
+        m_descentDownwardAcceleration = Mathf.Max(0.0f, descentDownwardAcceleration);
         m_speedMultiplier = Mathf.Max(0.01f, speedMultiplier);
         m_hasPlannedCollision = hasPlannedCollision;
         m_plannedCollisionTime = Mathf.Max(0.0f, plannedCollisionTime);
@@ -99,7 +152,12 @@ public class ParabolicProjectileMover : MonoBehaviour
         bool reachedPlannedCollision = m_hasPlannedCollision && nextTime >= m_plannedCollisionTime;
         Vector3 next = reachedPlannedCollision
             ? m_plannedCollisionPosition
-            : EvaluatePosition(m_start, m_initialVelocity, m_downwardAcceleration, nextTime);
+            : EvaluatePosition(
+                m_start,
+                m_initialVelocity,
+                m_ascentDownwardAcceleration,
+                m_descentDownwardAcceleration,
+                nextTime);
 
         if (TryGetBlockingHit(previous, next, out RaycastHit hit))
         {

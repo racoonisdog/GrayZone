@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 전투 씬 진입 시 전역 GameData의 Scramble 플래그를 읽어 슈터 오브젝트를 활성화합니다.
+/// 전투 씬 진입 시 전역 GameData의 Shooter 업그레이드 레벨을 읽어 슈터 오브젝트를 활성화합니다.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class ScrambleShooterActivator : MonoBehaviour
@@ -25,8 +25,8 @@ public sealed class ScrambleShooterActivator : MonoBehaviour
         }
 
         if (m_shooter01 != null)
-            m_shooter01.SetActive(gameData != null && gameData.Shooter01);
+            m_shooter01.SetActive(gameData != null && gameData.ShooterUpgradeLevel >= 1);
         if (m_shooter02 != null)
-            m_shooter02.SetActive(gameData != null && gameData.Shooter02);
+            m_shooter02.SetActive(gameData != null && gameData.ShooterUpgradeLevel >= 2);
     }
 }

@@ -15,10 +15,10 @@ MonoBehaviour:
   m_recipeId: FacilityUpgradePart_01
   m_resultKind: 1
   m_resultItem: {fileID: 11400000, guid: a4e1285f49e2117479c0fbf4075279ce, type: 2}
-  m_resultResourceId: facility_upgrade_part
+  m_resultResourceId: upgrade_material
   m_resultQuantityPerBatch: 1
   m_requiredFacilityLevel: 1
   m_unitWork: 3
   m_unitCosts:
-  - m_resourceId: upgrade_part_material
+  - m_resourceId: crafting_material
     m_amount: 5

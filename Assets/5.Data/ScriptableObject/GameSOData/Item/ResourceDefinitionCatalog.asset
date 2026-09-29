@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97be01e77435c8f4d8843da4dc14e168, type: 3}
+  m_Name: ResourceDefinitionCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::ResourceDefinitionCatalog
+  m_entries:
+  - m_resourceId: upgrade_material
+    m_displayName: "\uC5C5\uADF8\uB808\uC774\uB4DC \uC7AC\uB8CC"
+    m_icon: {fileID: 21300000, guid: 022d2e60845241a47be35a61e32dbfc3, type: 3}
+  - m_resourceId: crafting_material
+    m_displayName: "\uC81C\uC791 \uC7AC\uB8CC"
+    m_icon: {fileID: 21300000, guid: ece74b111b37c3d4b809c5de1ce772ab, type: 3}
+  - m_resourceId: trap_material
+    m_displayName: "\uD568\uC815 \uC7AC\uB8CC"
+    m_icon: {fileID: 21300000, guid: cf0d974c824e16343b34e5a808ac6a55, type: 3}

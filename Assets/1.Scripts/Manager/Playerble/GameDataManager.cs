@@ -47,9 +47,12 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private List<FacilityRuntimeState> facilityStates = new();
     [SerializeField] private ManufacturingRuntimeData manufacturing = new();
 
-    [Header("필드배치NPC변수")]
-    [SerializeField] private bool shooter01;
-    [SerializeField] private bool shooter02;
+    [Header("필드 배치 업그레이드 레벨")]
+    [Min(0)][SerializeField] private int trapUpgradeLevel;
+    [Min(0)][SerializeField] private int spikeUpgradeLevel;
+    [Min(0)][SerializeField] private int explosiveUpgradeLevel;
+    [Min(0)][SerializeField] private int shooterUpgradeLevel;
+    [Min(0)][SerializeField] private int wireUpgradeLevel;
 
     [Header("Last Field Settlement")]
     [Tooltip("마지막으로 정산 반영이 완료된 필드 ID이며 중복 반영 방지 키로 사용합니다.")]
@@ -113,9 +116,15 @@ public class GameDataManager : MonoBehaviour
 
     public bool FuelShortagePenaltyActive => fuelShortagePenaltyActive;
 
-    public bool Shooter01 => shooter01;
+    public int TrapUpgradeLevel => Mathf.Max(0, trapUpgradeLevel);
 
-    public bool Shooter02 => shooter02;
+    public int SpikeUpgradeLevel => Mathf.Max(0, spikeUpgradeLevel);
+
+    public int ExplosiveUpgradeLevel => Mathf.Max(0, explosiveUpgradeLevel);
+
+    public int ShooterUpgradeLevel => Mathf.Max(0, shooterUpgradeLevel);
+
+    public int WireUpgradeLevel => Mathf.Max(0, wireUpgradeLevel);
 
     /// <summary>현재 씬의 ShelterSceneDataManager가 등록되어 있는지 여부입니다.</summary>
     public bool HasActiveShelterSceneDataManager => activeShelterSceneDataManager != null;
@@ -123,14 +132,29 @@ public class GameDataManager : MonoBehaviour
     /// <summary>현재 세션 또는 저장 데이터에 반영된 최근 필드 결과가 있는지 여부입니다.</summary>
     public bool HasLastFieldResult => !string.IsNullOrWhiteSpace(lastSettledFieldId);
 
-    public void SetShooter01Active(bool isActive)
+    public void SetTrapUpgradeLevel(int level)
     {
-        shooter01 = isActive;
+        trapUpgradeLevel = Mathf.Max(0, level);
     }
 
-    public void SetShooter02Active(bool isActive)
+    public void SetSpikeUpgradeLevel(int level)
     {
-        shooter02 = isActive;
+        spikeUpgradeLevel = Mathf.Max(0, level);
+    }
+
+    public void SetExplosiveUpgradeLevel(int level)
+    {
+        explosiveUpgradeLevel = Mathf.Max(0, level);
+    }
+
+    public void SetShooterUpgradeLevel(int level)
+    {
+        shooterUpgradeLevel = Mathf.Max(0, level);
+    }
+
+    public void SetWireUpgradeLevel(int level)
+    {
+        wireUpgradeLevel = Mathf.Max(0, level);
     }
 
     /// <summary>마지막으로 정산 반영이 완료된 필드 ID입니다.</summary>
@@ -601,8 +625,11 @@ public class GameDataManager : MonoBehaviour
             shelterStability = ShelterStability,
             foodShortagePenaltyActive = FoodShortagePenaltyActive,
             fuelShortagePenaltyActive = FuelShortagePenaltyActive,
-            shooter01 = Shooter01,
-            shooter02 = Shooter02,
+            trapUpgradeLevel = TrapUpgradeLevel,
+            spikeUpgradeLevel = SpikeUpgradeLevel,
+            explosiveUpgradeLevel = ExplosiveUpgradeLevel,
+            shooterUpgradeLevel = ShooterUpgradeLevel,
+            wireUpgradeLevel = WireUpgradeLevel,
             totalFieldKillCount = TotalFieldKillCount,
             fieldKillHistory = new List<int>(fieldKillHistory),
             manufacturing = ManufacturingFacilitySaveDataMapper.FromRuntime(manufacturing)
@@ -673,8 +700,11 @@ public class GameDataManager : MonoBehaviour
         shelterStability = Mathf.Clamp(saveData.shelterStability, 0, 100);
         foodShortagePenaltyActive = saveData.foodShortagePenaltyActive;
         fuelShortagePenaltyActive = saveData.fuelShortagePenaltyActive;
-        shooter01 = saveData.shooter01;
-        shooter02 = saveData.shooter02;
+        SetTrapUpgradeLevel(saveData.trapUpgradeLevel);
+        SetSpikeUpgradeLevel(saveData.spikeUpgradeLevel);
+        SetExplosiveUpgradeLevel(saveData.explosiveUpgradeLevel);
+        SetShooterUpgradeLevel(saveData.shooterUpgradeLevel);
+        SetWireUpgradeLevel(saveData.wireUpgradeLevel);
         totalFieldKillCount = Mathf.Max(0, saveData.totalFieldKillCount);
         fieldKillHistory = saveData.fieldKillHistory != null
             ? new List<int>(saveData.fieldKillHistory)

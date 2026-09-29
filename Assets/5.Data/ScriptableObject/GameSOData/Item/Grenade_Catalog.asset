@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11869397ed8d2b8418f9d82e9dbd3d6f, type: 3}
+  m_Name: Grenade_Catalog
+  m_EditorClassIdentifier: Assembly-CSharp::ManufacturingRecipeDefinition
+  m_recipeId: Grenade_01
+  m_resultKind: 0
+  m_resultItem: {fileID: 11400000, guid: cd395eb2c76518a41a62dcd75d3bf4f6, type: 2}
+  m_resultResourceId: Grenade_01
+  m_resultQuantityPerBatch: 1
+  m_requiredFacilityLevel: 1
+  m_unitWork: 1
+  m_unitCosts:
+  - m_resourceId: crafting_material
+    m_amount: 2

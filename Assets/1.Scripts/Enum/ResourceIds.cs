@@ -7,21 +7,15 @@ using System.Collections.Generic;
 /// </summary>
 public static class ResourceIds
 {
-    public const string Food = "food";
-    public const string Fuel = "fuel";
-    public const string FacilityUpgradePart = "facility_upgrade_part";
-    public const string UpgradePartMaterial = "upgrade_part_material";
-    public const string WeaponPartMaterial = "weapon_part_material";
-    public const string MedicineMaterial = "medicine_material";
+    public const string UpgradeMaterial = "upgrade_material";
+    public const string CraftingMaterial = "crafting_material";
+    public const string TrapMaterial = "trap_material";
 
     private static readonly string[] s_all =
     {
-        Food,
-        Fuel,
-        FacilityUpgradePart,
-        UpgradePartMaterial,
-        WeaponPartMaterial,
-        MedicineMaterial
+        UpgradeMaterial,
+        CraftingMaterial,
+        TrapMaterial
     };
 
     public static IReadOnlyList<string> All => s_all;

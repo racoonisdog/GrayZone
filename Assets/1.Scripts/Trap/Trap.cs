@@ -65,13 +65,10 @@ public abstract class Trap : MonoBehaviour, IInteractable
 
     [Tooltip("설치할 때 소모할 자원입니다. 셸터에 이미 정의된 자원 중에서 고릅니다.")]
     [Variants(
-        ResourceIds.Food,
-        ResourceIds.Fuel,
-        ResourceIds.FacilityUpgradePart,
-        ResourceIds.UpgradePartMaterial,
-        ResourceIds.WeaponPartMaterial,
-        ResourceIds.MedicineMaterial)]
-    [SerializeField] private string m_buildCostResourceId = ResourceIds.UpgradePartMaterial;
+        ResourceIds.UpgradeMaterial,
+        ResourceIds.CraftingMaterial,
+        ResourceIds.TrapMaterial)]
+    [SerializeField] private string m_buildCostResourceId = ResourceIds.TrapMaterial;
 
     [Tooltip("설치에 소모할 자원의 수량입니다. 0이면 자원 없이 설치됩니다.")]
     [Min(0)]
