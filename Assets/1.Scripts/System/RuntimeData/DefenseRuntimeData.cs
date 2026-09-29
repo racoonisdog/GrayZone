@@ -38,6 +38,86 @@ public enum DefenseOutcome
 }
 
 /// <summary>
+/// Scramble 시설에서 올린 필드 배치 업그레이드 5종의 레벨입니다.
+/// </summary>
+/// <remarks>
+/// 값의 정본은 <see cref="GameDataManager"/>이고, 이 타입은 방어전 한 판 동안 쓰는 복사본입니다.
+/// </remarks>
+[Serializable]
+public sealed class DefenseUpgradeLevels
+{
+    [SerializeField] private int trap;
+    [SerializeField] private int spike;
+    [SerializeField] private int explosive;
+    [SerializeField] private int shooter;
+    [SerializeField] private int wire;
+
+    /// <summary>Trap 업그레이드 레벨입니다.</summary>
+    public int Trap => trap;
+
+    /// <summary>Spike 업그레이드 레벨입니다.</summary>
+    public int Spike => spike;
+
+    /// <summary>Explosive 업그레이드 레벨입니다.</summary>
+    public int Explosive => explosive;
+
+    /// <summary>Shooter 업그레이드 레벨입니다.</summary>
+    public int Shooter => shooter;
+
+    /// <summary>Wire 업그레이드 레벨입니다.</summary>
+    public int Wire => wire;
+
+    /// <summary>업그레이드 5종의 레벨로 만듭니다. 음수는 0으로 맞춥니다.</summary>
+    public DefenseUpgradeLevels(int trap, int spike, int explosive, int shooter, int wire)
+    {
+        this.trap = Mathf.Max(0, trap);
+        this.spike = Mathf.Max(0, spike);
+        this.explosive = Mathf.Max(0, explosive);
+        this.shooter = Mathf.Max(0, shooter);
+        this.wire = Mathf.Max(0, wire);
+    }
+
+    /// <summary>모든 업그레이드가 0레벨인 값입니다.</summary>
+    public static DefenseUpgradeLevels None => new DefenseUpgradeLevels(0, 0, 0, 0, 0);
+
+    /// <summary>GameDataManager에 저장된 현재 업그레이드 레벨을 복사합니다.</summary>
+    public static DefenseUpgradeLevels FromGameData(GameDataManager gameData)
+    {
+        if (gameData == null)
+        {
+            return None;
+        }
+
+        return new DefenseUpgradeLevels(
+            gameData.TrapUpgradeLevel,
+            gameData.SpikeUpgradeLevel,
+            gameData.ExplosiveUpgradeLevel,
+            gameData.ShooterUpgradeLevel,
+            gameData.WireUpgradeLevel);
+    }
+
+    /// <summary>지정한 업그레이드 종류의 레벨을 반환합니다.</summary>
+    public int GetLevel(ScrambleUpgradeType type)
+    {
+        return type switch
+        {
+            ScrambleUpgradeType.Trap => trap,
+            ScrambleUpgradeType.Spike => spike,
+            ScrambleUpgradeType.Explosive => explosive,
+            ScrambleUpgradeType.Shooter => shooter,
+            ScrambleUpgradeType.Wire => wire,
+            _ => 0
+        };
+    }
+
+    /// <summary>외부 변경과 분리된 복사본을 만듭니다.</summary>
+    public DefenseUpgradeLevels Clone()
+    {
+        return new DefenseUpgradeLevels(trap, spike, explosive, shooter, wire);
+    }
+}
+
+/// <summary>
 /// 방어전 씬에 들어올 때 외부에서 받는 방어전 전용 입장 데이터입니다.
 /// </summary>
 /// <remarks>
@@ -48,30 +128,25 @@ public enum DefenseOutcome
 public sealed class DefenseEntryData
 {
     [SerializeField] private string stageId = string.Empty;
-    [SerializeField] private bool shooter01Active;
-    [SerializeField] private bool shooter02Active;
+    [SerializeField] private DefenseUpgradeLevels upgrades = DefenseUpgradeLevels.None;
 
     /// <summary>방어전이 진행되는 스테이지 ID입니다.</summary>
     public string StageId => stageId ?? string.Empty;
 
-    /// <summary>Scramble 시설에서 첫 번째 슈터를 해금했는지 여부입니다.</summary>
-    public bool Shooter01Active => shooter01Active;
+    /// <summary>Scramble 시설에서 올린 업그레이드 레벨입니다.</summary>
+    public DefenseUpgradeLevels Upgrades => upgrades ??= DefenseUpgradeLevels.None;
 
-    /// <summary>Scramble 시설에서 두 번째 슈터를 해금했는지 여부입니다.</summary>
-    public bool Shooter02Active => shooter02Active;
-
-    /// <summary>스테이지 ID와 슈터 해금 상태로 입장 데이터를 만듭니다.</summary>
-    public DefenseEntryData(string stageId, bool shooter01Active, bool shooter02Active)
+    /// <summary>스테이지 ID와 업그레이드 레벨로 입장 데이터를 만듭니다.</summary>
+    public DefenseEntryData(string stageId, DefenseUpgradeLevels upgrades)
     {
         this.stageId = stageId?.Trim() ?? string.Empty;
-        this.shooter01Active = shooter01Active;
-        this.shooter02Active = shooter02Active;
+        this.upgrades = upgrades?.Clone() ?? DefenseUpgradeLevels.None;
     }
 
     /// <summary>외부 변경과 분리된 복사본을 만듭니다.</summary>
     public DefenseEntryData Clone()
     {
-        return new DefenseEntryData(stageId, shooter01Active, shooter02Active);
+        return new DefenseEntryData(stageId, upgrades);
     }
 }
 
@@ -306,8 +381,7 @@ public sealed class DefenseResultData
     [SerializeField] private int totalWaveCount;
     [SerializeField] private int clearedWaveCount;
     [SerializeField] private float elapsedTime;
-    [SerializeField] private bool shooter01Active;
-    [SerializeField] private bool shooter02Active;
+    [SerializeField] private DefenseUpgradeLevels upgrades = DefenseUpgradeLevels.None;
     [SerializeField] private List<DefenseWaveRecord> waves = new();
 
     /// <summary>방어전이 진행된 스테이지 ID입니다.</summary>
@@ -325,11 +399,8 @@ public sealed class DefenseResultData
     /// <summary>방어전 시작부터 결과 확정까지 걸린 시간(초)입니다.</summary>
     public float ElapsedTime => elapsedTime;
 
-    /// <summary>이번 방어전에 첫 번째 슈터가 배치되었는지 여부입니다.</summary>
-    public bool Shooter01Active => shooter01Active;
-
-    /// <summary>이번 방어전에 두 번째 슈터가 배치되었는지 여부입니다.</summary>
-    public bool Shooter02Active => shooter02Active;
+    /// <summary>이번 방어전에 적용된 Scramble 업그레이드 레벨입니다.</summary>
+    public DefenseUpgradeLevels Upgrades => upgrades ??= DefenseUpgradeLevels.None;
 
     /// <summary>웨이브별 기록입니다.</summary>
     public IReadOnlyList<DefenseWaveRecord> Waves => waves;
@@ -338,8 +409,7 @@ public sealed class DefenseResultData
     public DefenseResultData(DefenseEntryData entry, DefenseRuntimeData runtime, DefenseOutcome outcome)
     {
         stageId = entry?.StageId ?? string.Empty;
-        shooter01Active = entry != null && entry.Shooter01Active;
-        shooter02Active = entry != null && entry.Shooter02Active;
+        upgrades = entry?.Upgrades.Clone() ?? DefenseUpgradeLevels.None;
         this.outcome = outcome;
 
         if (runtime == null)
@@ -373,8 +443,7 @@ public sealed class DefenseResultData
             totalWaveCount = totalWaveCount,
             clearedWaveCount = clearedWaveCount,
             elapsedTime = elapsedTime,
-            shooter01Active = shooter01Active,
-            shooter02Active = shooter02Active
+            upgrades = Upgrades.Clone()
         };
 
         for (int i = 0; i < waves.Count; i++)
