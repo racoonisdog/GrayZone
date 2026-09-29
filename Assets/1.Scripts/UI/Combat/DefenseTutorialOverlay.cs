@@ -1,50 +1,50 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
-/// Defense 시작 시 화면 오른쪽에 조작 안내를 띄우고, 닫기 입력으로 감춥니다.
+/// 튜토리얼 페이지를 화면에 그리는 공용 템플릿입니다. 페이지 순서와 넘김 조건은 <see cref="TutorialManager"/>가 정합니다.
 /// </summary>
 /// <remarks>
 /// 다른 전투 HUD와 같은 방식입니다: 이 컴포넌트는 UI를 만들지 않고, 씬에 미리 배치된 자식을
-/// 이름으로 찾아 값(본문 문자열, 표시 여부)만 채웁니다. 레이아웃은 씬에서 조정합니다.
+/// 이름으로 찾아 값(텍스트, 이미지, 표시 여부)만 채웁니다. 레이아웃은 씬에서 조정합니다.
 ///
-/// 닫기 키는 <c>PlayerInput.inputactions</c>의 <c>TutorialClose</c> 액션이 정합니다(기본 E).
-/// 기본값이 상호작용과 같은 키라, 닫을 때 <see cref="PlayerInputController.SuppressInteractUntilRelease"/>로
-/// 상호작용을 막습니다. 안 막으면 튜토리얼을 닫은 그 입력이 그대로 구조 홀드로 이어집니다.
-/// 액션 바인딩을 다른 키로 바꾸면 이 억제는 무해하게 비어 돌아갑니다.
+/// 페이지에 <see cref="TutorialPage.OverridePrefab"/>이 있으면 공용 패널을 끄고 그 프리팹을 이 오브젝트 아래에 띄웁니다.
+/// 프리팹 안에 Title/Body/Hint/Image 이름의 자식이 있으면 같은 내용을 채웁니다.
 /// </remarks>
 [DisallowMultipleComponent]
 public class DefenseTutorialOverlay : MonoBehaviour
 {
     private const string PanelName = "Panel";
+    private const string TitleName = "Title";
     private const string BodyName = "Body";
     private const string HintName = "Hint";
+    private const string ImageName = "Image";
 
     [Header("References (비워두면 자식 이름으로 자동 탐색)")]
     [Tooltip("안내 패널 루트입니다. 이 오브젝트를 켜고 끄는 것으로 표시를 전환합니다. 비어 있으면 자식 'Panel'을 찾습니다.")]
     [SerializeField] private GameObject m_panelRoot;
 
+    [Tooltip("페이지 제목 텍스트입니다. 선택 항목이며, 비어 있으면 패널 아래 'Title'을 찾습니다.")]
+    [SerializeField] private TMP_Text m_titleText;
+
     [Tooltip("안내 본문 텍스트입니다. 비어 있으면 자식 'Body'를 찾습니다.")]
     [SerializeField] private TMP_Text m_bodyText;
 
-    [Tooltip("닫기 안내 텍스트입니다. 비어 있으면 자식 'Hint'를 찾습니다.")]
+    [Tooltip("하단 안내 텍스트입니다. 비어 있으면 자식 'Hint'를 찾습니다.")]
     [SerializeField] private TMP_Text m_hintText;
 
-    [Header("Defense")]
-    [Tooltip("구독할 라운드 매니저입니다. 비어 있으면 씬에서 찾습니다.")]
-    [SerializeField] private DefenseManager m_roundManager;
+    [Tooltip("페이지 이미지입니다. 선택 항목이며, 비어 있으면 패널 아래 'Image'를 찾습니다.")]
+    [SerializeField] private Image m_image;
 
-    [Header("Text")]
-    [TextArea(3, 8)]
-    [Tooltip("안내 본문입니다. 줄바꿈을 그대로 씁니다.")]
-    [SerializeField] private string m_body =
-        "감염체가 몰려옵니다.\n거점을 지키세요.\n\n라운드가 끝나면 잠시 휴식이 주어집니다.";
+    /// <summary>현재 페이지를 대신 그리고 있는 프리팹 인스턴스입니다.</summary>
+    private GameObject m_overrideInstance;
 
-    [Tooltip("닫기 안내 문구입니다. 표시할 키 이름은 여기서 직접 적습니다.")]
-    [SerializeField] private string m_hint = "[E] 3초 유지 — 방어전 시작";
+    /// <summary>Awake 전에 Show가 불렸는지입니다. 오브젝트가 꺼진 채 시작해 Awake가 늦게 돌 때 표시를 덮어쓰지 않기 위해 씁니다.</summary>
+    private bool m_showRequested;
 
     /// <summary>안내가 현재 표시 중인지 여부입니다.</summary>
-    public bool IsShown => m_panelRoot != null && m_panelRoot.activeSelf;
+    public bool IsShown => (m_panelRoot != null && m_panelRoot.activeSelf) || m_overrideInstance != null;
 
     private void Reset()
     {
@@ -54,89 +54,54 @@ public class DefenseTutorialOverlay : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
-        ApplyTexts();
-        SetVisible(false);
-    }
 
-    private void OnEnable()
-    {
-        AutoFindReferences();
-        Subscribe();
-        RefreshVisibility();
-    }
-
-    private void OnDisable()
-    {
-        Unsubscribe();
+        // 첫 페이지는 TutorialManager가 띄웁니다. 매니저가 없으면 안내는 뜨지 않습니다.
+        if (!m_showRequested)
+        {
+            SetPanelVisible(false);
+        }
     }
 
     /// <summary>
-    /// 방어전이 아직 시작되지 않았으면 안내를 띄우고, 시작된 뒤면 감춥니다.
+    /// 페이지 내용을 표시합니다. 이전 페이지가 띄운 프리팹은 제거합니다.
     /// </summary>
-    /// <remarks>
-    /// 안내는 "시작하는 방법"을 알려주는 것이라 시작 전에 떠 있어야 합니다. 시작되면 역할이 끝나므로 내립니다.
-    ///
-    /// 시작 이벤트만 믿지 않고 여기서 현재 상태도 함께 봅니다. UI 루트가 꺼진 채 씬이 시작되면
-    /// <c>OnEnable</c>이 늦게 돌아 그 사이의 시작 이벤트를 놓치기 때문입니다.
-    /// </remarks>
-    private void RefreshVisibility()
+    public void Show(TutorialPage page)
     {
-        bool started = m_roundManager != null && m_roundManager.IsGameStarted;
-        if (started)
+        m_showRequested = true;
+        AutoFindReferences();
+        ClearOverride();
+
+        if (page.OverridePrefab != null)
         {
-            Hide();
+            SetPanelVisible(false);
+            m_overrideInstance = Instantiate(page.OverridePrefab, transform);
+            FillByName(m_overrideInstance.transform, page);
             return;
         }
 
-        Show();
+        ApplyTexts(m_titleText, m_bodyText, m_hintText, m_image, page);
+        SetPanelVisible(true);
     }
 
-    /// <summary>안내를 표시합니다.</summary>
-    public void Show()
-    {
-        AutoFindReferences();
-        ApplyTexts();
-        SetVisible(true);
-    }
-
-    /// <summary>안내를 감춥니다.</summary>
+    /// <summary>안내를 감춥니다. 띄워 둔 프리팹도 제거합니다.</summary>
     public void Hide()
     {
-        SetVisible(false);
+        m_showRequested = false;
+        ClearOverride();
+        SetPanelVisible(false);
     }
 
-    private void Subscribe()
+    private void ClearOverride()
     {
-        if (m_roundManager == null)
+        if (m_overrideInstance != null)
         {
-            return;
+            Destroy(m_overrideInstance);
+            m_overrideInstance = null;
         }
-
-        m_roundManager.OnDefenseStarted -= HandleDefenseStarted;
-        m_roundManager.OnDefenseStarted += HandleDefenseStarted;
-    }
-
-    private void Unsubscribe()
-    {
-        if (m_roundManager != null)
-        {
-            m_roundManager.OnDefenseStarted -= HandleDefenseStarted;
-        }
-    }
-
-    /// <summary>방어전이 시작되면 안내를 내립니다. 시작 방법을 알려주는 안내라 역할이 끝납니다.</summary>
-    private void HandleDefenseStarted()
-    {
-        Hide();
     }
 
     private void AutoFindReferences()
     {
-        if (m_roundManager == null)
-        {
-            m_roundManager = FindFirstObjectByType<DefenseManager>();
-        }
-
         if (m_panelRoot == null)
         {
             Transform panel = transform.Find(PanelName);
@@ -148,39 +113,68 @@ public class DefenseTutorialOverlay : MonoBehaviour
 
         Transform searchRoot = m_panelRoot != null ? m_panelRoot.transform : transform;
 
+        if (m_titleText == null)
+        {
+            m_titleText = FindChild<TMP_Text>(searchRoot, TitleName);
+        }
+
         if (m_bodyText == null)
         {
-            Transform body = searchRoot.Find(BodyName);
-            if (body != null)
-            {
-                m_bodyText = body.GetComponent<TMP_Text>();
-            }
+            m_bodyText = FindChild<TMP_Text>(searchRoot, BodyName);
         }
 
         if (m_hintText == null)
         {
-            Transform hint = searchRoot.Find(HintName);
-            if (hint != null)
-            {
-                m_hintText = hint.GetComponent<TMP_Text>();
-            }
+            m_hintText = FindChild<TMP_Text>(searchRoot, HintName);
+        }
+
+        if (m_image == null)
+        {
+            m_image = FindChild<Image>(searchRoot, ImageName);
         }
     }
 
-    private void ApplyTexts()
+    private static void FillByName(Transform root, TutorialPage page)
     {
-        if (m_bodyText != null)
+        ApplyTexts(
+            FindChild<TMP_Text>(root, TitleName),
+            FindChild<TMP_Text>(root, BodyName),
+            FindChild<TMP_Text>(root, HintName),
+            FindChild<Image>(root, ImageName),
+            page);
+    }
+
+    private static void ApplyTexts(TMP_Text title, TMP_Text body, TMP_Text hint, Image image, TutorialPage page)
+    {
+        if (title != null)
         {
-            m_bodyText.text = m_body;
+            title.text = page.Title;
         }
 
-        if (m_hintText != null)
+        if (body != null)
         {
-            m_hintText.text = m_hint;
+            body.text = page.Body;
+        }
+
+        if (hint != null)
+        {
+            hint.text = page.Hint;
+        }
+
+        if (image != null)
+        {
+            image.sprite = page.Image;
+            image.gameObject.SetActive(page.Image != null);
         }
     }
 
-    private void SetVisible(bool visible)
+    private static T FindChild<T>(Transform root, string name) where T : Component
+    {
+        Transform child = root.Find(name);
+        return child != null ? child.GetComponent<T>() : null;
+    }
+
+    private void SetPanelVisible(bool visible)
     {
         if (m_panelRoot != null && m_panelRoot.activeSelf != visible)
         {

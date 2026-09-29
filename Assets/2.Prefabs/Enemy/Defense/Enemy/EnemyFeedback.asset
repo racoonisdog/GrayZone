@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 49d032e1f0124f0eafd564e72a8fd518, type: 3}
+  m_Name: EnemyFeedback
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyFeedbackSO
+  m_hitEffectPrefab: {fileID: 6724971032020575412, guid: e87601104e038e141954424b60b26c79, type: 3}
+  m_hitEffectLifetime: 2
+  m_hitSounds: []
+  m_bloodDecalPrefab: {fileID: 0}
+  m_bloodDecalLifetime: 20
+  m_idleSounds: []
+  m_alertSounds: []
+  m_chaseSounds: []
+  m_attackSounds: []
+  m_deathSounds: []

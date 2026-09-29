@@ -168,7 +168,7 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         // 구조 시작 시 구조자가 피구조자를 바라보도록 몸을 돌립니다.
         FaceInteractorToTarget(interactor);
 
-        // 몸이 돌아가도 화면(카메라)은 E를 누르기 시작한 시점 그대로 고정합니다.
+        // 몸이 돌아가도 화면(카메라)은 F를 누르기 시작한 시점 그대로 고정합니다.
         LockCameraToHoldStart();
     }
 

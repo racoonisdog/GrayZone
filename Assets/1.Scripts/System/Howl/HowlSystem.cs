@@ -68,17 +68,24 @@ public static class HowlSystem
     /// <param name="origin">전파 중심 위치입니다.</param>
     /// <param name="radius">전파 반경입니다.</param>
     /// <param name="members">위치를 제공할 스쿼드 캐릭터 목록입니다.</param>
+    /// <param name="reachedListeners">
+    /// 넘기면 반경 안에 있던 수신자를 모두 채웁니다. 줄 수 있는 위치가 없어 이번에 적용되지 않은 수신자도 포함합니다.
+    /// 하울링 버프처럼 반경 안 전원에게 거는 효과에 씁니다. 목록은 먼저 비웁니다.
+    /// </param>
     /// <returns>실제로 하울링을 적용한 수신자 수입니다.</returns>
     /// <remarks>
     /// 반경 밖이거나 교전에 참여하지 않은 변이체는 스쿼드 위치 정보를 얻지 않습니다(§5.5.5).
-    /// 이미 하울링 정보를 적용받은 변이체는 추가 하울링을 적용하지 않으므로 수신자 쪽에서 걸러집니다(§5.5.4).
+    /// 이미 다른 하울링을 받은 변이체도 이번 하울링으로 덮어씁니다(<see cref="EnemyTargetSensor.NotifyHowl"/>).
     /// </remarks>
     public static int Broadcast(
         EnemyTargetSensor sender,
         Vector3 origin,
         float radius,
-        IReadOnlyList<SquadMemberController> members)
+        IReadOnlyList<SquadMemberController> members,
+        List<EnemyTargetSensor> reachedListeners = null)
     {
+        reachedListeners?.Clear();
+
         if (radius <= 0f || members == null || members.Count == 0)
         {
             return 0;
@@ -106,6 +113,8 @@ public static class HowlSystem
             {
                 continue;
             }
+
+            reachedListeners?.Add(listener);
 
             if (listener.NotifyHowl(members))
             {

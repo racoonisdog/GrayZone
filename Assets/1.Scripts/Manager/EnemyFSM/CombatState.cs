@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -21,9 +22,6 @@ public class CombatState : EnemyStateBase
     /// <summary>공격 하위 상태입니다.</summary>
     public AttackState Attack { get; private set; }
 
-    /// <summary>하울링 하위 상태입니다.</summary>
-    public HowlState Howl { get; private set; }
-
     /// <summary>교전 수색 하위 상태입니다.</summary>
     public CombatSearchState Search { get; private set; }
 
@@ -31,47 +29,20 @@ public class CombatState : EnemyStateBase
     public EnemyStateBase CurrentSub => m_sub;
 
     // =========================
-    // 하울링 기록 (§5.8.4의 교전 종료 초기화 대상)
+    // 능력 분기점
     // =========================
-    // 대상 정보가 아니라 행동 기록이므로 센서가 아니라 교전 상태가 소유합니다.
-    // 교전 상태는 개체마다 하나만 만들어 재사용되므로 Enter/Exit 사이에 값이 유지됩니다.
+    // 교전이 다음 행동을 고르는 지점마다 붙은 능력(EnemyAbility)에게 묻습니다. 능력이 없는 적은
+    // 공통 흐름(추격)만 탑니다. 교전 상태는 개체마다 하나만 만들어 재사용되므로 Enter/Exit 사이에 값이 유지됩니다.
 
-    /// <summary>이 교전에서 하울링 기회를 모두 썼는지 여부입니다.</summary>
-    /// <remarks>
-    /// 전파에 성공했거나, 전파 전 취소가 허용 횟수를 넘겼을 때 참이 됩니다.
-    /// </remarks>
-    private bool m_howlConsumed;
+    /// <summary>진행 중인 선행 공격을 요청한 능력입니다. 선행 공격 중이 아니면 null입니다.</summary>
+    private EnemyAbility m_leadInOwner;
 
-    /// <summary>이 교전에서 전파 시점 전에 하울링이 끊긴 횟수입니다.</summary>
-    /// <remarks>
-    /// <b>전파 전 취소는 "하려고 했다"로 봅니다.</b> 끊긴 하울링은 주변에 아무것도 전달하지 못했으므로
-    /// 시도를 소모한 것으로 치지 않습니다. 다만 무한히 다시 서게 두면 경직으로 저지하는 플레이가
-    /// 성립하지 않으므로, <see cref="MaxHowlCancels"/>번째 취소에서 기회를 닫습니다.
-    ///
-    /// 전파 시점을 지난 뒤의 취소는 이 횟수에 넣지 않습니다. 그때는 이미 전달이 끝나 목적을 달성했고,
-    /// 남은 연출만 끊긴 것이기 때문입니다(§5.5.3).
-    ///
-    /// 기획 결정(2026-08-07, 사용자). 공용 문서 §5.5.1은 "전파 전 취소도 재시도하지 않는다"로 되어 있어
-    /// 이 규칙과 어긋납니다. 문서 갱신이 필요합니다.
-    /// </remarks>
-    private int m_howlCancelCount;
-
-    /// <summary>전파 전 취소를 몇 번까지 다시 시도하게 둘지입니다.</summary>
-    /// <remarks>
-    /// 2면 "첫 취소는 다시 설 수 있고, 두 번째 취소에서 끝"이 됩니다. 플레이어 입장에서는 경직을 두 번
-    /// 넣어야 하울링을 완전히 막는 셈입니다.
-    /// </remarks>
-    private const int MaxHowlCancels = 2;
-
-    /// <summary>이 교전에서 하울링 전 공격 기회를 이미 썼는지 여부입니다.</summary>
-    private bool m_preHowlAttackUsed;
-
-    /// <summary>교전 상태와 하위 상태들을 생성합니다.</summary>
+    /// <summary>교전 상태와 공통 하위 상태들을 생성합니다.</summary>
+    /// <remarks>능력 전용 하위 상태는 각 능력이 만들고 소유합니다.</remarks>
     public CombatState(EnemyController controller) : base(controller)
     {
         Chase = new ChaseState(controller);
         Attack = new AttackState(controller);
-        Howl = new HowlState(controller);
         Search = new CombatSearchState(controller);
     }
 
@@ -93,126 +64,82 @@ public class CombatState : EnemyStateBase
     /// 교전 진입 시 첫 하위 상태를 고릅니다.
     /// </summary>
     /// <remarks>
-    /// 하울링 조건을 충족하고 아직 시도하지 않았다면 하울링이 먼저입니다.
-    /// 그 시점에 즉시 공격할 수 있으면 근접 공격 1회를 먼저 수행하고 그 뒤에 하울링합니다(§5.5.2).
-    /// 공격할 수 없으면 기다리지 않고 바로 하울링합니다.
-    ///
-    /// 하울링을 수신해 합류한 개체는 하울링하지 않습니다(§5.5.1). 이것이 맞하울링을 막는 규칙입니다.
+    /// 붙은 능력에게 차례로 묻고 처음으로 상태를 돌려준 능력을 따릅니다. 아무도 가져가지 않으면 추격입니다.
+    /// 하울러는 여기서 하울링(또는 하울링 전 공격)을 돌려줍니다(<see cref="HowlAbility.OnCombatEnter"/>).
     /// </remarks>
     private EnemyStateBase ResolveEntrySubState()
     {
-        if (!CanTryHowl())
+        IReadOnlyList<EnemyAbility> abilities = Controller.Abilities;
+        for (int i = 0; i < abilities.Count; i++)
         {
-            return Chase;
+            EnemyStateBase next = abilities[i].OnCombatEnter();
+            if (next != null)
+            {
+                return next;
+            }
         }
 
-        // 하울링 전 공격: 즉시 때릴 수 있을 때만 1회. 기회는 성공 여부와 무관하게 소모합니다(§5.5.2).
-        if (!m_preHowlAttackUsed && CanAttackImmediately())
-        {
-            m_preHowlAttackUsed = true;
-            Attack.BeginAsPreHowlAttack();
-            return Attack;
-        }
-
-        return Howl;
-    }
-
-    /// <summary>
-    /// 지금 하울링을 시도할 수 있는지 판단합니다.
-    /// </summary>
-    /// <remarks>
-    /// 하울링을 수신해 합류했다면 시도하지 않습니다. 다만 이미 독립적으로 교전 중이었다면
-    /// 이후 하울링을 수신해도 자신의 시도를 유지해야 하므로(§5.5.1), 수신 기록은 진입 시점에만 봅니다.
-    /// 진입 이후에 받은 하울링은 이 판단에 영향을 주지 않습니다.
-    /// </remarks>
-    private bool CanTryHowl()
-    {
-        if (m_howlConsumed)
-        {
-            return false;
-        }
-
-        EnemyTargetSensor sensor = Controller.Sensor;
-        return sensor != null && !sensor.HasReceivedHowl;
+        return Chase;
     }
 
     /// <summary>현재 대상을 지금 바로 때릴 수 있는지 확인합니다.</summary>
-    private bool CanAttackImmediately()
+    /// <remarks>능력이 "즉시 공격할 수 있으면 먼저 한 번 친다" 같은 판단을 할 때 씁니다.</remarks>
+    public bool CanAttackCurrentTargetNow()
     {
         SquadMemberController target = Controller.Sensor != null ? Controller.Sensor.CurrentTarget : null;
         return target != null && Controller.Attack != null && Controller.Attack.CanStartAttack(target);
     }
 
     /// <summary>
-    /// 하울링 전파가 실제로 일어나 기회를 소모했음을 기록합니다.
+    /// 능력이 자기 행동 전에 공격 1회를 먼저 하도록 공격 하위 상태를 준비합니다.
     /// </summary>
+    /// <param name="owner">공격이 끝난 뒤 흐름을 돌려받을 능력입니다.</param>
+    /// <returns>능력이 그대로 돌려줄 공격 하위 상태입니다.</returns>
     /// <remarks>
-    /// <b>진입이 아니라 전파 시점에 소모합니다.</b> 전파 전에 끊긴 하울링은 주변에 아무것도 전달하지
-    /// 못했으므로 시도를 쓴 것으로 보지 않습니다(<see cref="NotifyHowlCanceled"/>).
-    /// 전파가 끝난 뒤에는 남은 연출이 끊겨도 결과가 유지되므로(§5.5.3) 여기서 확정합니다.
+    /// 선행 공격은 B-1 한 번으로 끝나며, 끝나면 <see cref="EnemyAbility.OnLeadInAttackFinished"/>로 다음 행동을 묻습니다.
+    /// 경직으로 끊기면 <see cref="EnemyAbility.OnStaggered"/>에 선행 공격이었음을 알립니다.
     /// </remarks>
-    public void MarkHowlBroadcast()
+    public EnemyStateBase BeginLeadInAttack(EnemyAbility owner)
     {
-        m_howlConsumed = true;
+        m_leadInOwner = owner;
+        Attack.BeginAsLeadInAttack();
+        return Attack;
     }
 
-    /// <summary>
-    /// 전파 시점 전에 하울링이 끊겼음을 기록하고, 허용 횟수를 넘겼으면 기회를 닫습니다.
-    /// </summary>
+    /// <summary>선행 공격을 마친 뒤 요청한 능력에게 다음 하위 상태를 묻습니다.</summary>
     /// <remarks>
-    /// 첫 취소는 "하려고 했다"로 보고 다시 설 수 있게 둡니다. 허용 횟수를 넘기면 이 교전에서는 끝입니다.
-    /// 무한 재시도를 두면 경직으로 하울링을 저지하는 플레이가 성립하지 않습니다.
+    /// <see cref="AttackState"/>가 선행 공격을 끝냈을 때 부릅니다. 능력이 null을 돌려주면 추격으로 갑니다.
     /// </remarks>
-    public void NotifyHowlCanceled()
+    public void ContinueAfterLeadInAttack()
     {
-        if (m_howlConsumed)
-        {
-            return;
-        }
+        EnemyAbility owner = m_leadInOwner;
+        m_leadInOwner = null;
 
-        m_howlCancelCount++;
-
-        if (m_howlCancelCount >= MaxHowlCancels)
-        {
-            m_howlConsumed = true;
-        }
+        EnemyStateBase next = owner != null ? owner.OnLeadInAttackFinished() : null;
+        SetSubState(next ?? Chase);
     }
-
-    /// <summary>경직이 끝난 뒤 하울링으로 이어가야 하는지 여부입니다.</summary>
-    private bool m_resumeWithHowlAfterStagger;
 
     /// <summary>
     /// 경직으로 현재 하위 행동을 취소합니다.
     /// </summary>
     /// <remarks>
-    /// 무엇이 끊겼는지에 따라 경직 이후가 달라집니다(공용 문서 §5.5).
-    /// <para>
-    /// <b>하울링 전 공격이 끊긴 경우</b>: 경직이 끝나면 바로 하울링으로 갑니다(§5.5.2). 공격 기회는
-    /// 이미 소모했지만 하울링 시도는 아직 쓰지 않았기 때문입니다. 후딜레이 중 끊긴 경우도 같습니다.
-    /// </para>
-    /// <para>
-    /// <b>하울링이 전파 전에 끊긴 경우</b>: 전달된 것이 없으므로 "하려고 했다"로 기록하고, 허용 횟수가
-    /// 남아 있으면 경직 후 다시 섭니다. 전파를 이미 마쳤다면 결과가 유지되므로 그대로 둡니다(§5.5.3).
-    /// </para>
-    /// 판단을 <b>하위 상태를 바꾸기 전에</b> 해야 합니다. <see cref="AttackState.Exit"/>가 하울링 전 공격
-    /// 표시를 지우므로, 순서를 뒤집으면 항상 false로 읽힙니다.
+    /// 무엇이 끊겼는지에 따라 경직 이후가 달라지므로(공용 문서 §5.5) 능력에게 먼저 알립니다.
+    /// 알림은 <b>하위 상태를 바꾸기 전에</b> 해야 합니다. 능력이 끊긴 상태의 진행도(예: 하울링 전파 여부)를
+    /// 읽어야 하고, <see cref="AttackState.Exit"/>가 선행 공격 표시를 지우기 때문입니다.
     /// </remarks>
     public void CancelForStagger()
     {
-        // 하울링이 전파 전에 끊긴 경우: 전달된 것이 없으므로 "하려고 했다"로 기록하고, 허용 횟수가 남아 있으면
-        // 경직이 끝난 뒤 다시 섭니다. 전파를 이미 마쳤다면 결과가 유지되므로 아무것도 하지 않습니다(§5.5.3).
-        if (m_sub == Howl && !Howl.IsBroadcastDone)
-        {
-            NotifyHowlCanceled();
-            m_resumeWithHowlAfterStagger = CanTryHowl();
+        bool wasLeadInAttack = m_sub == Attack && Attack.IsLeadInAttack;
 
-            SetSubState(Chase);
-            return;
+        IReadOnlyList<EnemyAbility> abilities = Controller.Abilities;
+        for (int i = 0; i < abilities.Count; i++)
+        {
+            EnemyAbility ability = abilities[i];
+            ability.OnStaggered(m_sub, wasLeadInAttack && ability == m_leadInOwner);
         }
 
-        // 하울링 전 공격이 끊긴 경우: 공격 기회는 소모했지만 하울링은 아직 남아 있으므로 경직 후 하울링으로
-        // 이어집니다(§5.5.2).
-        m_resumeWithHowlAfterStagger = m_sub == Attack && Attack.IsPreHowlAttack && CanTryHowl();
+        // 끊긴 선행 공격은 끝난 것으로 봅니다. 이어갈지는 능력이 경직 종료 때 정합니다.
+        m_leadInOwner = null;
 
         SetSubState(Chase);
     }
@@ -221,8 +148,8 @@ public class CombatState : EnemyStateBase
     /// 경직이 끝났을 때 이어갈 하위 상태를 고릅니다.
     /// </summary>
     /// <remarks>
-    /// 끊긴 것이 하울링 전 공격이거나 전파 전 하울링이고 기회가 남았으면 하울링으로 갑니다.
-    /// 그 밖에는 <b>추격을 다시 시작</b>합니다.
+    /// 능력이 이어갈 상태를 돌려주면 그 상태로 가고, 아니면 <b>추격을 다시 시작</b>합니다.
+    /// 모든 능력에 물어 각자 기록을 비우게 하고, 처음으로 돌려준 상태를 씁니다.
     ///
     /// 추격을 다시 켜는 것이 핵심입니다. 경직에 들어갈 때 하위 상태를 <see cref="Chase"/>로 바꾸지만
     /// 그 직후 잠금이 <c>StopMoving</c>으로 이동을 멈춥니다. 경직이 끝나도 이미 <see cref="Chase"/>였기 때문에
@@ -231,25 +158,26 @@ public class CombatState : EnemyStateBase
     /// </remarks>
     public void ResumeAfterStagger()
     {
-        if (!m_resumeWithHowlAfterStagger)
+        EnemyStateBase next = null;
+
+        IReadOnlyList<EnemyAbility> abilities = Controller.Abilities;
+        for (int i = 0; i < abilities.Count; i++)
+        {
+            EnemyStateBase candidate = abilities[i].OnStaggerEnded();
+            if (next == null)
+            {
+                next = candidate;
+            }
+        }
+
+        if (next == null || next == m_sub)
         {
             // 잠금이 멈춘 이동을 다시 켭니다. 상태는 그대로이므로 진입 처리 전체가 아니라 이동만 되살립니다.
             m_sub?.ResumeMovement();
             return;
         }
 
-        m_resumeWithHowlAfterStagger = false;
-        SetSubState(CanTryHowl() ? Howl : Chase);
-    }
-
-    /// <summary>하울링 전 공격을 마친 뒤 하울링으로 넘어갑니다.</summary>
-    /// <remarks>
-    /// <see cref="AttackState"/>가 하울링 전 공격을 끝냈을 때 부릅니다.
-    /// 공격이 끊겼는지와 무관하게 하울링으로 갑니다 - 기회는 이미 소모됐습니다(§5.5.2).
-    /// </remarks>
-    public void ContinueToHowlAfterPreAttack()
-    {
-        SetSubState(CanTryHowl() ? Howl : Chase);
+        SetSubState(next);
     }
 
     /// <summary>교전 공통 로직을 먼저 처리한 뒤 하위 상태를 구동합니다.</summary>
@@ -349,14 +277,13 @@ public class CombatState : EnemyStateBase
         Controller.Sensor?.ClearAllInfo();
         Controller.Sensor?.SetEngaged(false);
 
-        // 하울링 기록도 함께 초기화합니다(§5.8.4). 다음 교전에서 다시 한 번 하울링할 수 있습니다.
-        m_howlConsumed = false;
-        m_howlCancelCount = 0;
-        m_preHowlAttackUsed = false;
-
-        // 경직 중에 교전이 끝나면 이어갈 하울링도 사라집니다. 남겨 두면 다음 교전의 첫 경직이
-        // 엉뚱하게 하울링으로 이어집니다.
-        m_resumeWithHowlAfterStagger = false;
+        // 능력의 교전 단위 기록(하울링 기회 등)도 함께 초기화합니다(§5.8.4).
+        m_leadInOwner = null;
+        IReadOnlyList<EnemyAbility> abilities = Controller.Abilities;
+        for (int i = 0; i < abilities.Count; i++)
+        {
+            abilities[i].OnCombatExit();
+        }
 
         // 교착 감시 시계도 초기화합니다. 남겨 두면 다음 교전이 시작하자마자 교착으로 잘못 판정됩니다.
         m_noReachableTargetSince = 0.0f;

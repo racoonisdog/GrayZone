@@ -89,7 +89,7 @@ public sealed class FieldInventoryDebugView : MonoBehaviour
         m_lastLoggedPrompt = prompt;
         Debug.Log(string.IsNullOrEmpty(prompt)
             ? "[FieldInventoryDebugView] 상호작용 대상 없음"
-            : $"[FieldInventoryDebugView] 상호작용 대상: {prompt} (E 키)");
+            : $"[FieldInventoryDebugView] 상호작용 대상: {prompt} (F 키)");
     }
 
     /// <summary>현재 조작 중인 멤버의 입력 컨트롤러를 찾습니다.</summary>

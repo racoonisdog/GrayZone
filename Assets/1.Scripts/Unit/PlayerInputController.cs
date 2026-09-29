@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.Serialization;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -69,9 +70,6 @@ public class PlayerInputController : MonoBehaviour
     [Tooltip("상호작용 입력이 눌린 상태(홀드 포함)인지 여부입니다.")]
     [SerializeField] private bool m_interact;
 
-    /// <summary>튜토리얼 닫기 입력이 눌렸는지입니다. 읽는 쪽이 소비합니다.</summary>
-    private bool m_tutorialClose;
-
     /// <summary>상호작용 입력을 손 뗄 때까지 막고 있는지입니다.</summary>
     private bool m_suppressInteractUntilRelease;
 
@@ -80,6 +78,12 @@ public class PlayerInputController : MonoBehaviour
 
     // UI 커서 모드에서는 Input System 콜백이 게임플레이 상태를 다시 채우지 않도록 막습니다.
     private bool m_isInputEnabled = true;
+
+    // 튜토리얼이 닫아 둔 입력입니다. 스쿼드를 전환해도 같은 잠금이 유지돼야 해서 멤버별이 아니라 정적으로 둡니다.
+    private static PlayerInputLock s_lockedInputs;
+
+    // 잠금이 바뀔 때 이미 눌려 있던 값을 비우기 위해 살아 있는 인스턴스를 모아 둡니다.
+    private static readonly List<PlayerInputController> s_instances = new();
 
 #if ENABLE_INPUT_SYSTEM
     private PlayerInput m_playerInput;
@@ -122,6 +126,86 @@ public class PlayerInputController : MonoBehaviour
     /// <summary>폭발탄 투척 모드 활성 상태입니다.</summary>
     public bool ThrowMode => m_throwMode;
 
+    /// <summary>게임플레이 입력을 받고 있는지입니다. UI 커서 모드 등으로 막혀 있으면 false입니다.</summary>
+    /// <remarks>
+    /// 이 컴포넌트의 액션 콜백을 거치지 않고 키보드를 직접 읽는 쪽(<see cref="SquadManager"/>의 팀원 명령)이
+    /// 같은 입력 차단을 따르기 위해 읽습니다.
+    /// </remarks>
+    public bool IsInputEnabled => m_isInputEnabled;
+
+    /// <summary>현재 닫혀 있는 입력 종류입니다.</summary>
+    public static PlayerInputLock LockedInputs => s_lockedInputs;
+
+    /// <summary>
+    /// 지정한 입력들을 닫고, 나머지는 엽니다. 스쿼드 전원에게 같이 적용됩니다.
+    /// </summary>
+    /// <param name="locks">닫을 입력입니다. <see cref="PlayerInputLock.None"/>이면 모두 엽니다.</param>
+    /// <remarks>
+    /// 현재 이 잠금은 <see cref="TutorialManager"/>가 씁니다. 호출할 때마다 전체 값을 덮어쓰므로,
+    /// 다른 시스템이 함께 쓰려면 먼저 소유 규칙을 정해야 합니다.
+    /// <para>
+    /// 닫는 순간 이미 눌려 있던 값은 비웁니다. 열 때는 지금 눌려 있는 입력을 장치에서 다시 읽습니다.
+    /// 웅크리기와 투척 모드는 켜고 끄는 입력이라 닫혀 있는 동안 현재 상태를 그대로 유지하고, 전환만 막습니다.
+    /// </para>
+    /// </remarks>
+    public static void SetInputLock(PlayerInputLock locks)
+    {
+        if (s_lockedInputs == locks)
+        {
+            return;
+        }
+
+        bool anyUnlocked = (s_lockedInputs & ~locks) != 0;
+        s_lockedInputs = locks;
+
+        for (int i = s_instances.Count - 1; i >= 0; i--)
+        {
+            PlayerInputController instance = s_instances[i];
+            if (instance == null)
+            {
+                s_instances.RemoveAt(i);
+                continue;
+            }
+
+            if (anyUnlocked && instance.m_isInputEnabled)
+            {
+                // 다시 읽기 안에서 아직 닫혀 있는 입력은 다시 비웁니다.
+                instance.ResyncHeldInputFromDevices();
+            }
+            else
+            {
+                instance.ClearLockedInputs();
+            }
+        }
+    }
+
+    private static bool IsLocked(PlayerInputLock input)
+    {
+        return (s_lockedInputs & input) != 0;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticLock()
+    {
+        // 도메인 리로드를 끈 상태에서 Play Mode를 다시 들어가면 이전 잠금이 남기 때문에 비웁니다.
+        s_lockedInputs = PlayerInputLock.None;
+        s_instances.Clear();
+    }
+
+    /// <summary>닫혀 있는 입력 중 눌린 상태로 남은 값을 비웁니다. 켜고 끄는 입력(웅크리기, 투척 모드)은 건드리지 않습니다.</summary>
+    private void ClearLockedInputs()
+    {
+        if (IsLocked(PlayerInputLock.Move)) m_move = Vector2.zero;
+        if (IsLocked(PlayerInputLock.Look)) m_look = Vector2.zero;
+        if (IsLocked(PlayerInputLock.Jump)) m_jump = false;
+        if (IsLocked(PlayerInputLock.Sprint)) m_sprint = false;
+        if (IsLocked(PlayerInputLock.Aim)) m_aim = false;
+        if (IsLocked(PlayerInputLock.Shoot)) m_shoot = false;
+        if (IsLocked(PlayerInputLock.Reload)) m_reload = false;
+        if (IsLocked(PlayerInputLock.Interact)) m_interact = false;
+        if (IsLocked(PlayerInputLock.Inventory)) m_inventory = false;
+    }
+
     /// <summary>투척 모드에서 좌클릭 입력이 눌린 상태입니다.</summary>
     public bool Throw => m_throwMode && m_shoot;
 
@@ -159,7 +243,7 @@ public class PlayerInputController : MonoBehaviour
     {
         get
         {
-            if (!m_isInputEnabled || m_throwMode)
+            if (!m_isInputEnabled || m_throwMode || IsLocked(PlayerInputLock.Interact))
             {
                 return false;
             }
@@ -183,34 +267,10 @@ public class PlayerInputController : MonoBehaviour
     }
 
     /// <summary>
-    /// 이번 프레임에 튜토리얼 닫기 입력이 눌렸는지 여부입니다. 한 번 읽으면 소비됩니다.
-    /// </summary>
-    /// <remarks>
-    /// 누르는 순간만 필요한 입력이라 읽을 때 지웁니다. 눌린 상태를 유지해 두면 안내를 닫은 뒤에도
-    /// 같은 값이 남아 다음 안내가 뜨자마자 닫힙니다.
-    ///
-    /// 닫기 액션이 프로젝트에 없으면 이 값은 계속 <c>false</c>입니다. 그 경우 안내는 닫히지 않으므로
-    /// 소비 측에서 다른 닫기 수단을 두어야 합니다.
-    /// </remarks>
-    public bool TutorialClosePressed
-    {
-        get
-        {
-            if (!m_isInputEnabled || !m_tutorialClose)
-            {
-                return false;
-            }
-
-            m_tutorialClose = false;
-            return true;
-        }
-    }
-
-    /// <summary>
     /// 상호작용 입력을 키에서 손을 뗄 때까지 막습니다.
     /// </summary>
     /// <remarks>
-    /// 튜토리얼 닫기가 상호작용과 같은 키일 때 씁니다. 막지 않으면 안내를 닫은 그 입력이 그대로
+    /// 튜토리얼 페이지 넘김 키가 상호작용과 같은 키일 때 씁니다. 막지 않으면 페이지를 넘긴 그 입력이 그대로
     /// 이어져 눈앞의 대상과 상호작용해 버립니다. 시간이 아니라 "뗄 때까지"인 이유는, 얼마나 오래
     /// 누르고 있을지 알 수 없어서입니다.
     /// </remarks>
@@ -228,7 +288,7 @@ public class PlayerInputController : MonoBehaviour
     {
         get
         {
-            if (!m_isInputEnabled)
+            if (!m_isInputEnabled || IsLocked(PlayerInputLock.Inventory))
             {
                 return false;
             }
@@ -340,7 +400,13 @@ public class PlayerInputController : MonoBehaviour
 #if ENABLE_INPUT_SYSTEM
     private void Awake()
     {
+        s_instances.Add(this);
         CachePlayerInput();
+    }
+
+    private void OnDestroy()
+    {
+        s_instances.Remove(this);
     }
 
     /// <summary>
@@ -354,7 +420,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        MoveInput(value.Get<Vector2>());
+        MoveInput(IsLocked(PlayerInputLock.Move) ? Vector2.zero : value.Get<Vector2>());
     }
 
     /// <summary>
@@ -365,7 +431,7 @@ public class PlayerInputController : MonoBehaviour
     {
         if (m_isInputEnabled && m_cursorInputForLook)
         {
-            LookInput(value.Get<Vector2>());
+            LookInput(IsLocked(PlayerInputLock.Look) ? Vector2.zero : value.Get<Vector2>());
         }
     }
 
@@ -380,7 +446,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        JumpInput(value.isPressed);
+        JumpInput(!IsLocked(PlayerInputLock.Jump) && value.isPressed);
     }
 
     /// <summary>
@@ -394,7 +460,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        SprintInput(value.isPressed);
+        SprintInput(!IsLocked(PlayerInputLock.Sprint) && value.isPressed);
     }
 
     /// <summary>
@@ -408,7 +474,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        AimInput(value.isPressed);
+        AimInput(!IsLocked(PlayerInputLock.Aim) && value.isPressed);
     }
 
     /// <summary>
@@ -422,7 +488,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        ShootInput(value.isPressed);
+        ShootInput(!IsLocked(PlayerInputLock.Shoot) && value.isPressed);
     }
 
     /// <summary>
@@ -431,7 +497,7 @@ public class PlayerInputController : MonoBehaviour
     /// <param name="value">Input System에서 전달된 투척 모드 입력 상태입니다.</param>
     public void OnThrowMode(InputValue value)
     {
-        if (!m_isInputEnabled || !value.isPressed)
+        if (!m_isInputEnabled || !value.isPressed || IsLocked(PlayerInputLock.ThrowMode))
         {
             return;
         }
@@ -476,7 +542,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        ReloadInput(value.isPressed);
+        ReloadInput(!IsLocked(PlayerInputLock.Reload) && value.isPressed);
     }
 
     /// <summary>
@@ -485,7 +551,7 @@ public class PlayerInputController : MonoBehaviour
     /// <param name="value">Input System에서 전달된 웅크리기 입력 상태입니다.</param>
     public void OnCrouch(InputValue value)
     {
-        if (!m_isInputEnabled)
+        if (!m_isInputEnabled || IsLocked(PlayerInputLock.Crouch))
         {
             return;
         }
@@ -521,25 +587,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        InteractInput(value.isPressed);
-    }
-
-    /// <summary>
-    /// 튜토리얼 닫기(TutorialClose) 입력 액션 콜백입니다.
-    /// </summary>
-    /// <param name="value">Input System에서 전달된 입력 상태입니다.</param>
-    /// <remarks>
-    /// 액션이 정의되어 있지 않으면 이 콜백은 호출되지 않습니다. 그 경우
-    /// <see cref="TutorialClosePressed"/>는 계속 <c>false</c>이고 다른 동작에 영향을 주지 않습니다.
-    /// </remarks>
-    public void OnTutorialClose(InputValue value)
-    {
-        if (!m_isInputEnabled || !value.isPressed)
-        {
-            return;
-        }
-
-        m_tutorialClose = true;
+        InteractInput(!IsLocked(PlayerInputLock.Interact) && value.isPressed);
     }
 
     /// <summary>
@@ -553,7 +601,7 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        InventoryInput(value.isPressed);
+        InventoryInput(!IsLocked(PlayerInputLock.Inventory) && value.isPressed);
     }
 #endif
 
@@ -846,6 +894,8 @@ public class PlayerInputController : MonoBehaviour
         {
             m_interact = interaction.IsPressed();
         }
+
+        ClearLockedInputs();
 #endif
     }
 
@@ -942,6 +992,8 @@ public class PlayerInputController : MonoBehaviour
         {
             m_move = move.ReadValue<Vector2>();
         }
+
+        ClearLockedInputs();
 #endif
     }
 
