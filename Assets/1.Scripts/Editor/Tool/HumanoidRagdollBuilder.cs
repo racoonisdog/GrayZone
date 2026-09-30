@@ -17,11 +17,11 @@ public static class HumanoidRagdollBuilder
     private static readonly string[] EnemyPrefabPaths =
     {
         "Assets/2.Prefabs/Enemy/Howler.prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Scratcher(Defense_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Stalker(Defense_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Bloater(Defense_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Crusher(Defense_Run_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Scratcher(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Stalker(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Bloater(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Crusher(Defense_Run_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Howler(Defense_Player).prefab",
     };
 
     /// <summary>현재 Enemy 프리팹들을 각 Humanoid 골격 기준으로 다시 구성합니다.</summary>

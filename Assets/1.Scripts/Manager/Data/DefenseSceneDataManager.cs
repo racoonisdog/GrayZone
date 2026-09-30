@@ -38,6 +38,15 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     [Tooltip("마지막 웨이브를 막았을 때 전리품으로 기록할 자원 목록입니다. 귀환 정산에서 셸터 자원에 더해집니다.")]
     [SerializeField] private VictoryReward[] m_victoryRewards = Array.Empty<VictoryReward>();
 
+    [Foldout("Defense Schedule")]
+    [Tooltip("방어전 회차별로 쓸 방어전 SO 표입니다. 입장할 때 회차(클리어 횟수 + 1)로 이번 방어전 구성을 고릅니다.")]
+    [SerializeField] private DefenseScheduleSO m_schedule;
+
+    [Tooltip("0 이상이면 클리어 횟수 대신 이 회차로 방어전 구성을 고릅니다. -1이면 GameDataManager의 다음 회차를 씁니다. " +
+             "셸터를 거치지 않고 이 씬만 실행해 특정 회차를 확인할 때 씁니다. 0은 1회차로 봅니다.")]
+    [Min(-1)]
+    [SerializeField] private int m_debugRoundOverride = -1;
+
     [Foldout("References")]
     [Tooltip("공통 정산을 맡는 필드 데이터 매니저입니다. 비워 두면 런타임에 찾습니다.")]
     [SerializeField] private FieldSceneDataManager m_fieldSceneDataManager;
@@ -89,6 +98,18 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     {
         return m_entryData?.Upgrades.GetLevel(type) ?? 0;
     }
+
+    /// <summary>이번 방어전 회차입니다. 입장 데이터가 아직 없으면 지금 만들어 정합니다.</summary>
+    public int DefenseRound => EnsureEntryData().Round;
+
+    /// <summary>
+    /// 이번 방어전 구성입니다. 입장할 때 회차 표에서 골라 고정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 입장 데이터가 아직 없으면 지금 만들어 정합니다. 회차 표가 비었거나 그 칸이 비었으면 null입니다.
+    /// 출격 시점 값으로 고정되므로, 씬 도착 뒤 클리어 횟수가 바뀌어도 이번 판 구성은 바뀌지 않습니다.
+    /// </remarks>
+    public DefenseStageSO DefenseStage => EnsureEntryData().Stage;
 
     private void Reset()
     {
@@ -164,9 +185,27 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
     }
 
     /// <summary>방어전 입장 데이터를 복제해 적용합니다.</summary>
+    /// <remarks>외부에서 넘긴 입장 데이터에 방어전 구성이 없으면 그 회차로 회차 표에서 채웁니다.</remarks>
     public void InitializeEntry(DefenseEntryData entryData)
     {
-        m_entryData = entryData?.Clone() ?? CreateEmptyEntryData();
+        DefenseEntryData entry = entryData?.Clone() ?? CreateEmptyEntryData();
+        if (entry.Stage == null)
+        {
+            entry = new DefenseEntryData(entry.StageId, entry.Upgrades, entry.Round, ResolveScheduledStage(entry.Round));
+        }
+
+        m_entryData = entry;
+    }
+
+    /// <summary>입장 데이터가 없으면 GameDataManager 값으로 만들고, 있는 입장 데이터를 돌려줍니다.</summary>
+    private DefenseEntryData EnsureEntryData()
+    {
+        if (!HasEntryData)
+        {
+            InitializeEntry(CreateSceneEntryData());
+        }
+
+        return m_entryData;
     }
 
     /// <summary>
@@ -229,6 +268,10 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
             Debug.LogWarning($"[DefenseSceneDataManager] 승리를 확정하지 못했습니다. phase={Phase}", this);
             return null;
         }
+
+        // 클리어 횟수는 여기서 올리지 않습니다. 귀환 정산이 성공으로 반영될 때 올라가도록 표시만 남깁니다.
+        // 승리 뒤 귀환하지 못하고 실패한 판을 클리어로 세지 않기 위해서입니다.
+        GameDataManager.Instance?.MarkDefenseVictoryPending(m_entryData?.StageId);
 
         // 귀환 구역에 들어가 FinalizeField가 불릴 때 결과가 Success로 정산되도록 먼저 표시합니다.
         FieldSceneDataManager fieldData = ResolveFieldSceneDataManager();
@@ -345,22 +388,52 @@ public sealed class DefenseSceneDataManager : MonoBehaviour
         }
     }
 
-    /// <summary>GameDataManager의 Scramble 업그레이드 레벨과 현재 씬 이름으로 입장 데이터를 만듭니다.</summary>
-    private static DefenseEntryData CreateSceneEntryData()
+    /// <summary>GameDataManager의 Scramble 업그레이드 레벨, 다음 방어전 회차와 현재 씬 이름으로 입장 데이터를 만듭니다.</summary>
+    private DefenseEntryData CreateSceneEntryData()
     {
         GameDataManager gameData = GameDataManager.Instance;
         if (gameData == null)
         {
-            Debug.LogWarning("[DefenseSceneDataManager] GameDataManager가 없어 업그레이드를 모두 0레벨로 시작합니다.");
+            Debug.LogWarning("[DefenseSceneDataManager] GameDataManager가 없어 업그레이드를 모두 0레벨, 1회차로 시작합니다.");
             return CreateEmptyEntryData();
         }
 
-        return new DefenseEntryData(GetActiveSceneName(), DefenseUpgradeLevels.FromGameData(gameData));
+        int round = ResolveRound(gameData.NextDefenseRound);
+        return new DefenseEntryData(
+            GetActiveSceneName(),
+            DefenseUpgradeLevels.FromGameData(gameData),
+            round,
+            ResolveScheduledStage(round));
     }
 
-    private static DefenseEntryData CreateEmptyEntryData()
+    private DefenseEntryData CreateEmptyEntryData()
     {
-        return new DefenseEntryData(GetActiveSceneName(), DefenseUpgradeLevels.None);
+        int round = ResolveRound(1);
+        return new DefenseEntryData(GetActiveSceneName(), DefenseUpgradeLevels.None, round, ResolveScheduledStage(round));
+    }
+
+    /// <summary>디버그 회차가 지정돼 있으면 그 값을, 아니면 주어진 회차를 씁니다.</summary>
+    private int ResolveRound(int round)
+    {
+        return m_debugRoundOverride >= 0 ? Mathf.Max(1, m_debugRoundOverride) : Mathf.Max(1, round);
+    }
+
+    /// <summary>회차 표에서 이 회차의 방어전 구성을 고릅니다. 표가 없으면 경고하고 null을 돌려줍니다.</summary>
+    private DefenseStageSO ResolveScheduledStage(int round)
+    {
+        if (m_schedule == null)
+        {
+            Debug.LogWarning("[DefenseSceneDataManager] 방어전 회차 표(Defense Schedule)가 비어 있어 방어전 구성을 정하지 못했습니다.", this);
+            return null;
+        }
+
+        DefenseStageSO stage = m_schedule.GetStage(round);
+        if (stage == null)
+        {
+            Debug.LogWarning($"[DefenseSceneDataManager] 회차 표 '{m_schedule.name}'의 {round}회차 칸이 비어 있습니다.", this);
+        }
+
+        return stage;
     }
 
     private static string GetActiveSceneName()

@@ -42,7 +42,7 @@ public class DefenseMarksmanController : MonoBehaviour
     [Tooltip("적을 탐색하고 사격할 최대 거리(m)입니다. 실제 사거리는 이 값과 총기의 HitscanRange 중 짧은 쪽입니다. " +
              "배치 사수는 팀 AI보다 넓게 봅니다.")]
     [Min(0.1f)]
-    [SerializeField] private float m_sightRange = 100.0f;
+    [SerializeField] private float m_sightRange = 60.0f;
 
     [Tooltip("현재 정면을 기준으로 탐색할 수평 시야각(도)입니다. 360이면 전 방향을 탐색합니다.")]
     [Range(1.0f, 360.0f)]

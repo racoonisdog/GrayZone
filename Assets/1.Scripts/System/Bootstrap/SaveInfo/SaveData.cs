@@ -45,6 +45,8 @@ public class SaveData
         public int wireUpgradeLevel;
         public int totalFieldKillCount;
         public List<int> fieldKillHistory = new List<int>();
+        /// <summary>방어전을 클리어하고 귀환까지 마친 횟수입니다. 이 필드가 없는 예전 저장 파일은 0으로 읽힙니다.</summary>
+        public int defenseClearCount;
         /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>
         public int playableCharacterCount;
         /// <summary>schemaVersion 6 이하 저장 파일을 읽기 위한 레거시 수량 필드입니다.</summary>

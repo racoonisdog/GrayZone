@@ -14,11 +14,11 @@ public static class EnemyMeleeWiring
     private static readonly string[] PrefabPaths =
     {
         "Assets/2.Prefabs/Enemy/Howler.prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Scratcher(Defense_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Stalker(Defense_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Bloater(Defense_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Crusher(Defense_Run_Player).prefab",
-        "Assets/2.Prefabs/Enemy/Defense/Howler/Howler(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Scratcher(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Stalker(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Bloater(Defense_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Crusher(Defense_Run_Player).prefab",
+        "Assets/2.Prefabs/Enemy/Defense/Enemy/Howler(Defense_Player).prefab",
     };
     private const string BalancePath = "Assets/5.Data/ScriptableObject/Enemy/ZombieAttackBalance.asset";
     private static readonly string[] HitboxNames = { "AttackPoint_L", "AttackPoint_R" };

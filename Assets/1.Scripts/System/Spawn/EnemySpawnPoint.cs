@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using VInspector;
 
 /// <summary>
 /// 범위 안에서 여러 <see cref="EnemySpawnEntrySO"/> 생산 항목을 독립적으로 풀링·생성하는 스폰 지점입니다.
@@ -96,9 +97,11 @@ public class EnemySpawnPoint : MonoBehaviour
 
     private const int SpawnPositionSearchAttempts = 16;
 
+    [HideIf(nameof(HidesInspectorEntries))]
     [Header("Spawn Entries")]
     [Tooltip("이 지점이 운용할 적 프리팹별 생산 설정 에셋입니다. 리스트의 SO 하나마다 독립 풀과 생산 타이머가 만들어집니다.")]
     [SerializeField] private List<EnemySpawnEntrySO> m_spawnEntries = new List<EnemySpawnEntrySO>();
+    [EndIf]
 
     [Header("Spawn Area")]
     [Tooltip("스폰 지점을 중심으로 적을 무작위 생성할 가로·세로 범위(m)입니다. 이 오브젝트의 Y축 회전을 따라 함께 돌아갑니다. Y 좌표는 이 오브젝트 위치를 그대로 사용합니다.")]
@@ -129,6 +132,10 @@ public class EnemySpawnPoint : MonoBehaviour
 
     /// <summary>이 지점이 운용할 프리팹별 생산 설정 목록입니다.</summary>
     public IReadOnlyList<EnemySpawnEntrySO> SpawnEntries => m_spawnEntries;
+
+    /// <summary>인스펙터의 Spawn Entries 목록을 숨길지 여부입니다. 목록을 쓰지 않는 파생 스포너가 true로 바꿉니다.</summary>
+    /// <remarks>VInspector의 HideIf가 이 이름으로 읽습니다. 저장된 목록 값은 지우지 않고 표시만 숨깁니다.</remarks>
+    protected virtual bool HidesInspectorEntries => false;
 
     /// <summary>생성 범위의 가로·세로입니다. <see cref="AreaRotation"/>이 도는 평면 위에서 해석합니다.</summary>
     public Vector2 SpawnAreaSize => m_spawnAreaSize;
@@ -193,6 +200,32 @@ public class EnemySpawnPoint : MonoBehaviour
 
     /// <summary>풀 전체에서 시체 생성 순서를 안정적으로 비교하기 위한 증가 번호입니다.</summary>
     private ulong m_nextCorpseOrder;
+
+    /// <summary>외부에서 지정한 풀 항목 목록입니다. <see cref="m_usesExternalEntries"/>가 켜져 있을 때만 씁니다.</summary>
+    private readonly List<EnemySpawnEntrySO> m_externalEntries = new List<EnemySpawnEntrySO>();
+
+    /// <summary>
+    /// 인스펙터 목록 대신 외부에서 지정한 항목으로 풀을 준비하고, 자동 생산을 멈춘 상태인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 스포너가 웨이브 SO를 실행할 때 켭니다. 이때 적 생성은 <see cref="TrySpawnGroup"/>으로만 일어납니다.
+    /// </remarks>
+    private bool m_usesExternalEntries;
+
+    /// <summary>그룹 생성 시 항목별 필요 수를 합산하는 재사용 버퍼입니다.</summary>
+    private readonly Dictionary<SpawnRuntime, int> m_groupRequirementBuffer = new Dictionary<SpawnRuntime, int>();
+
+    /// <summary>그룹 관련 경고를 대상마다 한 번만 남기기 위한 기록입니다.</summary>
+    private readonly HashSet<UnityEngine.Object> m_groupWarningLogged = new HashSet<UnityEngine.Object>();
+
+    /// <summary>지금 풀 구성에 쓰는 항목 목록입니다. 외부 지정 모드면 외부 목록, 아니면 인스펙터 목록입니다.</summary>
+    private List<EnemySpawnEntrySO> ActiveEntrySource => m_usesExternalEntries ? m_externalEntries : m_spawnEntries;
+
+    /// <summary>인스펙터 목록 대신 외부에서 지정한 항목으로 풀을 운용 중인지 여부입니다.</summary>
+    protected bool UsesExternalEntries => m_usesExternalEntries;
+
+    /// <summary>풀 준비가 끝나 그룹을 바로 생성할 수 있는지 여부입니다.</summary>
+    protected bool IsPoolReady => m_runtimeInitialized && !m_runtimeSynchronizationPending && AreAllSpawnRuntimesPrewarmed();
 
     /// <summary>활성화될 때 SO 변경 이벤트를 연결하고, 재활성화라면 다음 프레임 동기화를 예약합니다.</summary>
     protected virtual void OnEnable()
@@ -280,7 +313,8 @@ public class EnemySpawnPoint : MonoBehaviour
 
         ScheduleProductionAfterPrewarm();
 
-        if (!m_spawnEnabled)
+        // 외부 지정 모드에서는 항목 SO의 생산 규칙으로 자동 생산하지 않습니다. 생성은 TrySpawnGroup으로만 일어납니다.
+        if (!m_spawnEnabled || m_usesExternalEntries)
         {
             return;
         }
@@ -464,6 +498,63 @@ public class EnemySpawnPoint : MonoBehaviour
         return despawnedCount;
     }
 
+    /// <summary>이 지점이 내보내 아직 살아 있는 적을 목록에 더합니다. 시체는 넣지 않습니다.</summary>
+    /// <param name="buffer">적을 추가할 목록입니다. 비우지 않고 뒤에 더합니다.</param>
+    public void CollectLiveEnemies(List<EnemyController> buffer)
+    {
+        if (buffer == null)
+        {
+            return;
+        }
+
+        for (int runtimeIndex = 0; runtimeIndex < m_spawnRuntimes.Count; runtimeIndex++)
+        {
+            List<PoolItem> items = m_spawnRuntimes[runtimeIndex].PoolItems;
+            for (int itemIndex = 0; itemIndex < items.Count; itemIndex++)
+            {
+                PoolItem item = items[itemIndex];
+                if (IsLive(item))
+                {
+                    buffer.Add(item.Enemy);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 살아 있는 적 가운데 조건에 맞는 적만 풀로 되돌립니다. 시체는 건드리지 않습니다.
+    /// </summary>
+    /// <param name="shouldDespawn">되돌릴 적이면 true를 돌려주는 조건입니다. null이면 살아 있는 적 전부입니다.</param>
+    /// <returns>되돌린 수입니다.</returns>
+    /// <remarks><see cref="DespawnActiveEnemies"/>와 같이 죽이는 것이 아니라 없던 일로 하므로 처치 수가 오르지 않습니다.</remarks>
+    public int DespawnLiveEnemies(Predicate<EnemyController> shouldDespawn)
+    {
+        int despawnedCount = 0;
+        for (int runtimeIndex = 0; runtimeIndex < m_spawnRuntimes.Count; runtimeIndex++)
+        {
+            List<PoolItem> items = m_spawnRuntimes[runtimeIndex].PoolItems;
+            for (int itemIndex = items.Count - 1; itemIndex >= 0; itemIndex--)
+            {
+                PoolItem item = items[itemIndex];
+                if (!IsLive(item) || (shouldDespawn != null && !shouldDespawn(item.Enemy)))
+                {
+                    continue;
+                }
+
+                ReturnToPool(item);
+                despawnedCount++;
+            }
+        }
+
+        return despawnedCount;
+    }
+
+    /// <summary>풀 항목이 월드에 나와 있고 아직 살아 있는(시체가 아닌) 적인지 확인합니다.</summary>
+    private static bool IsLive(PoolItem item)
+    {
+        return item != null && item.Enemy != null && item.IsActive && !item.IsAwaitingCorpseReturn;
+    }
+
     /// <summary>현재 SO 목록을 읽어 런타임 풀을 추가·유지·퇴역 처리합니다.</summary>
     /// <remarks>
     /// 같은 SO를 목록에 두 번 넣어도 각 목록 칸은 독립 생산 항목으로 취급합니다.
@@ -479,9 +570,10 @@ public class EnemySpawnPoint : MonoBehaviour
             m_spawnRuntimes[i].IsRetired = true;
         }
 
-        for (int entryIndex = 0; entryIndex < m_spawnEntries.Count; entryIndex++)
+        List<EnemySpawnEntrySO> source = ActiveEntrySource;
+        for (int entryIndex = 0; entryIndex < source.Count; entryIndex++)
         {
-            EnemySpawnEntrySO entry = m_spawnEntries[entryIndex];
+            EnemySpawnEntrySO entry = source[entryIndex];
             if (entry == null)
             {
                 continue;
@@ -566,27 +658,156 @@ public class EnemySpawnPoint : MonoBehaviour
                 return;
             }
 
-            PoolItem item = TakeAvailableItem(runtime);
-            if (item == null && runtime.PoolItems.Count < runtime.Entry.MaxCapacity)
-            {
-                item = CreatePoolItem(runtime);
-                if (item != null)
-                {
-                    runtime.AvailableItems.Remove(item);
-                }
-            }
-
-            // 생존 정원에는 자리가 있지만 물리 풀이 시체로 가득 찬 경우 가장 오래된 시체부터 회수합니다.
-            // 시체는 평소에는 현장에 남고, 다음 생존 적을 만들 공간이 필요할 때만 재사용됩니다.
-            if (item == null && ReclaimOldestCorpse(runtime))
-            {
-                item = TakeAvailableItem(runtime);
-            }
-
-            if (item == null || !ActivatePoolItem(item, spawnPosition))
+            if (!ActivateOne(runtime, spawnPosition))
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>한 SO 풀에서 적 하나를 꺼내 지정 위치에 활성화합니다.</summary>
+    /// <returns>활성화했으면 true입니다. 쓸 수 있는 풀 항목이 없으면 false입니다.</returns>
+    private bool ActivateOne(SpawnRuntime runtime, Vector3 spawnPosition)
+    {
+        PoolItem item = TakeAvailableItem(runtime);
+        if (item == null && runtime.PoolItems.Count < runtime.Entry.MaxCapacity)
+        {
+            item = CreatePoolItem(runtime);
+            if (item != null)
+            {
+                runtime.AvailableItems.Remove(item);
+            }
+        }
+
+        // 생존 정원에는 자리가 있지만 물리 풀이 시체로 가득 찬 경우 가장 오래된 시체부터 회수합니다.
+        // 시체는 평소에는 현장에 남고, 다음 생존 적을 만들 공간이 필요할 때만 재사용됩니다.
+        if (item == null && ReclaimOldestCorpse(runtime))
+        {
+            item = TakeAvailableItem(runtime);
+        }
+
+        return item != null && ActivatePoolItem(item, spawnPosition);
+    }
+
+    /// <summary>
+    /// 인스펙터 목록 대신 지정한 항목으로 풀을 준비하고 자동 생산을 멈춥니다.
+    /// </summary>
+    /// <param name="entries">풀을 만들 항목입니다. 같은 항목은 한 번만 씁니다.</param>
+    /// <remarks>
+    /// 이후 적 생성은 <see cref="TrySpawnGroup"/>으로만 일어납니다. 목록에서 빠진 항목의 풀은 기존 규칙대로
+    /// 살아 있는 적이 모두 돌아온 뒤 정리됩니다. 풀 준비는 다음 Update부터 여러 프레임에 나눠 진행됩니다.
+    /// </remarks>
+    protected void UseExternalEntries(IEnumerable<EnemySpawnEntrySO> entries)
+    {
+        m_externalEntries.Clear();
+        if (entries != null)
+        {
+            foreach (EnemySpawnEntrySO entry in entries)
+            {
+                if (entry != null && !m_externalEntries.Contains(entry))
+                {
+                    m_externalEntries.Add(entry);
+                }
+            }
+        }
+
+        m_usesExternalEntries = true;
+        RefreshEntrySubscriptions();
+        m_runtimeSynchronizationPending = true;
+    }
+
+    /// <summary>
+    /// 스폰 그룹 하나를 통째로 생성합니다. 자리가 모자라면 아무것도 만들지 않고 false를 돌려줍니다.
+    /// </summary>
+    /// <param name="group">생성할 그룹입니다.</param>
+    /// <returns>그룹을 생성했으면 true입니다. 어느 항목이든 생존 정원이 모자라면 false이며, 그때는 한 마리도 만들지 않습니다.</returns>
+    /// <remarks>
+    /// 그룹 구성을 온전히 유지해야 그룹 밸류로 위협 수준을 비교하는 의미가 있어서, 일부만 내보내지 않습니다.
+    /// 호출하는 쪽은 false를 받으면 같은 그룹을 들고 기다렸다가 다시 시도합니다.
+    ///
+    /// 항목의 마릿수가 그 항목의 최대 수용량보다 크면 영원히 들어갈 수 없으므로, 최대 수용량까지만 필요하다고 보고
+    /// 경고를 한 번 남깁니다. 풀에 없는 항목은 건너뛰고 경고를 한 번 남깁니다.
+    /// 최소 위치 간격을 만족하는 자리를 찾지 못하면 간격 없이 범위 안 무작위 위치에 생성합니다. 그룹이 한 번에
+    /// 여러 마리를 내보내므로, 간격 때문에 일부가 빠지는 것보다 조금 겹치는 편이 낫기 때문입니다.
+    /// </remarks>
+    protected bool TrySpawnGroup(SpawnGroupSO group)
+    {
+        if (group == null)
+        {
+            return true;
+        }
+
+        m_groupRequirementBuffer.Clear();
+        IReadOnlyList<SpawnGroupSO.Member> members = group.Members;
+        for (int i = 0; i < members.Count; i++)
+        {
+            EnemySpawnEntrySO entry = members[i].Entry;
+            if (entry == null)
+            {
+                continue;
+            }
+
+            SpawnRuntime runtime = FindActiveRuntime(entry);
+            if (runtime == null || runtime.Prefab == null)
+            {
+                WarnGroupOnce(entry, $"[EnemySpawnPoint] '{name}': 그룹 '{group.name}'의 항목 '{entry.name}' 풀이 없어 건너뜁니다. 이 스포너에 전달된 웨이브 구성을 확인하세요.");
+                continue;
+            }
+
+            m_groupRequirementBuffer.TryGetValue(runtime, out int required);
+            m_groupRequirementBuffer[runtime] = required + members[i].Count;
+        }
+
+        foreach (KeyValuePair<SpawnRuntime, int> pair in m_groupRequirementBuffer)
+        {
+            SpawnRuntime runtime = pair.Key;
+            int capacity = Mathf.Max(0, runtime.Entry.MaxCapacity);
+            if (pair.Value > capacity)
+            {
+                WarnGroupOnce(group, $"[EnemySpawnPoint] '{name}': 그룹 '{group.name}'이 항목 '{runtime.Entry.name}'을 {pair.Value}마리 요구하지만 최대 수용량은 {capacity}입니다. {capacity}마리만 생성합니다.");
+            }
+
+            if (capacity - runtime.LiveEnemyCount < Mathf.Min(pair.Value, capacity))
+            {
+                return false;
+            }
+        }
+
+        foreach (KeyValuePair<SpawnRuntime, int> pair in m_groupRequirementBuffer)
+        {
+            SpawnRuntime runtime = pair.Key;
+            int count = Mathf.Min(pair.Value, Mathf.Max(0, runtime.Entry.MaxCapacity));
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 spawnPosition = TryGetValidSpawnPosition(out Vector3 spaced) ? spaced : SampleSpawnCandidate();
+                ActivateOne(runtime, spawnPosition);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>지정 항목의 현재 사용 중인(퇴역하지 않은) 풀을 찾습니다.</summary>
+    private SpawnRuntime FindActiveRuntime(EnemySpawnEntrySO entry)
+    {
+        for (int i = 0; i < m_spawnRuntimes.Count; i++)
+        {
+            SpawnRuntime runtime = m_spawnRuntimes[i];
+            if (!runtime.IsRetired && runtime.Entry == entry)
+            {
+                return runtime;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>그룹 관련 경고를 대상마다 한 번만 남깁니다.</summary>
+    private void WarnGroupOnce(UnityEngine.Object key, string message)
+    {
+        if (key != null && m_groupWarningLogged.Add(key))
+        {
+            Debug.LogWarning(message, this);
         }
     }
 
@@ -917,22 +1138,11 @@ public class EnemySpawnPoint : MonoBehaviour
     /// </remarks>
     private bool TryGetValidSpawnPosition(out Vector3 spawnPosition)
     {
-        float halfWidth = m_spawnAreaSize.x * 0.5f;
-        float halfDepth = m_spawnAreaSize.y * 0.5f;
         float minimumDistanceSqr = m_minimumSpawnDistance * m_minimumSpawnDistance;
-        Vector3 origin = transform.position;
-        Quaternion areaRotation = AreaRotation;
 
         for (int i = 0; i < SpawnPositionSearchAttempts; i++)
         {
-            Vector3 localOffset = new Vector3(
-                UnityEngine.Random.Range(-halfWidth, halfWidth),
-                0.0f,
-                UnityEngine.Random.Range(-halfDepth, halfDepth));
-
-            Vector3 candidate = origin + (areaRotation * localOffset);
-            candidate.y = origin.y;
-            candidate = SnapCandidateToGround(candidate);
+            Vector3 candidate = SampleSpawnCandidate();
 
             if (!m_hasLastSpawnPosition)
             {
@@ -953,6 +1163,23 @@ public class EnemySpawnPoint : MonoBehaviour
 
         spawnPosition = default;
         return false;
+    }
+
+    /// <summary>생성 범위 안의 무작위 위치 하나를 뽑아 지면에 붙입니다. 최소 간격은 검사하지 않습니다.</summary>
+    private Vector3 SampleSpawnCandidate()
+    {
+        float halfWidth = m_spawnAreaSize.x * 0.5f;
+        float halfDepth = m_spawnAreaSize.y * 0.5f;
+        Vector3 origin = transform.position;
+
+        Vector3 localOffset = new Vector3(
+            UnityEngine.Random.Range(-halfWidth, halfWidth),
+            0.0f,
+            UnityEngine.Random.Range(-halfDepth, halfDepth));
+
+        Vector3 candidate = origin + (AreaRotation * localOffset);
+        candidate.y = origin.y;
+        return SnapCandidateToGround(candidate);
     }
 
     /// <summary>
@@ -1060,9 +1287,10 @@ public class EnemySpawnPoint : MonoBehaviour
     {
         UnsubscribeEntryChanges();
 
-        for (int i = 0; i < m_spawnEntries.Count; i++)
+        List<EnemySpawnEntrySO> source = ActiveEntrySource;
+        for (int i = 0; i < source.Count; i++)
         {
-            EnemySpawnEntrySO entry = m_spawnEntries[i];
+            EnemySpawnEntrySO entry = source[i];
             if (entry == null || m_subscribedEntries.Contains(entry))
             {
                 continue;
@@ -1091,7 +1319,7 @@ public class EnemySpawnPoint : MonoBehaviour
     /// <summary>연결된 SO의 Inspector 값 변경을 받아 다음 프레임 풀 수용량만 동기화하도록 예약합니다.</summary>
     private void HandleEntryConfigurationChanged(EnemySpawnEntrySO changedEntry)
     {
-        if (changedEntry != null && m_spawnEntries.Contains(changedEntry))
+        if (changedEntry != null && ActiveEntrySource.Contains(changedEntry))
         {
             m_runtimeSynchronizationPending = true;
         }

@@ -21,6 +21,17 @@ public enum EnemyDefenseDisposition
 
     /// <summary>웨이포인트 통과 후 스폰 포인트의 목표 위치로 향하는 성향입니다.</summary>
     TargetFirst,
+
+    /// <summary>
+    /// 혼합형입니다. 방어 대상 우선처럼 움직이다가, 스쿼드원에게 피격되면 그 캐릭터를 공격 대상으로 전환합니다.
+    /// </summary>
+    /// <remarks>
+    /// 전환된 어그로는 유지 시간 없이 교전이 이어지는 동안 유지하고, 교전이 끝나면 남은 웨이포인트를 건너뛰고
+    /// 곧장 방어 대상으로 향합니다. 지정사수와 함정의 피격은 전환하지 않습니다(스쿼드원이 아니므로).
+    /// 적이 <see cref="DefenseTargetZone"/> 안에 있고 쏜 캐릭터가 그 구역 밖이면 전환하지 않습니다.
+    /// 값은 정수로 저장되므로 이 항목은 반드시 맨 뒤에 둡니다.
+    /// </remarks>
+    TargetUntilAttacked,
 }
 
 /// <summary>
@@ -41,6 +52,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Header("Identity")]
     [Tooltip("이 감염체의 종류입니다. 시체 처리처럼 종류별로 다른 설정을 고를 때의 키로 씁니다. 밸런스 수치와는 무관합니다.")]
     [SerializeField] private EnemyType m_enemyType = EnemyType.Howler;
+
+    [Tooltip("이 적 한 마리의 위험도 포인트입니다. 스폰 그룹의 총 위험도를 계산할 때 씁니다. 기준값: 스크래처 1, 스토커 3, 블로터 5, 하울러 7, 크러셔 10.")]
+    [Min(0)]
+    [SerializeField] private int m_dangerLevel = 1;
 
     [Foldout("Defense")]
     [Tooltip("이 프리팹이 기본적으로 Defense 전용 적인지 여부입니다. EnemyDefenseSpawnPoint에서 생성되면 런타임에도 true로 설정됩니다.")]
@@ -258,6 +273,21 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>Player First가 플레이어보다 Defense 웨이포인트를 우선할지 여부입니다.</summary>
     private bool m_prioritizeDefenseWaypointsForPlayerFirst = true;
+
+    /// <summary>혼합형(<see cref="EnemyDefenseDisposition.TargetUntilAttacked"/>)이 피격으로 스쿼드원에게 전환한 상태인지 여부입니다.</summary>
+    /// <remarks>교전이 끝나면 해제되고, 다음 피격에서 다시 전환할 수 있습니다.</remarks>
+    private bool m_hybridAggroActive;
+
+    /// <summary>
+    /// 지금 스쿼드원을 공격 대상에서 빼야 하는지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어 대상 우선은 항상, 혼합형은 피격으로 전환하기 전까지 스쿼드원을 무시합니다.
+    /// 방어 대상을 치는 동작에 앞을 막아 선 캐릭터가 맞지 않게 하는 데도 씁니다(<see cref="EnemyAttack"/>).
+    /// </remarks>
+    public bool IsIgnoringSquad => IsDefenseEnemy
+        && (DefenseDisposition == EnemyDefenseDisposition.TargetFirst
+            || (DefenseDisposition == EnemyDefenseDisposition.TargetUntilAttacked && !m_hybridAggroActive));
 
     /// <summary>현재 활성 상태입니다.</summary>
     public EnemyStateBase Current => m_current;
@@ -693,15 +723,49 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>이 감염체의 종류입니다. 종류별 설정을 고를 때의 키입니다.</summary>
     public EnemyType EnemyType => m_enemyType;
 
+    /// <summary>이 적 한 마리의 위험도 포인트입니다.</summary>
+    /// <remarks>
+    /// 스폰 그룹의 총 위험도(위험도 × 마릿수의 합)를 계산하는 기준입니다. 체력이나 공격력 같은 밸런스 수치와는 따로
+    /// 기획자가 정하는 값이며, 같은 종류의 프리팹이 여러 개면 각각 같은 값을 넣어야 합니다.
+    /// </remarks>
+    public int DangerLevel => m_dangerLevel;
+
     /// <summary>이 감염체가 방어전에서 우선시할 대상 성향입니다.</summary>
     /// <remarks>
     /// 방어전 생성 경로 통과 후 플레이어 탐색과 외부 방어선 이동의 우선순위를 결정합니다.
     /// Spawn SO로 생성된 Defense 적은 SO 값을, 그 밖에는 프리팹 Inspector 값을 사용합니다.
     /// Defense 여부를 읽는 시점에 확인하므로 <see cref="ConfigureSpawn"/>과
     /// <see cref="ConfigureDefenseSpawn"/>의 호출 순서와 관계없이 같은 값이 나옵니다.
+    /// 정리 구간 안전장치로 <see cref="ForcePursuePlayer"/>가 불렸으면 무엇보다 우선해 플레이어 우선입니다.
     /// </remarks>
     public EnemyDefenseDisposition DefenseDisposition =>
-        m_hasSpawnConfiguration && IsDefenseEnemy ? m_spawnDefenseDisposition : m_defenseDisposition;
+        m_forcedPlayerPursuit && IsDefenseEnemy ? EnemyDefenseDisposition.PlayerFirst
+        : m_hasSpawnConfiguration && IsDefenseEnemy ? m_spawnDefenseDisposition : m_defenseDisposition;
+
+    /// <summary>정리 구간 안전장치로 플레이어 우선이 강제된 상태인지 여부입니다. 풀 반환 때 해제됩니다.</summary>
+    private bool m_forcedPlayerPursuit;
+
+    /// <summary>
+    /// 방어전 정리 구간이 너무 길어질 때, 이 적이 지금 조작 중인 캐릭터에게 향하도록 강제합니다.
+    /// </summary>
+    /// <remarks>
+    /// 성향을 플레이어 우선으로 바꾸고 남은 웨이포인트를 건너뜁니다. 그러면 방어전 이동이 매번 현재 조작 캐릭터 위치로
+    /// 목적지를 다시 잡으므로(<see cref="SquadManager.PlayerSquadMember"/>), 어디에 있든 플레이어 쪽으로 옵니다.
+    /// 방어 대상 우선과 혼합형의 "스쿼드원 무시"도 함께 풀립니다. 이미 교전 중이면 교전을 그대로 둡니다.
+    /// Defense 적이 아니면 아무 일도 하지 않습니다. 풀로 돌아갈 때 해제됩니다.
+    /// </remarks>
+    public void ForcePursuePlayer()
+    {
+        if (!IsDefenseEnemy || m_current == Dead)
+        {
+            return;
+        }
+
+        m_forcedPlayerPursuit = true;
+        m_prioritizeDefenseWaypointsForPlayerFirst = false;
+        m_defenseWaypointIndex = m_defenseWaypoints.Count;
+        m_defenseNavigationActive = true;
+    }
 
     /// <summary>프리팹 설정 또는 현재 생성 경로에 의해 Defense 전용 적으로 활성화됐는지 여부입니다.</summary>
     public bool IsDefenseEnemy => m_isDefenseEnemy || m_isDefenseSpawn;
@@ -808,6 +872,8 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_defenseWaypointIndex = 0;
         m_defenseNavigationActive = false;
         m_prioritizeDefenseWaypointsForPlayerFirst = true;
+        m_hybridAggroActive = false;
+        m_forcedPlayerPursuit = false;
     }
 
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
@@ -1718,6 +1784,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
+        // 혼합형의 어그로는 교전이 이어지는 동안만 유지합니다. 교전을 벗어나면 방어 대상으로 돌아가고,
+        // 다음 피격에서 다시 전환할 수 있게 둡니다.
+        if (m_current == Combat) m_hybridAggroActive = false;
+
         m_current?.Exit();
         if (next == Combat || next == Dead) RestoreDefenseApproachSettings();
         m_current = next;
@@ -1953,9 +2023,42 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     private bool ShouldDeferSquadCombat()
     {
-        return IsDefenseEnemy && (DefenseDisposition == EnemyDefenseDisposition.TargetFirst ||
-            (m_defenseNavigationActive && DefenseDisposition == EnemyDefenseDisposition.PlayerFirst &&
-             m_prioritizeDefenseWaypointsForPlayerFirst && m_defenseWaypointIndex < m_defenseWaypoints.Count));
+        return IsIgnoringSquad || (IsDefenseEnemy &&
+            m_defenseNavigationActive && DefenseDisposition == EnemyDefenseDisposition.PlayerFirst &&
+             m_prioritizeDefenseWaypointsForPlayerFirst && m_defenseWaypointIndex < m_defenseWaypoints.Count);
+    }
+
+    /// <summary>
+    /// 혼합형이 이번 피격으로 공격자에게 전환할지 판단하고, 전환하면 어그로를 켭니다.
+    /// </summary>
+    /// <param name="attacker">피해를 입힌 오브젝트입니다.</param>
+    /// <remarks>
+    /// 스쿼드원(조작 캐릭터와 AI 동료)이 쐈을 때만 전환합니다. 지정사수와 함정은 스쿼드원이 아니라 전환하지 않습니다.
+    /// 이 적이 <see cref="DefenseTargetZone"/> 안에 있고 쏜 캐릭터가 그 구역 밖이면 전환하지 않습니다. 방어 대상이 훨씬
+    /// 가까운데 멀리서 쏜 캐릭터를 쫓아가는 것을 막기 위해서입니다. 구역 판정은 전환하는 순간에만 합니다. 이미 쫓고 있는
+    /// 적이 구역에 들어와도 어그로를 풀지 않습니다.
+    /// 전환하면 남은 웨이포인트를 건너뛴 것으로 표시합니다. 교전이 끝나면 곧장 방어 대상으로 가게 하기 위해서입니다.
+    /// </remarks>
+    private void TryBeginHybridAggro(GameObject attacker)
+    {
+        if (!IsDefenseEnemy || DefenseDisposition != EnemyDefenseDisposition.TargetUntilAttacked || m_hybridAggroActive)
+        {
+            return;
+        }
+
+        SquadMemberController member = attacker != null ? attacker.GetComponentInParent<SquadMemberController>() : null;
+        if (member == null)
+        {
+            return;
+        }
+
+        if (DefenseTargetZone.ShouldIgnoreAttacker(transform.position, member.transform.position))
+        {
+            return;
+        }
+
+        m_hybridAggroActive = true;
+        m_defenseWaypointIndex = m_defenseWaypoints.Count;
     }
 
     private void RestoreDefenseApproachSettings()
@@ -2234,6 +2337,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         {
             return;
         }
+
+        // 혼합형은 스쿼드원에게 맞으면 여기서 어그로를 켜고, 그 뒤로는 일반 피격 규칙을 따릅니다.
+        TryBeginHybridAggro(attacker);
 
         // 피해/경직 자체는 체력 모듈이 처리합니다. 여기서는 경로 정책을 깨는 어그로 전환만 막습니다.
         if (ShouldDeferSquadCombat()) return;
