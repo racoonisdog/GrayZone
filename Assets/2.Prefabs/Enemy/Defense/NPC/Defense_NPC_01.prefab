@@ -218,7 +218,7 @@ MonoBehaviour:
   m_eyePoint: {fileID: 8328343202193431745}
   m_animator: {fileID: 4977820184565759080}
   m_pitchReference: {fileID: 0}
-  m_sightRange: 100
+  m_sightRange: 60
   m_sightAngle: 360
   m_targetScanInterval: 0.2
   m_targetAimHeight: 1

@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 949f02abe5534b64c9556b557163eca6, type: 3}
+  m_Name: SpawnGroup_Shelter_BridgeMixed
+  m_EditorClassIdentifier: Assembly-CSharp::SpawnGroupSO
+  m_members:
+  - m_entry: {fileID: 11400000, guid: 1861129aec546d647a387412b6a523da, type: 2}
+    m_count: 8
+  - m_entry: {fileID: 11400000, guid: c3a5452b00f466d4197eaf26bfe1deff, type: 2}
+    m_count: 1
+  - m_entry: {fileID: 11400000, guid: f85b7920c38b1ff45a70229faadaff4c, type: 2}
+    m_count: 1
+  - m_entry: {fileID: 11400000, guid: 485a451ba48384e43a5feb661f68715a, type: 2}
+    m_count: 1
+  - m_entry: {fileID: 11400000, guid: cc9b90bc4fd6c0542bda49f8719b6e86, type: 2}
+    m_count: 1
