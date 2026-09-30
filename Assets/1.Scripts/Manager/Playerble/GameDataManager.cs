@@ -10,11 +10,22 @@ using UnityEngine.Serialization;
 [DefaultExecutionOrder(-300)]
 public class GameDataManager : MonoBehaviour
 {
+    private static readonly PlayerbleCharacterId[] FixedDefenseSquadCharacterIds =
+    {
+        PlayerbleCharacterId.Narin,
+        PlayerbleCharacterId.Cheongsol,
+        PlayerbleCharacterId.Seoha
+    };
+
     /// <summary>현재 GameManager 자식에서 활성화된 전역 데이터 매니저 인스턴스입니다.</summary>
     public static GameDataManager Instance { get; private set; }
 
+    // NOTE(TEST BOOTSTRAP): Shelter 단독 실행/반복 테스트를 위한 의도적인 전환 스위치입니다.
+    // true면 MainSceneSaveManager가 Shelter 시작 시 DefaultSaveData를 다시 적용하므로,
+    // 다른 Scene에서 돌아오기 전의 GameDataManager 데이터가 덮이는 것이 정상적인 테스트 동작입니다.
+    // 실제 게임 흐름에서는 false로 두며, 기존 GameDataManager 데이터를 Shelter가 이어서 사용합니다.
     [Header("Shelter Bootstrap")]
-    [Tooltip("활성화하면 Shelter 진입 시 테스트용 DefaultSaveData를 적용합니다. 실제 게임 플레이에서는 비활성화합니다.")]
+    [Tooltip("테스트 전용: 활성화하면 Shelter 진입 시 DefaultSaveData가 GameDataManager를 의도적으로 덮어씁니다. 실제 플레이에서는 비활성화합니다.")]
     [SerializeField] private bool useDefaultSaveDataOnShelterStart;
 
     [Header("Progress")]
@@ -98,8 +109,17 @@ public class GameDataManager : MonoBehaviour
     public IReadOnlyList<CharacterSnapshotData> Characters => characters;
     public IReadOnlyList<ItemStorageEntry> ItemStorageEntries => itemStorageEntries;
 
-    /// <summary>Shelter 진입 시 테스트용 기본 데이터를 적용할지 여부입니다.</summary>
+    /// <summary>
+    /// Shelter 진입 시 테스트용 DefaultSaveData로 GameDataManager를 의도적으로 덮어쓸지 여부입니다.
+    /// false인 실제 게임 흐름에서는 현재 GameDataManager 데이터를 그대로 유지합니다.
+    /// </summary>
     public bool UseDefaultSaveDataOnShelterStart => useDefaultSaveDataOnShelterStart;
+
+    /// <summary>Shelter 진입 시 테스트용 DefaultSaveData를 적용할지 설정합니다.</summary>
+    public void SetUseDefaultSaveDataOnShelterStart(bool enabled)
+    {
+        useDefaultSaveDataOnShelterStart = enabled;
+    }
 
     /// <summary>플레이어블 캐릭터와 비플레이어 NPC를 합한 전체 보유 수입니다.</summary>
     public int TotalOwnedCharacterCount => CharacterCount;
@@ -408,6 +428,31 @@ public class GameDataManager : MonoBehaviour
         }
 
         characters.Add(normalizedSnapshot);
+        return true;
+    }
+
+    /// <summary>방어전에 출격할 나린, 청솔, 서하를 고정 스쿼드로 설정합니다.</summary>
+    public bool TrySetFixedDefenseSquad()
+    {
+        EnsureRuntimeState();
+        List<string> fixedSquadRuntimeIds = new(FixedDefenseSquadCharacterIds.Length);
+
+        for (int i = 0; i < FixedDefenseSquadCharacterIds.Length; i++)
+        {
+            PlayerbleCharacterId characterId = FixedDefenseSquadCharacterIds[i];
+            CharacterSnapshotData character = characters.Find(
+                candidate => candidate != null && candidate.CharacterId == characterId);
+            if (character == null)
+            {
+                Debug.LogWarning(
+                    $"[GameDataManager] 방어전 고정 스쿼드 캐릭터를 찾지 못했습니다. characterId={characterId}");
+                return false;
+            }
+
+            fixedSquadRuntimeIds.Add(character.RuntimeId);
+        }
+
+        playableSquadRuntimeIds = fixedSquadRuntimeIds;
         return true;
     }
 

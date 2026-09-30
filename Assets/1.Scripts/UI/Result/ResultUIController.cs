@@ -147,6 +147,8 @@ public class ResultUIController : MonoBehaviour
     {
         OnReturnToShelter?.Invoke();
         TestSceneUiEventSystemBridge.DisableBeforeShelterTransition();
+        // 방어전 귀환 반복 테스트를 위해 다음 Shelter 진입에서 DefaultSaveData를 적용한다.
+        GameDataManager.Instance?.SetUseDefaultSaveDataOnShelterStart(true);
         SceneTransitionController.LoadScene(m_returnSceneName);
     }
 

@@ -147,6 +147,15 @@ public sealed class ScrambleFacility : MonoBehaviour
             return false;
         }
 
+        GameDataManager gameData = GameDataManager.Instance;
+        if (gameData == null || !gameData.TrySetFixedDefenseSquad())
+        {
+            Debug.LogWarning(
+                "[ScrambleFacility] Failed to set the fixed defense squad.",
+                this);
+            return false;
+        }
+
         SceneTransitionController.LoadScene(sceneName);
         return true;
     }

@@ -24,7 +24,7 @@ MonoBehaviour:
   - resourceId: trap_material
     amount: 9999
   startingCharacterDefinitions:
-  - {fileID: 11400000, guid: d9fa4f3014d8cc64ba58aebb2a6827c2, type: 2}
+  - {fileID: 11400000, guid: 2500c3745cea5654a838c007ba8ebfeb, type: 2}
   - {fileID: 11400000, guid: 6ebffd95315760a44ae6b35e6f84bf68, type: 2}
   - {fileID: 11400000, guid: 5a8c15051019b3a469542db2111b6d61, type: 2}
   startDay: 1
