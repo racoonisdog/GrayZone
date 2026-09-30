@@ -14,6 +14,22 @@ using VInspector;
 [DisallowMultipleComponent]
 public sealed class DefenseManager : MonoBehaviour
 {
+    /// <summary>Shooter 업그레이드 한 레벨에서 함께 배치되는 좌우 지정사수 한 쌍입니다.</summary>
+    /// <remarks>
+    /// 기획 기준(2026-09-29): 레벨마다 좌우 한 명씩, 2명이 추가됩니다. 1레벨은 좌우 2명(A_01, B_01),
+    /// 2레벨은 좌우 4명(A_01, B_01, A_02, B_02)입니다. 네 명 모두 같은 지정사수 기능(사격·장전·애니메이션)을 쓰고
+    /// 모델만 다를 예정이므로, 칸에는 <see cref="DefenseMarksmanController"/>가 붙은 NPC를 넣습니다.
+    /// </remarks>
+    [Serializable]
+    public struct MarksmanTier
+    {
+        [Tooltip("이 레벨에서 켤 왼쪽 지정사수입니다. 비어 있으면 무시합니다.")]
+        public GameObject Left;
+
+        [Tooltip("이 레벨에서 켤 오른쪽 지정사수입니다. 비어 있으면 무시합니다.")]
+        public GameObject Right;
+    }
+
     [Header("Defense Round")]
     [Tooltip("Defense 게임을 시작한 뒤 스포너를 활성화해 둘 라운드 시간(초)입니다.")]
     [Min(0.01f)]
@@ -36,6 +52,12 @@ public sealed class DefenseManager : MonoBehaviour
 
     [Tooltip("웨이브 진행과 방어전 결과를 기록할 방어전 데이터 매니저입니다. 비워 두면 런타임에 찾습니다.")]
     [SerializeField] private DefenseSceneDataManager m_defenseSceneDataManager;
+
+    [Header("Marksman Placement")]
+    [Tooltip("Shooter 업그레이드 레벨별 지정사수 배치입니다. 첫 칸이 1레벨, 둘째 칸이 2레벨입니다. " +
+             "레벨이 N이면 1~N번째 칸의 좌우 지정사수를 모두 켜고 나머지는 끕니다. " +
+             "비워 두면 이 매니저는 지정사수를 건드리지 않습니다.")]
+    [SerializeField] private MarksmanTier[] m_marksmanTiers = Array.Empty<MarksmanTier>();
 
     [Header("Defense HUD")]
     [Tooltip("전투 또는 휴식의 남은 시간을 분:초로 표시할 텍스트입니다. 비어 있으면 타이머 표시는 생략합니다.")]
@@ -169,8 +191,9 @@ public sealed class DefenseManager : MonoBehaviour
 
     private void Start()
     {
-        // DefenseSceneDataManager는 실행 순서상 먼저 Awake를 마쳤으므로 여기서 웨이브 설정을 넘깁니다.
+        // DefenseSceneDataManager는 실행 순서상 먼저 Start까지 마쳐 입장 데이터를 갖고 있습니다.
         ResolveDefenseSceneDataManager()?.ConfigureWaves(m_totalWaveCount);
+        ApplyMarksmanPlacement();
     }
 
     private void Update()
@@ -325,6 +348,12 @@ public sealed class DefenseManager : MonoBehaviour
     [Tooltip("켜면 라운드 스킵이 필드에 남은 적을 함께 치웁니다. 끄면 적을 둔 채로 구간만 넘깁니다. 휴식으로 넘어갔는데 지난 전투의 적이 돌아다니는 상태를 피하려면 켜 두세요.")]
     [SerializeField] private bool m_debugSkipClearsEnemies = true;
 
+    [Foldout("Debug")]
+    [Tooltip("0 이상이면 Shooter 업그레이드 레벨 대신 이 값으로 지정사수를 배치합니다. -1이면 입장 데이터 값을 씁니다. " +
+             "셸터를 거치지 않고 이 씬만 실행해 배치를 확인할 때 씁니다.")]
+    [Min(-1)]
+    [SerializeField] private int m_debugMarksmanLevelOverride = -1;
+
     /// <summary>
     /// 이 매니저가 제어하는 스폰 포인트가 내보낸 적을 모두 풀로 되돌립니다.
     /// </summary>
@@ -461,6 +490,54 @@ public sealed class DefenseManager : MonoBehaviour
         startInput = activeMember.GetComponent<PlayerInputController>();
         startInteraction = activeMember.GetComponent<InteractionController>();
         return startInput != null && startInput.isActiveAndEnabled;
+    }
+
+    /// <summary>
+    /// Shooter 업그레이드 레벨에 맞춰 지정사수를 켜고 끕니다.
+    /// </summary>
+    /// <remarks>
+    /// 레벨은 <see cref="DefenseSceneDataManager"/>의 입장 데이터에서 읽습니다. 씬 도착 뒤 전역 데이터가 바뀌어도
+    /// 이번 판의 배치는 출격 시점 값으로 고정됩니다. 레벨이 목록 길이보다 크면 목록 전체를 켭니다.
+    /// </remarks>
+    private void ApplyMarksmanPlacement()
+    {
+        if (m_marksmanTiers == null || m_marksmanTiers.Length == 0)
+        {
+            return;
+        }
+
+        int level = ResolveMarksmanLevel();
+        for (int i = 0; i < m_marksmanTiers.Length; i++)
+        {
+            bool active = i < level;
+            SetMarksmanActive(m_marksmanTiers[i].Left, active);
+            SetMarksmanActive(m_marksmanTiers[i].Right, active);
+        }
+    }
+
+    private int ResolveMarksmanLevel()
+    {
+        if (m_debugMarksmanLevelOverride >= 0)
+        {
+            return m_debugMarksmanLevelOverride;
+        }
+
+        DefenseSceneDataManager defenseData = ResolveDefenseSceneDataManager();
+        if (defenseData != null)
+        {
+            return defenseData.GetUpgradeLevel(ScrambleUpgradeType.Shooter);
+        }
+
+        Debug.LogWarning("[DefenseManager] DefenseSceneDataManager가 없어 GameDataManager의 Shooter 레벨로 지정사수를 배치합니다.", this);
+        return GameDataManager.Instance != null ? GameDataManager.Instance.ShooterUpgradeLevel : 0;
+    }
+
+    private static void SetMarksmanActive(GameObject marksman, bool active)
+    {
+        if (marksman != null && marksman.activeSelf != active)
+        {
+            marksman.SetActive(active);
+        }
     }
 
     /// <summary>웨이브 진행을 기록할 방어전 데이터 매니저 참조를 확보합니다.</summary>
