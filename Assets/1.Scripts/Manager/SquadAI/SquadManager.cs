@@ -135,6 +135,9 @@ public class SquadManager : MonoBehaviour
     [Tooltip("조준점 근처에서 NavMesh 위 자리를 찾을 반경(m)입니다. 이 안에 걸을 수 있는 자리가 없으면 명령하지 않습니다.")]
     [SerializeField] private float m_orderNavMeshSampleRadius = 2.0f;
 
+    [Tooltip("명령 자리와 복귀 시 돌아올 팀원 발밑에 재생할 이펙트 설정입니다. 비우면 이펙트 없이 명령만 내립니다.")]
+    [SerializeField] private SquadOrderFeedbackSO m_orderFeedback;
+
     [Foldout("Enemy Intel Options")]
     [Tooltip("교전 적을 지금 보고 있는지 다시 판정하는 주기입니다. 짧을수록 반응이 빠르지만 시야 판정 비용이 늘어납니다.")]
     [SerializeField] private float m_enemyIntelInterval = 0.2f;
@@ -439,9 +442,10 @@ public class SquadManager : MonoBehaviour
             {
                 state.Cancelled = true;
                 SquadAIController ai = ResolveOrderableAi(state.Target);
-                if (ai != null)
+                if (ai != null && ai.HasMoveOrder)
                 {
                     ai.CancelMoveOrder();
+                    PlayRecallFeedback(aiOrder, state.Target);
                 }
             }
 
@@ -464,17 +468,71 @@ public class SquadManager : MonoBehaviour
             return;
         }
 
-        if (!TryResolveOrderPoint(out Vector3 point))
+        if (!TryResolveOrderPoint(out Vector3 point, out bool hasAimHit))
         {
             if (m_logSwitchDebug)
             {
                 Debug.Log($"[SquadManager] 팀원 {aiOrder + 1} 명령: 조준점에서 이동할 수 있는 자리를 찾지 못했습니다.", this);
             }
 
+            // 조준한 곳에 표시해야 "거기는 못 간다"가 읽힙니다. 하늘처럼 맞은 곳이 없으면 명령받은 팀원 발밑에 띄웁니다.
+            PlayInvalidOrderFeedback(hasAimHit ? point : target.transform.position);
             return;
         }
 
         targetAi.IssueMoveOrder(point);
+        PlayOrderFeedback(aiOrder, point);
+    }
+
+    /// <summary>이동할 수 없는 곳에 명령했을 때 명령 불가 이펙트를 재생합니다.</summary>
+    /// <param name="position">이펙트를 띄울 위치입니다.</param>
+    private void PlayInvalidOrderFeedback(Vector3 position)
+    {
+        if (m_orderFeedback == null)
+        {
+            return;
+        }
+
+        FeedbackPlaybackUtility.SpawnPrefab(
+            m_orderFeedback.InvalidOrderEffectPrefab,
+            position + Vector3.up * m_orderFeedback.GroundOffset,
+            Quaternion.identity,
+            m_orderFeedback.InvalidOrderEffectLifetime);
+    }
+
+    /// <summary>이동·사수 명령을 내린 자리에 명령 이펙트를 재생합니다.</summary>
+    /// <param name="aiOrder">명령한 키의 팀원 순번입니다. 0이 팀원 1(Q)입니다. 키마다 이펙트가 다릅니다.</param>
+    /// <param name="point">NavMesh 위로 보정한 명령 자리입니다.</param>
+    private void PlayOrderFeedback(int aiOrder, Vector3 point)
+    {
+        if (m_orderFeedback == null)
+        {
+            return;
+        }
+
+        FeedbackPlaybackUtility.SpawnPrefab(
+            m_orderFeedback.GetOrderEffectPrefab(aiOrder),
+            point + Vector3.up * m_orderFeedback.GroundOffset,
+            Quaternion.identity,
+            m_orderFeedback.OrderEffectLifetime);
+    }
+
+    /// <summary>복귀 명령을 받은 팀원 발밑에 복귀 이펙트를 재생합니다.</summary>
+    /// <param name="aiOrder">복귀시킨 키의 팀원 순번입니다. 0이 팀원 1(Q)입니다. 키마다 이펙트가 다릅니다.</param>
+    /// <param name="member">명령을 취소하고 돌아올 팀원입니다.</param>
+    /// <remarks>어느 팀원이 돌아오는지 보이도록 명령자가 아니라 돌아올 팀원 쪽에 표시합니다. 명령이 없던 팀원에게는 부르지 않습니다.</remarks>
+    private void PlayRecallFeedback(int aiOrder, SquadMemberController member)
+    {
+        if (m_orderFeedback == null || member == null)
+        {
+            return;
+        }
+
+        FeedbackPlaybackUtility.SpawnPrefab(
+            m_orderFeedback.GetRecallEffectPrefab(aiOrder),
+            member.transform.position + Vector3.up * m_orderFeedback.GroundOffset,
+            Quaternion.identity,
+            m_orderFeedback.RecallEffectLifetime);
     }
 
     /// <summary>지금 팀원 명령 입력을 받을 수 있는지 확인합니다.</summary>
@@ -538,15 +596,19 @@ public class SquadManager : MonoBehaviour
     }
 
     /// <summary>화면 중앙 조준점이 가리키는 걸을 수 있는 자리를 찾습니다.</summary>
-    /// <param name="point">NavMesh 위로 보정한 자리입니다.</param>
+    /// <param name="point">
+    /// NavMesh 위로 보정한 자리입니다. 실패했을 때는 광선이 맞은 지점이며, 명령 불가 이펙트 위치로 씁니다.
+    /// </param>
+    /// <param name="hasAimHit">광선이 무언가에 맞았는지입니다. false면 <paramref name="point"/>는 의미가 없습니다.</param>
     /// <returns>자리를 찾았으면 true입니다.</returns>
     /// <remarks>
     /// 스쿼드 멤버의 콜라이더는 건너뜁니다. 3인칭 카메라라 광선이 조작 캐릭터 어깨에 먼저 걸릴 수 있습니다.
     /// 트리거는 보지 않습니다. 감지 범위 같은 보이지 않는 영역에 명령 지점이 찍히면 안 되기 때문입니다.
     /// </remarks>
-    private bool TryResolveOrderPoint(out Vector3 point)
+    private bool TryResolveOrderPoint(out Vector3 point, out bool hasAimHit)
     {
         point = default;
+        hasAimHit = false;
 
         Camera camera = Camera.main;
         if (camera == null)
@@ -583,6 +645,8 @@ public class SquadManager : MonoBehaviour
         {
             return false;
         }
+
+        hasAimHit = true;
 
         if (!NavMesh.SamplePosition(point, out NavMeshHit navHit,
                 Mathf.Max(0.1f, m_orderNavMeshSampleRadius), NavMesh.AllAreas))

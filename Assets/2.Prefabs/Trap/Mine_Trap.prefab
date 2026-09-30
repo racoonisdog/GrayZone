@@ -161,7 +161,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MineTrap
   m_startPlaced: 0
   m_buildCostResourceId: upgrade_part_material
-  m_buildCostAmount: 1
+  m_buildCostAmount: 0
   m_buildPrompt: "?\u317C\uD282"
   m_buildHoldDuration: 1
   m_blueprintMaterial: {fileID: 2100000, guid: cf43b62aa6a65f148a402c99cb003910, type: 2}
