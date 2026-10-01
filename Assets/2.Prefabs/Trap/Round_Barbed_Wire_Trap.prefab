@@ -97,7 +97,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   m_startPlaced: 0
-  m_buildCostResourceId: upgrade_part_material
+  m_buildCostResourceId: upgrade_material
   m_buildCostAmount: 1
   m_buildPrompt: "\uC124\uCE58"
   m_buildHoldDuration: 1
@@ -106,6 +106,7 @@ MonoBehaviour:
   m_blueprintVisualRoot: {fileID: 0}
   m_builtVisualRoot: {fileID: 0}
   m_maxHealth: 100
+  m_currentHealth: 0
   m_rebuildPolicy: 1
   m_damage: 1
   m_damageMode: 1
