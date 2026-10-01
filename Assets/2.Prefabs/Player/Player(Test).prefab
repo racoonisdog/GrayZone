@@ -5409,7 +5409,7 @@ MonoBehaviour:
   m_publicTarget: {fileID: 0}
   m_currentWeapon: {fileID: 0}
   m_currentWeaponFallbackName: 
-  m_reserveAmmo: 0
+  m_reserveAmmo: 120
   m_maxReserveAmmo: 120
   m_debugInfiniteReserveAmmo: 0
 --- !u!114 &6619302410003073894

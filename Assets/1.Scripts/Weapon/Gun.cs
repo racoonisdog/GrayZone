@@ -86,6 +86,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [FormerlySerializedAs("currentBullet")]
     [SerializeField] private int m_currentBullet = 30;
 
+    [Tooltip("켜면 시작할 때 현재 탄약을 밸런스 SO가 정한 최대 탄약으로 채웁니다. 끄면 위의 현재 탄약 값으로 시작합니다.")]
+    [SerializeField] private bool m_startWithFullMagazine = true;
+
     [Tooltip("최대 탄약 수입니다.")]
     [FormerlySerializedAs("maxBullet")]
     [BalanceField]
@@ -902,6 +905,13 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
         m_hasRequiredReferences = true;
         BindConfiguredBalance();
+
+        // 최대 탄약은 밸런스 SO가 정하므로 프리팹에 적힌 현재 탄약과 어긋날 수 있습니다(예: 30/45).
+        // 밸런스가 들어간 직후에 채워야 실제 최대치로 시작합니다. 이어하기 상태는 이후 스냅샷 적용이 덮어씁니다.
+        if (m_startWithFullMagazine)
+        {
+            m_currentBullet = m_maxBullet;
+        }
     }
 
     /// <summary>
