@@ -1445,6 +1445,104 @@ public class CrosshairController : MonoBehaviour
         set { m_ammoGaugeBackgroundAlpha = Mathf.Clamp01(value); RefreshRuntimeLayout(); }
     }
 
+    /// <summary>탄약 게이지 배경의 색입니다. 투명도는 <see cref="AmmoGaugeBackgroundAlpha"/>가 정합니다.</summary>
+    public Color AmmoGaugeBackgroundColor
+    {
+        get => m_ammoGaugeBackgroundColor;
+        set { m_ammoGaugeBackgroundColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>재장전 중 진행도 아크의 색입니다.</summary>
+    public Color ReloadAmmoGaugeColor
+    {
+        get => m_reloadAmmoGaugeColor;
+        set { m_reloadAmmoGaugeColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>장탄 아크를 탄 단위로 나눌 때 칸 사이 간격(도)입니다.</summary>
+    public float AmmoGaugeSegmentGapDegrees
+    {
+        get => m_ammoGaugeSegmentGapDegrees;
+        set { m_ammoGaugeSegmentGapDegrees = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    // 차단 마커 ─────────────────────────────────────────────────
+
+    /// <summary>총구와 조준점 사이가 막혔을 때 차단 마커를 표시할지 여부입니다.</summary>
+    public bool BlockMarkerEnabled
+    {
+        get => m_showBlockMarker;
+        set
+        {
+            m_showBlockMarker = value;
+            if (!value)
+            {
+                HideBlockMarker();
+            }
+        }
+    }
+
+    /// <summary>차단 마커 링의 지름(픽셀)입니다.</summary>
+    public float BlockMarkerRingSizePixels
+    {
+        get => m_blockMarkerRingSizePixels;
+        set { m_blockMarkerRingSizePixels = Mathf.Max(0.0f, value); RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커 링의 선 두께(픽셀)입니다. 0이면 링을 그리지 않습니다.</summary>
+    public float BlockMarkerRingThicknessPixels
+    {
+        get => m_blockMarkerRingThicknessPixels;
+        set { m_blockMarkerRingThicknessPixels = Mathf.Max(0.0f, value); RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커 가운데 점의 지름(픽셀)입니다. 0이면 점을 그리지 않습니다.</summary>
+    public float BlockMarkerDotSizePixels
+    {
+        get => m_blockMarkerDotSizePixels;
+        set { m_blockMarkerDotSizePixels = Mathf.Max(0.0f, value); RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커의 색입니다. 링과 가운데 점이 같은 색을 씁니다.</summary>
+    public Color BlockMarkerColor
+    {
+        get => m_blockMarkerColor;
+        set { m_blockMarkerColor = value; RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커가 보이는 동안 중앙 조준선을 흐리게 할지 여부입니다.</summary>
+    public bool DimCrosshairWhileBlockMarker
+    {
+        get => m_dimCrosshairWhileBlockMarker;
+        set => m_dimCrosshairWhileBlockMarker = value;
+    }
+
+    /// <summary>차단 마커가 보이는 동안의 조준선 투명도입니다.</summary>
+    public float BlockMarkerCrosshairAlpha
+    {
+        get => m_blockMarkerCrosshairAlpha;
+        set => m_blockMarkerCrosshairAlpha = Mathf.Clamp01(value);
+    }
+
+    /// <summary>차단 마커 표시·해제에 맞춰 조준선 투명도가 바뀌는 시간(초)입니다.</summary>
+    public float BlockMarkerCrosshairFadeDuration
+    {
+        get => m_blockMarkerCrosshairFadeDuration;
+        set => m_blockMarkerCrosshairFadeDuration = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>
+    /// 떠 있는 차단 마커를 다시 그리게 합니다.
+    /// </summary>
+    /// <remarks>
+    /// 차단 마커는 나타나는 순간에만 다시 그려집니다. 표시 중에 모양이나 색을 바꾸면 이 호출이 없을 때
+    /// 다음에 다시 나타날 때까지 이전 모양이 남습니다.
+    /// </remarks>
+    private void RepaintBlockMarker()
+    {
+        m_blockMarkerElement?.MarkDirtyRepaint();
+    }
+
     // 적중 표시 ─────────────────────────────────────────────────
 
     /// <summary>히트마커 밑변의 길이(픽셀)입니다.</summary>
@@ -1679,7 +1777,11 @@ public class CrosshairController : MonoBehaviour
     public int SpecialAmmoGaugeRoundCount => m_specialAmmoGaugeRoundCount;
 
     /// <summary>특수탄 장탄 아크 색입니다.</summary>
-    public Color SpecialAmmoGaugeColor => m_specialAmmoGaugeColor;
+    public Color SpecialAmmoGaugeColor
+    {
+        get => m_specialAmmoGaugeColor;
+        set { m_specialAmmoGaugeColor = value; RefreshRuntimeLayout(); }
+    }
 
     /// <summary>현재 무기의 장탄 아크를 탄 단위로 분할할지와 구간 수를 설정합니다.</summary>
     /// <param name="enabled">분할 표시를 사용하면 <c>true</c>입니다.</param>

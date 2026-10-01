@@ -101,10 +101,12 @@ public class CrosshairDebugInspector : MonoBehaviour
     private bool m_showShape = true;
     private bool m_showSub = true;
     private bool m_showSpread = true;
+    private bool m_showShotRecoil;
     private bool m_showReload;
     private bool m_showAmmoGauge;
     private bool m_showHitMarker;
     private bool m_showKillSkull;
+    private bool m_showBlockMarker;
     private bool m_showThrowable = true;
 
     // 투척물 구역의 버튼이 한 번에 넣는 수량입니다.
@@ -118,9 +120,13 @@ public class CrosshairDebugInspector : MonoBehaviour
     private bool m_showSubStrokeColor;
     private bool m_showAmmoGaugeColor;
     private bool m_showLowAmmoGaugeColor;
+    private bool m_showReloadAmmoGaugeColor;
+    private bool m_showSpecialAmmoGaugeColor;
+    private bool m_showAmmoGaugeBackgroundColor;
     private bool m_showHitMarkerColorBody;
     private bool m_showHitMarkerColorHead;
     private bool m_showKillSkullTint;
+    private bool m_showBlockMarkerColor;
 
     // IMGUI 런타임 창은 기본 리사이즈 핸들이 없으므로 테두리를 잡아 크기를 바꿉니다.
     private Rect m_windowRect = new Rect(520f, 10f, 460f, 640f);
@@ -363,6 +369,8 @@ public class CrosshairDebugInspector : MonoBehaviour
         GUILayout.Space(6);
         DrawSpreadSection(crosshair);
         GUILayout.Space(6);
+        DrawShotRecoilSection(crosshair);
+        GUILayout.Space(6);
         DrawReloadSection(crosshair);
         GUILayout.Space(6);
         DrawAmmoGaugeSection(crosshair);
@@ -370,6 +378,8 @@ public class CrosshairDebugInspector : MonoBehaviour
         DrawHitMarkerSection(crosshair);
         GUILayout.Space(6);
         DrawKillSkullSection(crosshair);
+        GUILayout.Space(6);
+        DrawBlockMarkerSection(crosshair);
 
         GUILayout.EndScrollView();
 
@@ -556,6 +566,22 @@ public class CrosshairDebugInspector : MonoBehaviour
                 4));
     }
 
+    private void DrawShotRecoilSection(CrosshairController crosshair)
+    {
+        if (!SectionHeader("■ 사격 반동 펄스", ref m_showShotRecoil))
+        {
+            return;
+        }
+
+        // 펄스 곡선(AnimationCurve)은 IMGUI로 다루기 어려워 인스펙터에서만 고칩니다.
+        crosshair.SetShotRecoilPulseEnabled(
+            GUILayout.Toggle(crosshair.ShotRecoilPulseEnabled, " 발사마다 조준선 벌어짐"));
+        crosshair.SetShotRecoilPulseAmplitudePixels(
+            SliderRow("최대 벌어짐", crosshair.ShotRecoilPulseAmplitudePixels, 0f, 60f, "0"));
+        crosshair.SetShotRecoilPulseDuration(
+            SliderRow("길이(초)", crosshair.ShotRecoilPulseDuration, 0f, 1f));
+    }
+
     private void DrawReloadSection(CrosshairController crosshair)
     {
         if (!SectionHeader("■ 재장전", ref m_showReload))
@@ -596,9 +622,13 @@ public class CrosshairDebugInspector : MonoBehaviour
         crosshair.ShowAmmoGaugeBackground =
             GUILayout.Toggle(crosshair.ShowAmmoGaugeBackground, " 배경 표시");
         crosshair.AmmoGaugeBackgroundAlpha = SliderRow("배경 투명도", crosshair.AmmoGaugeBackgroundAlpha, 0f, 1f);
+        crosshair.AmmoGaugeSegmentGapDegrees = SliderRow("칸 간격(도)", crosshair.AmmoGaugeSegmentGapDegrees, 0f, 20f);
 
         crosshair.AmmoGaugeColor = ColorRow("게이지 색", crosshair.AmmoGaugeColor, ref m_showAmmoGaugeColor);
         crosshair.LowAmmoGaugeColor = ColorRow("잔탄 부족 색", crosshair.LowAmmoGaugeColor, ref m_showLowAmmoGaugeColor);
+        crosshair.ReloadAmmoGaugeColor = ColorRow("재장전 진행 색", crosshair.ReloadAmmoGaugeColor, ref m_showReloadAmmoGaugeColor);
+        crosshair.SpecialAmmoGaugeColor = ColorRow("특수탄 색", crosshair.SpecialAmmoGaugeColor, ref m_showSpecialAmmoGaugeColor);
+        crosshair.AmmoGaugeBackgroundColor = ColorRow("배경 색", crosshair.AmmoGaugeBackgroundColor, ref m_showAmmoGaugeBackgroundColor);
     }
 
     private void DrawHitMarkerSection(CrosshairController crosshair)
@@ -613,6 +643,27 @@ public class CrosshairDebugInspector : MonoBehaviour
         crosshair.HitMarkerBaseLengthPixels = SliderRow("밑변 길이", crosshair.HitMarkerBaseLengthPixels, 0f, 60f, "0");
         crosshair.HitMarkerCenterGapPixels = SliderRow("중앙 간격", crosshair.HitMarkerCenterGapPixels, 0f, 60f, "0");
         crosshair.HitMarkerFadeDuration = SliderRow("사라짐(초)", crosshair.HitMarkerFadeDuration, 0f, 2f);
+
+        crosshair.HitMarkerDamageScaleEnabled =
+            GUILayout.Toggle(crosshair.HitMarkerDamageScaleEnabled, " 피해량에 비례한 길이");
+        if (crosshair.HitMarkerDamageScaleEnabled)
+        {
+            crosshair.HitMarkerMinDamage = SliderRow("최소 피해", crosshair.HitMarkerMinDamage, 0f, 200f, "0");
+            crosshair.HitMarkerMaxDamage = SliderRow("최대 피해", crosshair.HitMarkerMaxDamage, 0f, 500f, "0");
+            crosshair.HitMarkerLengthAtMinDamagePixels =
+                SliderRow("최소 피해 길이", crosshair.HitMarkerLengthAtMinDamagePixels, 0f, 100f, "0");
+            crosshair.HitMarkerLengthAtMaxDamagePixels =
+                SliderRow("최대 피해 길이", crosshair.HitMarkerLengthAtMaxDamagePixels, 0f, 100f, "0");
+        }
+
+        crosshair.HitMarkerRollBaseDegrees = SliderRow("기울기(도)", crosshair.HitMarkerRollBaseDegrees, -90f, 90f, "0");
+        crosshair.HitMarkerRandomRollEnabled =
+            GUILayout.Toggle(crosshair.HitMarkerRandomRollEnabled, " 발마다 무작위로 기울이기");
+        if (crosshair.HitMarkerRandomRollEnabled)
+        {
+            crosshair.HitMarkerRollRandomRangeDegrees =
+                SliderRow("무작위 범위(도)", crosshair.HitMarkerRollRandomRangeDegrees, 0f, 45f, "0");
+        }
 
         crosshair.HitMarkerColorBody = ColorRow("몸통 적중 색", crosshair.HitMarkerColorBody, ref m_showHitMarkerColorBody);
         crosshair.HitMarkerColorHead = ColorRow("약점 적중 색", crosshair.HitMarkerColorHead, ref m_showHitMarkerColorHead);
@@ -631,6 +682,27 @@ public class CrosshairDebugInspector : MonoBehaviour
         crosshair.KillSkullFadeDuration = SliderRow("사라짐(초)", crosshair.KillSkullFadeDuration, 0f, 3f);
 
         crosshair.KillSkullTint = ColorRow("색조", crosshair.KillSkullTint, ref m_showKillSkullTint);
+    }
+
+    private void DrawBlockMarkerSection(CrosshairController crosshair)
+    {
+        if (!SectionHeader("■ 차단 마커", ref m_showBlockMarker))
+        {
+            return;
+        }
+
+        crosshair.BlockMarkerEnabled = GUILayout.Toggle(crosshair.BlockMarkerEnabled, " 막혔을 때 실제 탄착점 표시");
+        crosshair.BlockMarkerRingSizePixels = SliderRow("링 지름", crosshair.BlockMarkerRingSizePixels, 0f, 100f, "0");
+        crosshair.BlockMarkerRingThicknessPixels = SliderRow("링 두께", crosshair.BlockMarkerRingThicknessPixels, 0f, 20f);
+        crosshair.BlockMarkerDotSizePixels = SliderRow("가운데 점", crosshair.BlockMarkerDotSizePixels, 0f, 40f);
+
+        crosshair.DimCrosshairWhileBlockMarker =
+            GUILayout.Toggle(crosshair.DimCrosshairWhileBlockMarker, " 표시 중 조준선 흐리게");
+        crosshair.BlockMarkerCrosshairAlpha = SliderRow("흐릴 때 투명도", crosshair.BlockMarkerCrosshairAlpha, 0f, 1f);
+        crosshair.BlockMarkerCrosshairFadeDuration =
+            SliderRow("전환 시간(초)", crosshair.BlockMarkerCrosshairFadeDuration, 0f, 1f);
+
+        crosshair.BlockMarkerColor = ColorRow("마커 색", crosshair.BlockMarkerColor, ref m_showBlockMarkerColor);
     }
 
     // ─────────────────────────────────────────────────────────────
