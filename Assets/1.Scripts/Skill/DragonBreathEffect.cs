@@ -29,7 +29,7 @@ public sealed class DragonBreathEffect : MonoBehaviour
     [Tooltip("용숨결 직격 피해가 성립한 대상에게 적용할 화상 상태이상입니다. 비어 있으면 Resources 기본 에셋을 사용합니다.")]
     [SerializeField] private StatusEffectDefinitionSO m_burningEffect;
 
-    [Tooltip("발사할 때 Scene 뷰에 원통형 판정 범위를 잠시 그립니다.")]
+    [Tooltip("켜면 발사 여부와 오브젝트 선택 여부에 관계없이 Scene 뷰에 원통형 판정 범위를 계속 표시합니다.")]
     [SerializeField] private bool m_drawDebugRange = true;
 
     private readonly HashSet<IDamageable> m_damagedTargets = new HashSet<IDamageable>();
@@ -43,6 +43,7 @@ public sealed class DragonBreathEffect : MonoBehaviour
     public float DamageRadius => Mathf.Max(0.01f, m_damageRadius);
     public float DamageRange => Mathf.Max(0.01f, m_damageRange);
     public float Lifetime => Mathf.Max(0.01f, m_lifetime);
+    public bool DrawDebugRange => m_drawDebugRange;
 
     private void Awake()
     {
