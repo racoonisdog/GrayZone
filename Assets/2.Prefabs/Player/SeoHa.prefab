@@ -691,6 +691,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StatusEffectContainer
   m_effectAnchor: {fileID: 0}
+  m_modelTintRoot: {fileID: 0}
 --- !u!4 &2137951434080301018 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4526457136588419995, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}

@@ -8,6 +8,7 @@ public static class StatusEffectSetupUtility
     private const string StatusFolder = "Assets/Resources/StatusEffects";
     private const string VisualFolder = "Assets/Resources/StatusEffectVisuals";
     private const string VisualPrefabFolder = "Assets/2.Prefabs/StatusEffect";
+    private const string PlaceholderMaterialPath = VisualPrefabFolder + "/Placeholder_AuraParticle.mat";
     private const string BurningPath = StatusFolder + "/Burning.asset";
     private const string HastePath = StatusFolder + "/NarinTeamHaste.asset";
     private const string DragonBreathPrefabPath = "Assets/Resources/Skill/DragonBreathEffect.prefab";
@@ -17,15 +18,16 @@ public static class StatusEffectSetupUtility
     public static string CreateDefaultsAndWirePrefabs()
     {
         EnsureFolders();
+        Material placeholderMaterial = GetOrCreatePlaceholderParticleMaterial();
 
         StatusEffectVisualSO burningVisual = CreateVisual(
-            "Burning", new Color(1.0f, 0.24f, 0.02f, 0.9f), true, 1.0f);
+            "Burning", new Color(1.0f, 0.24f, 0.02f, 0.9f), true, 1.0f, placeholderMaterial);
         StatusEffectVisualSO hasteVisual = CreateVisual(
-            "NarinHaste", new Color(0.1f, 0.75f, 1.0f, 0.8f), true, 1.0f);
+            "NarinHaste", new Color(0.1f, 0.75f, 1.0f, 0.8f), true, 1.0f, placeholderMaterial);
         StatusEffectVisualSO healVisual = CreateVisual(
-            "TeamHeal", new Color(0.2f, 1.0f, 0.35f, 0.85f), false, 1.5f);
+            "TeamHeal", new Color(0.2f, 1.0f, 0.35f, 0.85f), false, 1.5f, placeholderMaterial);
         StatusEffectVisualSO howlerVisual = CreateVisual(
-            "HowlerBuff", new Color(0.65f, 0.15f, 1.0f, 0.85f), true, 1.0f);
+            "HowlerBuff", new Color(0.65f, 0.15f, 1.0f, 0.85f), true, 1.0f, placeholderMaterial);
 
         StatusEffectDefinitionSO burning = GetOrCreate(BurningPath, "Burning");
         ConfigureDefinition(
@@ -120,14 +122,19 @@ public static class StatusEffectSetupUtility
         string assetName,
         Color color,
         bool loop,
-        float oneShotLifetime)
+        float oneShotLifetime,
+        Material placeholderMaterial)
     {
         string prefabPath = VisualPrefabFolder + "/Placeholder_" + assetName + ".prefab";
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
         if (prefab == null)
         {
-            prefab = CreatePlaceholderParticlePrefab(prefabPath, assetName, color, loop);
+            prefab = CreatePlaceholderParticlePrefab(
+                prefabPath, assetName, color, loop, placeholderMaterial);
         }
+
+        ConfigurePlaceholderParticlePrefab(
+            prefabPath, color, loop, placeholderMaterial);
 
         string assetPath = VisualFolder + "/" + assetName + ".asset";
         StatusEffectVisualSO visual = AssetDatabase.LoadAssetAtPath<StatusEffectVisualSO>(assetPath);
@@ -154,18 +161,22 @@ public static class StatusEffectSetupUtility
         string prefabPath,
         string effectName,
         Color color,
-        bool loop)
+        bool loop,
+        Material placeholderMaterial)
     {
         GameObject root = new GameObject("Placeholder_" + effectName);
         try
         {
             ParticleSystem particles = root.AddComponent<ParticleSystem>();
+            ParticleSystemRenderer particleRenderer = root.GetComponent<ParticleSystemRenderer>();
+            particleRenderer.sharedMaterial = placeholderMaterial;
+            particleRenderer.renderMode = ParticleSystemRenderMode.Billboard;
             ParticleSystem.MainModule main = particles.main;
             main.loop = loop;
             main.duration = 1.0f;
             main.startLifetime = loop ? 1.0f : 0.8f;
-            main.startSpeed = loop ? 0.2f : 1.2f;
-            main.startSize = loop ? 0.22f : 0.3f;
+            main.startSpeed = loop ? 0.15f : 0.8f;
+            main.startSize = loop ? 0.16f : 0.22f;
             main.startColor = color;
             main.simulationSpace = ParticleSystemSimulationSpace.Local;
             main.playOnAwake = true;
@@ -174,18 +185,19 @@ public static class StatusEffectSetupUtility
             ParticleSystem.EmissionModule emission = particles.emission;
             if (loop)
             {
-                emission.rateOverTime = 18.0f;
+                emission.rateOverTime = 24.0f;
             }
             else
             {
                 emission.rateOverTime = 0.0f;
-                emission.SetBursts(new[] { new ParticleSystem.Burst(0.0f, 28) });
+                emission.SetBursts(new[] { new ParticleSystem.Burst(0.0f, 32) });
             }
 
             ParticleSystem.ShapeModule shape = particles.shape;
-            shape.shapeType = ParticleSystemShapeType.Sphere;
-            shape.radius = 0.9f;
-            shape.radiusThickness = 1.0f;
+            shape.shapeType = ParticleSystemShapeType.Circle;
+            shape.radius = 0.8f;
+            shape.radiusThickness = 0.2f;
+            shape.rotation = new Vector3(90.0f, 0.0f, 0.0f);
 
             ParticleSystem.ColorOverLifetimeModule colorOverLifetime = particles.colorOverLifetime;
             colorOverLifetime.enabled = true;
@@ -208,6 +220,104 @@ public static class StatusEffectSetupUtility
         finally
         {
             Object.DestroyImmediate(root);
+        }
+    }
+
+    private static Material GetOrCreatePlaceholderParticleMaterial()
+    {
+        Texture2D texture = FindBuiltinParticleTexture();
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        Material material = AssetDatabase.LoadAssetAtPath<Material>(PlaceholderMaterialPath);
+        if (material == null)
+        {
+            material = new Material(shader)
+            {
+                name = "Placeholder_AuraParticle",
+            };
+            AssetDatabase.CreateAsset(material, PlaceholderMaterialPath);
+        }
+        else if (shader != null)
+        {
+            material.shader = shader;
+        }
+
+        material.SetTexture("_BaseMap", texture);
+        material.SetTexture("_MainTex", texture);
+        material.SetColor("_BaseColor", Color.white);
+        material.SetFloat("_Surface", 1.0f);
+        material.SetFloat("_Blend", 2.0f);
+        material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+        material.SetFloat("_SrcBlendAlpha", (float)UnityEngine.Rendering.BlendMode.One);
+        material.SetFloat("_DstBlendAlpha", (float)UnityEngine.Rendering.BlendMode.One);
+        material.SetFloat("_ZWrite", 0.0f);
+        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        material.SetOverrideTag("RenderType", "Transparent");
+        material.SetShaderPassEnabled("DepthOnly", false);
+        material.SetShaderPassEnabled("SHADOWCASTER", false);
+        material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        EditorUtility.SetDirty(material);
+        return material;
+    }
+
+    private static Texture2D FindBuiltinParticleTexture()
+    {
+        Object[] assets = AssetDatabase.LoadAllAssetsAtPath("Resources/unity_builtin_extra");
+        for (int i = 0; i < assets.Length; i++)
+        {
+            if (assets[i] is Texture2D texture && texture.name == "Default-Particle")
+            {
+                return texture;
+            }
+        }
+
+        return Texture2D.whiteTexture;
+    }
+
+    private static void ConfigurePlaceholderParticlePrefab(
+        string prefabPath,
+        Color color,
+        bool loop,
+        Material material)
+    {
+        GameObject root = PrefabUtility.LoadPrefabContents(prefabPath);
+        try
+        {
+            ParticleSystem[] particles = root.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < particles.Length; i++)
+            {
+                ParticleSystem.MainModule main = particles[i].main;
+                main.loop = loop;
+                main.startLifetime = loop ? 1.0f : 0.8f;
+                main.startSpeed = loop ? 0.15f : 0.8f;
+                main.startSize = loop ? 0.16f : 0.22f;
+                main.startColor = color;
+
+                ParticleSystem.EmissionModule emission = particles[i].emission;
+                emission.rateOverTime = loop ? 24.0f : 0.0f;
+                emission.SetBursts(loop
+                    ? System.Array.Empty<ParticleSystem.Burst>()
+                    : new[] { new ParticleSystem.Burst(0.0f, 32) });
+
+                ParticleSystem.ShapeModule shape = particles[i].shape;
+                shape.shapeType = ParticleSystemShapeType.Circle;
+                shape.radius = 0.8f;
+                shape.radiusThickness = 0.2f;
+                shape.rotation = new Vector3(90.0f, 0.0f, 0.0f);
+            }
+
+            ParticleSystemRenderer[] renderers = root.GetComponentsInChildren<ParticleSystemRenderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].sharedMaterial = material;
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(root);
         }
     }
 

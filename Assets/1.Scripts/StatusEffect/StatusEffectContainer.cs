@@ -15,6 +15,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
         public float ExpireTime;
         public float NextTickTime;
         public GameObject VisualInstance;
+        public long VisualSequence;
     }
 
     private sealed class OneShotVisual
@@ -23,21 +24,40 @@ public sealed class StatusEffectContainer : MonoBehaviour
         public StatusEffectVisualSO Definition;
         public GameObject Instance;
         public float ExpireTime;
+        public long VisualSequence;
     }
+
+    private sealed class ModelTintTarget
+    {
+        public Renderer Renderer;
+        public int MaterialIndex;
+        public bool HasBaseColor;
+        public bool HasColor;
+        public Color OriginalBaseColor;
+        public Color OriginalColor;
+    }
+
+    private static readonly int BaseColorProperty = Shader.PropertyToID("_BaseColor");
+    private static readonly int ColorProperty = Shader.PropertyToID("_Color");
 
     private readonly List<Entry> m_entries = new List<Entry>();
     private readonly List<OneShotVisual> m_oneShotVisuals = new List<OneShotVisual>();
     private readonly Dictionary<GameObject, Stack<GameObject>> m_visualPool =
         new Dictionary<GameObject, Stack<GameObject>>();
+    private readonly List<ModelTintTarget> m_modelTintTargets = new List<ModelTintTarget>();
+    private MaterialPropertyBlock m_modelTintPropertyBlock;
 
     [Header("Recipient Visuals")]
     [Tooltip("Optional anchor for body status visuals. If empty, a renderer-bounds center anchor is created at runtime.")]
     [SerializeField] private Transform m_effectAnchor;
+    [Tooltip("Optional root whose mesh renderers receive status colors. If empty, the whole recipient is used.")]
+    [SerializeField] private Transform m_modelTintRoot;
 
     private IDamageable m_damageable;
     private SquadMemberController m_squadMember;
     private Transform m_runtimeEffectAnchor;
     private Transform m_visualPoolRoot;
+    private long m_nextVisualSequence;
 
     public int Count => m_entries.Count;
     public int ActiveVisualCount
@@ -73,13 +93,28 @@ public sealed class StatusEffectContainer : MonoBehaviour
 
     public float MovementSpeedMultiplier { get; private set; } = 1.0f;
     public float ActionSpeedMultiplier { get; private set; } = 1.0f;
+    public bool HasActiveModelTint { get; private set; }
+    public Color CurrentModelTintColor { get; private set; } = Color.white;
+    public float CurrentModelTintStrength { get; private set; }
 
     /// <summary>효과 추가·갱신·중첩·제거 시 UI가 목록을 다시 읽도록 알립니다.</summary>
     public event Action<StatusEffectContainer> OnChanged;
 
     private void Awake()
     {
+        m_modelTintPropertyBlock = new MaterialPropertyBlock();
         ResolveOwner();
+        CacheModelTintTargets();
+    }
+
+    private void OnEnable()
+    {
+        RefreshModelTint();
+    }
+
+    private void OnDisable()
+    {
+        RestoreModelTint();
     }
 
     private void Update()
@@ -98,6 +133,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
 
         float now = Time.time;
         bool changed = false;
+        bool visualChanged = false;
         for (int i = m_entries.Count - 1; i >= 0; i--)
         {
             Entry entry = m_entries[i];
@@ -121,11 +157,17 @@ public sealed class StatusEffectContainer : MonoBehaviour
 
             RecycleVisual(visual.Definition, visual.Instance);
             m_oneShotVisuals.RemoveAt(i);
+            visualChanged = true;
         }
 
-        if (changed)
+        if (changed || visualChanged)
         {
-            RecalculateModifiers();
+            if (changed)
+            {
+                RecalculateModifiers();
+            }
+
+            RefreshModelTint();
             OnChanged?.Invoke(this);
         }
     }
@@ -156,6 +198,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
                 Stacks = 1,
                 ExpireTime = now + definition.Duration,
                 NextTickTime = now + definition.TickInterval,
+                VisualSequence = ++m_nextVisualSequence,
             };
             entry.VisualInstance = SpawnVisual(definition.RecipientVisual);
             m_entries.Add(entry);
@@ -165,6 +208,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
             entry.SourceFaction = sourceFaction;
             entry.Source = source;
             entry.ExpireTime = now + definition.Duration;
+            entry.VisualSequence = ++m_nextVisualSequence;
             if (definition.StackPolicy == StatusEffectStackPolicy.StackIntensity)
             {
                 entry.Stacks = Mathf.Min(definition.MaxStacks, entry.Stacks + 1);
@@ -181,6 +225,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
         }
 
         RecalculateModifiers();
+        RefreshModelTint();
         OnChanged?.Invoke(this);
         return true;
     }
@@ -240,6 +285,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
         }
 
         RecalculateModifiers();
+        RefreshModelTint();
         OnChanged?.Invoke(this);
         return true;
     }
@@ -248,6 +294,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
     {
         if (m_entries.Count == 0 && m_oneShotVisuals.Count == 0)
         {
+            RestoreModelTint();
             return;
         }
 
@@ -265,6 +312,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
         m_entries.Clear();
         m_oneShotVisuals.Clear();
         RecalculateModifiers();
+        RefreshModelTint();
         OnChanged?.Invoke(this);
     }
 
@@ -283,7 +331,9 @@ public sealed class StatusEffectContainer : MonoBehaviour
             Definition = visual,
             Instance = instance,
             ExpireTime = Time.time + (lifetime > 0.0f ? lifetime : visual.OneShotLifetime),
+            VisualSequence = ++m_nextVisualSequence,
         });
+        RefreshModelTint();
         return instance;
     }
 
@@ -314,6 +364,7 @@ public sealed class StatusEffectContainer : MonoBehaviour
             }
 
             active.ExpireTime = Time.time + resolvedLifetime;
+            active.VisualSequence = ++m_nextVisualSequence;
             if (active.Definition == visual && active.Instance != null)
             {
                 if (visual != null && visual.RestartOnStatusRefresh)
@@ -321,12 +372,14 @@ public sealed class StatusEffectContainer : MonoBehaviour
                     FeedbackPlaybackUtility.RestartPlayback(active.Instance);
                 }
 
+                RefreshModelTint();
                 return active.Instance;
             }
 
             RecycleVisual(active.Definition, active.Instance);
             active.Definition = visual;
             active.Instance = SpawnVisual(visual);
+            RefreshModelTint();
             return active.Instance;
         }
 
@@ -342,7 +395,9 @@ public sealed class StatusEffectContainer : MonoBehaviour
             Definition = visual,
             Instance = instance,
             ExpireTime = Time.time + resolvedLifetime,
+            VisualSequence = ++m_nextVisualSequence,
         });
+        RefreshModelTint();
         return instance;
     }
 
@@ -366,6 +421,11 @@ public sealed class StatusEffectContainer : MonoBehaviour
             RecycleVisual(active.Definition, active.Instance);
             m_oneShotVisuals.RemoveAt(i);
             stopped = true;
+        }
+
+        if (stopped)
+        {
+            RefreshModelTint();
         }
 
         return stopped;
@@ -452,6 +512,170 @@ public sealed class StatusEffectContainer : MonoBehaviour
         {
             m_squadMember.SetSpeedPercent(MovementSpeedMultiplier * 100.0f, ActionSpeedMultiplier * 100.0f);
         }
+    }
+
+    private void CacheModelTintTargets()
+    {
+        if (m_modelTintPropertyBlock == null)
+        {
+            m_modelTintPropertyBlock = new MaterialPropertyBlock();
+        }
+
+        m_modelTintTargets.Clear();
+        Transform root = m_modelTintRoot != null ? m_modelTintRoot : transform;
+        Renderer[] renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+        if (renderers.Length == 0)
+        {
+            renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+        }
+
+        for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
+        {
+            Renderer renderer = renderers[rendererIndex];
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            Material[] materials = renderer.sharedMaterials;
+            for (int materialIndex = 0; materialIndex < materials.Length; materialIndex++)
+            {
+                Material material = materials[materialIndex];
+                if (material == null)
+                {
+                    continue;
+                }
+
+                bool hasBaseColor = material.HasProperty(BaseColorProperty);
+                bool hasColor = material.HasProperty(ColorProperty);
+                if (!hasBaseColor && !hasColor)
+                {
+                    continue;
+                }
+
+                renderer.GetPropertyBlock(m_modelTintPropertyBlock, materialIndex);
+                m_modelTintTargets.Add(new ModelTintTarget
+                {
+                    Renderer = renderer,
+                    MaterialIndex = materialIndex,
+                    HasBaseColor = hasBaseColor,
+                    HasColor = hasColor,
+                    OriginalBaseColor = hasBaseColor && m_modelTintPropertyBlock.HasColor(BaseColorProperty)
+                        ? m_modelTintPropertyBlock.GetColor(BaseColorProperty)
+                        : hasBaseColor ? material.GetColor(BaseColorProperty) : Color.white,
+                    OriginalColor = hasColor && m_modelTintPropertyBlock.HasColor(ColorProperty)
+                        ? m_modelTintPropertyBlock.GetColor(ColorProperty)
+                        : hasColor ? material.GetColor(ColorProperty) : Color.white,
+                });
+            }
+        }
+    }
+
+    private void RefreshModelTint()
+    {
+        StatusEffectVisualSO latestVisual = null;
+        long latestSequence = long.MinValue;
+
+        for (int i = 0; i < m_entries.Count; i++)
+        {
+            StatusEffectVisualSO visual = m_entries[i].Definition != null
+                ? m_entries[i].Definition.RecipientVisual
+                : null;
+            if (visual != null && visual.ApplyModelTint &&
+                m_entries[i].VisualSequence > latestSequence)
+            {
+                latestVisual = visual;
+                latestSequence = m_entries[i].VisualSequence;
+            }
+        }
+
+        for (int i = 0; i < m_oneShotVisuals.Count; i++)
+        {
+            OneShotVisual active = m_oneShotVisuals[i];
+            if (active.Definition != null && active.Definition.ApplyModelTint &&
+                active.VisualSequence > latestSequence)
+            {
+                latestVisual = active.Definition;
+                latestSequence = active.VisualSequence;
+            }
+        }
+
+        if (latestVisual == null)
+        {
+            RestoreModelTint();
+            return;
+        }
+
+        if (m_modelTintTargets.Count == 0)
+        {
+            CacheModelTintTargets();
+        }
+
+        Color tint = latestVisual.ModelTintColor;
+        float strength = latestVisual.ModelTintStrength;
+
+        HasActiveModelTint = true;
+        CurrentModelTintColor = tint;
+        CurrentModelTintStrength = strength;
+
+        for (int i = 0; i < m_modelTintTargets.Count; i++)
+        {
+            ModelTintTarget target = m_modelTintTargets[i];
+            if (target.Renderer == null)
+            {
+                continue;
+            }
+
+            target.Renderer.GetPropertyBlock(m_modelTintPropertyBlock, target.MaterialIndex);
+            if (target.HasBaseColor)
+            {
+                Color targetColor = tint;
+                targetColor.a = target.OriginalBaseColor.a;
+                m_modelTintPropertyBlock.SetColor(
+                    BaseColorProperty,
+                    Color.Lerp(target.OriginalBaseColor, targetColor, strength));
+            }
+
+            if (target.HasColor)
+            {
+                Color targetColor = tint;
+                targetColor.a = target.OriginalColor.a;
+                m_modelTintPropertyBlock.SetColor(
+                    ColorProperty,
+                    Color.Lerp(target.OriginalColor, targetColor, strength));
+            }
+
+            target.Renderer.SetPropertyBlock(m_modelTintPropertyBlock, target.MaterialIndex);
+        }
+    }
+
+    private void RestoreModelTint()
+    {
+        for (int i = 0; i < m_modelTintTargets.Count; i++)
+        {
+            ModelTintTarget target = m_modelTintTargets[i];
+            if (target.Renderer == null)
+            {
+                continue;
+            }
+
+            target.Renderer.GetPropertyBlock(m_modelTintPropertyBlock, target.MaterialIndex);
+            if (target.HasBaseColor)
+            {
+                m_modelTintPropertyBlock.SetColor(BaseColorProperty, target.OriginalBaseColor);
+            }
+
+            if (target.HasColor)
+            {
+                m_modelTintPropertyBlock.SetColor(ColorProperty, target.OriginalColor);
+            }
+
+            target.Renderer.SetPropertyBlock(m_modelTintPropertyBlock, target.MaterialIndex);
+        }
+
+        HasActiveModelTint = false;
+        CurrentModelTintColor = Color.white;
+        CurrentModelTintStrength = 0.0f;
     }
 
     private void ResolveOwner()
@@ -548,7 +772,12 @@ public sealed class StatusEffectContainer : MonoBehaviour
         m_runtimeEffectAnchor = anchorObject.transform;
         m_runtimeEffectAnchor.SetParent(transform, false);
 
-        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+        Renderer[] renderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+        if (renderers.Length == 0)
+        {
+            renderers = GetComponentsInChildren<MeshRenderer>(true);
+        }
+
         if (renderers.Length == 0)
         {
             return m_runtimeEffectAnchor;

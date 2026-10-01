@@ -25,12 +25,23 @@ public sealed class StatusEffectVisualSO : ScriptableObject
     [Tooltip("Restart particles when an existing status refreshes its duration.")]
     [SerializeField] private bool m_restartOnStatusRefresh;
 
+    [Header("Recipient Model Tint")]
+    [Tooltip("Adds this color to compatible materials on the recipient while the visual is active.")]
+    [SerializeField] private bool m_applyModelTint;
+    [SerializeField] private Color m_modelTintColor = Color.white;
+    [Tooltip("0 keeps the original material color. 1 fully applies the configured tint color.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_modelTintStrength = 0.35f;
+
     public GameObject Prefab => m_prefab;
     public Vector3 LocalPosition => m_localPosition;
     public Quaternion LocalRotation => Quaternion.Euler(m_localEulerAngles);
     public Vector3 LocalScaleMultiplier => m_localScaleMultiplier;
     public float OneShotLifetime => Mathf.Max(0.01f, m_oneShotLifetime);
     public bool RestartOnStatusRefresh => m_restartOnStatusRefresh;
+    public bool ApplyModelTint => m_applyModelTint && m_modelTintStrength > 0.0f;
+    public Color ModelTintColor => m_modelTintColor;
+    public float ModelTintStrength => Mathf.Clamp01(m_modelTintStrength);
 
 #if UNITY_EDITOR
     private void OnValidate()
@@ -39,6 +50,7 @@ public sealed class StatusEffectVisualSO : ScriptableObject
         m_localScaleMultiplier.y = Mathf.Max(0.0f, m_localScaleMultiplier.y);
         m_localScaleMultiplier.z = Mathf.Max(0.0f, m_localScaleMultiplier.z);
         m_oneShotLifetime = Mathf.Max(0.01f, m_oneShotLifetime);
+        m_modelTintStrength = Mathf.Clamp01(m_modelTintStrength);
     }
 #endif
 }
