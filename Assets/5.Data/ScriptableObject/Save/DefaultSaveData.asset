@@ -20,7 +20,7 @@ MonoBehaviour:
   - resourceId: upgrade_material
     amount: 9999
   - resourceId: crafting_material
-    amount: 9999
+    amount: 10
   - resourceId: trap_material
     amount: 9999
   startingCharacterDefinitions:

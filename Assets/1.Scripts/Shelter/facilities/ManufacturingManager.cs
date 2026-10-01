@@ -110,6 +110,9 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
     /// <summary>헬퍼 배치 상태 또는 최종 제작력이 바뀌었을 때 발생합니다.</summary>
     public event Action HelpersChanged;
 
+    /// <summary>즉시 제작이 성공해 결과 입고와 슬롯 비활성화까지 완료됐을 때 발생합니다.</summary>
+    public event Action CraftCompleted;
+
     public string FacilityId
     {
         get
@@ -622,6 +625,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
         m_craftingSlotAvailable[slotIndex] = false;
         dataManager.MarkDirty();
         NotifyJobsChanged();
+        CraftCompleted?.Invoke();
         return true;
     }
 
