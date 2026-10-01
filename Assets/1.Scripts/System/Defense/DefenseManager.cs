@@ -117,10 +117,8 @@ public sealed class DefenseManager : MonoBehaviour
     [SerializeField] private float m_clearingForceEndDelay = 60.0f;
 
     [Header("Defense Start Input")]
-    [Tooltip("방어전 시작 전, 현재 스쿼드 조작 멤버가 상호작용 대상이 없는 곳에서 상호작용키를 홀드하면 방어전을 시작합니다.")]
-    [SerializeField] private bool m_allowEmptySpaceHoldStart = true;
-
-    [Tooltip("현재 스쿼드 조작 멤버가 허공 상호작용 홀드로 방어전을 시작하기까지 필요한 시간(초)입니다.")]
+    [Tooltip("방어전 시작 전, 현재 스쿼드 조작 멤버가 상호작용 대상이 없는 곳에서 상호작용키를 이 시간(초)만큼 홀드하면 방어전을 시작합니다. " +
+             "튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_emptySpaceHoldStartDuration = 3.0f;
 
@@ -217,8 +215,24 @@ public sealed class DefenseManager : MonoBehaviour
     /// <summary>전투 시간이 끝나 남은 적을 정리하는 구간인지 여부입니다.</summary>
     public bool IsClearing => m_isGameStarted && m_isClearing;
 
-    /// <summary>휴식 구간인지 여부입니다.</summary>
-    public bool IsResting => m_isGameStarted && !m_isPlaying && !m_isClearing && !m_isVictoryReady;
+    /// <summary>휴식 구간인지 여부입니다. 방어전 시작 전도 포함합니다.</summary>
+    /// <remarks>
+    /// 방어전 시작 전(시작 홀드를 기다리는 시간)도 휴식으로 취급합니다(사용자 확정 2026-10-01). 그 시간에도 함정을 설치할 수 있어야
+    /// 하기 때문입니다. 시작 전에는 휴식 타이머가 돌지 않으므로 <see cref="RestTimer"/>는 0입니다.
+    /// </remarks>
+    public bool IsResting => !m_isPlaying && !m_isClearing && !m_isVictoryReady;
+
+    /// <summary>
+    /// 지금 함정을 설치할 수 있는 구간인지 여부입니다. 휴식 구간(방어전 시작 전 포함)입니다.
+    /// </summary>
+    /// <remarks>
+    /// 전투, 남은 적 정리, 승리 뒤에는 닫힙니다. 상시 설치 함정(재설치 정책 Always)은 이 값과 관계없이 설치할 수 있습니다.
+    /// 구간이 바뀔 때마다 씬의 함정에 알립니다(<see cref="Trap.SetBuildWindowOpen"/>).
+    /// </remarks>
+    public bool IsTrapBuildWindowOpen => IsResting;
+
+    /// <summary>설치 구간을 알릴 씬의 함정 목록입니다. 처음 알릴 때 한 번 찾습니다.</summary>
+    private Trap[] m_traps;
 
     /// <summary>이 매니저의 스포너가 내보내 아직 살아 있는 적 수입니다. 시체는 세지 않습니다.</summary>
     public int RemainingEnemyCount => CountManagedLiveEnemies();
@@ -370,6 +384,29 @@ public sealed class DefenseManager : MonoBehaviour
         EndStageCombat();
         RefreshTimerText();
         HideWaveStartMessage();
+        RefreshTrapBuildWindow();
+    }
+
+    /// <summary>
+    /// 지금 구간이 함정 설치 구간인지 씬의 모든 함정에 알립니다.
+    /// </summary>
+    /// <remarks>
+    /// 상시 설치가 아닌 함정은 설치 구간에만 청사진을 보이고 설치를 받습니다. 이미 설치된 함정은 그대로 둡니다.
+    /// 함정 목록은 처음 부를 때 찾습니다. 함정은 씬에 미리 배치되므로 진행 중에 새로 생기지 않습니다.
+    /// 진행 중에 켜진 함정은 스스로 <see cref="IsTrapBuildWindowOpen"/>을 읽어 맞춥니다.
+    /// </remarks>
+    private void RefreshTrapBuildWindow()
+    {
+        m_traps ??= FindObjectsByType<Trap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+        bool isOpen = IsTrapBuildWindowOpen;
+        for (int i = 0; i < m_traps.Length; i++)
+        {
+            if (m_traps[i] != null)
+            {
+                m_traps[i].SetBuildWindowOpen(isOpen);
+            }
+        }
     }
 
     [Foldout("Debug")]
@@ -477,6 +514,7 @@ public sealed class DefenseManager : MonoBehaviour
         m_roundTimer = Mathf.Max(0.01f, m_roundDuration);
         m_restTimer = 0.0f;
         BeginStageCombat();
+        RefreshTrapBuildWindow();
         RefreshTimerText();
         ShowWaveStartMessage();
         ResolveDefenseSceneDataManager()?.RecordWaveStarted(m_currentWave);
@@ -659,7 +697,11 @@ public sealed class DefenseManager : MonoBehaviour
         m_restTimer = Mathf.Max(0.01f, m_restDuration);
         RefreshTimerText();
         ResolveDefenseSceneDataManager()?.RecordRestStarted();
+
+        // 휴식 복구 정책(OnRest) 함정이 먼저 되살아난 뒤 설치 구간을 엽니다. 순서가 바뀌어도 결과는 같지만,
+        // 복구와 표시가 한 번에 맞춰지도록 알림을 먼저 보냅니다.
         OnRestStarted?.Invoke();
+        RefreshTrapBuildWindow();
     }
 
     /// <summary>마지막 웨이브를 완료하고, 정산 전 귀환 구역 진입 대기 상태로 전환합니다.</summary>
@@ -676,6 +718,7 @@ public sealed class DefenseManager : MonoBehaviour
 
         RecordVictory();
         SetReturnPointActive(true);
+        RefreshTrapBuildWindow();
         OnDefenseVictoryReady?.Invoke();
     }
 
@@ -792,16 +835,16 @@ public sealed class DefenseManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 임시 시작 규칙입니다. 플레이어가 상호작용 대상으로 조준하지 않은 상태에서만
+    /// 방어전 시작 규칙입니다. 플레이어가 상호작용 대상으로 조준하지 않은 상태에서만
     /// 상호작용키를 일정 시간 유지하면 <see cref="StartDefense"/>를 호출합니다.
     /// </summary>
+    /// <remarks>
+    /// 튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다(사용자 확정 2026-10-01). 끄는 옵션은 두지 않습니다.
+    /// 다른 시작 경로가 없어서, 끄면 방어전을 시작할 방법이 없어지기 때문입니다.
+    /// 시작 전 시간은 휴식으로 취급하므로 이 동안 함정을 설치할 수 있습니다(<see cref="IsResting"/>).
+    /// </remarks>
     private void UpdateEmptySpaceHoldStart()
     {
-        if (!m_allowEmptySpaceHoldStart)
-        {
-            m_emptySpaceHoldStartTimer = 0.0f;
-            return;
-        }
 
         if (!TryGetActiveSquadStartInput(out PlayerInputController startInput,
                 out InteractionController startInteraction)
