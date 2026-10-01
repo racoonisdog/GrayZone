@@ -32,6 +32,10 @@ public class FacilityUpgradeUI : MonoBehaviour
     [SerializeField] private GameObject m_insufficientNotice; // 자원 부족 알림
     [SerializeField] private GameObject m_maxLevelNotice;      // 최대 레벨 알림
 
+    [Header("Cutscene")]
+    [Tooltip("비어 있으면 씬에서 찾습니다. 시설에 업그레이드 연출이 있으면 연출을 통해 업그레이드합니다.")]
+    [SerializeField] private UIManager m_uiManager;
+
     private string m_facilityId;
 
     /// <summary>시설 업그레이드 UI가 닫힐 때 발생</summary>
@@ -118,6 +122,12 @@ public class FacilityUpgradeUI : MonoBehaviour
 
     private void OnUpgradeClicked()
     {
+        // 연출이 연결된 시설은 연출이 화면을 가린 시점에 업그레이드한다(창은 UIManager가 닫음).
+        if (m_uiManager == null)
+            m_uiManager = FindFirstObjectByType<UIManager>();
+        if (m_uiManager != null && m_uiManager.TryPlayFacilityUpgradeCutscene(m_facilityId))
+            return;
+
         if (FacilityManager.Instance != null && FacilityManager.Instance.TryUpgrade(m_facilityId))
             Refresh(); // 성공 → 새 레벨 기준으로 다시 그림 (슬롯/건물은 매니저 이벤트로 자동 갱신)
     }

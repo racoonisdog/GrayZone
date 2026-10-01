@@ -27,7 +27,10 @@ public enum ShelterUIType
     Operations,
 
     /// <summary>방어전 출격 UI가 열려 있음</summary>
-    Scramble
+    Scramble,
+
+    /// <summary>시설 업그레이드 연출이 재생 중임</summary>
+    Cutscene
 }
 
 /// <summary>
@@ -131,6 +134,9 @@ public class UIManager : MonoBehaviour
                 return true;
             case ShelterUIType.Inventory:
                 CloseInventoryUI();
+                return true;
+            case ShelterUIType.Cutscene:
+                // 연출 중에는 Escape를 소비만 하고 아무것도 닫지 않는다.
                 return true;
             default:
                 return false;
@@ -489,6 +495,52 @@ public class UIManager : MonoBehaviour
         }
 
         RestoreUIAfterFacilityUpgrade();
+    }
+
+    /// <summary>
+    /// 시설에 연결된 업그레이드 연출이 있으면 열린 시설 UI를 닫고 연출을 재생한다.
+    /// </summary>
+    /// <remarks>
+    /// 연출 동안 <see cref="ShelterUIType.Cutscene"/> 상태로 두어 플레이어 조작을 잠그고,
+    /// 실제 업그레이드는 연출이 화면을 가린 시점에 <see cref="FacilityManager.TryUpgrade"/>로 실행한다.
+    /// </remarks>
+    /// <param name="facilityId">업그레이드할 시설 ID</param>
+    /// <returns>연출을 시작했으면 <c>true</c>. 연출이 없거나 업그레이드할 수 없으면 <c>false</c></returns>
+    public bool TryPlayFacilityUpgradeCutscene(string facilityId)
+    {
+        if (m_activeUI == ShelterUIType.Cutscene)
+            return false;
+
+        if (!FacilityUpgradeCutscene.TryGet(facilityId, out FacilityUpgradeCutscene cutscene))
+            return false;
+
+        if (!cutscene.Play())
+            return false;
+
+        // 업그레이드 창과 그 창을 연 시설 UI까지 모두 닫고 연출 상태로 전환
+        m_returnUIAfterFacilityUpgrade = ShelterUIType.None;
+        if (m_facilityUpgradeUI != null)
+            m_facilityUpgradeUI.Close();
+        if (m_medicalUI != null && m_medicalUI.IsOpen)
+            m_medicalUI.Close();
+        if (m_manufacturingUI != null && m_manufacturingUI.IsOpen)
+            m_manufacturingUI.Close();
+
+        SetInteractionUIActive(false);
+        cutscene.Finished += HandleCutsceneFinished;
+        SetActiveUI(ShelterUIType.Cutscene);
+
+        if (m_logMessages)
+            Debug.Log($"[UI] Play Facility Upgrade Cutscene : {facilityId}", cutscene);
+
+        return true;
+
+        void HandleCutsceneFinished(bool upgraded)
+        {
+            cutscene.Finished -= HandleCutsceneFinished;
+            if (m_activeUI == ShelterUIType.Cutscene)
+                SetActiveUI(ShelterUIType.None);
+        }
     }
 
     private void HandleMedicalUIClosed()
