@@ -432,7 +432,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ClaymoreTrap
   m_startPlaced: 0
-  m_buildCostResourceId: upgrade_material
+  m_buildCostResourceId: trap_material
   m_buildCostAmount: 0
   m_buildPrompt: "?\u317C\uD282"
   m_buildHoldDuration: 1
