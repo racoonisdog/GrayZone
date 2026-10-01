@@ -2069,9 +2069,12 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         if (m_input.look.sqrMagnitude >= Threshold && !m_lockCameraPosition)
         {
             float deltaTimeMultiplier = IsCurrentDeviceMouse ? 1.0f : Time.deltaTime;
+            float lookSensitivity = IsCurrentDeviceMouse && GameSettingManager.Instance != null
+                ? GameSettingManager.Instance.MouseSensitivity
+                : 1.0f;
 
-            float yawDelta = m_input.look.x * deltaTimeMultiplier;
-            float pitchDelta = m_input.look.y * deltaTimeMultiplier;
+            float yawDelta = m_input.look.x * deltaTimeMultiplier * lookSensitivity;
+            float pitchDelta = m_input.look.y * deltaTimeMultiplier * lookSensitivity;
 
             if (m_recoilCompensationAbsorb)
             {

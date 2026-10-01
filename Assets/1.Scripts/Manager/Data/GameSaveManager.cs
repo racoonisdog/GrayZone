@@ -111,10 +111,9 @@ public class GameSaveManager : MonoBehaviour
             return false;
         }
 
-        SettingData settingData = GameSettingManager.Instance.CreateSettingData();
-        settingData.schemaVersion = SettingData.CurrentSchemaVersion;
-        string path = GetSettingPath();
-        return TryWriteJsonFile(path, settingData, "setting data");
+        // 사용자 설정 파일의 스키마·마이그레이션·입출력은 GameSettingManager가 단독 소유합니다.
+        // GameSaveManager는 전체 저장 흐름에서 호출만 묶고, GameData와 SettingData를 섞지 않습니다.
+        return GameSettingManager.Instance.SaveSettings();
     }
 
     /// <summary>사용자 설정 JSON 파일을 읽어 GameSettingManager에 적용합니다.</summary>
@@ -126,15 +125,7 @@ public class GameSaveManager : MonoBehaviour
             return false;
         }
 
-        string path = GetSettingPath();
-        if (!TryReadJsonFile(path, out SettingData settingData, "setting data"))
-        {
-            return false;
-        }
-
-        settingData.schemaVersion = settingData.schemaVersion <= 0 ? SettingData.CurrentSchemaVersion : settingData.schemaVersion;
-        GameSettingManager.Instance.ApplySettingData(settingData);
-        return true;
+        return GameSettingManager.Instance.LoadSettings();
     }
 
     /// <summary>지정한 프로필의 게임 저장 파일 절대 경로를 반환합니다.</summary>

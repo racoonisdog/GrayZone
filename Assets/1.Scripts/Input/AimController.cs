@@ -616,6 +616,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>카메라 롤과 FOV 펀치로 구성된 시각 킥 적용 여부입니다.</summary>
     public bool VisualKickEnabled => m_enableVisualKick;
 
+    private bool IsVisualKickAllowed => m_enableVisualKick
+        && (GameSettingManager.Instance == null || GameSettingManager.Instance.CameraKickEnabled);
+
     /// <summary>시각 킥 회복 방식입니다.</summary>
     public VisualKickRecoveryMode CurrentVisualKickRecoveryMode => m_visualKickRecoveryMode;
 
@@ -1956,6 +1959,18 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         float targetFov = m_isAds ? m_adsFov : m_hipfireFov;
         UpdateBaseFov(targetFov, snap);
 
+        if (!IsVisualKickAllowed)
+        {
+            m_visualKickRoll = 0.0f;
+            m_visualKickFovPunch = 0.0f;
+            m_rollKickEnvelope.Clear();
+            m_hipfireFovPunchEnvelope.Clear();
+            m_adsFovPunchEnvelope.Clear();
+            m_aimCamera.Lens.FieldOfView = m_baseFov;
+            m_aimCamera.Lens.Dutch = 0.0f;
+            return;
+        }
+
         if (snap)
         {
             // 전투 자세 진입 등 스냅 시엔 시각 킥도 초기화(재진입 시 롤/펀치 잔상 방지).
@@ -2896,7 +2911,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         // (2) 시각 킥 — 롤·FOV 펀치 누적(조준/탄 무영향, 상한 클램프).
-        if (m_enableVisualKick)
+        if (IsVisualKickAllowed)
         {
             // 엔벨로프를 켠 축은 이번 발의 곡선 하나를 시작만 하고, 값은 매 프레임 합에서 나옵니다.
             if (m_useRollKickEnvelope)
