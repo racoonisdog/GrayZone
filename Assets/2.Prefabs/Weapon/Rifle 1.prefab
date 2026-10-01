@@ -5878,17 +5878,24 @@ MonoBehaviour:
     m_Bits: 16384
   m_muzzleOverlapRadius: 0.12
   m_allyBulletPassThrough: 1
-  m_hipfireMinSpread: 0
-  m_hipfireMaxSpread: 3
-  m_hipfireCurrentSpread: 0
+  m_hipfireStandingMinSpread: 1
+  m_hipfireStandingMaxSpread: 3
+  m_hipfireCrouchMinSpread: 0.6
+  m_hipfireCrouchMaxSpread: 1.8
+  m_hipfireAirborneMinSpread: 3
+  m_hipfireAirborneMaxSpread: 5
+  m_hipfireCurrentSpread: 1
   m_hipfireMinSpreadShotCount: 3
   m_hipfireSpreadIncreasePerShot: 0.5
   m_hipfireSpreadRecoveryPerSecond: 8
   m_hipfireSpreadRecoveryDelay: 0.15
-  m_adsMinSpread: 0
-  m_adsMaxSpread: 1
+  m_adsStandingMinSpread: 0
+  m_adsStandingMaxSpread: 1
+  m_adsCrouchMinSpread: 0
+  m_adsCrouchMaxSpread: 0.6
+  m_adsAirborneMinSpread: 2
+  m_adsAirborneMaxSpread: 3
   m_adsCurrentSpread: 0
-  m_airborneExtraSpread: 2
   m_adsMinSpreadShotCount: 3
   m_adsSpreadIncreasePerShot: 0.4
   m_adsSpreadRecoveryPerSecond: 8

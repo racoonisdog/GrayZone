@@ -119,6 +119,9 @@ public class SquadManager : MonoBehaviour
     [FormerlySerializedAs("member3Key")]
     [SerializeField] private Key m_member3Key = Key.Digit3;
 
+    [Tooltip("현재 직접 조작 중인 캐릭터의 스킬을 발동하는 키입니다.")]
+    [SerializeField] private Key m_skillKey = Key.C;
+
     [Tooltip("AI 팀원 1(조작 중이 아닌 멤버 중 목록 순서상 첫째)에게 명령하는 키입니다. 짧게 누르면 조준점으로 이동해 사수하고, 길게 누르면 명령을 취소합니다.")]
     [SerializeField] private Key m_orderMember1Key = Key.Q;
 
@@ -219,6 +222,9 @@ public class SquadManager : MonoBehaviour
     /// <summary>조작 가능한 스쿼드원이 한 명도 남지 않아 게임오버 조건이 성립했을 때 발생합니다.</summary>
     public event Action OnSquadEliminated;
 
+    /// <summary>현재 조작 멤버가 바뀌어 UI가 참조할 스킬이 변경될 때 발생합니다.</summary>
+    public event Action<CharacterSkill> OnPlayerSkillChanged;
+
     /// <summary>현재 PlayerSquadMember의 스쿼드 목록 인덱스입니다.</summary>
     public int PlayerSquadMemberIndex => m_playerSquadMemberIndex;
 
@@ -236,6 +242,14 @@ public class SquadManager : MonoBehaviour
 
     /// <summary>현재 PlayerSquadMember에 대응하는 플레이어 공개 데이터입니다.</summary>
     public PlayerbleUnitData PlayerSquadMemberData => GetPlayerData(m_playerSquadMemberIndex);
+
+    /// <summary>현재 조작 중인 캐릭터가 보유한 스킬입니다.</summary>
+    public CharacterSkill PlayerSquadMemberSkill => GetSkill(m_playerSquadMemberIndex);
+
+    /// <summary>현재 조작 중인 캐릭터의 상태효과 컨테이너입니다. UI는 이 경로로 참조합니다.</summary>
+    public StatusEffectContainer PlayerSquadMemberStatusEffects => PlayerSquadMember != null
+        ? PlayerSquadMember.StatusEffects
+        : null;
 
     /// <summary>현재 플레이어가 직접 조작 중인 스쿼드 멤버입니다.</summary>
     public SquadMemberController PlayerSquadMember
@@ -269,6 +283,18 @@ public class SquadManager : MonoBehaviour
         }
 
         return m_playerDataSources[index];
+    }
+
+    /// <summary>지정한 스쿼드 목록 인덱스의 캐릭터 스킬을 반환합니다.</summary>
+    public CharacterSkill GetSkill(int index)
+    {
+        if (m_squadMembers == null || index < 0 || index >= m_squadMembers.Count)
+        {
+            return null;
+        }
+
+        SquadMemberController member = m_squadMembers[index];
+        return member != null ? member.GetComponent<CharacterSkill>() : null;
     }
 
     /// <summary>다음 멤버로 전환하는 입력 키입니다.</summary>
@@ -306,6 +332,10 @@ public class SquadManager : MonoBehaviour
         }
 
         s_instance = this;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        SkillStatusDebugHud.EnsureAttached(this);
+#endif
 
         AutoFindReferences();
         NormalizeMemberIndex();
@@ -355,6 +385,7 @@ public class SquadManager : MonoBehaviour
         RefreshPlayerSquadMemberWeaponUI();
 
         m_hasInitialized = true;
+        OnPlayerSkillChanged?.Invoke(PlayerSquadMemberSkill);
     }
 
     /// <summary>
@@ -368,8 +399,69 @@ public class SquadManager : MonoBehaviour
         }
 
         HandleSwitchInput();
+        HandleSkillInput();
         HandleOrderInput();
         UpdateEnemyIntel();
+    }
+
+    /// <summary>공용 스킬 키로 현재 조작 캐릭터의 스킬 발동을 시도합니다.</summary>
+    private void HandleSkillInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || m_skillKey == Key.None || !IsOrderInputAllowed())
+        {
+            return;
+        }
+
+        if (keyboard[m_skillKey].wasPressedThisFrame)
+        {
+            TryActivatePlayerSkill();
+        }
+    }
+
+    /// <summary>현재 조작 캐릭터의 스킬 발동을 시도합니다. UI 버튼도 이 경로를 사용합니다.</summary>
+    public bool TryActivatePlayerSkill()
+    {
+        CharacterSkill skill = PlayerSquadMemberSkill;
+        return skill != null && skill.TryActivate(this);
+    }
+
+    /// <summary>
+    /// 전 스쿼드의 이동·행동 속도를 기본값 100% 기준으로 설정합니다.
+    /// </summary>
+    public void ApplySquadSpeedPercent(float movementPercent, float actionPercent)
+    {
+        if (m_squadMembers == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < m_squadMembers.Count; i++)
+        {
+            SquadMemberController member = m_squadMembers[i];
+            if (member != null)
+            {
+                member.SetSpeedPercent(movementPercent, actionPercent);
+            }
+        }
+    }
+
+    /// <summary>전 스쿼드 멤버의 각 상태효과 컨테이너에 같은 효과를 적용합니다.</summary>
+    public void ApplySquadStatusEffect(StatusEffectDefinitionSO effect, Faction sourceFaction, GameObject source = null)
+    {
+        if (effect == null || m_squadMembers == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < m_squadMembers.Count; i++)
+        {
+            SquadMemberController member = m_squadMembers[i];
+            if (member != null)
+            {
+                member.StatusEffects.Apply(effect, sourceFaction, source);
+            }
+        }
     }
 
     /// <summary>
@@ -1088,6 +1180,7 @@ public class SquadManager : MonoBehaviour
         UpdateCameraTarget();
         RefreshCharacterCameraCollisionResponses();
         RefreshPlayerSquadMemberWeaponUI();
+        OnPlayerSkillChanged?.Invoke(PlayerSquadMemberSkill);
 
         if (useTransformSwap)
         {
@@ -1949,6 +2042,7 @@ public class SquadManager : MonoBehaviour
         UpdateCameraTarget();
         RefreshCharacterCameraCollisionResponses();
         RefreshPlayerSquadMemberWeaponUI();
+        OnPlayerSkillChanged?.Invoke(PlayerSquadMemberSkill);
     }
 
     /// <summary>

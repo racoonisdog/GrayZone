@@ -607,6 +607,31 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         Buffs.Apply(buff);
     }
 
+    /// <summary>소유자가 있는 버프를 적용합니다.</summary>
+    /// <returns>새 적용 또는 죽은 소유자에서 새 소유자로 교체됐으면 true입니다.</returns>
+    public bool ApplyBuff(EnemyBuffSO buff, EnemyController owner)
+    {
+        return Buffs.Apply(buff, owner);
+    }
+
+    /// <summary>지정한 하울러가 이 버프의 단일 소유권을 지금 확보할 수 있는지 확인합니다.</summary>
+    public bool CanReceiveBuffFrom(EnemyBuffSO buff, EnemyController owner)
+    {
+        return Buffs.CanAcceptOwner(buff, owner);
+    }
+
+    /// <summary>현재 이 버프를 소유한 적을 반환합니다.</summary>
+    public EnemyController GetBuffOwner(EnemyBuffSO buff)
+    {
+        return m_buffs != null ? m_buffs.GetOwner(buff) : null;
+    }
+
+    /// <summary>소유자 사망 뒤 감소할 버프 잔여시간을 반환합니다.</summary>
+    public float GetBuffRemainingDuration(EnemyBuffSO buff)
+    {
+        return m_buffs != null ? m_buffs.GetRemainingDuration(buff) : 0.0f;
+    }
+
     /// <summary>지정한 종류의 버프가 걸려 있는지 확인합니다.</summary>
     /// <param name="buff">확인할 버프 종류입니다.</param>
     public bool HasBuff(EnemyBuffSO buff)

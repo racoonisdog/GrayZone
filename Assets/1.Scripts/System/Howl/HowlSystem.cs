@@ -124,4 +124,63 @@ public static class HowlSystem
 
         return applied;
     }
+
+    /// <summary>
+    /// 위치 정보 전파 없이 반경 안의 살아 있는 적만 수집합니다.
+    /// </summary>
+    /// <param name="sender">수집 대상에서 제외할 하울러의 센서입니다.</param>
+    /// <param name="origin">범위 중심입니다.</param>
+    /// <param name="radius">수집 반경입니다.</param>
+    /// <param name="results">재사용할 결과 목록입니다. 호출 시 먼저 비웁니다.</param>
+    /// <returns>수집한 적 수입니다.</returns>
+    /// <remarks>
+    /// 기존 <see cref="Broadcast"/>는 스쿼드 위치를 공유하는 호출 기능으로 보존합니다.
+    /// 버프 하울링은 이 메서드를 사용해 대상 수집만 수행하며 위치 정보나 합류 상태를 건드리지 않습니다.
+    /// </remarks>
+    public static int CollectEnemiesInRange(
+        EnemyTargetSensor sender,
+        Vector3 origin,
+        float radius,
+        List<EnemyController> results)
+    {
+        if (results == null)
+        {
+            return 0;
+        }
+
+        results.Clear();
+        if (radius <= 0.0f)
+        {
+            return 0;
+        }
+
+        float sqrRadius = radius * radius;
+        for (int i = s_listeners.Count - 1; i >= 0; i--)
+        {
+            EnemyTargetSensor listener = s_listeners[i];
+            if (listener == null)
+            {
+                s_listeners.RemoveAt(i);
+                continue;
+            }
+
+            if (listener == sender
+                || (listener.transform.position - origin).sqrMagnitude > sqrRadius)
+            {
+                continue;
+            }
+
+            EnemyController enemy = listener.GetComponent<EnemyController>();
+            if (enemy == null
+                || !enemy.isActiveAndEnabled
+                || (enemy.Health != null && enemy.Health.IsDead))
+            {
+                continue;
+            }
+
+            results.Add(enemy);
+        }
+
+        return results.Count;
+    }
 }

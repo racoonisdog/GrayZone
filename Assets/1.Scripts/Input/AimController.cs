@@ -127,6 +127,16 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         PerShotReset,
     }
 
+    /// <summary>캐릭터가 소유한 조준선의 탄퍼짐 표시 방식입니다.</summary>
+    public enum CrosshairSpreadMode
+    {
+        /// <summary>현재 무기의 실제 탄퍼짐 방사각을 매 프레임 표시합니다.</summary>
+        CurrentSpread,
+
+        /// <summary>현재 자세에서 가능한 무기 최대 탄퍼짐 방사각을 고정으로 표시합니다.</summary>
+        WeaponMaxSpread,
+    }
+
     [Foldout("Aim Options")]
     [Tooltip("조준 중 활성화할 Cinemachine 카메라입니다.")]
     [FormerlySerializedAs("aimCam")]
@@ -142,6 +152,29 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("탄퍼짐 조준선 UI 컨트롤러입니다. 비워두면 Aim Image 하위 또는 자기 하위에서 자동으로 찾습니다.")]
     [SerializeField] private CrosshairController m_crosshairController;
 
+    [Foldout("Crosshair Presentation")]
+    [Tooltip("이 캐릭터가 직접 조작될 때 공용 HUD에 적용할 보조 조준선 모양입니다. 표시값은 캐릭터가 소유하고 HUD는 그 값을 그리기만 합니다.")]
+    [SerializeField] private CrosshairController.SubShape m_crosshairSubShape = CrosshairController.SubShape.RoundedCross;
+
+    [Tooltip("이 캐릭터의 조준선이 탄퍼짐 콘에서 표시할 반경 기준입니다. ConeEdge면 실제 최대 탄퍼짐 경계를 표시합니다.")]
+    [SerializeField] private CrosshairController.SpreadDisplayBasis m_crosshairSpreadDisplayBasis = CrosshairController.SpreadDisplayBasis.MostShots;
+
+    [Tooltip("0 이상이면 이 캐릭터 조준선의 탄퍼짐 표시 배율을 고정합니다. -1이면 무기 분포에서 계산합니다. 실제 탄착은 바꾸지 않으며, 무기 밸런스를 바꿔도 의도적으로 유지할 UI 기준점에만 사용합니다.")]
+    [SerializeField] private float m_crosshairSpreadDisplayFactorOverride = -1.0f;
+
+    [Tooltip("현재 퍼짐을 따라갈지, 현재 자세에서 가능한 최대 퍼짐을 고정 원으로 표시할지 정합니다.")]
+    [SerializeField] private CrosshairSpreadMode m_crosshairSpreadMode = CrosshairSpreadMode.CurrentSpread;
+
+    [Tooltip("이 캐릭터 조준선의 중심 기본 여백(픽셀)입니다. 최대 퍼짐 경계 링을 정확히 맞출 때는 0으로 둡니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_crosshairCenterSpacePixels = 1.0f;
+
+    [Tooltip("이 캐릭터 조준선이 Ring일 때의 기본 지름(픽셀)입니다. 최대 퍼짐 경계 링을 정확히 맞출 때는 0으로 둡니다.")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_crosshairSubRingBaseDiameterPixels = 16.0f;
+
+    [Tooltip("이 캐릭터가 직접 조작될 때 발사 펄스로 조준선을 추가로 벌릴지 여부입니다. 최대 퍼짐 고정 링은 false여야 실제 경계와 일치합니다.")]
+    [SerializeField] private bool m_crosshairEnableShotRecoilPulse = true;
 
     [Tooltip("지향점(LookPoint)을 표시하거나 상체 회전 IK 타겟으로 사용할 오브젝트입니다. 캐릭터가 항상 바라보는 먼 지점을 따라갑니다.")]
     [FormerlySerializedAs("m_aimTarget")]
@@ -303,8 +336,22 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private bool m_isPlayerControlled;
 
+    // 화면 HUD 자체는 하나지만, 마지막으로 어떤 캐릭터의 표시값을 적용했는지는 명시적으로 기억해야
+    // 대원 전환 시 이전 대원의 모양/기준이 남지 않습니다.
+    private static AimController s_crosshairPresentationOwner;
+    private static CrosshairController s_crosshairPresentationTarget;
+    private static CrosshairController.SubShape s_crosshairPresentationSubShape;
+    private static CrosshairController.SpreadDisplayBasis s_crosshairPresentationSpreadBasis;
+    private static float s_crosshairPresentationDisplayFactorOverride;
+    private static float s_crosshairPresentationCenterSpacePixels;
+    private static float s_crosshairPresentationSubRingBaseDiameterPixels;
+    private static bool s_crosshairPresentationShotRecoilPulse;
+
     /// <summary>상체 조준(허리) 리그 weight의 목표값입니다.</summary>
     private float m_rigWeightTarget;
+
+    /// <summary>스킬 등 외부 효과가 적용하는 재장전·전투 자세 전환 속도 배율입니다.</summary>
+    private float m_actionSpeedMultiplier = 1.0f;
 
     /// <summary>지금 적용 중인 상체 조준(허리) 리그 weight입니다.</summary>
     private float m_rigWeight;
@@ -383,6 +430,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private bool m_hasMuzzleAlignment;
     private bool m_combatShotPending;
     private bool m_fireRequested;
+    private readonly System.Collections.Generic.List<Gun.HitscanShotInfo> m_firedPelletBuffer = new(8);
 
     /// <summary>
     [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
@@ -443,6 +491,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private Animator m_animator;
     private AudioSource m_weaponAudioSource;
     private Gun m_weaponController;
+    private ChungSolDragonBreathSkill m_dragonBreathSkill;
     private Camera m_mainCamera;
     private EnemyController m_currentAimEnemy;
     private Vector3 m_currentAimPoint;
@@ -558,7 +607,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     {
         get
         {
-            float reloadTime = m_weaponController != null ? m_weaponController.ReloadTime : 0.0f;
+            float reloadTime = m_weaponController != null ? m_weaponController.ActiveReloadDuration : 0.0f;
             float eventTime = ResolveReloadEventTimeAtUnitSpeed();
             return reloadTime > 0.0f && eventTime > 0.0f ? eventTime / reloadTime : 1.0f;
         }
@@ -576,7 +625,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>누적 가능한 카메라 롤 상한(도)입니다.</summary>
     /// <summary>상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간(초)입니다.</summary>
     /// <remarks>재장전이 들고 날 때의 페이드 길이가 이 값입니다. 짧으면 툭 끊기고 길면 늘어집니다.</remarks>
-    public float StanceBlendDuration => m_stanceBlendDuration;
+    public float StanceBlendDuration => ScaleActionDuration(m_stanceBlendDuration);
+
+    /// <summary>현재 외부 행동 속도 배율입니다.</summary>
+    public float ActionSpeedMultiplier => m_actionSpeedMultiplier;
 
     public float VisualKickMaxRoll => m_visualKickMaxRoll;
 
@@ -764,13 +816,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     public bool UseZoomEnvelope => m_useZoomEnvelope;
 
     /// <summary>ADS 진입(확대)에 걸리는 시간(초)입니다.</summary>
-    public float ZoomInDuration => Mathf.Max(0.0f, m_zoomInDuration);
+    public float ZoomInDuration => ScaleActionDuration(m_zoomInDuration);
 
     /// <summary>ADS 진입 곡선입니다.</summary>
     public AnimationCurve ZoomInCurve => m_zoomInCurve;
 
     /// <summary>ADS 해제(축소)에 걸리는 시간(초)입니다.</summary>
-    public float ZoomOutDuration => Mathf.Max(0.0f, m_zoomOutDuration);
+    public float ZoomOutDuration => ScaleActionDuration(m_zoomOutDuration);
 
     /// <summary>ADS 해제 곡선입니다.</summary>
     public AnimationCurve ZoomOutCurve => m_zoomOutCurve;
@@ -852,6 +904,22 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>ADS 해제 시간을 설정합니다.</summary>
     public void SetZoomOutDuration(float value) => m_zoomOutDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>스킬 등 외부 효과가 적용하는 재장전·전투 자세 전환 속도 배율을 설정합니다.</summary>
+    public void SetActionSpeedMultiplier(float value)
+    {
+        m_actionSpeedMultiplier = Mathf.Max(0.01f, value);
+
+        if (m_controller != null && m_controller.IsReload)
+        {
+            ApplyReloadAnimationSpeed();
+        }
+    }
+
+    private float ScaleActionDuration(float duration)
+    {
+        return Mathf.Max(0.0f, duration) / m_actionSpeedMultiplier;
+    }
 
     /// <summary>ADS 진입 곡선을 교체합니다.</summary>
     public void SetZoomInCurve(AnimationCurve value)
@@ -1123,9 +1191,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         UpdateHitscanBlockMarker(shotInfo);
 
         if (m_fireRequested && m_weaponController != null
-            && m_weaponController.TryLayShoot(shotInfo, m_isAds, out Gun.HitscanShotInfo firedShot))
+            && m_weaponController.TryLayShoot(shotInfo, m_isAds, out _, m_firedPelletBuffer))
         {
-            SpawnImpactMarker(firedShot);
+            for (int i = 0; i < m_firedPelletBuffer.Count; i++)
+            {
+                SpawnImpactMarker(m_firedPelletBuffer[i]);
+            }
+
             ApplyRecoilAndVisualKick();
         }
     }
@@ -1242,7 +1314,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_weaponController.SetSpreadRecoveryBlockedByHeldFireInput(m_input != null && m_input.Shoot);
         }
 
-        if (m_crosshairController != null)
+        if (m_crosshairController != null && !UsesWeaponMaxSpreadCrosshair)
         {
             m_crosshairController.SetShotRecoilPulseHoldByFireInput(m_input != null && m_input.Shoot);
         }
@@ -1273,12 +1345,27 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         if (m_weaponController != null)
         {
-            // 게이지 채움: 재장전 중에는 재장전 진행도, 평소에는 현재 탄약 비율을 표시합니다.
-            float fill = reloading
-                ? m_weaponController.ReloadProgress
-                : m_weaponController.MaxBullet > 0
-                    ? (float)m_weaponController.CurrentBullet / m_weaponController.MaxBullet
-                    : 0.0f;
+            bool segmentedByRound = m_weaponController.SegmentAmmoGaugeByRound;
+            m_crosshairController.SetAmmoGaugeSegmentation(
+                segmentedByRound,
+                m_weaponController.MaxBullet);
+
+            int specialRounds = m_dragonBreathSkill != null
+                ? Mathf.Min(m_dragonBreathSkill.SpecialRoundsRemaining, m_weaponController.CurrentBullet)
+                : 0;
+            m_crosshairController.SetSpecialAmmoGaugeRounds(specialRounds);
+
+            float magazineFill = m_weaponController.MaxBullet > 0
+                ? (float)m_weaponController.CurrentBullet / m_weaponController.MaxBullet
+                : 0.0f;
+
+            // 발 단위 게이지는 재장전 중에도 실제 장탄수를 표시합니다. 탄이 삽입될 때만 한 칸씩 증가합니다.
+            // 연속 게이지를 사용하는 무기는 기존처럼 재장전 진행도를 부드럽게 표시합니다.
+            float fill = segmentedByRound
+                ? magazineFill
+                : reloading
+                    ? m_weaponController.ReloadProgress
+                    : magazineFill;
             m_crosshairController.SetAmmoGaugeFill(fill);
         }
     }
@@ -1293,6 +1380,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_animator = GetComponent<Animator>();
         m_weaponAudioSource = GetComponent<AudioSource>();
         m_weaponController = GetComponentInChildren<Gun>();
+        m_dragonBreathSkill = GetComponent<ChungSolDragonBreathSkill>();
         m_mainCamera = Camera.main;
     }
 
@@ -1602,6 +1690,44 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     private void BeginReload()
     {
+        ApplyReloadPresentation();
+
+        if (m_weaponController != null)
+        {
+            m_weaponController.StartReload();
+        }
+    }
+
+    /// <summary>스킬이 요청한 탄창 전체 장전을 전용 속도 배율과 함께 시작합니다.</summary>
+    /// <param name="reloadSpeedMultiplier">일반 재장전 대비 스킬 재장전 속도 배율입니다.</param>
+    public bool BeginSkillReload(float reloadSpeedMultiplier)
+    {
+        if (!m_hasRequiredReferences
+            || m_controller == null
+            || m_weaponController == null
+            || m_controller.IsReload
+            || m_weaponController.IsReloading)
+        {
+            return false;
+        }
+
+        if (!m_weaponController.StartSkillReload(reloadSpeedMultiplier))
+        {
+            return false;
+        }
+
+        // 0초 장전은 무기에서 즉시 완료되므로 불필요한 재장전 비주얼을 걸지 않습니다.
+        if (m_weaponController.IsReloading)
+        {
+            ApplyReloadPresentation();
+        }
+
+        return true;
+    }
+
+    /// <summary>플레이어·AI·스킬 재장전이 공유하는 조준 해제 및 애니메이터 상태를 적용합니다.</summary>
+    private void ApplyReloadPresentation()
+    {
         m_inCombatStance = false;
         m_isAds = false;
         m_hipfireTimer = 0.0f;
@@ -1622,11 +1748,6 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_animator.SetBool(AnimIDIsReload, true);
         m_animator.SetTrigger(AnimIDReload);
         m_controller.SetReload(true);
-
-        if (m_weaponController != null)
-        {
-            m_weaponController.StartReload();
-        }
     }
 
     /// <summary>
@@ -1707,7 +1828,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        float reloadTime = m_weaponController != null ? m_weaponController.ReloadTime : 0.0f;
+        float reloadTime = m_weaponController != null ? m_weaponController.ActiveReloadDuration : 0.0f;
         float eventTime = ResolveReloadEventTimeAtUnitSpeed();
 
         // 어느 한쪽이라도 알 수 없으면 배속을 건드리지 않습니다(1배속 유지).
@@ -1922,7 +2043,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_zoomElapsed = 0.0f;
         }
 
-        float duration = m_isAds ? m_zoomInDuration : m_zoomOutDuration;
+        float duration = m_isAds ? ZoomInDuration : ZoomOutDuration;
         if (duration <= 0.0f)
         {
             m_baseFov = targetFov;
@@ -1970,7 +2091,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         float spreadDegrees = m_weaponController != null ? m_weaponController.GetCurrentSpread(m_isAds) : 0.0f;
 
         // 시각 FOV 펀치가 아니라 기준 FOV를 써서, 크로스헤어가 발사 juice에 따라 숨쉬지 않게 합니다.
-        PushCrosshairSpread(spreadDegrees, m_baseFov, snap);
+        PushCrosshairSpread(spreadDegrees, m_baseFov, m_isAds, snap);
     }
 
     /// <summary>
@@ -1995,7 +2116,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         float fovDegrees = m_mainCamera != null ? m_mainCamera.fieldOfView : 60.0f;
-        PushCrosshairSpread(ResolveRestingSpreadDegrees(), fovDegrees, false);
+        PushCrosshairSpread(ResolveRestingSpreadDegrees(), fovDegrees, false, false);
     }
 
     /// <summary>
@@ -2024,8 +2145,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// 전투 중(<see cref="UpdateCrosshair"/>)과 휴지 중(<see cref="UpdateRestingCrosshair"/>)이 같은 본문을
     /// 쓰게 해서, 두 경로에서 분포·집중도나 펄스 비율 통지가 빠지는 일이 없게 합니다.
     /// </remarks>
-    private void PushCrosshairSpread(float spreadDegrees, float fovDegrees, bool snap)
+    private void PushCrosshairSpread(float spreadDegrees, float fovDegrees, bool isAds, bool snap)
     {
+        ApplyCrosshairPresentationIfNeeded();
+
+        if (UsesWeaponMaxSpreadCrosshair && m_weaponController != null)
+        {
+            m_weaponController.GetSpreadRange(isAds, out _, out spreadDegrees);
+            // 최대 경계 링은 발사 직후의 UI 펄스까지 얹으면 실제 산탄 콘보다 커집니다.
+            snap = true;
+        }
+
         SpreadDistribution distribution = m_weaponController != null
             ? m_weaponController.Distribution
             : SpreadDistribution.Gaussian;
@@ -2035,8 +2165,58 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         // 탄퍼짐이 상한에 가까워질수록 발당 펄스 기여를 같은 비율로 줄입니다. 상한 gap의 들썩임을 막는
         // 목적은 예전 상한 판정과 같지만, 한 프레임에 펄스를 버리지 않으므로 총 gap이 도중에 줄어들지 않습니다.
-        m_crosshairController.SetShotRecoilPulseSpreadScale(1.0f - GetCurrentSpreadProgress01());
+        m_crosshairController.SetShotRecoilPulseSpreadScale(
+            UsesWeaponMaxSpreadCrosshair ? 0.0f : 1.0f - GetCurrentSpreadProgress01());
     }
+
+    /// <summary>이 캐릭터가 직접 조작될 때만, 자신이 소유한 조준선 표시값을 공용 HUD에 적용합니다.</summary>
+    private void ApplyCrosshairPresentationIfNeeded()
+    {
+        // 투척 모드 동안에는 ExplosiveProjectileShooter가 같은 공용 HUD의 프리셋을 소유합니다.
+        // 여기서 일반 캐릭터 프로필을 다시 쓰면 두 시스템 값이 섞여 수류탄 링이 남습니다.
+        if (m_crosshairController == null || (m_input != null && m_input.ThrowMode) || HasAppliedCrosshairPresentation())
+        {
+            return;
+        }
+
+        m_crosshairController.CurrentSubShape = m_crosshairSubShape;
+        m_crosshairController.SetSpreadDisplayBasis(m_crosshairSpreadDisplayBasis);
+        m_crosshairController.SetSpreadDisplayFactorOverride(m_crosshairSpreadDisplayFactorOverride);
+        m_crosshairController.CenterSpacePixels = m_crosshairCenterSpacePixels;
+        m_crosshairController.SubRingSizePixels = m_crosshairSubRingBaseDiameterPixels;
+        m_crosshairController.SetShotRecoilPulseEnabled(m_crosshairEnableShotRecoilPulse);
+        m_crosshairController.ClearShotRecoilPulse();
+
+        s_crosshairPresentationOwner = this;
+        s_crosshairPresentationTarget = m_crosshairController;
+        s_crosshairPresentationSubShape = m_crosshairSubShape;
+        s_crosshairPresentationSpreadBasis = m_crosshairSpreadDisplayBasis;
+        s_crosshairPresentationDisplayFactorOverride = m_crosshairSpreadDisplayFactorOverride;
+        s_crosshairPresentationCenterSpacePixels = m_crosshairCenterSpacePixels;
+        s_crosshairPresentationSubRingBaseDiameterPixels = m_crosshairSubRingBaseDiameterPixels;
+        s_crosshairPresentationShotRecoilPulse = m_crosshairEnableShotRecoilPulse;
+    }
+
+    /// <summary>현재 캐릭터 프로필이 HUD에 적용된 값과 같은지 비교합니다. Inspector 실시간 수정을 놓치지 않기 위해 모든 표시값을 확인합니다.</summary>
+    private bool HasAppliedCrosshairPresentation()
+    {
+        return s_crosshairPresentationOwner == this
+            && s_crosshairPresentationTarget == m_crosshairController
+            && s_crosshairPresentationSubShape == m_crosshairSubShape
+            && s_crosshairPresentationSpreadBasis == m_crosshairSpreadDisplayBasis
+            && Mathf.Approximately(s_crosshairPresentationDisplayFactorOverride, m_crosshairSpreadDisplayFactorOverride)
+            && Mathf.Approximately(s_crosshairPresentationCenterSpacePixels, m_crosshairCenterSpacePixels)
+            && Mathf.Approximately(s_crosshairPresentationSubRingBaseDiameterPixels, m_crosshairSubRingBaseDiameterPixels)
+            && s_crosshairPresentationShotRecoilPulse == m_crosshairEnableShotRecoilPulse
+            && m_crosshairController.CurrentSubShape == m_crosshairSubShape
+            && m_crosshairController.CurrentSpreadDisplayBasis == m_crosshairSpreadDisplayBasis
+            && Mathf.Approximately(m_crosshairController.SpreadDisplayFactorOverride, m_crosshairSpreadDisplayFactorOverride)
+            && Mathf.Approximately(m_crosshairController.CenterSpacePixels, m_crosshairCenterSpacePixels)
+            && Mathf.Approximately(m_crosshairController.SubRingSizePixels, m_crosshairSubRingBaseDiameterPixels)
+            && m_crosshairController.ShotRecoilPulseEnabled == m_crosshairEnableShotRecoilPulse;
+    }
+
+    private bool UsesWeaponMaxSpreadCrosshair => m_crosshairSpreadMode == CrosshairSpreadMode.WeaponMaxSpread;
 
     /// <summary>
     /// 전투 스탠스(자유시점/힙파이어/ADS)가 바뀐 프레임에만 조준선 디버그 스냅샷을 한 번 캡처합니다.
@@ -2710,7 +2890,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 실제 탄퍼짐은 초반 정밀탄에서 0일 수 있으므로, 발사 성공 자체를 기준으로 UI 반동 펄스를 별도로 준다.
         // 상한 근처에서의 들썩임 억제는 펄스를 버리는 대신 UpdateCrosshair가 매 프레임 통지하는
         // 비례 감쇠(SetShotRecoilPulseSpreadScale)가 담당한다. 그래서 여기서는 분기 없이 항상 펄스를 준다.
-        if (m_crosshairController != null)
+        if (m_crosshairController != null && !UsesWeaponMaxSpreadCrosshair)
         {
             m_crosshairController.TriggerShotRecoilPulse();
         }
@@ -3172,9 +3352,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     {
         RefreshAirMotionState();
 
-        float step = m_stanceBlendDuration <= 0.0f
+        float stanceBlendDuration = StanceBlendDuration;
+        float step = stanceBlendDuration <= 0.0f
             ? 1.0f
-            : Time.deltaTime / m_stanceBlendDuration;
+            : Time.deltaTime / stanceBlendDuration;
 
         // 공중 처리는 목표값만 바꿉니다. 현재값을 직접 건드리면 뜨고 내리는 순간 자세가 툭 끊깁니다.
         float aimTarget = ResolveAirborneAdjustedRigTarget(m_rigWeightTarget);
@@ -3387,6 +3568,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     public void SetPlayerControlled(bool value)
     {
         m_isPlayerControlled = value;
+
+        if (value)
+        {
+            CacheOptionalCrosshairController();
+            ApplyCrosshairPresentationIfNeeded();
+        }
     }
 
     /// <summary>

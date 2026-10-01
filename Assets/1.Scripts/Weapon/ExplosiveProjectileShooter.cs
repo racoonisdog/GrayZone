@@ -268,12 +268,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_sourceCollider = GetComponent<Collider>();
         ResolveGrenadeSelectionUI();
         CreateTrajectoryLine();
-        ApplyCrosshairMode(m_input != null && m_input.ThrowMode);
+        ApplyCrosshairMode(false);
     }
 
     private void LateUpdate()
     {
-        bool throwModeActive = m_input != null && m_input.ThrowMode;
+        // 공용 HUD는 현재 직접 조작 중인 캐릭터만 변경합니다. AI가 된 이전 캐릭터가
+        // 자기 입력 상태로 수류탄 프리셋을 다시 쓰면 일반 크로스헤어와 값이 섞입니다.
+        bool ownsPlayerCrosshair = m_aimController != null && m_aimController.IsPlayerControlled;
+        bool throwModeActive = ownsPlayerCrosshair && m_input != null && m_input.ThrowMode;
         SetGrenadeAnimationMode(throwModeActive);
         SetGrenadeEquipmentVisible(throwModeActive);
         SetHeldGrenadeVisible(throwModeActive && !IsGrenadeThrowAnimationActive());

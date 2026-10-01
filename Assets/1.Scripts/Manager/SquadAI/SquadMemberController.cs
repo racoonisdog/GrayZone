@@ -76,6 +76,7 @@ public class SquadMemberController : MonoBehaviour
     private bool m_isInteractionLocked;
     private Collider m_reviveDetectionCollider;
     private RagdollController m_ragdollController;
+    private StatusEffectContainer m_statusEffects;
 
     [Foldout("Reference Options")]
     [Tooltip("입력 값을 보관하는 플레이어 입력 컴포넌트입니다.")]
@@ -145,6 +146,56 @@ public class SquadMemberController : MonoBehaviour
     /// <summary>현재 멤버가 다운 상태인지 여부입니다.</summary>
     public bool IsDown => m_isDown;
 
+    /// <summary>기본값 100을 기준으로 한 현재 이동 속도 비율입니다.</summary>
+    public float MovementSpeedPercent { get; private set; } = 100.0f;
+
+    /// <summary>기본값 100을 기준으로 한 현재 행동 속도 비율입니다.</summary>
+    public float ActionSpeedPercent { get; private set; } = 100.0f;
+
+    /// <summary>이 멤버에게 적용 중인 버프·디버프·상태이상 컨테이너입니다.</summary>
+    public StatusEffectContainer StatusEffects => m_statusEffects != null
+        ? m_statusEffects
+        : m_statusEffects = StatusEffectContainer.GetOrAdd(gameObject);
+
+    /// <summary>
+    /// 캐릭터의 이동·행동 속도를 기본값 100% 기준으로 한 번에 설정합니다.
+    /// </summary>
+    /// <param name="movementPercent">이동 속도 비율입니다. 150이면 기본값보다 50% 빠릅니다.</param>
+    /// <param name="actionPercent">행동 속도 비율입니다. 재장전·자세 전환과 Shotgun 펌프 간격에 적용됩니다.</param>
+    /// <remarks>소총의 발사 간격은 행동 속도에 포함하지 않습니다.</remarks>
+    public void SetSpeedPercent(float movementPercent, float actionPercent)
+    {
+        AutoFindReferences();
+
+        MovementSpeedPercent = Mathf.Max(1.0f, movementPercent);
+        ActionSpeedPercent = Mathf.Max(1.0f, actionPercent);
+
+        float movementMultiplier = MovementSpeedPercent * 0.01f;
+        float actionMultiplier = ActionSpeedPercent * 0.01f;
+
+        if (m_thirdPersonController != null)
+        {
+            m_thirdPersonController.SetMovementSpeedMultiplier(movementMultiplier);
+            m_thirdPersonController.SetActionSpeedMultiplier(actionMultiplier);
+        }
+
+        if (m_weaponController == null)
+        {
+            m_weaponController = GetComponentInChildren<Gun>();
+        }
+
+        if (m_weaponController != null)
+        {
+            m_weaponController.SetActionSpeedMultiplier(actionMultiplier);
+        }
+
+        // AimController의 재장전 애니메이션 배속은 Gun.ReloadTime을 읽으므로 무기 배율을 먼저 갱신합니다.
+        if (m_aimController != null)
+        {
+            m_aimController.SetActionSpeedMultiplier(actionMultiplier);
+        }
+    }
+
     /// <summary>현재 직접 조작 중인 멤버에게 길을 양보할 수 있는 AI 상태인지 여부입니다.</summary>
     public bool CanYieldToPlayer =>
         IsAiSquadMember && m_isAlive && !m_isDown && !m_isInteractionLocked &&
@@ -208,6 +259,7 @@ public class SquadMemberController : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
+        m_statusEffects = StatusEffectContainer.GetOrAdd(gameObject);
         EnsureDownedAllyInteractable();
         EnsureReviveDetectionCollider();
         ApplyControlState();

@@ -17,6 +17,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <remarks>UI 갱신용입니다. 사격·재장전·밸런스 재적용 모두 이 이벤트를 거칩니다.</remarks>
     public event System.Action<int, int> OnBulletChanged;
 
+    /// <summary>사격이 실제로 성립한 직후 대표 발사 정보를 전달합니다.</summary>
+    /// <remarks>특수탄처럼 다음 성공 사격에 반응하는 시스템이 입력·탄약 판정을 중복 구현하지 않도록 제공됩니다.</remarks>
+    public event System.Action<HitscanShotInfo> OnShotFired;
+
+    /// <summary>실제 히트스캔 처리 직전에 특수탄 시스템이 이번 사격을 대신 소비할 기회를 제공합니다.</summary>
+    /// <remarks>구독자가 true를 반환하면 탄약·반동·총성·사격 쿨다운은 유지하되 일반 탄환 생성과 히트스캔 피해만 생략합니다.</remarks>
+    public event System.Func<HitscanShotInfo, bool> OnTryOverrideShot;
+
     [Foldout("Balance Data")]
     [Tooltip("이 무기에 적용할 순수 수치형 밸런스 SO입니다. 비어 있으면 기존 Inspector 값을 사용합니다.")]
     [FormerlySerializedAs("m_balance")]
@@ -65,6 +73,15 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     // Assets/1.Scripts/Enum/WeaponEnum.cs로 옮겼습니다.
 
     [Foldout("Bullet Options")]
+    [Tooltip("총기의 분류입니다. Shotgun이면 한 번의 사격에 아래 펠릿 수만큼 히트스캔을 독립적으로 처리합니다. 밸런스 SO가 있으면 SO의 무기 분류가 이 값을 덮어씁니다.")]
+    [BalanceField(Shared = true)]
+    [SerializeField] private WeaponType m_weaponType = WeaponType.AssaultRifle;
+
+    [Tooltip("Shotgun 한 번의 사격에서 발사할 펠릿 수입니다. 탄약·반동·총성·탄피는 펠릿 수와 무관하게 한 번만 처리하며, Shotgun이 아닌 총기는 항상 1발로 처리합니다.")]
+    [BalanceField]
+    [Clamp(Min = 1)]
+    [SerializeField] private int m_pelletCount = 1;
+
     [Tooltip("현재 탄약 수입니다.")]
     [FormerlySerializedAs("currentBullet")]
     [SerializeField] private int m_currentBullet = 30;
@@ -75,10 +92,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private int m_maxBullet = 30;
 
+    [Tooltip("켜면 크로스헤어 장탄 아크를 최대 장탄수만큼 끊어 한 칸이 한 발을 나타내게 합니다.")]
+    [BalanceField]
+    [SerializeField] private bool m_segmentAmmoGaugeByRound;
+
     [Tooltip("켜면 재장전할 때 예비 탄약을 소모하지 않습니다. 예비 탄약 표시도 숫자 대신 무한 기호가 됩니다.")]
     [SerializeField] private bool m_infiniteAmmo = true;
 
-    [Tooltip("사격 후 다음 사격이 가능해질 때까지의 지연 시간입니다.")]
+    [Tooltip("한 번의 사격 후 다음 사격이 가능해질 때까지의 지연 시간(초)입니다. 입력 홀드·연속 클릭 모두 이 쿨다운을 공유합니다.")]
     [FormerlySerializedAs("shootDelay")]
     [BalanceField]
     [Clamp(Min = 0)]
@@ -89,6 +110,10 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_reloadTime = 1.5f;
+
+    [Tooltip("재장전 방식입니다. Magazine은 시간이 끝날 때 부족한 탄약을 한 번에 채우고, IndividualRounds는 총 재장전 시간 ÷ 장탄량 간격마다 1발씩 채웁니다. 개별 장전은 중간에 취소해도 이미 들어간 탄약이 유지됩니다.")]
+    [BalanceField]
+    [SerializeField] private ReloadMode m_reloadMode = ReloadMode.Magazine;
 
     [Tooltip("탄약이 최대치일 때도 재장전을 허용할지 여부입니다. 기본값은 false로, 풀 탄창에서는 재장전이 막히고 빈 장전 사운드만 재생됩니다. 디버그 용도로만 true로 켭니다.")]
     [SerializeField] private bool m_allowFullMagReload = false;
@@ -156,7 +181,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [SerializeField] private ParticleSystem m_muzzleFlashParticle;
 
     [Foldout("Hitscan Options")]
-    [Tooltip("명중 한 발이 주는 기본 피해량입니다. 약점 배율과 거리 감쇠는 여기에 곱해집니다.")]
+    [Tooltip("명중 한 발이 주는 기본 피해량입니다. Shotgun은 펠릿 하나당 이 피해를 각각 적용하며, 약점 배율과 거리 감쇠는 펠릿별 피해에 곱해집니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private int m_hitscanDamage = 1;
@@ -201,16 +226,38 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     [Foldout("Spread Options")]
     [Header("Hipfire")]
-    [Tooltip("힙파이어(비조준) 시 최소 방사각(도).")]
+    [Tooltip("힙파이어·서기 자세의 최소 방사각(도).")]
     [FormerlySerializedAs("m_hipfireBaseSpread")]
+    [FormerlySerializedAs("m_hipfireMinSpread")]
     [BalanceField]
     [Clamp(Min = 0)]
-    [SerializeField] private float m_hipfireMinSpread = 4.0f;
+    [SerializeField] private float m_hipfireStandingMinSpread = 4.0f;
 
-    [Tooltip("힙파이어(비조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [Tooltip("힙파이어·서기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [FormerlySerializedAs("m_hipfireMaxSpread")]
     [BalanceField]
     [Clamp(Min = 0)]
-    [SerializeField] private float m_hipfireMaxSpread = 10.0f;
+    [SerializeField] private float m_hipfireStandingMaxSpread = 10.0f;
+
+    [Tooltip("힙파이어·앉기 자세의 최소 방사각(도). 앉는 도중에는 서기 값에서 이 값으로 보간됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_hipfireCrouchMinSpread = 2.4f;
+
+    [Tooltip("힙파이어·앉기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_hipfireCrouchMaxSpread = 6.0f;
+
+    [Tooltip("힙파이어·공중 자세의 최소 방사각(도). 공중에서는 앉기 여부와 무관하게 이 범위를 사용합니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_hipfireAirborneMinSpread = 6.0f;
+
+    [Tooltip("힙파이어·공중 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_hipfireAirborneMaxSpread = 12.0f;
 
     [Tooltip("현재 적용 중인 힙파이어 방사각(도)입니다. 런타임 관찰용이며 직접 편집하는 값이 아닙니다.")]
     [ReadOnly][SerializeField] private float m_hipfireCurrentSpread;
@@ -244,29 +291,41 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [SerializeField] private float m_hipfireSpreadRecoveryDelay = 0.3f;
 
     [Header("ADS")]
-    [Tooltip("ADS(조준) 시 최소 방사각(도). 0이면 정밀 사격입니다.")]
+    [Tooltip("ADS·서기 자세의 최소 방사각(도). 0이면 정밀 사격입니다.")]
     [FormerlySerializedAs("m_adsBaseSpread")]
+    [FormerlySerializedAs("m_adsMinSpread")]
     [BalanceField]
     [Clamp(Min = 0)]
-    [SerializeField] private float m_adsMinSpread = 0.0f;
+    [SerializeField] private float m_adsStandingMinSpread = 0.0f;
 
-    [Tooltip("ADS(조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [Tooltip("ADS·서기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [FormerlySerializedAs("m_adsMaxSpread")]
     [BalanceField]
     [Clamp(Min = 0)]
-    [SerializeField] private float m_adsMaxSpread = 6.0f;
+    [SerializeField] private float m_adsStandingMaxSpread = 6.0f;
+
+    [Tooltip("ADS·앉기 자세의 최소 방사각(도). 앉는 도중에는 서기 값에서 이 값으로 보간됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_adsCrouchMinSpread = 0.0f;
+
+    [Tooltip("ADS·앉기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_adsCrouchMaxSpread = 3.6f;
+
+    [Tooltip("ADS·공중 자세의 최소 방사각(도). 공중에서는 앉기 여부와 무관하게 이 범위를 사용합니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_adsAirborneMinSpread = 2.0f;
+
+    [Tooltip("ADS·공중 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_adsAirborneMaxSpread = 8.0f;
 
     [Tooltip("현재 적용 중인 ADS 방사각(도)입니다. 런타임 관찰용이며 직접 편집하는 값이 아닙니다.")]
     [ReadOnly][SerializeField] private float m_adsCurrentSpread;
-
-    [Tooltip("공중에 떠 있는 동안 더해지는 방사각(도)입니다. 힙파이어와 ADS 모두에 같은 값이 더해지며, 연사 누적과 별개로 즉시 적용됩니다.")]
-    [BalanceField]
-    [Clamp(Min = 0)]
-    [SerializeField] private float m_airborneExtraSpread = 2.0f;
-
-    [Tooltip("앉은 자세에서 방사각에 곱할 배율입니다. 1이면 선 자세와 같고, 작을수록 탄착군이 좁아집니다. 최소·최대에 함께 곱하므로 상한도 같은 비율로 내려갑니다.")]
-    [BalanceField]
-    [Clamp(Min = 0.0f, Max = 1.0f)]
-    [SerializeField] private float m_crouchSpreadMultiplier = 0.6f;
 
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다.")]
     [BalanceField]
@@ -289,7 +348,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [SerializeField] private float m_adsSpreadRecoveryDelay = 0.3f;
 
     [Header("Distribution")]
-    [Tooltip("탄퍼짐 분포 방식입니다. Uniform=원판 전체 균일, Gaussian=중심 가중 정규분포(기본). 샷건(콘 3분할) 등은 추후 추가 예정입니다.")]
+    [Tooltip("탄퍼짐 분포 방식입니다. Uniform=원판 전체 균일, Gaussian=중심 가중 정규분포(기본). Shotgun 펠릿도 이 분포를 그대로 사용합니다.")]
     [BalanceField]
     [SerializeField] private SpreadDistribution m_spreadDistribution = SpreadDistribution.Gaussian;
 
@@ -398,7 +457,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     private bool m_canShoot = true;
     private bool m_isReloading;
+    private bool m_isSkillReloading;
+    private float m_activeReloadSpeedMultiplier = 1.0f;
     private float m_reloadStartTime;
+    private float m_nextIndividualReloadTime;
+    private float m_actionSpeedMultiplier = 1.0f;
     private float m_nextDryFireTime;
     private bool m_hasRequiredReferences;
     private Faction m_ownerFaction = Faction.Player;
@@ -424,6 +487,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     /// <summary>이번 사격이 피해를 줄 대상을 가까운 순서대로 담은 목록입니다. 재사용합니다.</summary>
     private readonly List<ShotPathHit> m_shotPath = new List<ShotPathHit>(TraceBufferSize);
+
+    /// <summary>한 번의 방아쇠 입력에서 계산한 모든 펠릿 결과입니다. 트레이서와 호출자 결과 전달에 재사용합니다.</summary>
+    private readonly List<HitscanShotInfo> m_pelletShotBuffer = new List<HitscanShotInfo>(8);
 
     /// <summary>레이캐스트와 총구 오버랩 명중을 같은 피해 경로에서 처리하기 위한 내부 명중 정보입니다.</summary>
     private readonly struct ShotPathHit
@@ -490,13 +556,27 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     // 시트 값이 뒤집혔을 때 되돌릴 기준입니다. 프리팹마다 튜닝이 달라 클래스 공용 상수를 쓸 수 없으므로,
     // 첫 바인딩 직전에 이 프리팹이 저작한 값을 그대로 보관합니다.
     private bool m_fallbackRangesCaptured;
-    private float m_fallbackHipfireMinSpread;
-    private float m_fallbackHipfireMaxSpread;
-    private float m_fallbackAdsMinSpread;
-    private float m_fallbackAdsMaxSpread;
+    private float m_fallbackHipfireStandingMinSpread;
+    private float m_fallbackHipfireStandingMaxSpread;
+    private float m_fallbackHipfireCrouchMinSpread;
+    private float m_fallbackHipfireCrouchMaxSpread;
+    private float m_fallbackHipfireAirborneMinSpread;
+    private float m_fallbackHipfireAirborneMaxSpread;
+    private float m_fallbackAdsStandingMinSpread;
+    private float m_fallbackAdsStandingMaxSpread;
+    private float m_fallbackAdsCrouchMinSpread;
+    private float m_fallbackAdsCrouchMaxSpread;
+    private float m_fallbackAdsAirborneMinSpread;
+    private float m_fallbackAdsAirborneMaxSpread;
 
     /// <summary>현재 탄약 수입니다.</summary>
     public int CurrentBullet => m_currentBullet;
+
+    /// <summary>현재 총기의 분류입니다.</summary>
+    public WeaponType WeaponType => m_weaponType;
+
+    /// <summary>Shotgun 한 번의 사격에서 처리할 펠릿 수입니다. Shotgun이 아니면 항상 1입니다.</summary>
+    public int PelletCount => m_weaponType == WeaponType.Shotgun ? Mathf.Max(1, m_pelletCount) : 1;
 
     /// <summary>현재 이 무기에 지정된 순수 수치형 밸런스 SO입니다.</summary>
     public GunBalanceSO Balance => m_balanceSO;
@@ -506,6 +586,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     /// <summary>최대 탄약 수입니다.</summary>
     public int MaxBullet => m_maxBullet;
+
+    /// <summary>크로스헤어 장탄 아크를 탄 단위로 분할할지 여부입니다.</summary>
+    public bool SegmentAmmoGaugeByRound => m_segmentAmmoGaugeByRound;
 
     /// <summary>이 총기가 예비 탄약을 소모하지 않는지 여부입니다.</summary>
     /// <remarks>
@@ -535,7 +618,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     public event System.Action<CombatDamage.HitFeedback> OnHitFeedback;
 
     /// <summary>
-    /// 재장전이 완료돼 탄약이 채워졌을 때 발생합니다.
+    /// 재장전이 끝났을 때 발생합니다. 예비 탄약이 부족하면 최대치보다 적게 채워진 상태에서도 발생할 수 있습니다.
     /// </summary>
     /// <remarks>
     /// 재장전 종료를 알리는 정규 경로는 재장전 클립의 애니메이션 이벤트(<see cref="AimController.Reload"/>)입니다.
@@ -549,10 +632,13 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>현재 재장전 중인지 여부입니다.</summary>
     public bool IsReloading => m_isReloading;
 
+    /// <summary>예비 탄약을 소모하지 않고 탄창 전체를 채우는 스킬 전용 재장전 중인지 여부입니다.</summary>
+    public bool IsSkillReloading => m_isReloading && m_isSkillReloading;
+
     /// <summary>현재 재장전 진행도(0~1)입니다. 재장전 중이 아니면 0입니다.</summary>
     public float ReloadProgress => !m_isReloading ? 0.0f
-        : m_reloadTime <= 0.0f ? 1.0f
-        : Mathf.Clamp01((Time.time - m_reloadStartTime) / m_reloadTime);
+        : ActiveReloadDuration <= 0.0f ? 1.0f
+        : Mathf.Clamp01((Time.time - m_reloadStartTime) / ActiveReloadDuration);
 
     /// <summary>
     /// 지금 재장전을 시작할 수 있는 상태인지 여부입니다.
@@ -573,11 +659,27 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>탄약이 최대치일 때도 재장전을 허용할지 여부입니다. 기본값은 <c>false</c>이며 디버그 용도입니다.</summary>
     public bool AllowFullMagReload => m_allowFullMagReload;
 
-    /// <summary>사격 지연 시간입니다.</summary>
-    public float ShootDelay => m_shootDelay;
+    /// <summary>한 번의 사격 후 다음 사격까지 적용되는 쿨다운(초)입니다. 입력 방식과 무관하게 동일하게 적용됩니다.</summary>
+    public float ShootDelay => m_weaponType == WeaponType.Shotgun
+        ? m_shootDelay / m_actionSpeedMultiplier
+        : m_shootDelay;
 
     /// <summary>재장전 시간입니다.</summary>
-    public float ReloadTime => m_reloadTime;
+    public float ReloadTime => m_reloadTime / m_actionSpeedMultiplier;
+
+    /// <summary>현재 재장전에 적용된 스킬 전용 배율까지 반영한 실제 소요 시간입니다.</summary>
+    public float ActiveReloadDuration => ReloadTime / Mathf.Max(0.01f, m_activeReloadSpeedMultiplier);
+
+    /// <summary>현재 외부 행동 속도 배율입니다.</summary>
+    public float ActionSpeedMultiplier => m_actionSpeedMultiplier;
+
+    /// <summary>이 총기의 재장전 방식입니다.</summary>
+    public ReloadMode ReloadMode => m_reloadMode;
+
+    /// <summary>개별 장전 방식에서 탄약 1발이 들어가는 간격입니다.</summary>
+    public float IndividualReloadInterval => m_maxBullet > 0
+        ? ReloadTime / m_maxBullet
+        : 0.0f;
 
     /// <summary>탄환 생성 위치입니다.</summary>
     public Transform FirePos => m_firePos;
@@ -597,7 +699,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>히트스캔 판정에 사용할 최대 사거리입니다.</summary>
     public float HitscanRange => m_hitscanRange;
 
-    /// <summary>히트스캔 사격이 적에게 적용할 피해량입니다.</summary>
+    /// <summary>히트스캔 한 발의 기본 피해량입니다. Shotgun이면 펠릿 하나마다 이 값이 각각 적용됩니다.</summary>
     public int HitscanDamage => m_hitscanDamage;
 
     /// <summary>이 무기가 약점 판정을 사용하는지 여부입니다.</summary>
@@ -649,53 +751,16 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <returns>사격 상태를 변경하지 않고 계산한 현재 탄퍼짐 방사각(도)입니다.</returns>
     public float GetCurrentSpread(bool isAds)
     {
-        float spread = isAds
-            ? GetCurrentSpread(m_adsMinSpread, m_adsMaxSpread, m_adsCurrentSpreadAdd)
-            : GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
-
-        // 자세로 좁힌 뒤 공중 페널티를 얹습니다. 공중이면 앉기 배율은 1이라 페널티만 남습니다.
-        return spread * CurrentCrouchSpreadScale + CurrentAirborneExtraSpread;
+        GetSpreadRange(isAds, out float minSpread, out float maxSpread);
+        float currentSpreadAdd = isAds ? m_adsCurrentSpreadAdd : m_hipfireCurrentSpreadAdd;
+        return GetCurrentSpread(minSpread, maxSpread, currentSpreadAdd);
     }
-
-    /// <summary>공중에 떠 있는 동안 더해지는 방사각(도)입니다.</summary>
-    public float AirborneExtraSpread => m_airborneExtraSpread;
 
     /// <summary>이 무기를 든 대상이 지금 공중에 떠 있는지 여부입니다.</summary>
     public bool IsAirborne => m_isAirborne;
 
-    /// <summary>
-    /// 지금 실제로 더해지는 공중 추가 방사각(도)입니다. 접지 상태면 0입니다.
-    /// </summary>
-    /// <remarks>
-    /// 이 값은 최소·최대 방사각 양쪽에 같이 더해집니다. 즉 공중에서는 사거리 콘 전체가 통째로 넓어지고,
-    /// 연사 누적이 없는 첫 발도 지상보다 벌어집니다. 누적값에 더하지 않는 이유는 공중이 연사와 무관한
-    /// 별개의 불안정 요인이기 때문입니다. 누적에 섞으면 착지 후에도 회복 곡선을 타면서 남습니다.
-    /// </remarks>
-    private float CurrentAirborneExtraSpread => m_isAirborne ? Mathf.Max(0.0f, m_airborneExtraSpread) : 0.0f;
-
-    /// <summary>앉은 자세에서 방사각에 곱할 배율입니다.</summary>
-    public float CrouchSpreadMultiplier => m_crouchSpreadMultiplier;
-
     /// <summary>지금 적용 중인 앉기 정도입니다. 0이면 선 자세, 1이면 완전히 앉은 자세입니다.</summary>
     public float CrouchBlend => m_crouchBlend;
-
-    /// <summary>
-    /// 지금 실제로 방사각에 곱해지는 배율입니다. 선 자세면 1입니다.
-    /// </summary>
-    /// <remarks>
-    /// 켜짐/꺼짐이 아니라 앉기 보간값을 따라갑니다. 자세가 바뀌는 동안 탄착군도 같이 좁혀져야
-    /// 앉는 도중에 방사각만 계단처럼 튀지 않습니다.
-    ///
-    /// 공중 추가 방사각과 달리 곱셈인 이유는 방향이 반대이기 때문입니다. 공중은 자세와 무관하게 얹히는
-    /// 불안정 요인이라 더하고, 앉기는 자세 자체가 안정되는 것이라 콘 전체를 비율로 좁힙니다.
-    /// 곱셈이라 최소·최대가 같은 비율로 내려가, 상한을 따로 관리하지 않아도 됩니다.
-    ///
-    /// <b>공중에서는 앉기를 적용하지 않습니다.</b> 발이 떠 있으면 앉은 자세가 주는 안정이 없습니다.
-    /// 입력이나 애니메이션 상으로 웅크림이 남아 있어도 공중이 우선입니다.
-    /// </remarks>
-    private float CurrentCrouchSpreadScale => m_isAirborne
-        ? 1.0f
-        : Mathf.Lerp(1.0f, Mathf.Clamp01(m_crouchSpreadMultiplier), Mathf.Clamp01(m_crouchBlend));
 
     /// <summary>
     /// 이 무기를 든 대상의 앉기 정도를 전달합니다.
@@ -710,9 +775,6 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         m_crouchBlend = Mathf.Clamp01(value);
     }
 
-    /// <summary>앉기 방사각 배율을 설정합니다. 0~1로 보정합니다.</summary>
-    public void SetCrouchSpreadMultiplier(float value) => m_crouchSpreadMultiplier = Mathf.Clamp01(value);
-
     /// <summary>
     /// 이 무기를 든 대상의 접지 여부를 전달합니다.
     /// </summary>
@@ -726,9 +788,6 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         m_isAirborne = value;
     }
 
-    /// <summary>공중 추가 방사각(도)을 설정합니다. 음수는 0으로 보정합니다.</summary>
-    public void SetAirborneExtraSpread(float value) => m_airborneExtraSpread = Mathf.Max(0.0f, value);
-
     /// <summary>현재 사격 자세의 방사각 최소·최대값을 함께 반환합니다.</summary>
     /// <param name="isAds">ADS면 <c>true</c>, 힙파이어면 <c>false</c>입니다.</param>
     /// <param name="minSpread">해당 자세의 최소 방사각(도)입니다.</param>
@@ -736,18 +795,52 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <remarks>크로스헤어가 벌어짐 폭을 그릴 때 두 값이 함께 필요해 한 번에 돌려줍니다.</remarks>
     public void GetSpreadRange(bool isAds, out float minSpread, out float maxSpread)
     {
-        minSpread = Mathf.Max(0.0f, isAds ? m_adsMinSpread : m_hipfireMinSpread);
-        maxSpread = Mathf.Max(minSpread, isAds ? m_adsMaxSpread : m_hipfireMaxSpread);
+        if (isAds)
+        {
+            ResolveStanceSpreadRange(
+                m_adsStandingMinSpread,
+                m_adsStandingMaxSpread,
+                m_adsCrouchMinSpread,
+                m_adsCrouchMaxSpread,
+                m_adsAirborneMinSpread,
+                m_adsAirborneMaxSpread,
+                out minSpread,
+                out maxSpread);
+            return;
+        }
 
-        // 앉은 자세는 콘 전체를 비율로 좁힙니다. 최소·최대에 함께 곱해야 상한도 같이 내려갑니다.
-        float crouchScale = CurrentCrouchSpreadScale;
-        minSpread *= crouchScale;
-        maxSpread *= crouchScale;
+        ResolveStanceSpreadRange(
+            m_hipfireStandingMinSpread,
+            m_hipfireStandingMaxSpread,
+            m_hipfireCrouchMinSpread,
+            m_hipfireCrouchMaxSpread,
+            m_hipfireAirborneMinSpread,
+            m_hipfireAirborneMaxSpread,
+            out minSpread,
+            out maxSpread);
+    }
 
-        // 공중에서는 콘 전체가 통째로 올라갑니다. 최소에만 더하면 크로스헤어가 상한에 눌려 벌어지지 않습니다.
-        float extra = CurrentAirborneExtraSpread;
-        minSpread += extra;
-        maxSpread += extra;
+    /// <summary>서기·앉기·공중 중 현재 자세에 해당하는 독립 탄퍼짐 범위를 계산합니다.</summary>
+    private void ResolveStanceSpreadRange(
+        float standingMin,
+        float standingMax,
+        float crouchMin,
+        float crouchMax,
+        float airborneMin,
+        float airborneMax,
+        out float minSpread,
+        out float maxSpread)
+    {
+        if (m_isAirborne)
+        {
+            minSpread = Mathf.Max(0.0f, airborneMin);
+            maxSpread = Mathf.Max(minSpread, airborneMax);
+            return;
+        }
+
+        float crouchBlend = Mathf.Clamp01(m_crouchBlend);
+        minSpread = Mathf.Max(0.0f, Mathf.Lerp(standingMin, crouchMin, crouchBlend));
+        maxSpread = Mathf.Max(minSpread, Mathf.Lerp(standingMax, crouchMax, crouchBlend));
     }
 
     /// <summary>탄퍼짐 콘 안에서의 분포 방식입니다. 크로스헤어가 표시 배율을 계산할 때 읽습니다(읽기 전용).</summary>
@@ -834,12 +927,15 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 두 플래그를 되돌리는 곳은 그 예약뿐입니다. 그래서 복구가 없으면 <b>사격 직후 비활성화된 총은
     /// <c>m_canShoot=false</c>로 굳어 다시 켜도 영영 발사되지 않습니다</b>(재장전 중이었다면 같은 이유로
     /// <c>m_isReloading=true</c>에 갇힙니다). Play Mode에서 실제로 발생한 상태이므로 가정이 아닙니다.
-    /// 재장전은 완료 예약이 사라졌으니 중단으로 처리합니다. 탄약은 채우지 않으며 다시 재장전해야 합니다.
+    /// 재장전은 완료 예약이 사라졌으니 중단으로 처리합니다. 개별 장전으로 이미 들어간 탄약은 유지하지만
+    /// 남은 탄약은 채우지 않으며 다시 재장전해야 합니다.
     /// </remarks>
     private void OnEnable()
     {
         m_canShoot = true;
         m_isReloading = false;
+        m_isSkillReloading = false;
+        m_activeReloadSpeedMultiplier = 1.0f;
 
         if (m_hasRequiredReferences)
         {
@@ -862,6 +958,8 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </summary>
     private void Update()
     {
+        UpdateIndividualReload();
+
         // AimController가 발사 입력을 유지하는 프레임을 통지하면 spread 회복을 건너뜁니다.
         // 한 프레임 앞까지 유지하는 것은 Gun.Update와 AimController.Update 실행 순서가 바뀌어도 홀드 중
         // 한 프레임만 회복됐다 다시 벌어지는 현상을 막기 위함입니다.
@@ -1015,10 +1113,18 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return;
         }
 
-        m_fallbackHipfireMinSpread = m_hipfireMinSpread;
-        m_fallbackHipfireMaxSpread = m_hipfireMaxSpread;
-        m_fallbackAdsMinSpread = m_adsMinSpread;
-        m_fallbackAdsMaxSpread = m_adsMaxSpread;
+        m_fallbackHipfireStandingMinSpread = m_hipfireStandingMinSpread;
+        m_fallbackHipfireStandingMaxSpread = m_hipfireStandingMaxSpread;
+        m_fallbackHipfireCrouchMinSpread = m_hipfireCrouchMinSpread;
+        m_fallbackHipfireCrouchMaxSpread = m_hipfireCrouchMaxSpread;
+        m_fallbackHipfireAirborneMinSpread = m_hipfireAirborneMinSpread;
+        m_fallbackHipfireAirborneMaxSpread = m_hipfireAirborneMaxSpread;
+        m_fallbackAdsStandingMinSpread = m_adsStandingMinSpread;
+        m_fallbackAdsStandingMaxSpread = m_adsStandingMaxSpread;
+        m_fallbackAdsCrouchMinSpread = m_adsCrouchMinSpread;
+        m_fallbackAdsCrouchMaxSpread = m_adsCrouchMaxSpread;
+        m_fallbackAdsAirborneMinSpread = m_adsAirborneMinSpread;
+        m_fallbackAdsAirborneMaxSpread = m_adsAirborneMaxSpread;
         m_fallbackRangesCaptured = true;
     }
 
@@ -1036,25 +1142,39 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return;
         }
 
-        if (m_hipfireMaxSpread < m_hipfireMinSpread)
+        RestoreInvertedSpreadRange(ref m_hipfireStandingMinSpread, ref m_hipfireStandingMaxSpread,
+            m_fallbackHipfireStandingMinSpread, m_fallbackHipfireStandingMaxSpread, "힙파이어/서기");
+        RestoreInvertedSpreadRange(ref m_hipfireCrouchMinSpread, ref m_hipfireCrouchMaxSpread,
+            m_fallbackHipfireCrouchMinSpread, m_fallbackHipfireCrouchMaxSpread, "힙파이어/앉기");
+        RestoreInvertedSpreadRange(ref m_hipfireAirborneMinSpread, ref m_hipfireAirborneMaxSpread,
+            m_fallbackHipfireAirborneMinSpread, m_fallbackHipfireAirborneMaxSpread, "힙파이어/공중");
+        RestoreInvertedSpreadRange(ref m_adsStandingMinSpread, ref m_adsStandingMaxSpread,
+            m_fallbackAdsStandingMinSpread, m_fallbackAdsStandingMaxSpread, "ADS/서기");
+        RestoreInvertedSpreadRange(ref m_adsCrouchMinSpread, ref m_adsCrouchMaxSpread,
+            m_fallbackAdsCrouchMinSpread, m_fallbackAdsCrouchMaxSpread, "ADS/앉기");
+        RestoreInvertedSpreadRange(ref m_adsAirborneMinSpread, ref m_adsAirborneMaxSpread,
+            m_fallbackAdsAirborneMinSpread, m_fallbackAdsAirborneMaxSpread, "ADS/공중");
+    }
+
+    /// <summary>뒤집힌 자세별 범위를 해당 프리팹의 최초 저작값으로 되돌립니다.</summary>
+    private void RestoreInvertedSpreadRange(
+        ref float minSpread,
+        ref float maxSpread,
+        float fallbackMin,
+        float fallbackMax,
+        string label)
+    {
+        if (maxSpread >= minSpread)
         {
-            Debug.LogWarning(
-                $"[Gun] 비조준 방사각 범위가 뒤집혔습니다(min={m_hipfireMinSpread}, max={m_hipfireMaxSpread}). " +
-                $"프리팹 값(min={m_fallbackHipfireMinSpread}, max={m_fallbackHipfireMaxSpread})으로 되돌립니다.",
-                this);
-            m_hipfireMinSpread = m_fallbackHipfireMinSpread;
-            m_hipfireMaxSpread = m_fallbackHipfireMaxSpread;
+            return;
         }
 
-        if (m_adsMaxSpread < m_adsMinSpread)
-        {
-            Debug.LogWarning(
-                $"[Gun] 조준 방사각 범위가 뒤집혔습니다(min={m_adsMinSpread}, max={m_adsMaxSpread}). " +
-                $"프리팹 값(min={m_fallbackAdsMinSpread}, max={m_fallbackAdsMaxSpread})으로 되돌립니다.",
-                this);
-            m_adsMinSpread = m_fallbackAdsMinSpread;
-            m_adsMaxSpread = m_fallbackAdsMaxSpread;
-        }
+        Debug.LogWarning(
+            $"[Gun] {label} 방사각 범위가 뒤집혔습니다(min={minSpread}, max={maxSpread}). " +
+            $"프리팹 값(min={fallbackMin}, max={fallbackMax})으로 되돌립니다.",
+            this);
+        minSpread = fallbackMin;
+        maxSpread = fallbackMax;
     }
 
     /// <summary>
@@ -1078,15 +1198,27 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </summary>
     /// <remarks>
     /// 단일 필드 경계는 <see cref="ClampAttribute"/>가 담당하므로 여기 두지 않습니다.
-    /// 여기 남은 둘은 다른 필드가 경계라서 선언으로 표현할 수 없는 것들입니다.
-    /// 현재 탄약은 최대 탄창을 넘을 수 없고, 최대 탄퍼짐은 최소 탄퍼짐보다 작을 수 없습니다.
+    /// 여기 남은 규칙은 다른 필드가 경계라서 선언으로 표현할 수 없는 것들입니다.
+    /// 현재 탄약은 최대 탄창을 넘을 수 없고, 각 사격 모드·자세의 최대 탄퍼짐은 최소 탄퍼짐보다 작을 수 없습니다.
     /// 뒤집힌 탄퍼짐 범위는 시트에서 값이 잘못 들어와도 조준이 무너지지 않도록 여기서 되돌립니다.
     /// </remarks>
     private void ClampBulletValues()
     {
+        m_pelletCount = Mathf.Max(1, m_pelletCount);
         m_currentBullet = Mathf.Clamp(m_currentBullet, 0, m_maxBullet);
-        m_adsMaxSpread = Mathf.Max(m_adsMinSpread, m_adsMaxSpread);
-        m_hipfireMaxSpread = Mathf.Max(m_hipfireMinSpread, m_hipfireMaxSpread);
+        ClampSpreadRange(ref m_hipfireStandingMinSpread, ref m_hipfireStandingMaxSpread);
+        ClampSpreadRange(ref m_hipfireCrouchMinSpread, ref m_hipfireCrouchMaxSpread);
+        ClampSpreadRange(ref m_hipfireAirborneMinSpread, ref m_hipfireAirborneMaxSpread);
+        ClampSpreadRange(ref m_adsStandingMinSpread, ref m_adsStandingMaxSpread);
+        ClampSpreadRange(ref m_adsCrouchMinSpread, ref m_adsCrouchMaxSpread);
+        ClampSpreadRange(ref m_adsAirborneMinSpread, ref m_adsAirborneMaxSpread);
+    }
+
+    /// <summary>자세별 최소·최대 방사각을 유효 범위로 보정합니다.</summary>
+    private static void ClampSpreadRange(ref float minSpread, ref float maxSpread)
+    {
+        minSpread = Mathf.Max(0.0f, minSpread);
+        maxSpread = Mathf.Max(minSpread, maxSpread);
     }
 
     /// <remarks>
@@ -1131,12 +1263,29 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             m_currentBullet--;
         }
         m_canShoot = false;
-        // 오브젝트 풀링
-        SpawnBullet(targetPosition);
-        PlaySuccessfulShotFeedback(m_firePos.position, targetPosition);
-        UpdateBulletUI();
+        Vector3 firedDirection = (targetPosition - m_firePos.position).normalized;
+        HitscanShotInfo firedShot = new HitscanShotInfo
+        {
+            IsValid = firedDirection.sqrMagnitude > 0.0f,
+            Origin = m_firePos.position,
+            Direction = firedDirection,
+            AimPoint = targetPosition,
+            EndPoint = targetPosition,
+            FrameCount = Time.frameCount,
+        };
 
-        Invoke(nameof(ResetShoot), m_shootDelay);
+        bool overridden = TryOverrideShot(firedShot);
+        if (!overridden)
+        {
+            // 일반탄만 기존 탄환 오브젝트를 생성합니다. 특수탄은 구독자가 별도 판정/이펙트를 소유합니다.
+            SpawnBullet(targetPosition);
+        }
+
+        PlaySuccessfulShotFeedback(m_firePos.position, targetPosition, !overridden);
+        UpdateBulletUI();
+        OnShotFired?.Invoke(firedShot);
+
+        Invoke(nameof(ResetShoot), ShootDelay);
         return true;
     }
 
@@ -1145,11 +1294,22 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </summary>
     /// <param name="shotInfo">총구 원점·조준 방향·조준점을 담은 조준 정보입니다(탄퍼짐 미적용 정밀 값).</param>
     /// <param name="isAds">조준(ADS) 상태면 <c>true</c>, 힙파이어면 <c>false</c>입니다. 기본 방사각 선택에 사용합니다.</param>
-    /// <param name="firedShot">탄퍼짐이 적용된 실제 발사 방향과 탄착 정보입니다. 마커/이펙트가 이 값을 씁니다.</param>
+    /// <param name="firedShot">탄퍼짐이 적용된 대표 발사 방향과 탄착 정보입니다. Shotgun은 기존 호출부 호환을 위해 첫 번째 펠릿을 반환합니다.</param>
+    /// <param name="firedPellets">모든 펠릿 결과를 받을 재사용 목록입니다. 전달하면 호출 직후 비우고 이번 결과를 채우며, 필요 없으면 생략할 수 있습니다.</param>
     /// <returns>사격에 성공하면 <c>true</c>, 필수 참조 누락·무효 정보·쿨다운·재장전·탄약 부족이면 <c>false</c>입니다.</returns>
-    public bool TryLayShoot(HitscanShotInfo shotInfo, bool isAds, out HitscanShotInfo firedShot)
+    /// <remarks>
+    /// Shotgun도 방아쇠 입력, 탄약 소모, 쿨다운, 반동, 총성, 탄피와 머즐 피드백은 한 번만 처리합니다.
+    /// 펠릿별로 달라지는 것은 같은 방사각과 분포에서 독립 샘플링한 히트스캔 방향과 그 명중 결과뿐입니다.
+    /// </remarks>
+    public bool TryLayShoot(
+        HitscanShotInfo shotInfo,
+        bool isAds,
+        out HitscanShotInfo firedShot,
+        List<HitscanShotInfo> firedPellets = null)
     {
         firedShot = shotInfo;
+        firedPellets?.Clear();
+        m_pelletShotBuffer.Clear();
 
         if (!m_hasRequiredReferences)
         {
@@ -1178,13 +1338,50 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         }
         m_canShoot = false;
 
-        firedShot = BuildFiredShot(shotInfo, isAds);
-        LayShoot(firedShot);
-        PlaySuccessfulShotFeedback(firedShot.Origin, firedShot.EndPoint);
+        float spread = ResolveShotSpread(isAds);
+        int pelletCount = PelletCount;
+        bool overridden = false;
+
+        if (OnTryOverrideShot != null)
+        {
+            firedShot = BuildDirectionOnlyShot(shotInfo, spread, isAds);
+            overridden = TryOverrideShot(firedShot);
+        }
+
+        if (!overridden)
+        {
+            for (int i = 0; i < pelletCount; i++)
+            {
+                HitscanShotInfo pelletShot = BuildFiredShot(shotInfo, spread, isAds);
+                if (i == 0)
+                {
+                    firedShot = pelletShot;
+                }
+
+                m_pelletShotBuffer.Add(pelletShot);
+                firedPellets?.Add(pelletShot);
+
+                // ResolveShotPath가 재사용 버퍼에 남긴 결과는 다음 펠릿이 덮어쓰기 전에 즉시 소비합니다.
+                LayShoot(pelletShot);
+            }
+        }
+        else
+        {
+            // 호출부가 한 번의 성공 사격 결과를 계속 받을 수 있도록 대표 방향만 제공합니다.
+            m_pelletShotBuffer.Add(firedShot);
+            firedPellets?.Add(firedShot);
+        }
+
+        PlaySuccessfulShotFeedback(firedShot.Origin, firedShot.EndPoint, !overridden);
+        if (!overridden)
+        {
+            PlayAdditionalPelletTracers();
+        }
         EmitShotNoise();
         UpdateBulletUI();
+        OnShotFired?.Invoke(firedShot);
 
-        Invoke(nameof(ResetShoot), m_shootDelay);
+        Invoke(nameof(ResetShoot), ShootDelay);
         return true;
     }
 
@@ -1192,11 +1389,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 현재 방사각으로 발사 방향을 흩뜨려 실제 발사 사격 정보를 구성합니다.
     /// </summary>
     /// <param name="aimShot">탄퍼짐 미적용 정밀 조준 정보입니다.</param>
-    /// <param name="isAds">조준(ADS) 상태 여부입니다.</param>
+    /// <param name="spread">이번 방아쇠 입력에 적용할 방사각(도)입니다.</param>
+    /// <param name="isAds">조준(ADS) 상태 여부입니다. 진단 로그에 사용합니다.</param>
     /// <returns>탄퍼짐이 적용된 방향으로 재레이캐스트한 발사 사격 정보입니다.</returns>
-    private HitscanShotInfo BuildFiredShot(HitscanShotInfo aimShot, bool isAds)
+    private HitscanShotInfo BuildFiredShot(HitscanShotInfo aimShot, float spread, bool isAds)
     {
-        float spread = ResolveShotSpread(isAds);
         Vector3 direction = ApplySpread(aimShot.Direction, spread);
 
         // 사격 순간 방사각/편향 진단 로그(에디터 전용, 빌드에서 호출 스트립).
@@ -1215,6 +1412,42 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         ResolveShotPath(aimShot.Origin, direction, m_hitscanRange, ref fired);
 
         return fired;
+    }
+
+    /// <summary>특수탄이 일반 레이캐스트를 대체할 때 사용할 발사 방향만 계산합니다.</summary>
+    private HitscanShotInfo BuildDirectionOnlyShot(HitscanShotInfo aimShot, float spread, bool isAds)
+    {
+        Vector3 direction = ApplySpread(aimShot.Direction, spread);
+        LogSpreadDebug(isAds, spread, aimShot.Direction, direction);
+
+        return new HitscanShotInfo
+        {
+            IsValid = direction.sqrMagnitude > 0.0f,
+            AimPoint = aimShot.AimPoint,
+            Origin = aimShot.Origin,
+            Direction = direction,
+            EndPoint = aimShot.Origin + direction * m_hitscanRange,
+            FrameCount = aimShot.FrameCount,
+        };
+    }
+
+    /// <summary>등록된 특수탄 처리기 중 하나가 이번 사격을 소비했는지 확인합니다.</summary>
+    private bool TryOverrideShot(HitscanShotInfo shotInfo)
+    {
+        if (!shotInfo.IsValid || OnTryOverrideShot == null)
+        {
+            return false;
+        }
+
+        foreach (System.Func<HitscanShotInfo, bool> handler in OnTryOverrideShot.GetInvocationList())
+        {
+            if (handler(shotInfo))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1789,11 +2022,12 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <returns>최소 방사각 + 누적 증가값으로 계산한 이번 사격의 방사각(도)입니다.</returns>
     private float ResolveShotSpread(bool isAds)
     {
-        // 누적 결과가 이미 [min, max]로 제한된 뒤라, 여기에 곱하면 상한도 같은 비율로 내려갑니다.
-        return CurrentAirborneExtraSpread + CurrentCrouchSpreadScale * (isAds
+        GetSpreadRange(isAds, out float minSpread, out float maxSpread);
+
+        return isAds
             ? ResolveShotSpread(
-                m_adsMinSpread,
-                m_adsMaxSpread,
+                minSpread,
+                maxSpread,
                 m_adsMinSpreadShotCount,
                 m_adsSpreadIncreasePerShot,
                 m_adsSpreadRecoveryDelay,
@@ -1801,14 +2035,14 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
                 ref m_adsShotsInBurst,
                 ref m_adsLastShotTime)
             : ResolveShotSpread(
-                m_hipfireMinSpread,
-                m_hipfireMaxSpread,
+                minSpread,
+                maxSpread,
                 m_hipfireMinSpreadShotCount,
                 m_hipfireSpreadIncreasePerShot,
                 m_hipfireSpreadRecoveryDelay,
                 ref m_hipfireCurrentSpreadAdd,
                 ref m_hipfireShotsInBurst,
-                ref m_hipfireLastShotTime));
+                ref m_hipfireLastShotTime);
     }
 
     /// <summary>
@@ -1887,8 +2121,10 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
     private void UpdateCurrentSpreadInspectorFields()
     {
-        m_hipfireCurrentSpread = GetCurrentSpread(m_hipfireMinSpread, m_hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
-        m_adsCurrentSpread = GetCurrentSpread(m_adsMinSpread, m_adsMaxSpread, m_adsCurrentSpreadAdd);
+        GetSpreadRange(false, out float hipfireMinSpread, out float hipfireMaxSpread);
+        GetSpreadRange(true, out float adsMinSpread, out float adsMaxSpread);
+        m_hipfireCurrentSpread = GetCurrentSpread(hipfireMinSpread, hipfireMaxSpread, m_hipfireCurrentSpreadAdd);
+        m_adsCurrentSpread = GetCurrentSpread(adsMinSpread, adsMaxSpread, m_adsCurrentSpreadAdd);
     }
 
     /// <summary>
@@ -1955,52 +2191,182 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     }
 
     /// <summary>
-    /// 재장전을 시작합니다.
+    /// 재장전을 시작합니다. 개별 장전은 총 재장전 시간을 장탄량으로 나눈 간격마다 1발씩 확정합니다.
     /// </summary>
     public void StartReload()
     {
-        if (m_isReloading || (!m_allowFullMagReload && m_currentBullet >= m_maxBullet))
+        if (m_isReloading
+            || (!m_allowFullMagReload && m_currentBullet >= m_maxBullet)
+            || !HasAmmoToReload)
         {
             return;
         }
 
+        m_isSkillReloading = false;
+        m_activeReloadSpeedMultiplier = 1.0f;
         m_isReloading = true;
         m_reloadStartTime = Time.time;
         PlayReloadSound();
         CancelInvoke(nameof(CompleteReload));
-        Invoke(nameof(CompleteReload), m_reloadTime);
+
+        if (m_reloadMode == ReloadMode.IndividualRounds)
+        {
+            float interval = IndividualReloadInterval;
+            m_nextIndividualReloadTime = m_reloadStartTime + interval;
+
+            if (interval <= 0.0f)
+            {
+                CompleteReload();
+                return;
+            }
+        }
+
+        // 개별 장전도 빈 탄창 기준 총 재장전 시간에 마지막 탄이 확정되도록 같은 안전 타이머를 둡니다.
+        // 보통은 UpdateIndividualReload가 각 탄을 넣고, 일부만 비었다면 그보다 먼저 완료하며 이 예약을 취소합니다.
+        Invoke(nameof(CompleteReload), ReloadTime);
+    }
+
+    /// <summary>스킬 전용 속도로 재장전을 시작하고 완료 시 예비 탄약 소모 없이 탄창 전체를 채웁니다.</summary>
+    /// <param name="reloadSpeedMultiplier">일반 재장전 대비 스킬 재장전 속도 배율입니다.</param>
+    public bool StartSkillReload(float reloadSpeedMultiplier)
+    {
+        if (m_isReloading)
+        {
+            return false;
+        }
+
+        m_isSkillReloading = true;
+        m_activeReloadSpeedMultiplier = Mathf.Max(0.01f, reloadSpeedMultiplier);
+        m_isReloading = true;
+        m_reloadStartTime = Time.time;
+        PlayReloadSound();
+        CancelInvoke(nameof(CompleteReload));
+
+        if (ActiveReloadDuration <= 0.0f)
+        {
+            CompleteReload();
+        }
+        else
+        {
+            Invoke(nameof(CompleteReload), ActiveReloadDuration);
+        }
+
+        return true;
     }
 
     /// <summary>
-    /// 재장전을 완료하고 탄약을 최대치로 채웁니다.
+    /// 재장전을 완료하고 남은 탄약을 채웁니다. 개별 장전에서는 총 시간 끝의 마지막 탄을 보장하는 안전 경로입니다.
     /// </summary>
     public void CompleteReload()
     {
-        CancelInvoke(nameof(CompleteReload));
-
-        int missing = Mathf.Max(0, m_maxBullet - m_currentBullet);
-        if (missing > 0)
+        if (!m_isReloading)
         {
-            // 예비 탄약을 쓰는 총기만 공급자에게 묻습니다. 공급자가 없으면 지금까지처럼 가득 채웁니다.
-            int granted = m_infiniteAmmo || AmmoReserve == null
-                ? missing
-                : AmmoReserve.ConsumeReserveAmmo(missing);
-
-            m_currentBullet = Mathf.Min(m_maxBullet, m_currentBullet + granted);
+            return;
         }
 
+        CancelInvoke(nameof(CompleteReload));
+
+        if (m_isSkillReloading)
+        {
+            m_currentBullet = m_maxBullet;
+        }
+        else
+        {
+            int missing = Mathf.Max(0, m_maxBullet - m_currentBullet);
+            AddReloadRounds(missing);
+        }
+
+        FinishReload();
+    }
+
+    /// <summary>
+    /// 개별 장전 모드의 다음 탄약 삽입 시점을 처리합니다.
+    /// </summary>
+    /// <remarks>
+    /// 프레임 시간이 삽입 간격보다 길어져도 누락되지 않도록 만료된 구간을 모두 처리합니다.
+    /// 각 발은 들어가는 즉시 현재 탄약과 예비 탄약에 확정되므로 이후 취소해도 유지됩니다.
+    /// </remarks>
+    private void UpdateIndividualReload()
+    {
+        if (!m_isReloading || m_isSkillReloading || m_reloadMode != ReloadMode.IndividualRounds)
+        {
+            return;
+        }
+
+        float interval = IndividualReloadInterval;
+        if (interval <= 0.0f)
+        {
+            CompleteReload();
+            return;
+        }
+
+        while (m_isReloading && Time.time >= m_nextIndividualReloadTime)
+        {
+            int added = AddReloadRounds(1);
+            if (added <= 0)
+            {
+                FinishReload();
+                return;
+            }
+
+            UpdateBulletUI();
+
+            if (m_currentBullet >= m_maxBullet || !HasAmmoToReload)
+            {
+                FinishReload();
+                return;
+            }
+
+            m_nextIndividualReloadTime += interval;
+        }
+    }
+
+    /// <summary>부족한 탄약에 한해 요청한 발수만큼 현재 탄창에 확정합니다.</summary>
+    /// <returns>실제로 장전된 탄약 수입니다.</returns>
+    private int AddReloadRounds(int requestedRounds)
+    {
+        int missing = Mathf.Max(0, m_maxBullet - m_currentBullet);
+        int request = Mathf.Min(Mathf.Max(0, requestedRounds), missing);
+        if (request <= 0)
+        {
+            return 0;
+        }
+
+        // 예비 탄약을 쓰는 총기만 공급자에게 묻습니다. 공급자가 없으면 지금까지처럼 제한 없이 채웁니다.
+        int granted = m_infiniteAmmo || AmmoReserve == null
+            ? request
+            : AmmoReserve.ConsumeReserveAmmo(request);
+
+        granted = Mathf.Clamp(granted, 0, request);
+        m_currentBullet = Mathf.Min(m_maxBullet, m_currentBullet + granted);
+        return granted;
+    }
+
+    /// <summary>재장전 상태와 안전 타이머를 정리하고 완료 이벤트를 보냅니다.</summary>
+    private void FinishReload()
+    {
+        if (!m_isReloading)
+        {
+            return;
+        }
+
+        CancelInvoke(nameof(CompleteReload));
         m_isReloading = false;
+        m_isSkillReloading = false;
+        m_activeReloadSpeedMultiplier = 1.0f;
         UpdateBulletUI();
         OnReloadCompleted?.Invoke();
     }
 
     /// <summary>
-    /// 진행 중인 재장전을 취소합니다.
+    /// 진행 중인 재장전을 취소합니다. 개별 장전으로 이미 확정된 탄약은 되돌리지 않습니다.
     /// </summary>
     public void CancelReload()
     {
         CancelInvoke(nameof(CompleteReload));
         m_isReloading = false;
+        m_isSkillReloading = false;
+        m_activeReloadSpeedMultiplier = 1.0f;
         UpdateBulletUI();
     }
 
@@ -2064,9 +2430,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         }
 
         float deviationDeg = Vector3.Angle(aimDirection, firedDirection);
+        GetSpreadRange(false, out float hipfireMinSpread, out float hipfireMaxSpread);
+        GetSpreadRange(true, out float adsMinSpread, out float adsMaxSpread);
         Debug.Log($"[SpreadDebug] isAds={isAds} spread={spread:F3}° deviation={deviationDeg:F3}° " +
-                  $"(ads[{m_adsMinSpread:F2}~{m_adsMaxSpread:F2}] add={m_adsCurrentSpreadAdd:F2} / " +
-                  $"hip[{m_hipfireMinSpread:F2}~{m_hipfireMaxSpread:F2}] add={m_hipfireCurrentSpreadAdd:F2})", this);
+                  $"(ads[{adsMinSpread:F2}~{adsMaxSpread:F2}] add={m_adsCurrentSpreadAdd:F2} / " +
+                  $"hip[{hipfireMinSpread:F2}~{hipfireMaxSpread:F2}] add={m_hipfireCurrentSpreadAdd:F2})", this);
 #endif
     }
 
@@ -2472,7 +2840,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     }
 
     /// <summary>피드백 이미터가 리소스를 가지고 있으면 그쪽으로 출력하고, 없으면 기존 개별 배선 경로를 유지합니다.</summary>
-    private void PlaySuccessfulShotFeedback(Vector3 tracerStart, Vector3 tracerEnd)
+    private void PlaySuccessfulShotFeedback(Vector3 tracerStart, Vector3 tracerEnd, bool playTracer = true)
     {
         if (TryUseFeedbackEmitter(out WeaponFeedbackEmitter emitter))
         {
@@ -2481,13 +2849,33 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
                 muzzleSocket,
                 m_shellPos,
                 tracerStart,
-                tracerEnd);
+                tracerEnd,
+                playTracer);
             return;
         }
 
         SpawnShell();
         SpawnMuzzleFlash();
         PlayShootSound();
+    }
+
+    /// <summary>첫 펠릿을 제외한 나머지 산탄 경로에 트레이서를 출력합니다.</summary>
+    /// <remarks>
+    /// 첫 펠릿은 <see cref="PlaySuccessfulShotFeedback"/>가 사운드·머즐·탄피와 함께 처리합니다.
+    /// 나머지 펠릿은 트레이서만 추가해야 한 번의 방아쇠 입력이 여러 발의 총성이나 탄피로 보이지 않습니다.
+    /// </remarks>
+    private void PlayAdditionalPelletTracers()
+    {
+        if (m_pelletShotBuffer.Count <= 1 || !TryUseFeedbackEmitter(out WeaponFeedbackEmitter emitter))
+        {
+            return;
+        }
+
+        for (int i = 1; i < m_pelletShotBuffer.Count; i++)
+        {
+            HitscanShotInfo pellet = m_pelletShotBuffer[i];
+            emitter.PlayTracer(pellet.Origin, pellet.EndPoint);
+        }
     }
 
     /// <summary>같은 총기 오브젝트에 붙은 Feedback emitter를 찾습니다.</summary>
@@ -2562,9 +2950,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     }
 
     /// <summary>
-    /// 사격 지연 시간을 설정합니다.
+    /// 한 번의 사격 후 다음 사격까지의 쿨다운을 설정합니다.
     /// </summary>
-    /// <param name="value">새 사격 지연 시간입니다.</param>
+    /// <param name="value">새 쿨다운 시간(초)입니다.</param>
     public void SetShootDelay(float value)
     {
         m_shootDelay = Mathf.Max(0.0f, value);
@@ -2580,6 +2968,60 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     }
 
     /// <summary>
+    /// 스킬 등 외부 효과가 적용하는 행동 속도 배율을 설정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 재장전은 모든 무기에 적용하고, 사격 간격은 사람의 펌프 동작이 필요한 Shotgun에만 적용합니다.
+    /// 진행 중인 재장전은 현재 진행률을 유지한 채 남은 시간을 새 배율에 맞춰 다시 예약합니다.
+    /// </remarks>
+    public void SetActionSpeedMultiplier(float value)
+    {
+        float oldReloadTime = ActiveReloadDuration;
+        float reloadProgress = m_isReloading && oldReloadTime > 0.0f
+            ? Mathf.Clamp01((Time.time - m_reloadStartTime) / oldReloadTime)
+            : 0.0f;
+        float oldInterval = m_isReloading && m_reloadMode == ReloadMode.IndividualRounds
+            ? IndividualReloadInterval
+            : 0.0f;
+        float nextRoundFraction = oldInterval > 0.0f
+            ? Mathf.Clamp01((m_nextIndividualReloadTime - Time.time) / oldInterval)
+            : 0.0f;
+
+        m_actionSpeedMultiplier = Mathf.Max(0.01f, value);
+
+        if (!m_isReloading)
+        {
+            return;
+        }
+
+        float newReloadTime = ActiveReloadDuration;
+        m_reloadStartTime = Time.time - reloadProgress * newReloadTime;
+
+        if (m_reloadMode == ReloadMode.IndividualRounds)
+        {
+            m_nextIndividualReloadTime = Time.time + IndividualReloadInterval * nextRoundFraction;
+        }
+
+        CancelInvoke(nameof(CompleteReload));
+        float remaining = newReloadTime * (1.0f - reloadProgress);
+        if (remaining <= 0.0f)
+        {
+            CompleteReload();
+        }
+        else
+        {
+            Invoke(nameof(CompleteReload), remaining);
+        }
+    }
+
+    /// <summary>재장전 방식을 설정합니다.</summary>
+    /// <param name="value">새 재장전 방식입니다.</param>
+    public void SetReloadMode(ReloadMode value)
+    {
+        m_reloadMode = value;
+    }
+
+    /// <summary>
     /// 탄약이 최대치일 때도 재장전을 허용할지 여부를 설정합니다.
     /// </summary>
     /// <param name="value">풀 탄창 재장전을 허용하면 <c>true</c>입니다. 기본값은 <c>false</c>이며 디버그 용도입니다.</param>
@@ -2592,20 +3034,44 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     // 플레이테스트 트레이너용 런타임 스탯 setter. 값 보정 규칙은 ClampBulletValues와 일치시킵니다.
     // ─────────────────────────────────────────────────────────────
 
-    /// <summary>이번 무기의 최소 힙파이어 방사각(도)입니다.</summary>
-    public float HipfireMinSpread => m_hipfireMinSpread;
+    /// <summary>힙파이어·서기 자세의 최소 방사각(도)입니다.</summary>
+    public float HipfireMinSpread => m_hipfireStandingMinSpread;
 
-    /// <summary>이번 무기의 최대 힙파이어 방사각(도)입니다.</summary>
-    public float HipfireMaxSpread => m_hipfireMaxSpread;
+    /// <summary>힙파이어·서기 자세의 최대 방사각(도)입니다.</summary>
+    public float HipfireMaxSpread => m_hipfireStandingMaxSpread;
 
-    /// <summary>이번 무기의 최소 ADS 방사각(도)입니다.</summary>
-    public float AdsMinSpread => m_adsMinSpread;
+    /// <summary>힙파이어·앉기 자세의 최소 방사각(도)입니다.</summary>
+    public float HipfireCrouchMinSpread => m_hipfireCrouchMinSpread;
 
-    /// <summary>이번 무기의 최대 ADS 방사각(도)입니다.</summary>
-    public float AdsMaxSpread => m_adsMaxSpread;
+    /// <summary>힙파이어·앉기 자세의 최대 방사각(도)입니다.</summary>
+    public float HipfireCrouchMaxSpread => m_hipfireCrouchMaxSpread;
 
-    /// <summary>히트스캔 사격 피해량을 설정합니다. 음수는 0으로 보정합니다.</summary>
-    /// <param name="value">새 피해량입니다.</param>
+    /// <summary>힙파이어·공중 자세의 최소 방사각(도)입니다.</summary>
+    public float HipfireAirborneMinSpread => m_hipfireAirborneMinSpread;
+
+    /// <summary>힙파이어·공중 자세의 최대 방사각(도)입니다.</summary>
+    public float HipfireAirborneMaxSpread => m_hipfireAirborneMaxSpread;
+
+    /// <summary>ADS·서기 자세의 최소 방사각(도)입니다.</summary>
+    public float AdsMinSpread => m_adsStandingMinSpread;
+
+    /// <summary>ADS·서기 자세의 최대 방사각(도)입니다.</summary>
+    public float AdsMaxSpread => m_adsStandingMaxSpread;
+
+    /// <summary>ADS·앉기 자세의 최소 방사각(도)입니다.</summary>
+    public float AdsCrouchMinSpread => m_adsCrouchMinSpread;
+
+    /// <summary>ADS·앉기 자세의 최대 방사각(도)입니다.</summary>
+    public float AdsCrouchMaxSpread => m_adsCrouchMaxSpread;
+
+    /// <summary>ADS·공중 자세의 최소 방사각(도)입니다.</summary>
+    public float AdsAirborneMinSpread => m_adsAirborneMinSpread;
+
+    /// <summary>ADS·공중 자세의 최대 방사각(도)입니다.</summary>
+    public float AdsAirborneMaxSpread => m_adsAirborneMaxSpread;
+
+    /// <summary>히트스캔 한 발의 기본 피해량을 설정합니다. Shotgun이면 펠릿 하나마다 이 값이 각각 적용됩니다. 음수는 0으로 보정합니다.</summary>
+    /// <param name="value">새 기본 피해량(Shotgun은 펠릿당)입니다.</param>
     public void SetHitscanDamage(int value) => m_hitscanDamage = value;
 
     /// <summary>이 무기의 약점 판정 사용 여부를 설정합니다.</summary>
@@ -2659,22 +3125,51 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <param name="value">1보다 작은 값은 1로 보정됩니다.</param>
     public void SetSpreadConcentration(float value) => m_spreadConcentration = value;
 
-    /// <summary>힙파이어 최소/최대 방사각(도)을 설정합니다. max는 min 이상으로 보정합니다.</summary>
+    /// <summary>힙파이어·서기 자세의 최소/최대 방사각(도)을 설정합니다.</summary>
     /// <param name="minSpread">새 최소 방사각입니다.</param>
     /// <param name="maxSpread">새 최대 방사각입니다.</param>
     public void SetHipfireSpread(float minSpread, float maxSpread)
     {
-        m_hipfireMinSpread = Mathf.Max(0.0f, minSpread);
-        m_hipfireMaxSpread = Mathf.Max(m_hipfireMinSpread, maxSpread);
+        SetSpreadRange(ref m_hipfireStandingMinSpread, ref m_hipfireStandingMaxSpread, minSpread, maxSpread);
     }
 
-    /// <summary>ADS 최소/최대 방사각(도)을 설정합니다. max는 min 이상으로 보정합니다.</summary>
+    /// <summary>힙파이어·앉기 자세의 최소/최대 방사각(도)을 설정합니다.</summary>
+    public void SetHipfireCrouchSpread(float minSpread, float maxSpread)
+    {
+        SetSpreadRange(ref m_hipfireCrouchMinSpread, ref m_hipfireCrouchMaxSpread, minSpread, maxSpread);
+    }
+
+    /// <summary>힙파이어·공중 자세의 최소/최대 방사각(도)을 설정합니다.</summary>
+    public void SetHipfireAirborneSpread(float minSpread, float maxSpread)
+    {
+        SetSpreadRange(ref m_hipfireAirborneMinSpread, ref m_hipfireAirborneMaxSpread, minSpread, maxSpread);
+    }
+
+    /// <summary>ADS·서기 자세의 최소/최대 방사각(도)을 설정합니다.</summary>
     /// <param name="minSpread">새 최소 방사각입니다.</param>
     /// <param name="maxSpread">새 최대 방사각입니다.</param>
     public void SetAdsSpread(float minSpread, float maxSpread)
     {
-        m_adsMinSpread = Mathf.Max(0.0f, minSpread);
-        m_adsMaxSpread = Mathf.Max(m_adsMinSpread, maxSpread);
+        SetSpreadRange(ref m_adsStandingMinSpread, ref m_adsStandingMaxSpread, minSpread, maxSpread);
+    }
+
+    /// <summary>ADS·앉기 자세의 최소/최대 방사각(도)을 설정합니다.</summary>
+    public void SetAdsCrouchSpread(float minSpread, float maxSpread)
+    {
+        SetSpreadRange(ref m_adsCrouchMinSpread, ref m_adsCrouchMaxSpread, minSpread, maxSpread);
+    }
+
+    /// <summary>ADS·공중 자세의 최소/최대 방사각(도)을 설정합니다.</summary>
+    public void SetAdsAirborneSpread(float minSpread, float maxSpread)
+    {
+        SetSpreadRange(ref m_adsAirborneMinSpread, ref m_adsAirborneMaxSpread, minSpread, maxSpread);
+    }
+
+    /// <summary>최소/최대 방사각을 보정해 대상 범위에 기록합니다.</summary>
+    private static void SetSpreadRange(ref float targetMin, ref float targetMax, float minSpread, float maxSpread)
+    {
+        targetMin = Mathf.Max(0.0f, minSpread);
+        targetMax = Mathf.Max(targetMin, maxSpread);
     }
 
     /// <summary>힙파이어 연사 탄퍼짐 누적과 회복 규칙을 설정합니다.</summary>
