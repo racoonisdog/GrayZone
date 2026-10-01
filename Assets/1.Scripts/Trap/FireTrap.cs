@@ -55,6 +55,12 @@ public sealed class FireTrap : Trap
     [Tooltip("켜면 범위에 들어온 순간 1틱 분량의 피해를 바로 줍니다. 끄면 첫 틱 간격이 지난 뒤부터 피해가 들어갑니다.")]
     [SerializeField] private bool m_damageOnEnter = true;
 
+    [Tooltip("켜면 범위 안의 폭발물 함정(지뢰·클레이모어 등)에 불이 붙어 연쇄로 터집니다. 점화 순간과 이후 피해 간격마다 확인합니다.")]
+    [SerializeField] private bool m_igniteExplosives = true;
+
+    /// <summary>다음 연쇄 점화 확인까지 남은 시간(초)입니다.</summary>
+    private float m_chainTimer;
+
     /// <summary>지금 범위 안에 있는 대상들입니다.</summary>
     private readonly Dictionary<IDamageable, Occupant> m_occupants =
         new Dictionary<IDamageable, Occupant>();
@@ -131,6 +137,9 @@ public sealed class FireTrap : Trap
         {
             return;
         }
+
+        IgniteExplosivesInRange(trigger);
+        m_chainTimer = FireTickInterval;
 
         Bounds bounds = trigger.bounds;
         Collider[] hits = Physics.OverlapBox(
@@ -241,6 +250,15 @@ public sealed class FireTrap : Trap
             return;
         }
 
+        // 폭발물은 피해 대상이 아니라 m_occupants에 잡히지 않으므로 따로 주기적으로 찾습니다.
+        // 불길이 남아 있는 동안 새로 설치된 함정도 불이 붙어야 합니다.
+        m_chainTimer -= Time.deltaTime;
+        if (m_chainTimer <= 0.0f)
+        {
+            IgniteExplosivesInRange(GetComponent<Collider>());
+            m_chainTimer = FireTickInterval;
+        }
+
         if (m_occupants.Count == 0)
         {
             return;
@@ -309,6 +327,27 @@ public sealed class FireTrap : Trap
 
         occupant.PendingDamage -= amount;
         damageable.TakeDamage(amount, gameObject);
+    }
+
+    /// <summary>화염 지대 범위 안의 폭발물 함정에 불이 붙었음을 알립니다.</summary>
+    /// <remarks>
+    /// 판정 범위는 트리거 콜라이더의 경계 상자입니다. 피해 판정과 레이어가 달라서(함정은 Trap 레이어)
+    /// 트리거 이벤트로는 잡히지 않습니다. 이미 터졌거나 청사진인 함정은 받는 쪽이 무시합니다.
+    /// </remarks>
+    private void IgniteExplosivesInRange(Collider trigger)
+    {
+        if (!m_igniteExplosives || trigger == null)
+        {
+            return;
+        }
+
+        Bounds bounds = trigger.bounds;
+        ExplosionDamage.TriggerChainDetonation(
+            bounds.center,
+            bounds.extents,
+            Quaternion.identity,
+            candidate => candidate.bounds.Intersects(bounds),
+            gameObject);
     }
 
     /// <summary>지속 시간이 끝난 화염 지대를 정리하고 제거합니다.</summary>
