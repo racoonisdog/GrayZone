@@ -7,6 +7,18 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public abstract class ProjectileBase : MonoBehaviour
 {
+    [Header("Inventory")]
+    [Tooltip("이 투척물을 한 번 사용할 때 1개 소모할 인벤토리 아이템 정의입니다.")]
+    [SerializeField] private ItemDefinition m_inventoryItemDefinition;
+
+    /// <summary>이 투척물과 연결된 인벤토리 아이템 정의입니다.</summary>
+    public ItemDefinition InventoryItemDefinition => m_inventoryItemDefinition;
+
+    /// <summary>인벤토리에서 조회하고 소모할 아이템 정의 ID입니다.</summary>
+    public string InventoryItemDefinitionId => m_inventoryItemDefinition != null
+        ? m_inventoryItemDefinition.ItemDefinitionId
+        : string.Empty;
+
     /// <summary>투척 경로를 계산할 최대 비행 시간입니다.</summary>
     public virtual float FlightTimeLimit => float.PositiveInfinity;
 

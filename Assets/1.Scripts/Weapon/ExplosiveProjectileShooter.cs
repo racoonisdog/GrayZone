@@ -151,6 +151,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Tooltip("G 투척 모드에서 현재 선택된 투척물 아이콘을 표시할 UI입니다. 비어 있으면 Scene에서 자동으로 찾습니다.")]
     [SerializeField] private GrenadeSelectionUI m_grenadeSelectionUI;
 
+    [Tooltip("투척물 수량을 조회하고 실제 투척 시 1개를 소모할 스쿼드 공용 인벤토리입니다. 비어 있으면 Scene에서 자동으로 찾습니다.")]
+    [SerializeField] private SquadInventoryManager m_inventoryManager;
+
     [Tooltip("G 투척 모드에서 수치 프리셋을 적용할 크로스헤어입니다. 비어 있으면 AimController 또는 Scene에서 자동으로 찾습니다.")]
     [SerializeField] private CrosshairController m_defaultCrosshair;
 
@@ -175,6 +178,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     [Tooltip("Grenade Hand IK 소켓이 없을 때만 사용할 Collider 중심 기준 fallback 투척 시작 위치입니다.")]
     [SerializeField] private Vector3 m_throwOriginOffset = new Vector3(0.0f, 0.2f, 1.0f);
+
+    [Tooltip("손 소켓 또는 fallback 투척 원점에 추가할 로컬 X/Y/Z 오프셋입니다. X는 좌우, Y는 높이, Z는 앞뒤이며 궤적 시작점과 실제 투척물 생성 위치에 함께 적용됩니다.")]
+    [SerializeField] private Vector3 m_throwStartOffset = Vector3.zero;
 
     [Tooltip("수평 조준 시 폭탄이 같은 높이로 돌아올 때의 기준 투척 거리입니다. 실제 비행 종료점은 아닙니다.")]
     [UnityEngine.Serialization.FormerlySerializedAs("m_maxThrowDistance")]
@@ -225,6 +231,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Tooltip("경로 표시 선의 색상입니다.")]
     [SerializeField] private Color m_trajectoryColor = new Color(1.0f, 0.75f, 0.1f, 0.9f);
 
+    [Header("Impact Range Preview")]
+    [Tooltip("착탄 범위 원 내부 채움에 사용할 색상입니다.")]
+    [SerializeField] private Color m_impactPreviewColor = new Color(1.0f, 0.75f, 0.1f, 0.9f);
+
+    [Tooltip("착탄 범위 원 내부 채움의 투명도입니다. 0은 완전 투명, 1은 완전 불투명입니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_impactPreviewFillAlpha = 0.2f;
+
     private readonly RaycastHit[] m_previewHits = new RaycastHit[16];
     private readonly Vector3[] m_trajectoryPoints = new Vector3[MaxTrajectoryPointCount];
 
@@ -233,8 +247,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private Animator m_animator;
     private Collider m_sourceCollider;
     private LineRenderer m_trajectoryLine;
-    private LineRenderer m_explosionPreviewLine;
+    private MeshRenderer m_explosionPreviewFillRenderer;
+    private Mesh m_explosionPreviewFillMesh;
     private Material m_runtimeLineMaterial;
+    private Material m_runtimeExplosionFillMaterial;
     private bool m_wasThrowModeActive;
     private bool m_throwWasHeld;
     private Vector3 m_throwStart;
@@ -268,6 +284,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         CacheGrenadeAnimationParameters();
         InitializeGrenadeEquipmentVisuals();
         m_sourceCollider = GetComponent<Collider>();
+        ResolveInventoryManager();
         ResolveGrenadeSelectionUI();
         CreateTrajectoryLine();
         ApplyCrosshairMode(m_input != null && m_input.ThrowMode);
@@ -281,9 +298,22 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         SetHeldGrenadeVisible(throwModeActive && !IsGrenadeThrowAnimationActive());
         ApplyCrosshairMode(throwModeActive);
 
-        if (m_input == null || m_aimController == null || !throwModeActive)
+        bool ownsSelectionUI = m_aimController != null
+            ? m_aimController.IsPlayerControlled
+            : m_input != null && m_input.isActiveAndEnabled;
+        if (!ownsSelectionUI)
         {
             UpdateGrenadeSelectionUI(false);
+            HideTrajectory();
+            m_wasThrowModeActive = false;
+            m_throwWasHeld = false;
+            return;
+        }
+
+        UpdateGrenadeSelectionUI(true);
+
+        if (m_input == null || m_aimController == null || !throwModeActive)
+        {
             HideTrajectory();
             m_wasThrowModeActive = false;
             m_throwWasHeld = false;
@@ -354,6 +384,16 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         if (m_runtimeLineMaterial != null)
         {
             Destroy(m_runtimeLineMaterial);
+        }
+
+        if (m_runtimeExplosionFillMaterial != null)
+        {
+            Destroy(m_runtimeExplosionFillMaterial);
+        }
+
+        if (m_explosionPreviewFillMesh != null)
+        {
+            Destroy(m_explosionPreviewFillMesh);
         }
     }
 
@@ -604,8 +644,29 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         ResolveGrenadeSelectionUI();
         if (m_grenadeSelectionUI != null)
         {
-            m_grenadeSelectionUI.SetState(this, visible, GetSelectedProjectile());
+            ProjectileBase selectedProjectile = GetSelectedProjectile();
+            m_grenadeSelectionUI.SetState(
+                this,
+                visible,
+                selectedProjectile,
+                GetProjectileQuantity(selectedProjectile));
         }
+    }
+
+    private void ResolveInventoryManager()
+    {
+        if (m_inventoryManager == null)
+        {
+            m_inventoryManager = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
+        }
+    }
+
+    private int GetProjectileQuantity(ProjectileBase projectile)
+    {
+        ResolveInventoryManager();
+        return projectile != null && m_inventoryManager != null
+            ? m_inventoryManager.CountOf(projectile.InventoryItemDefinitionId)
+            : 0;
     }
 
     private void ApplyCrosshairMode(bool throwModeActive)
@@ -700,19 +761,18 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private Vector3 ResolveThrowStartPosition()
     {
-        if (m_heldGrenadeSocket != null)
-        {
-            return m_heldGrenadeSocket.position;
-        }
+        Vector3 origin = m_heldGrenadeSocket != null
+            ? m_heldGrenadeSocket.position
+            : (m_sourceCollider != null ? m_sourceCollider.bounds.center : transform.position)
+                + transform.TransformDirection(m_throwOriginOffset);
 
-        Vector3 origin = m_sourceCollider != null
-            ? m_sourceCollider.bounds.center
-            : transform.position;
-        return origin + transform.TransformDirection(m_throwOriginOffset);
+        return origin + transform.TransformDirection(m_throwStartOffset);
     }
 
     private void DrawTrajectory()
     {
+        // 포물선 궤적 선은 임시로 숨기고 착탄 지점의 원형 표시만 사용합니다.
+        /*
         m_trajectoryLine.enabled = true;
         m_trajectoryLine.positionCount = m_trajectoryPointCount;
 
@@ -720,6 +780,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         {
             m_trajectoryLine.SetPosition(i, m_trajectoryPoints[i]);
         }
+        */
+        m_trajectoryLine.enabled = false;
+        m_trajectoryLine.positionCount = 0;
 
         DrawExplosionPreview();
     }
@@ -855,6 +918,24 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
+        if (string.IsNullOrWhiteSpace(selectedProjectile.InventoryItemDefinitionId))
+        {
+            Debug.LogWarning($"[{name}] '{selectedProjectile.name}'에 Inventory Item Definition이 연결되지 않았습니다.", this);
+            return false;
+        }
+
+        ResolveInventoryManager();
+        if (m_inventoryManager == null)
+        {
+            Debug.LogWarning($"[{name}] SquadInventoryManager를 찾지 못해 투척물을 사용할 수 없습니다.", this);
+            return false;
+        }
+
+        if (GetProjectileQuantity(selectedProjectile) <= 0)
+        {
+            return false;
+        }
+
         Quaternion rotation = m_initialVelocity.sqrMagnitude > 0.0001f
             ? Quaternion.LookRotation(m_initialVelocity.normalized, Vector3.up)
             : transform.rotation;
@@ -889,6 +970,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_collisionRadius,
             GetProjectileCollisionLayers(selectedProjectile),
             transform);
+
+        if (!m_inventoryManager.TryConsumeOne(selectedProjectile.InventoryItemDefinitionId))
+        {
+            Destroy(projectile.gameObject);
+            return false;
+        }
+
+        UpdateGrenadeSelectionUI(true);
 
         return true;
     }
@@ -948,11 +1037,18 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_trajectoryLine = lineObject.AddComponent<LineRenderer>();
         ConfigurePreviewLine(m_trajectoryLine, false);
 
-        GameObject explosionPreviewObject = new GameObject("ExplosionRadiusPreview");
-        explosionPreviewObject.transform.SetParent(transform, false);
+        GameObject explosionFillObject = new GameObject("ExplosionRadiusFill");
+        explosionFillObject.transform.SetParent(transform, false);
 
-        m_explosionPreviewLine = explosionPreviewObject.AddComponent<LineRenderer>();
-        ConfigurePreviewLine(m_explosionPreviewLine, true);
+        MeshFilter explosionFillFilter = explosionFillObject.AddComponent<MeshFilter>();
+        m_explosionPreviewFillRenderer = explosionFillObject.AddComponent<MeshRenderer>();
+        m_explosionPreviewFillRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        m_explosionPreviewFillRenderer.receiveShadows = false;
+        m_explosionPreviewFillRenderer.sortingOrder = -1;
+        m_explosionPreviewFillRenderer.enabled = false;
+
+        m_explosionPreviewFillMesh = CreateExplosionPreviewFillMesh();
+        explosionFillFilter.sharedMesh = m_explosionPreviewFillMesh;
 
         Shader lineShader = Shader.Find("Universal Render Pipeline/Unlit");
         if (lineShader != null)
@@ -963,8 +1059,59 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             };
             m_runtimeLineMaterial.SetColor("_BaseColor", m_trajectoryColor);
             m_trajectoryLine.sharedMaterial = m_runtimeLineMaterial;
-            m_explosionPreviewLine.sharedMaterial = m_runtimeLineMaterial;
+
+            m_runtimeExplosionFillMaterial = new Material(lineShader)
+            {
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            ConfigureTransparentPreviewMaterial(m_runtimeExplosionFillMaterial);
+            m_runtimeExplosionFillMaterial.SetFloat("_Cull", (float)CullMode.Off);
+            m_explosionPreviewFillRenderer.sharedMaterial = m_runtimeExplosionFillMaterial;
         }
+    }
+
+    private static Mesh CreateExplosionPreviewFillMesh()
+    {
+        Vector3[] vertices = new Vector3[ExplosionPreviewSegmentCount + 1];
+        Vector3[] normals = new Vector3[vertices.Length];
+        int[] triangles = new int[ExplosionPreviewSegmentCount * 3];
+
+        vertices[0] = Vector3.zero;
+        normals[0] = Vector3.up;
+
+        for (int i = 0; i < ExplosionPreviewSegmentCount; i++)
+        {
+            float angle = 2.0f * Mathf.PI * i / ExplosionPreviewSegmentCount;
+            vertices[i + 1] = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle));
+            normals[i + 1] = Vector3.up;
+
+            int triangleIndex = i * 3;
+            triangles[triangleIndex] = 0;
+            triangles[triangleIndex + 1] = ((i + 1) % ExplosionPreviewSegmentCount) + 1;
+            triangles[triangleIndex + 2] = i + 1;
+        }
+
+        Mesh mesh = new Mesh
+        {
+            name = "Explosion Radius Fill Mesh",
+            hideFlags = HideFlags.HideAndDontSave,
+            vertices = vertices,
+            normals = normals,
+            triangles = triangles,
+        };
+        mesh.RecalculateBounds();
+        return mesh;
+    }
+
+    private static void ConfigureTransparentPreviewMaterial(Material material)
+    {
+        material.SetOverrideTag("RenderType", "Transparent");
+        material.SetFloat("_Surface", 1.0f);
+        material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+        material.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+        material.SetFloat("_ZWrite", 0.0f);
+        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        material.renderQueue = (int)RenderQueue.Transparent;
     }
 
     private void ConfigurePreviewLine(LineRenderer lineRenderer, bool loop)
@@ -984,45 +1131,58 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         ProjectileBase selectedProjectile = GetSelectedProjectile();
         if (!m_hasExplosionPreview || selectedProjectile == null)
         {
-            m_explosionPreviewLine.enabled = false;
-            m_explosionPreviewLine.positionCount = 0;
+            HideExplosionPreview();
             return;
         }
 
         float radius = Mathf.Max(0.0f, selectedProjectile.ImpactPreviewRadius);
         if (radius <= 0.0f)
         {
-            m_explosionPreviewLine.enabled = false;
-            m_explosionPreviewLine.positionCount = 0;
+            HideExplosionPreview();
             return;
         }
 
         Vector3 center = m_explosionPreviewCenter + Vector3.up * ExplosionPreviewHeightOffset;
-        m_explosionPreviewLine.enabled = true;
-        m_explosionPreviewLine.positionCount = ExplosionPreviewSegmentCount;
+        ApplyImpactPreviewAppearance();
 
-        for (int i = 0; i < ExplosionPreviewSegmentCount; i++)
+        if (m_explosionPreviewFillRenderer != null)
         {
-            float angle = 2.0f * Mathf.PI * i / ExplosionPreviewSegmentCount;
-            Vector3 offset = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle)) * radius;
-            m_explosionPreviewLine.SetPosition(i, center + offset);
+            Transform fillTransform = m_explosionPreviewFillRenderer.transform;
+            fillTransform.position = center;
+            fillTransform.rotation = Quaternion.identity;
+            fillTransform.localScale = new Vector3(radius, 1.0f, radius);
+            m_explosionPreviewFillRenderer.enabled = m_impactPreviewFillAlpha > 0.0f;
+        }
+    }
+
+    private void ApplyImpactPreviewAppearance()
+    {
+        if (m_runtimeExplosionFillMaterial == null)
+        {
+            return;
+        }
+
+        Color fillColor = m_impactPreviewColor;
+        fillColor.a = Mathf.Clamp01(m_impactPreviewFillAlpha);
+        m_runtimeExplosionFillMaterial.SetColor("_BaseColor", fillColor);
+    }
+
+    private void HideExplosionPreview()
+    {
+        if (m_explosionPreviewFillRenderer != null)
+        {
+            m_explosionPreviewFillRenderer.enabled = false;
         }
     }
 
     private void HideTrajectory()
     {
-        if (m_trajectoryLine == null)
+        if (m_trajectoryLine != null)
         {
-            return;
+            m_trajectoryLine.enabled = false;
+            m_trajectoryLine.positionCount = 0;
         }
 
-        m_trajectoryLine.enabled = false;
-        m_trajectoryLine.positionCount = 0;
-
-        if (m_explosionPreviewLine != null)
-        {
-            m_explosionPreviewLine.enabled = false;
-            m_explosionPreviewLine.positionCount = 0;
-        }
+        HideExplosionPreview();
     }
 }
