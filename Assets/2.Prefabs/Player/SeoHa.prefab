@@ -677,6 +677,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeoHaTeamHealSkill
   m_cooldownDuration: 30
   m_healPercent: 30
+  m_skillReviveHp: 20
   m_healVisual: {fileID: 11400000, guid: e4ad4c4f0afb76948b81ec47d1013fb1, type: 2}
 --- !u!114 &8463637936028346911
 MonoBehaviour:
