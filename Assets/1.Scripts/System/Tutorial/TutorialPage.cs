@@ -29,7 +29,7 @@ public enum TutorialAdvanceInput
 public struct TutorialPage
 {
     [Header("Content")]
-    [Tooltip("페이지 제목입니다. 비어 있으면 제목 텍스트를 비웁니다.")]
+    [Tooltip("페이지 제목입니다. 비어 있으면 템플릿에 적힌 제목을 그대로 둡니다.")]
     [SerializeField] private string m_title;
 
     [TextArea(3, 8)]
@@ -41,6 +41,16 @@ public struct TutorialPage
 
     [Tooltip("하단 안내 문구입니다. 키 이름은 여기에 직접 적습니다(예: \"[F] 3초 유지\").")]
     [SerializeField] private string m_hint;
+
+    [Tooltip("본문 사이에 끼워 넣을 키 아이콘입니다(예: H, F). 비어 있으면 아이콘을 끕니다. " +
+             "본문에는 아이콘 자리만큼 공백을 넣어 둡니다.")]
+    [SerializeField] private Sprite m_keyIcon;
+
+    [Tooltip("키 아이콘의 위치(px)입니다. 패널 왼쪽 위 기준이며 y는 아래로 갈수록 커집니다(Figma 좌표와 같음).")]
+    [SerializeField] private Vector2 m_keyIconPosition;
+
+    [Tooltip("키 아이콘의 크기(px)입니다.")]
+    [SerializeField] private Vector2 m_keyIconSize;
 
     [Tooltip("이 페이지만 공용 템플릿 대신 띄울 UI 프리팹입니다. 비워두면 공용 템플릿을 씁니다. " +
              "프리팹 안에 Title/Body/Hint/Image 이름의 자식이 있으면 같은 내용을 채웁니다.")]
@@ -62,6 +72,9 @@ public struct TutorialPage
     [Min(0.0f)]
     [Tooltip("KeyHold일 때 키를 유지해야 하는 시간(초)입니다. 0이면 누르는 순간 넘어갑니다. 중간에 떼면 처음부터 다시 셉니다.")]
     [SerializeField] private float m_holdSeconds;
+
+    [Tooltip("켜면 이 페이지의 넘김 입력을 채웠을 때 방어전을 시작하고 튜토리얼을 끝냅니다. 마지막 페이지(예: X 3초 유지로 시작)에 씁니다.")]
+    [SerializeField] private bool m_startDefenseOnAdvance;
 
     [Header("Input Lock")]
     [Tooltip("조건이 해결되기 전까지 닫아 둘 플레이어 입력입니다. 이벤트 대기 페이지는 이벤트가 오면 열리고, " +
@@ -98,8 +111,20 @@ public struct TutorialPage
     /// <summary><see cref="TutorialAdvanceInput.KeyHold"/>일 때의 유지 시간(초)입니다. 0이면 누르는 순간입니다.</summary>
     public float HoldSeconds => m_holdSeconds;
 
+    /// <summary>넘김 입력을 채우면 방어전을 시작하고 튜토리얼을 끝내는 페이지인지 여부입니다.</summary>
+    public bool StartDefenseOnAdvance => m_startDefenseOnAdvance;
+
     /// <summary>조건 해결 전까지 닫아 둘 입력입니다.</summary>
     public PlayerInputLock LockedInputs => m_lockedInputs;
+
+    /// <summary>본문 사이에 끼워 넣을 키 아이콘입니다. 없으면 null입니다.</summary>
+    public Sprite KeyIcon => m_keyIcon;
+
+    /// <summary>키 아이콘 위치(px, 패널 왼쪽 위 기준, y는 아래쪽이 양수)입니다.</summary>
+    public Vector2 KeyIconPosition => m_keyIconPosition;
+
+    /// <summary>키 아이콘 크기(px)입니다.</summary>
+    public Vector2 KeyIconSize => m_keyIconSize;
 
     /// <summary>
     /// 코드에서 기본 페이지를 만들 때 씁니다. 인스펙터에서 새로 추가한 페이지에는 적용되지 않습니다.

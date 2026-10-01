@@ -33,6 +33,11 @@ public class ChaseState : EnemyStateBase
     /// <remarks>대상을 고르는 것은 <see cref="CombatState"/>의 몫입니다. 추격 거리 제한이나 강제 귀환은 두지 않습니다.</remarks>
     public override void Tick()
     {
+        if (Controller.Combat.TryBeginAbilityAction())
+        {
+            return;
+        }
+
         EnemyTargetSensor sensor = Controller.Sensor;
         SquadMemberController target = sensor != null ? sensor.CurrentTarget : null;
         if (target == null)

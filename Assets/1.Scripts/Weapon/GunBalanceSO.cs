@@ -18,9 +18,15 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     // ───────────── Gun ─────────────
 
     [Header("Gun")]
+    [Tooltip("Shotgun 한 번의 사격에서 발사할 펠릿 수입니다. 탄약·반동·총성·탄피는 펠릿 수와 무관하게 한 번만 처리하며, Shotgun이 아닌 총기는 항상 1발로 처리합니다. (1 이상)")]
+    [SerializeField] private int Gun_m_pelletCount = 1;
+
     [Tooltip("최대 탄약 수입니다. (0 이상)")]
     [FormerlySerializedAs("m_maxBullet")]
     [SerializeField] private int Gun_m_maxBullet = 30;
+
+    [Tooltip("켜면 크로스헤어 장탄 아크를 최대 장탄수만큼 끊어 한 칸이 한 발을 나타내게 합니다.")]
+    [SerializeField] private bool Gun_m_segmentAmmoGaugeByRound;
 
     [Tooltip("사격 후 다음 사격이 가능해질 때까지의 지연 시간입니다. (0 이상)")]
     [FormerlySerializedAs("m_shootDelay")]
@@ -30,7 +36,10 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_reloadTime")]
     [SerializeField] private float Gun_m_reloadTime = 1.5f;
 
-    [Tooltip("명중 한 발이 주는 기본 피해량입니다. 약점 배율과 거리 감쇠는 여기에 곱해집니다. (0 이상)")]
+    [Tooltip("재장전 방식입니다. Magazine은 시간이 끝날 때 부족한 탄약을 한 번에 채우고, IndividualRounds는 총 재장전 시간 ÷ 장탄량 간격마다 1발씩 채웁니다. 개별 장전은 중간에 취소해도 이미 들어간 탄약이 유지됩니다.")]
+    [SerializeField] private ReloadMode Gun_m_reloadMode = ReloadMode.Magazine;
+
+    [Tooltip("명중 한 발이 주는 기본 피해량입니다. Shotgun은 펠릿 하나당 이 피해를 각각 적용하며, 약점 배율과 거리 감쇠는 펠릿별 피해에 곱해집니다. (0 이상)")]
     [FormerlySerializedAs("m_hitscanDamage")]
     [SerializeField] private int Gun_m_hitscanDamage = 1;
 
@@ -50,16 +59,27 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_knockbackImpulse")]
     [SerializeField] private float Gun_m_knockbackImpulse = 0f;
 
-    [Tooltip("힙파이어(비조준) 시 최소 방사각(도). (0 이상)")]
+    [Tooltip("힙파이어·서기 자세의 최소 방사각(도). (0 이상)")]
     [FormerlySerializedAs("m_hipfireMinSpread")]
-    [SerializeField] private float Gun_m_hipfireMinSpread = 2f;
+    [FormerlySerializedAs("Gun_m_hipfireMinSpread")]
+    [SerializeField] private float Gun_m_hipfireStandingMinSpread = 2f;
 
-    [Tooltip("힙파이어(비조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
+    [Tooltip("힙파이어·서기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
     [FormerlySerializedAs("m_hipfireMaxSpread")]
-    [SerializeField] private float Gun_m_hipfireMaxSpread = 7f;
+    [FormerlySerializedAs("Gun_m_hipfireMaxSpread")]
+    [SerializeField] private float Gun_m_hipfireStandingMaxSpread = 7f;
 
-    [Tooltip("공중에 떠 있는 동안 힙파이어·ADS 방사각에 함께 더해지는 각도(도). 연사 누적과 별개로 즉시 적용됩니다. (0 이상)")]
-    [SerializeField] private float Gun_m_airborneExtraSpread = 2f;
+    [Tooltip("힙파이어·앉기 자세의 최소 방사각(도). 앉는 도중에는 서기 값에서 이 값으로 보간됩니다. (0 이상)")]
+    [SerializeField] private float Gun_m_hipfireCrouchMinSpread = 1.2f;
+
+    [Tooltip("힙파이어·앉기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
+    [SerializeField] private float Gun_m_hipfireCrouchMaxSpread = 4.2f;
+
+    [Tooltip("힙파이어·공중 자세의 최소 방사각(도). 공중에서는 앉기 여부와 무관하게 이 범위를 사용합니다. (0 이상)")]
+    [SerializeField] private float Gun_m_hipfireAirborneMinSpread = 4f;
+
+    [Tooltip("힙파이어·공중 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
+    [SerializeField] private float Gun_m_hipfireAirborneMaxSpread = 9f;
 
     [Tooltip("힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상)")]
     [FormerlySerializedAs("m_hipfireMinSpreadShotCount")]
@@ -77,13 +97,27 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_hipfireSpreadRecoveryDelay")]
     [SerializeField] private float Gun_m_hipfireSpreadRecoveryDelay = 0.3f;
 
-    [Tooltip("ADS(조준) 시 최소 방사각(도). 0이면 정밀 사격입니다. (0 이상)")]
+    [Tooltip("ADS·서기 자세의 최소 방사각(도). 0이면 정밀 사격입니다. (0 이상)")]
     [FormerlySerializedAs("m_adsMinSpread")]
-    [SerializeField] private float Gun_m_adsMinSpread = 0f;
+    [FormerlySerializedAs("Gun_m_adsMinSpread")]
+    [SerializeField] private float Gun_m_adsStandingMinSpread = 0f;
 
-    [Tooltip("ADS(조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
+    [Tooltip("ADS·서기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
     [FormerlySerializedAs("m_adsMaxSpread")]
-    [SerializeField] private float Gun_m_adsMaxSpread = 3f;
+    [FormerlySerializedAs("Gun_m_adsMaxSpread")]
+    [SerializeField] private float Gun_m_adsStandingMaxSpread = 3f;
+
+    [Tooltip("ADS·앉기 자세의 최소 방사각(도). 앉는 도중에는 서기 값에서 이 값으로 보간됩니다. (0 이상)")]
+    [SerializeField] private float Gun_m_adsCrouchMinSpread = 0f;
+
+    [Tooltip("ADS·앉기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
+    [SerializeField] private float Gun_m_adsCrouchMaxSpread = 1.8f;
+
+    [Tooltip("ADS·공중 자세의 최소 방사각(도). 공중에서는 앉기 여부와 무관하게 이 범위를 사용합니다. (0 이상)")]
+    [SerializeField] private float Gun_m_adsAirborneMinSpread = 2f;
+
+    [Tooltip("ADS·공중 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상)")]
+    [SerializeField] private float Gun_m_adsAirborneMaxSpread = 5f;
 
     [Tooltip("ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상)")]
     [FormerlySerializedAs("m_adsMinSpreadShotCount")]
@@ -101,7 +135,7 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_adsSpreadRecoveryDelay")]
     [SerializeField] private float Gun_m_adsSpreadRecoveryDelay = 0.3f;
 
-    [Tooltip("탄퍼짐 분포 방식입니다. Uniform=원판 전체 균일, Gaussian=중심 가중 정규분포(기본). 샷건(콘 3분할) 등은 추후 추가 예정입니다.")]
+    [Tooltip("탄퍼짐 분포 방식입니다. Uniform=원판 전체 균일, Gaussian=중심 가중 정규분포(기본). Shotgun 펠릿도 이 분포를 그대로 사용합니다.")]
     [FormerlySerializedAs("m_spreadDistribution")]
     [SerializeField] private SpreadDistribution Gun_m_spreadDistribution = SpreadDistribution.Gaussian;
 
@@ -153,8 +187,9 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_penetration")]
     [SerializeField] private PenetrationTable Gun_m_penetration;
 
-    // ───────────── SO 전용 (스크립트에 대응 없음) ─────────────
+    // ───────────── SO 메타데이터 ─────────────
     // 생성기가 만들지 않는 필드입니다. 재생성해도 지워지지 않게 여기 유지합니다.
+    // m_weaponType은 Gun의 Shared BalanceField와 이름으로 연결되어 런타임 발사 방식도 결정합니다.
 
     [Tooltip("테이블과 향후 런타임 어댑터에서 사용할 고정 무기 ID입니다.")]
     [SerializeField] private string m_weaponId = "weapon.rifle.01";

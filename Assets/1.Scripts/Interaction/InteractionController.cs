@@ -103,8 +103,8 @@ public class InteractionController : MonoBehaviour
     /// 상호작용 대상 탐지를 멈추거나 다시 켭니다. 모든 멤버에게 같이 적용됩니다.
     /// </summary>
     /// <remarks>
-    /// <see cref="TutorialManager"/>가 씁니다. 튜토리얼 조건이 상호작용 입력(탭, 방어전 시작 홀드)인 페이지에서는
-    /// 그 입력이 트랩 설치 같은 다른 상호작용으로 가지 않고 튜토리얼 조건에 먼저 쓰여야 하기 때문입니다.
+    /// 지금은 멈추는 곳이 없습니다. <see cref="TutorialManager"/>는 "대상을 보고 있으면 대상 우선"으로 바뀌면서
+    /// 탐지를 멈추지 않고, 남은 상태를 지우기 위해 false로만 부릅니다.
     /// 멈춰 있는 동안에는 <see cref="Current"/>가 null이므로 프롬프트도 뜨지 않고,
     /// "대상이 없을 때만" 동작하는 방어전 시작 홀드는 조준 방향과 관계없이 동작합니다.
     /// 입력 자체(<see cref="PlayerInputController.Interact"/>)는 막지 않습니다.

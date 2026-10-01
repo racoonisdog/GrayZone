@@ -47,14 +47,19 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
     private ThirdPersonController m_activeInteractorThirdPerson;
     private bool m_holdActive;
     private float m_holdProgress01;
+    private bool m_remoteRescueActive;
+    private float m_remoteRescueProgress01;
 
     public float HoldDuration => m_holdDuration > 0.0f
         ? m_holdDuration
         : DefaultReviveHoldDuration;
 
-    public bool IsReviveHoldActive => m_holdActive;
+    public bool IsReviveHoldActive => m_holdActive || m_remoteRescueActive;
 
-    public float ReviveHoldProgress01 => m_holdProgress01;
+    public float ReviveHoldProgress01 => Mathf.Max(m_holdProgress01, m_remoteRescueProgress01);
+
+    /// <summary>키 입력이나 근접 구조자 없이 외부 효과가 구조 게이지를 채우는 중인지 여부입니다.</summary>
+    public bool IsRemoteRescueActive => m_remoteRescueActive;
 
     /// <summary>지금 이 대상을 구조하고 있는 멤버입니다. 홀드 중이 아니면 <c>null</c>입니다.</summary>
     /// <remarks>
@@ -83,6 +88,7 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
     private void OnDisable()
     {
         EndHold(false);
+        CancelRemoteRescue();
     }
 
 #if UNITY_EDITOR
@@ -103,6 +109,11 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         AutoFindReferences();
 
         if (m_memberController == null || m_playerHealth == null)
+        {
+            return false;
+        }
+
+        if (m_remoteRescueActive)
         {
             return false;
         }
@@ -132,6 +143,113 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
         }
 
         return true;
+    }
+
+    /// <summary>현재 대상을 원격 구조 게이지 대상으로 사용할 수 있는지 확인합니다.</summary>
+    public bool CanReceiveRemoteRescue()
+    {
+        AutoFindReferences();
+        return m_memberController != null
+            && m_playerHealth != null
+            && m_memberController.IsAlive
+            && m_memberController.IsDown
+            && !m_playerHealth.IsDead
+            && m_playerHealth.IsDowned
+            && m_playerHealth.CurrentHP <= 0;
+    }
+
+    /// <summary>
+    /// 근접 구조 입력 없이 구조 게이지를 채우기 시작합니다.
+    /// 이미 근접 구조 중이면 그 진행도를 이어받고 근접 구조자의 잠금은 해제합니다.
+    /// </summary>
+    public bool BeginRemoteRescue()
+    {
+        if (m_remoteRescueActive)
+        {
+            return CanReceiveRemoteRescue();
+        }
+
+        if (!CanReceiveRemoteRescue())
+        {
+            return false;
+        }
+
+        float inheritedProgress = m_holdActive ? m_holdProgress01 : 0.0f;
+        if (m_holdActive)
+        {
+            EndHold(false);
+        }
+
+        m_remoteRescueActive = true;
+        m_remoteRescueProgress01 = inheritedProgress;
+        m_playerHealth.SetDownTimerPaused(true);
+        m_memberController.SetAssistedStandingAnimator(true);
+        return true;
+    }
+
+    /// <summary>외부 효과가 계산한 0~1 진행도를 원격 구조 게이지에 반영합니다.</summary>
+    public bool UpdateRemoteRescue(float progress01)
+    {
+        if (!m_remoteRescueActive && !BeginRemoteRescue())
+        {
+            return false;
+        }
+
+        if (!CanReceiveRemoteRescue())
+        {
+            CancelRemoteRescue();
+            return false;
+        }
+
+        m_remoteRescueProgress01 = Mathf.Clamp01(progress01);
+        m_playerHealth.SetDownTimerPaused(true);
+        return true;
+    }
+
+    /// <summary>가득 찬 원격 구조 게이지를 별도 스킬 구조 체력으로 완료합니다.</summary>
+    public bool CompleteRemoteRescue(int reviveHp)
+    {
+        if (!m_remoteRescueActive || m_remoteRescueProgress01 < HoldCompleteThreshold ||
+            !CanReceiveRemoteRescue())
+        {
+            CancelRemoteRescue();
+            return false;
+        }
+
+        if (!m_playerHealth.ReviveFromDown(Mathf.Max(1, reviveHp)))
+        {
+            CancelRemoteRescue();
+            return false;
+        }
+
+        m_remoteRescueActive = false;
+        m_remoteRescueProgress01 = 1.0f;
+        m_playerHealth.SetDownTimerPaused(false);
+        m_memberController.SetAlive(true);
+        m_memberController.SetDown(false);
+        m_memberController.CompleteAssistedStandingAnimator();
+        return true;
+    }
+
+    /// <summary>진행 중인 원격 구조를 취소하고 다운 타이머를 다시 흐르게 합니다.</summary>
+    public void CancelRemoteRescue()
+    {
+        if (!m_remoteRescueActive)
+        {
+            return;
+        }
+
+        m_remoteRescueActive = false;
+        m_remoteRescueProgress01 = 0.0f;
+        if (m_playerHealth != null)
+        {
+            m_playerHealth.SetDownTimerPaused(false);
+        }
+
+        if (m_memberController != null)
+        {
+            m_memberController.SetAssistedStandingAnimator(false);
+        }
     }
 
     public string GetPrompt()

@@ -218,12 +218,13 @@ MonoBehaviour:
   m_eyePoint: {fileID: 8328343202193431745}
   m_animator: {fileID: 4977820184565759080}
   m_pitchReference: {fileID: 0}
-  m_sightRange: 45
+  m_sightRange: 60
   m_sightAngle: 360
   m_targetScanInterval: 0.2
   m_targetAimHeight: 1
   m_rotationSpeed: 12
   m_aimToleranceAngle: 8
+  m_fireImmediately: 1
   m_maxAimUpPitch: 70
   m_maxAimDownPitch: 30
   m_chestPitchWeight: 0.35
@@ -231,7 +232,7 @@ MonoBehaviour:
   m_burstDuration: 0.8
   m_burstRestDuration: 0.5
   m_aimErrorRadius: 0.25
-  m_drawDebugGizmos: 0
+  m_drawDebugGizmos: 1
 --- !u!4 &8328343202193431745 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4053046336664830355, guid: 01908a24894eeda44b08a6419d6a4fe5, type: 3}

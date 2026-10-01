@@ -34,11 +34,11 @@ public enum TrapRebuildPolicy
     /// </remarks>
     Always,
 
-    /// <summary>웨이브 사이 휴식 구간이 시작되면 다시 설치할 수 있습니다. 전투 중에는 복구할 수 없습니다.</summary>
+    /// <summary>웨이브 사이 휴식 구간(방어전 시작 전 포함)에만 설치할 수 있습니다. 전투 중에는 복구할 수 없습니다.</summary>
     OnRest,
 
-    /// <summary>이번 방어전에서는 다시 설치할 수 없습니다. 다음 방어전이 시작될 때 복구됩니다.</summary>
-    NextDefense,
+    // 예전의 NextDefense(이번 방어전에는 다시 설치 불가)는 없앴습니다(2026-10-01). 같은 동작은
+    // OnRest + 방어전당 설치 횟수 1로 표현합니다(Trap.m_buildChargesPerDefense). 정수 2를 쓰는 에셋이 없음을 확인했습니다.
 }
 
 /// <summary>
@@ -105,6 +105,17 @@ public abstract class Trap : MonoBehaviour, IInteractable
     private Material[][] m_originalMaterials;
     private UnityEngine.Rendering.ShadowCastingMode[] m_originalShadowModes;
 
+    /// <summary>렌더러의 원래 켜짐 여부입니다. 청사진을 숨겼다가 다시 보일 때 원래부터 꺼져 있던 렌더러를 켜지 않기 위해서입니다.</summary>
+    private bool[] m_originalRendererEnabled;
+
+    /// <summary>
+    /// 지금 함정을 설치할 수 있는 구간인지 여부입니다. 방어전 매니저가 알려 줍니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 매니저가 없는 씬(셸터 등)에서는 바뀌지 않으므로 기본값을 열림으로 둡니다. 그래야 예전처럼 언제든 설치됩니다.
+    /// </remarks>
+    private bool m_buildWindowOpen = true;
+
     [Header("Trap")]
     [Tooltip("이 함정의 최대 내구도입니다. 0 이하로 닳으면 다 쓴 것으로 보고 청사진 상태로 돌아갑니다. 다시 설치하면 이 값으로 회복됩니다.")]
     [Min(0)]
@@ -115,8 +126,17 @@ public abstract class Trap : MonoBehaviour, IInteractable
     [ReadOnly]
     [SerializeField] private int m_currentHealth;
 
-    [Tooltip("다 쓴 함정을 언제 다시 설치할 수 있는지입니다. Always는 전투 중에도 바로, OnRest는 휴식 구간부터, NextDefense는 다음 방어전부터입니다.")]
+    [Tooltip("언제 설치할 수 있는지입니다. Always는 전투 중에도 언제든, OnRest는 휴식 구간(방어전 시작 전 포함)에만 설치할 수 있습니다.")]
     [SerializeField] protected TrapRebuildPolicy m_rebuildPolicy = TrapRebuildPolicy.Always;
+
+    [Tooltip("방어전 한 판 동안 이 자리에 설치할 수 있는 횟수입니다. 다 쓰면 그 방어전에서는 다시 설치할 수 없고, 다음 방어전에서 다시 채워집니다. " +
+             "0이면 제한이 없습니다. 처음부터 설치된 상태(Start Placed)는 횟수를 쓰지 않습니다.")]
+    [Min(0)]
+    [SerializeField] private int m_buildChargesPerDefense = 0;
+
+    [Tooltip("이번 방어전에서 남은 설치 횟수입니다. 제한이 없으면 -1로 표시합니다. 확인용입니다.")]
+    [ReadOnly]
+    [SerializeField] private int m_remainingBuildCharges = -1;
 
     [Tooltip("한 번에 주는 피해량입니다. Tick 방식이면 1틱당 피해량입니다.")]
     [Min(0)]
@@ -168,6 +188,50 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// </remarks>
     public bool IsDepleted { get; private set; }
 
+    /// <summary>
+    /// 지금 자원만 있으면 설치할 수 있는 청사진인지 여부입니다. 이 값이 거짓인 청사진은 보이지도 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 재설치 정책이 <see cref="TrapRebuildPolicy.Always"/>면 구간과 관계없이 언제든 설치할 수 있습니다(상시 설치).
+    /// 그 밖의 정책은 방어전 매니저가 연 설치 구간(방어전 시작 전, 휴식 구간)에만 설치할 수 있습니다.
+    /// 다 써서 복구 시점을 기다리는 함정(<see cref="IsDepleted"/>)은 설치할 수 없습니다.
+    /// </remarks>
+    public bool IsBuildable => IsBlueprint && !IsDepleted && HasBuildCharge
+        && (m_rebuildPolicy == TrapRebuildPolicy.Always || m_buildWindowOpen);
+
+    /// <summary>방어전당 설치 횟수에 제한이 있는지 여부입니다. 0이면 제한이 없습니다.</summary>
+    private bool HasBuildChargeLimit => m_buildChargesPerDefense > 0;
+
+    /// <summary>이번 방어전에서 아직 설치할 수 있는 횟수가 남았는지 여부입니다. 제한이 없으면 항상 참입니다.</summary>
+    public bool HasBuildCharge => !HasBuildChargeLimit || m_remainingBuildCharges > 0;
+
+    /// <summary>이번 방어전에서 남은 설치 횟수입니다. 제한이 없으면 -1입니다.</summary>
+    public int RemainingBuildCharges => HasBuildChargeLimit ? m_remainingBuildCharges : -1;
+
+    /// <summary>설치 횟수를 방어전 한 판의 처음 값으로 채웁니다.</summary>
+    private void ResetBuildCharges()
+    {
+        m_remainingBuildCharges = HasBuildChargeLimit ? m_buildChargesPerDefense : -1;
+    }
+
+    /// <summary>
+    /// 설치 가능 구간이 열리거나 닫혔음을 알립니다. 방어전 매니저가 구간이 바뀔 때마다 부릅니다.
+    /// </summary>
+    /// <param name="isOpen">지금 함정을 설치할 수 있는 구간이면 true입니다.</param>
+    /// <remarks>
+    /// 설치된 함정에는 영향이 없습니다. 청사진의 표시와 설치 가능 여부만 바뀝니다.
+    /// </remarks>
+    public void SetBuildWindowOpen(bool isOpen)
+    {
+        if (m_buildWindowOpen == isOpen)
+        {
+            return;
+        }
+
+        m_buildWindowOpen = isOpen;
+        ApplyBuildStateVisual();
+    }
+
 
     /// <summary>휴식/다음 방어전 알림을 받기 위해 구독해 둔 방어전 매니저입니다.</summary>
     private DefenseManager m_defenseManager;
@@ -189,6 +253,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
     {
         CacheVisuals();
         m_currentHealth = m_maxHealth;
+        ResetBuildCharges();
         IsBuilt = m_startPlaced;
         ApplyBuildStateVisual();
     }
@@ -198,8 +263,8 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// </summary>
     /// <remarks>
     /// 매니저가 없는 씬(셸터 등)에서도 함정은 동작해야 하므로 없으면 조용히 넘어갑니다. 대신 그런
-    /// 씬에서는 <see cref="TrapRebuildPolicy.OnRest"/>와 <see cref="TrapRebuildPolicy.NextDefense"/>가
-    /// 영영 복구되지 않습니다. 그 씬에서는 <see cref="TrapRebuildPolicy.Always"/>를 쓰세요.
+    /// 씬에서는 <see cref="TrapRebuildPolicy.OnRest"/> 함정이 다 쓴 뒤 영영 복구되지 않고, 설치 횟수도 다시 채워지지 않습니다.
+    /// 그 씬에서는 <see cref="TrapRebuildPolicy.Always"/>와 횟수 제한 없음(0)을 쓰세요.
     /// </remarks>
     protected virtual void OnEnable()
     {
@@ -216,6 +281,9 @@ public abstract class Trap : MonoBehaviour, IInteractable
 
         m_defenseManager.OnRestStarted += HandleRestStarted;
         m_defenseManager.OnDefenseStarted += HandleDefenseStarted;
+
+        // 방어전 도중에 켜진 함정도 지금 구간에 맞는 상태로 시작하도록 한 번 맞춥니다.
+        SetBuildWindowOpen(m_defenseManager.IsTrapBuildWindowOpen);
     }
 
     protected virtual void OnDisable()
@@ -238,14 +306,16 @@ public abstract class Trap : MonoBehaviour, IInteractable
         }
     }
 
-    /// <summary>새 방어전이 시작되면 다 쓴 함정을 모두 되살립니다.</summary>
+    /// <summary>새 방어전이 시작되면 설치 횟수를 다시 채우고, 다 쓴 함정을 모두 되살립니다.</summary>
     /// <remarks>
-    /// <see cref="TrapRebuildPolicy.NextDefense"/>만이 아니라 전부 되살립니다. 방어전이 새로 시작되면
-    /// 어떤 정책이든 이전 전투에서 쓴 결과를 끌고 갈 이유가 없습니다.
+    /// 방어전이 새로 시작되면 어떤 정책이든 이전 전투에서 쓴 결과를 끌고 갈 이유가 없습니다.
+    /// 횟수를 다 써서 숨겨져 있던 청사진도 여기서 다시 보일 수 있게 됩니다.
     /// </remarks>
     private void HandleDefenseStarted()
     {
+        ResetBuildCharges();
         Rearm();
+        ApplyBuildStateVisual();
     }
 
     /// <summary>청사진 머테리얼로 덮기 전에 원래 머테리얼과 그림자 설정을 기억해 둡니다.</summary>
@@ -254,11 +324,13 @@ public abstract class Trap : MonoBehaviour, IInteractable
         m_visualRenderers = GetComponentsInChildren<Renderer>(true);
         m_originalMaterials = new Material[m_visualRenderers.Length][];
         m_originalShadowModes = new UnityEngine.Rendering.ShadowCastingMode[m_visualRenderers.Length];
+        m_originalRendererEnabled = new bool[m_visualRenderers.Length];
 
         for (int i = 0; i < m_visualRenderers.Length; i++)
         {
             m_originalMaterials[i] = m_visualRenderers[i].sharedMaterials;
             m_originalShadowModes[i] = m_visualRenderers[i].shadowCastingMode;
+            m_originalRendererEnabled[i] = m_visualRenderers[i].enabled;
         }
     }
 
@@ -268,10 +340,13 @@ public abstract class Trap : MonoBehaviour, IInteractable
     public float HoldDuration => m_buildHoldDuration;
 
     /// <inheritdoc />
-    /// <remarks>이미 설치됐거나, 다 써서 아직 복구 시점이 오지 않았거나, 자원이 모자라면 후보에서 빠집니다.</remarks>
+    /// <remarks>
+    /// 이미 설치됐거나, 다 써서 아직 복구 시점이 오지 않았거나, 설치 구간이 아니거나(상시 설치가 아닐 때),
+    /// 자원이 모자라면 후보에서 빠집니다.
+    /// </remarks>
     public bool CanInteract(GameObject interactor)
     {
-        return IsBlueprint && !IsDepleted && CanPayBuildCost();
+        return IsBuildable && CanPayBuildCost();
     }
 
     /// <inheritdoc />
@@ -285,7 +360,8 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// <inheritdoc />
     public void Interact(GameObject interactor)
     {
-        if (IsBuilt || !TryPayBuildCost())
+        // 홀드 도중에 전투가 시작돼 설치 구간이 닫혔으면 자원을 내기 전에 멈춥니다.
+        if (!IsBuildable || !TryPayBuildCost())
         {
             return;
         }
@@ -341,6 +417,13 @@ public abstract class Trap : MonoBehaviour, IInteractable
         }
 
         IsBuilt = true;
+
+        // 설치할 때마다 이번 방어전의 남은 횟수를 하나 씁니다. 다 쓰면 파괴된 뒤 이 방어전에서는 다시 보이지 않습니다.
+        if (HasBuildChargeLimit && m_remainingBuildCharges > 0)
+        {
+            m_remainingBuildCharges--;
+        }
+
         ApplyBuildStateVisual();
         OnBuilt();
     }
@@ -439,9 +522,14 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// 머테리얼을 통째로 갈아 끼우는 이유는, 불투명 머테리얼을 <c>MaterialPropertyBlock</c>으로
     /// 반투명하게 만들 수 없기 때문입니다. 블렌드 모드·ZWrite·렌더 큐는 머테리얼에 속한 값이라
     /// 프로퍼티만 바꿔서는 통하지 않습니다. 같은 메시를 그대로 쓰므로 별도 청사진 메시를 만들 필요는 없습니다.
+    ///
+    /// 설치할 수 없는 청사진(<see cref="IsBuildable"/>이 거짓)은 렌더러를 꺼서 숨깁니다. 설치 구간이 아닐 때 청사진이
+    /// 보이면 플레이어가 설치할 수 있다고 오해하기 때문입니다. 설치된 함정은 항상 보입니다.
     /// </remarks>
     private void ApplyBuildStateVisual()
     {
+        bool isVisible = IsBuilt || IsBuildable;
+
         if (m_blueprintMaterial != null && m_visualRenderers != null)
         {
             for (int i = 0; i < m_visualRenderers.Length; i++)
@@ -475,9 +563,20 @@ public abstract class Trap : MonoBehaviour, IInteractable
             }
         }
 
+        if (m_visualRenderers != null)
+        {
+            for (int i = 0; i < m_visualRenderers.Length; i++)
+            {
+                if (m_visualRenderers[i] != null)
+                {
+                    m_visualRenderers[i].enabled = isVisible && m_originalRendererEnabled[i];
+                }
+            }
+        }
+
         if (m_blueprintVisualRoot != null)
         {
-            m_blueprintVisualRoot.SetActive(IsBlueprint);
+            m_blueprintVisualRoot.SetActive(IsBlueprint && isVisible);
         }
 
         if (m_builtVisualRoot != null)

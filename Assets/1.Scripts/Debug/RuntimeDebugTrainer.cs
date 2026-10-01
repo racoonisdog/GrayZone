@@ -1196,13 +1196,27 @@ public class RuntimeDebugTrainer : MonoBehaviour
         // 조준 중에는 화면이 확대돼 같은 값도 더 크게 보이므로 무기가 자세별로 따로 들고 있습니다.
         weapon.SetRecoilFovPunchAds(SliderRow("카메라 FOV 펀치(ADS)", weapon.RecoilFovPunchAds, 0f, 10f));
 
-        float hipMin = SliderRow("힙 탄퍼짐 최소", weapon.HipfireMinSpread, 0f, 20f);
-        float hipMax = SliderRow("힙 탄퍼짐 최대", weapon.HipfireMaxSpread, 0f, 20f);
+        GUILayout.Label("힙파이어 자세별 탄퍼짐", m_headerStyle);
+        float hipMin = SliderRow("힙/서기 최소", weapon.HipfireMinSpread, 0f, 20f);
+        float hipMax = SliderRow("힙/서기 최대", weapon.HipfireMaxSpread, 0f, 20f);
         weapon.SetHipfireSpread(hipMin, hipMax);
+        float hipCrouchMin = SliderRow("힙/앉기 최소", weapon.HipfireCrouchMinSpread, 0f, 20f);
+        float hipCrouchMax = SliderRow("힙/앉기 최대", weapon.HipfireCrouchMaxSpread, 0f, 20f);
+        weapon.SetHipfireCrouchSpread(hipCrouchMin, hipCrouchMax);
+        float hipAirborneMin = SliderRow("힙/공중 최소", weapon.HipfireAirborneMinSpread, 0f, 20f);
+        float hipAirborneMax = SliderRow("힙/공중 최대", weapon.HipfireAirborneMaxSpread, 0f, 20f);
+        weapon.SetHipfireAirborneSpread(hipAirborneMin, hipAirborneMax);
 
-        float adsMin = SliderRow("ADS 탄퍼짐 최소", weapon.AdsMinSpread, 0f, 20f);
-        float adsMax = SliderRow("ADS 탄퍼짐 최대", weapon.AdsMaxSpread, 0f, 20f);
+        GUILayout.Label("ADS 자세별 탄퍼짐", m_headerStyle);
+        float adsMin = SliderRow("ADS/서기 최소", weapon.AdsMinSpread, 0f, 20f);
+        float adsMax = SliderRow("ADS/서기 최대", weapon.AdsMaxSpread, 0f, 20f);
         weapon.SetAdsSpread(adsMin, adsMax);
+        float adsCrouchMin = SliderRow("ADS/앉기 최소", weapon.AdsCrouchMinSpread, 0f, 20f);
+        float adsCrouchMax = SliderRow("ADS/앉기 최대", weapon.AdsCrouchMaxSpread, 0f, 20f);
+        weapon.SetAdsCrouchSpread(adsCrouchMin, adsCrouchMax);
+        float adsAirborneMin = SliderRow("ADS/공중 최소", weapon.AdsAirborneMinSpread, 0f, 20f);
+        float adsAirborneMax = SliderRow("ADS/공중 최대", weapon.AdsAirborneMaxSpread, 0f, 20f);
+        weapon.SetAdsAirborneSpread(adsAirborneMin, adsAirborneMax);
 
         DrawBurstSpreadSection(weapon);
     }

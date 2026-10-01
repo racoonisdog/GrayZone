@@ -1,12 +1,11 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 교전 하위 상태: 하울링(패턴 A)을 수행해 주변 변이체를 교전에 합류시킵니다.
+/// 교전 하위 상태: 하울링(패턴 A)을 수행해 주변 변이체에게 소유권 버프를 부여합니다.
 /// </summary>
 /// <remarks>
-/// 첫 발견자만 수행합니다. 소음만 감지한 상태에서는 진입하지 않고, 시야·근접 감지·직접 피격으로
-/// 캐릭터를 직접 인식했을 때만 조건을 충족합니다(§5.5.1).
+/// 반경 안에 버프를 새로 받을 수 있는 적이 설정 인원 이상일 때 진입합니다. 기존 스쿼드 위치 공유 호출은
+/// <see cref="HowlAbility.BroadcastSquadCall"/>에 보존돼 있지만 이 상태에서는 사용하지 않습니다.
 ///
 /// <b>전파는 시작과 동시에 일어나지 않습니다.</b> 정해진 시점에 전파되며, 그 전에 사망하면 취소됩니다(§5.5.3).
 /// 이 지연이 "나린이 전파 전에 경직을 넣어 저지한다"(콘텐츠 §7.5)가 성립하는 근거이므로 없애면 안 됩니다.
@@ -52,7 +51,7 @@ public class HowlState : EnemyStateBase
         m_ability.PlayHowlAnimation();
     }
 
-    /// <summary>전파 시점에 주변 변이체를 합류시키고, 행동이 끝나면 다음 행동을 고릅니다.</summary>
+    /// <summary>전파 시점에 주변 변이체에게 버프를 부여하고, 행동이 끝나면 다음 행동을 고릅니다.</summary>
     /// <remarks>
     /// 전파는 시작과 동시에 일어나지 않습니다. 이 지연이 "전파 전에 경직을 넣어 저지한다"가 성립하는 근거이므로
     /// 없애면 안 됩니다. 전파 전에 사망하면 취소됩니다.
@@ -102,31 +101,12 @@ public class HowlState : EnemyStateBase
     /// </remarks>
     public bool IsBroadcastDone => m_broadcastDone;
 
-    /// <summary>주변 변이체에게 스쿼드 실시간 위치를 전파합니다.</summary>
+    /// <summary>주변 변이체에게 단일 소유권 버프를 전파합니다.</summary>
     private void DoBroadcast()
     {
         m_broadcastDone = true;
-
-        // 전파가 실제로 일어난 이 시점에 기회를 소모합니다. 진입 시점에 소모하면 전파 전에 끊긴 개체가
-        // 아무것도 전달하지 못하고도 기회를 잃습니다.
+        m_ability.BroadcastBuffHowl();
         m_ability.MarkHowlBroadcast();
-
-        EnemyTargetSensor sensor = Controller.Sensor;
-        if (sensor == null)
-        {
-            return;
-        }
-
-        IReadOnlyList<SquadMemberController> members = sensor.BuildHowlMemberList();
-
-        // 송신자도 스쿼드 위치를 얻습니다(§5.5.5). 이것을 빼면 자기가 부른 결과를 자기만 못 받아,
-        // 시야가 끊기는 순간 교전을 놓치고 비교전 속도로 걸어가며 잠시 뒤 하울링을 다시 합니다.
-        // 전파보다 먼저 적용하는 이유는, 전파 도중 목록이 바뀌지 않더라도 순서를 읽는 사람이
-        // "송신자가 빠졌나" 의심하지 않게 하려는 것입니다.
-        sensor.ApplyOwnHowl(members);
-
-        // 전파와 하울링 버프는 능력이 함께 처리합니다. 버프를 건 대상을 능력이 기억해야 사망 시 해제할 수 있습니다.
-        m_ability.BroadcastHowl(members);
     }
 
     /// <summary>하울링이 끝난 뒤 다음 행동을 고릅니다.</summary>

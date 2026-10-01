@@ -195,11 +195,13 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     /// <param name="shellSocket">탄피를 생성할 소켓입니다.</param>
     /// <param name="tracerStart">트레이서 시작 지점입니다.</param>
     /// <param name="tracerEnd">트레이서 끝 지점입니다.</param>
+    /// <param name="playTracer">일반탄 트레이서를 출력할지 여부입니다.</param>
     public void PlayShot(
         Transform muzzleSocket,
         Transform shellSocket,
         Vector3 tracerStart,
-        Vector3 tracerEnd)
+        Vector3 tracerEnd,
+        bool playTracer = true)
     {
         PlayLocal(m_shotSounds, ref m_lastShotIndex);
 
@@ -230,16 +232,10 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
                 forceLocalParticleSimulation: true);
         }
 
-        Quaternion tracerRotation = hasShotDirection
-            ? Quaternion.LookRotation(tracerDelta.normalized)
-            : Quaternion.identity;
-
-        GameObject tracer = SpawnPersonalEffect(
-            m_tracerEffectPrefab,
-            tracerStart,
-            tracerRotation,
-            m_tracerEffectLifetime);
-        FeedbackPlaybackUtility.ConfigureTracer(tracer, tracerStart, tracerEnd);
+        if (playTracer)
+        {
+            PlayTracer(tracerStart, tracerEnd);
+        }
 
         if (shellSocket != null)
         {
@@ -249,6 +245,28 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
                 shellSocket.rotation,
                 m_shellLifetime);
         }
+    }
+
+    /// <summary>한 펠릿의 총구-탄착 경로에 트레이서만 출력합니다.</summary>
+    /// <param name="tracerStart">트레이서 시작 지점입니다.</param>
+    /// <param name="tracerEnd">트레이서 끝 지점입니다.</param>
+    /// <remarks>
+    /// 산탄총의 두 번째 이후 펠릿처럼 사운드·머즐·탄피를 다시 재생하면 안 되는 경로에서 사용합니다.
+    /// 첫 펠릿은 <see cref="PlayShot"/>이 이 메서드를 함께 호출합니다.
+    /// </remarks>
+    public void PlayTracer(Vector3 tracerStart, Vector3 tracerEnd)
+    {
+        Vector3 tracerDelta = tracerEnd - tracerStart;
+        Quaternion tracerRotation = tracerDelta.sqrMagnitude > 0.0001f
+            ? Quaternion.LookRotation(tracerDelta.normalized)
+            : Quaternion.identity;
+
+        GameObject tracer = SpawnPersonalEffect(
+            m_tracerEffectPrefab,
+            tracerStart,
+            tracerRotation,
+            m_tracerEffectLifetime);
+        FeedbackPlaybackUtility.ConfigureTracer(tracer, tracerStart, tracerEnd);
     }
 
     /// <summary>탄이 지형에 멈춘 위치에서 이 무기 전용 탄착 이펙트를 재생합니다.</summary>

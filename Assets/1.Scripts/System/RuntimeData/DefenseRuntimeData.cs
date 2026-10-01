@@ -129,6 +129,8 @@ public sealed class DefenseEntryData
 {
     [SerializeField] private string stageId = string.Empty;
     [SerializeField] private DefenseUpgradeLevels upgrades = DefenseUpgradeLevels.None;
+    [SerializeField] private int round = 1;
+    [SerializeField] private DefenseStageSO stage;
 
     /// <summary>방어전이 진행되는 스테이지 ID입니다.</summary>
     public string StageId => stageId ?? string.Empty;
@@ -136,17 +138,30 @@ public sealed class DefenseEntryData
     /// <summary>Scramble 시설에서 올린 업그레이드 레벨입니다.</summary>
     public DefenseUpgradeLevels Upgrades => upgrades ??= DefenseUpgradeLevels.None;
 
+    /// <summary>이번 방어전 회차입니다. 1부터 시작합니다.</summary>
+    public int Round => Mathf.Max(1, round);
+
+    /// <summary>이번 방어전 구성입니다. 입장할 때 회차 표에서 정해지며, 없으면 null입니다.</summary>
+    public DefenseStageSO Stage => stage;
+
     /// <summary>스테이지 ID와 업그레이드 레벨로 입장 데이터를 만듭니다.</summary>
-    public DefenseEntryData(string stageId, DefenseUpgradeLevels upgrades)
+    /// <param name="stageId">방어전이 진행되는 스테이지 ID입니다.</param>
+    /// <param name="upgrades">Scramble 시설에서 올린 업그레이드 레벨입니다.</param>
+    /// <param name="round">이번 방어전 회차입니다. 1보다 작으면 1로 봅니다.</param>
+    /// <param name="stage">이번 방어전 구성입니다.</param>
+    public DefenseEntryData(string stageId, DefenseUpgradeLevels upgrades, int round = 1, DefenseStageSO stage = null)
     {
         this.stageId = stageId?.Trim() ?? string.Empty;
         this.upgrades = upgrades?.Clone() ?? DefenseUpgradeLevels.None;
+        this.round = Mathf.Max(1, round);
+        this.stage = stage;
     }
 
     /// <summary>외부 변경과 분리된 복사본을 만듭니다.</summary>
+    /// <remarks>방어전 SO는 공유 에셋이라 참조만 복사합니다.</remarks>
     public DefenseEntryData Clone()
     {
-        return new DefenseEntryData(stageId, upgrades);
+        return new DefenseEntryData(stageId, upgrades, round, stage);
     }
 }
 

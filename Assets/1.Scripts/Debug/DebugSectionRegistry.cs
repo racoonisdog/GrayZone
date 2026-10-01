@@ -81,6 +81,9 @@ internal static class DebugFieldNames
         { "m_debugDrawShotNoiseRange", "발사 소음 반경 표시" },
         { "m_debugDrawAudioDistance", "오디오 거리 표시" },
 
+        // 스킬
+        { "m_debugInfiniteDragonBreathMagazine", "용숨결탄 무한 장탄수" },
+
         // 플레이어
         { "m_debugInfiniteHealth", "무한 체력" },
         { "m_debugLogInjuryStateChange", "부상 상태 변화 로그" },
@@ -195,6 +198,7 @@ public static class DebugSectionRegistry
     public static readonly string[] TabNames =
     {
         "플레이어",
+        "스킬",
         "팀 AI",
         "무기",
         "적",
@@ -219,6 +223,10 @@ public static class DebugSectionRegistry
         { "CrosshairController", "플레이어" },
         { "InteractionController", "플레이어" },
         { "PlayerbleUnitData", "플레이어" },
+
+        { "NarinTeamHasteSkill", "스킬" },
+        { "ChungSolDragonBreathSkill", "스킬" },
+        { "SeoHaTeamHealSkill", "스킬" },
 
         { "SquadAIController", "팀 AI" },
         { "SquadMemberController", "팀 AI" },

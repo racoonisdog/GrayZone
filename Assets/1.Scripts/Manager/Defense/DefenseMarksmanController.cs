@@ -39,9 +39,10 @@ public class DefenseMarksmanController : MonoBehaviour
     [SerializeField] private ThirdPersonController m_pitchReference;
 
     [Foldout("Targeting Options")]
-    [Tooltip("적을 탐색하고 사격할 최대 거리(m)입니다. 실제 사거리는 총기의 HitscanRange도 함께 제한합니다.")]
+    [Tooltip("적을 탐색하고 사격할 최대 거리(m)입니다. 실제 사거리는 이 값과 총기의 HitscanRange 중 짧은 쪽입니다. " +
+             "배치 사수는 팀 AI보다 넓게 봅니다.")]
     [Min(0.1f)]
-    [SerializeField] private float m_sightRange = 45.0f;
+    [SerializeField] private float m_sightRange = 60.0f;
 
     [Tooltip("현재 정면을 기준으로 탐색할 수평 시야각(도)입니다. 360이면 전 방향을 탐색합니다.")]
     [Range(1.0f, 360.0f)]
@@ -59,9 +60,13 @@ public class DefenseMarksmanController : MonoBehaviour
     [Min(0.1f)]
     [SerializeField] private float m_rotationSpeed = 12.0f;
 
-    [Tooltip("사격을 허용할 수평 조준 오차(도)입니다.")]
+    [Tooltip("사격을 허용할 수평 조준 오차(도)입니다. 즉시 사격이 켜져 있으면 쓰지 않습니다.")]
     [Range(0.1f, 45.0f)]
     [SerializeField] private float m_aimToleranceAngle = 8.0f;
+
+    [Tooltip("켜면 목표가 보이는 즉시 몸을 목표 방향으로 돌리고 사격합니다. " +
+             "끄면 회전 속도대로 천천히 돌아 조준 오차 안에 들어온 뒤에 사격합니다.")]
+    [SerializeField] private bool m_fireImmediately = true;
 
     [Foldout("Aim Pose Options")]
     [Range(1.0f, 89.0f)]
@@ -91,7 +96,8 @@ public class DefenseMarksmanController : MonoBehaviour
     [SerializeField] private float m_aimErrorRadius = 0.25f;
 
     [Foldout("Debug")]
-    [Tooltip("선택했을 때 탐색 반경과 현재 조준선을 Scene 뷰에 표시합니다.")]
+    [Tooltip("켜면 선택하지 않아도 Scene 뷰에 시야를 표시합니다. 바닥의 원은 실제 사거리(감지 거리와 총 사거리 중 짧은 쪽), " +
+             "정면의 두 선은 상하 조준 한계, 목표가 있으면 조준선(초록 = 정렬됨, 청록 = 회전 중)입니다. 빌드에는 영향이 없습니다.")]
     [SerializeField] private bool m_drawDebugGizmos;
 
     private EnemyController m_currentTarget;
@@ -184,7 +190,16 @@ public class DefenseMarksmanController : MonoBehaviour
             return;
         }
 
-        RotateToward(m_currentAimPoint);
+        // 지정사수는 팀 AI와 달리 반응 지연 없이 쏘는 배치 사수입니다. 즉시 사격이면 몸을 목표 쪽으로 바로 돌려
+        // 조준 오차 조건을 곧바로 만족시킵니다.
+        if (m_fireImmediately)
+        {
+            FaceToward(m_currentAimPoint);
+        }
+        else
+        {
+            RotateToward(m_currentAimPoint);
+        }
 
         if (m_weapon.CurrentBullet <= 0)
         {
@@ -598,6 +613,16 @@ public class DefenseMarksmanController : MonoBehaviour
             Time.deltaTime * m_rotationSpeed);
     }
 
+    /// <summary>수평 방향으로 목표를 곧바로 바라보게 합니다.</summary>
+    private void FaceToward(Vector3 aimPoint)
+    {
+        Vector3 flatDirection = Vector3.ProjectOnPlane(aimPoint - transform.position, Vector3.up);
+        if (flatDirection.sqrMagnitude > 0.0001f)
+        {
+            transform.rotation = Quaternion.LookRotation(flatDirection.normalized, Vector3.up);
+        }
+    }
+
     private float GetAimAngleError()
     {
         Vector3 flatDirection = Vector3.ProjectOnPlane(m_currentAimPoint - transform.position, Vector3.up);
@@ -744,20 +769,65 @@ public class DefenseMarksmanController : MonoBehaviour
         }
     }
 
-    private void OnDrawGizmosSelected()
+    /// <summary>
+    /// 시야를 Scene 뷰에 그립니다. 선택 여부와 관계없이 <see cref="m_drawDebugGizmos"/>가 켜져 있으면 표시합니다.
+    /// </summary>
+    /// <remarks>
+    /// 사거리는 목표 판정과 같은 기준(감지 거리와 총 사거리 중 짧은 쪽)으로 그립니다. 감지 거리만 그리면
+    /// 총 사거리가 더 짧을 때 원 안에 있는데도 쏘지 않는 이유가 보이지 않습니다.
+    /// 에디트 모드에서는 Awake가 돌지 않아 참조가 비어 있으므로 여기서 직접 찾습니다.
+    /// </remarks>
+    private void OnDrawGizmos()
     {
         if (!m_drawDebugGizmos)
         {
             return;
         }
 
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, m_sightRange);
+        Gun weapon = m_weapon != null ? m_weapon : GetComponentInChildren<Gun>(true);
+        float range = weapon != null ? Mathf.Min(m_sightRange, weapon.HitscanRange) : m_sightRange;
+        Vector3 origin = transform.position;
+        Vector3 eye = GetEyePosition();
+        Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = Vector3.forward;
+        }
+
+        Color rangeColor = new Color(1.0f, 0.85f, 0.1f, 0.9f);
+
+#if UNITY_EDITOR
+        UnityEditor.Handles.color = rangeColor;
+        if (m_sightAngle >= 359.9f)
+        {
+            UnityEditor.Handles.DrawWireDisc(origin, Vector3.up, range);
+        }
+        else
+        {
+            Vector3 arcStart = Quaternion.AngleAxis(-m_sightAngle * 0.5f, Vector3.up) * forward;
+            UnityEditor.Handles.DrawWireArc(origin, Vector3.up, arcStart, m_sightAngle, range);
+            UnityEditor.Handles.DrawLine(origin, origin + arcStart * range);
+            UnityEditor.Handles.DrawLine(origin, origin + Quaternion.AngleAxis(m_sightAngle * 0.5f, Vector3.up) * forward * range);
+        }
+
+        UnityEditor.Handles.Label(origin + Vector3.up * 2.2f, $"{name}\n사거리 {range:0}m");
+#else
+        Gizmos.color = rangeColor;
+        Gizmos.DrawWireSphere(origin, range);
+#endif
+
+        // 상하 조준 한계입니다. 이 두 선 사이 밖의 적은 사거리 안이어도 목표로 잡지 않습니다.
+        GetAimPitchLimits(out float maxUpPitch, out float maxDownPitch);
+        Vector3 right = Vector3.Cross(Vector3.up, forward);
+        Gizmos.color = new Color(1.0f, 0.5f, 0.1f, 0.8f);
+        Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(-maxUpPitch, right) * forward * range);
+        Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(maxDownPitch, right) * forward * range);
 
         if (m_currentTarget != null)
         {
             Gizmos.color = IsAimAligned ? Color.green : Color.cyan;
-            Gizmos.DrawLine(GetEyePosition(), m_currentAimPoint);
+            Gizmos.DrawLine(eye, m_currentAimPoint);
+            Gizmos.DrawWireSphere(m_currentAimPoint, 0.3f);
         }
     }
 }
