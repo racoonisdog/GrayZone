@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -63,11 +64,36 @@ public sealed class SquadInventoryManager : MonoBehaviour
         // 첫 획득이 아니라 시작 시점에 만들어, 인벤토리 구독자가 Awake 순서에 상관없이 같은 인스턴스를 받게 합니다.
         m_inventory ??= CreateInventory();
 
+        InitializeFromGameDataManager();
+
         if (m_itemCatalog == null)
         {
             Debug.LogWarning(
                 "[SquadInventoryManager] ItemDefinitionCatalog가 배선되지 않았습니다. 아이템별 최대 스택 수량을 알 수 없어 모든 아이템이 슬롯당 1개씩만 쌓입니다.",
                 this);
+        }
+    }
+
+    /// <summary>필드 시작 시 전역 셸터 창고의 아이템 수량을 스쿼드 공용 인벤토리로 복사합니다.</summary>
+    private void InitializeFromGameDataManager()
+    {
+        if (GameDataManager.Instance == null)
+            return;
+
+        IReadOnlyList<ItemStorageEntry> startingItems = GameDataManager.Instance.ItemStorageEntries;
+        for (int i = 0; i < startingItems.Count; i++)
+        {
+            ItemStorageEntry entry = startingItems[i];
+            if (entry == null || !entry.IsValid)
+                continue;
+
+            TryAcquire(entry.ItemDefinitionId, entry.Quantity, out int leftover);
+            if (leftover > 0)
+            {
+                Debug.LogWarning(
+                    $"[SquadInventoryManager] 시작 아이템 {entry.ItemDefinitionId} x{entry.Quantity} 중 {leftover}개를 넣지 못했습니다.",
+                    this);
+            }
         }
     }
 
@@ -118,6 +144,29 @@ public sealed class SquadInventoryManager : MonoBehaviour
         return string.IsNullOrWhiteSpace(itemDefinitionId)
             ? 0
             : Inventory.CountOf(itemDefinitionId.Trim());
+    }
+
+    /// <summary>해당 아이템을 앞쪽의 사용 가능한 슬롯에서 1개 소모합니다.</summary>
+    public bool TryConsumeOne(string itemDefinitionId)
+    {
+        if (string.IsNullOrWhiteSpace(itemDefinitionId))
+            return false;
+
+        string normalizedId = itemDefinitionId.Trim();
+        for (int i = 0; i < Inventory.SlotCount; i++)
+        {
+            if (!Inventory.IsUnlocked(i)
+                || Inventory.IsContentLocked(i)
+                || Inventory.IsEmpty(i)
+                || !string.Equals(Inventory.GetContent(i), normalizedId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return Inventory.TryRemove(i, 1) == SlotOpResult.Success;
+        }
+
+        return false;
     }
 
     /// <summary>슬롯에 들어 있는 아이템의 정적 정의를 찾습니다. 빈 칸이거나 카탈로그에 없으면 <c>false</c>입니다.</summary>

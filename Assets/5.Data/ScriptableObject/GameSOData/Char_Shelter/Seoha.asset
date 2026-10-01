@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6faca94c9f0962f4cb85e026709f992e, type: 3}
   m_Name: Seoha
   m_EditorClassIdentifier: Assembly-CSharp::PlayableCharacterDefinition
-  definitionId: TestNpc03
+  definitionId: Seoha
   runtimeId: 
   characterId: 3
   displayName: 

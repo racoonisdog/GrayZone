@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: CharacterPortraitCatalog
   m_EditorClassIdentifier: Assembly-CSharp::CharacterPortraitCatalog
   entries:
-  - definitionId: TestNpc01
+  - definitionId: Narin
     portrait: {fileID: 21300000, guid: 2293d97d978e83f47a6f1799a860baae, type: 3}
-  - definitionId: TestNpc02
+  - definitionId: Cheongsol
     portrait: {fileID: 21300000, guid: fe1d47fd6167408448bd7e3bfadd4d76, type: 3}
-  - definitionId: TestNpc03
+  - definitionId: Seoha
     portrait: {fileID: 21300000, guid: 76220f0550a494442affad109d789f36, type: 3}

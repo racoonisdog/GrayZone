@@ -4,6 +4,7 @@ __Guid,,9199ae7a21bc4dc6a804e2275068cbd5
 __Path,,Assets/5.Data/ScriptableObject/Enemy/EnemyBalance.asset
 m_enemyId,테이블과 런타임에서 적 종류를 식별하는 고정 ID입니다. 에셋 이름과 별도로 유지합니다.,enemy.basic
 m_maxHp,적의 최대 HP입니다. 최소값은 1입니다.,30
+m_mass,피격 및 폭발 충격량을 이동 속도로 환산할 때 사용하는 적의 유효 질량(kg)입니다. 값이 클수록 같은 충격에 덜 날아갑니다.,60
 m_wanderRadius,스폰 위치를 기준으로 배회 목적지를 고르는 반경(m)입니다.,8
 m_wanderInterval,배회 목적지를 다시 선택하는 기본 주기(초)입니다.,3
 m_wanderSpeed,배회 상태의 이동 속도(m/s)입니다.,2

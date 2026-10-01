@@ -15,6 +15,9 @@ public class ShelterSceneManager : MonoBehaviour
     [SerializeField] private ShelterSceneDataManager m_ShelterSceneDataManager;
     [SerializeField] private UIManager m_UIManager;
     [SerializeField] private MedicalManager m_MedicalManager;
+    // 실제 플레이에서는 Awake 시 현재 GameDataManager 정본을 Shelter 작업 데이터로 복사한다.
+    // 단, GameDataManager.UseDefaultSaveDataOnShelterStart가 true면 이후 MainSceneSaveManager.Start에서
+    // 테스트용 DefaultSaveData가 다시 적용되므로 이 복사 결과가 테스트 데이터로 대체된다.
     [SerializeField] private bool m_copyDataFromGameDataManagerOnAwake = true;
 
 

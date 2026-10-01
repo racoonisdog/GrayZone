@@ -21,6 +21,10 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
     [Tooltip("적의 최대 HP입니다. 최소값은 1입니다.")]
     [SerializeField] private int m_maxHp = 10;
 
+    [Header("Physics")]
+    [Tooltip("피격 및 폭발 충격량을 이동 속도로 환산할 때 사용하는 적의 유효 질량(kg)입니다. 값이 클수록 같은 충격에 덜 날아갑니다.")]
+    [SerializeField] private float m_mass = 60f;
+
     [Header("Movement")]
     [Tooltip("스폰 위치를 기준으로 배회 목적지를 고르는 반경(m)입니다.")]
     [SerializeField] private float m_wanderRadius = 8f;
@@ -151,6 +155,9 @@ public sealed class EnemyBalanceSO : ScriptableObject, IBalanceTableData
 
     /// <summary>적의 최대 HP입니다.</summary>
     public int MaxHp => Mathf.Max(1, m_maxHp);
+
+    /// <summary>피격 및 폭발 충격량 계산에 사용하는 적의 유효 질량(kg)입니다.</summary>
+    public float Mass => Mathf.Max(0.1f, m_mass);
 
     /// <summary>배회 목적지 선택 반경(m)입니다.</summary>
     public float WanderRadius => Mathf.Max(0f, m_wanderRadius);

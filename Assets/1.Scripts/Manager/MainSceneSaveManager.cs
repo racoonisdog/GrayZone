@@ -29,10 +29,13 @@ public class MainSceneSaveManager : MonoBehaviour
 
         if (!GameDataManager.Instance.UseDefaultSaveDataOnShelterStart)
         {
+            // 실제 게임 흐름: ShelterSceneManager.Awake에서 복사한 기존 GameDataManager 데이터를 유지한다.
+            // Shelter 복귀 데이터가 초기화되는 문제를 점검할 때는 이 플래그가 false인지 먼저 확인할 것.
             return;
         }
 
-        // Temporary test hook for launching the Shelter scene directly.
+        // 테스트 흐름: Shelter 단독 실행/반복 테스트를 위해 DefaultSaveData를 의도적으로 다시 적용한다.
+        // 따라서 이 플래그가 true인 동안 Scene 복귀 전 데이터가 덮이는 것은 미수정 버그가 아니라 예상 동작이다.
         StartNewGame();
     }
 

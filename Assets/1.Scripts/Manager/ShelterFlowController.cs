@@ -16,6 +16,9 @@ public sealed class ShelterFlowController : MonoBehaviour
         [Tooltip("목표를 안내하는 화살표 컨트롤러")]
         [SerializeField] private ObjectiveIndicatorController m_indicator;
 
+        [Tooltip("이 단계에서 화살표가 가리킬 월드 타깃")]
+        [SerializeField] private Transform m_target;
+
         public void SetIndicatorVisible(bool visible)
         {
             if (m_indicator == null)
@@ -23,6 +26,9 @@ public sealed class ShelterFlowController : MonoBehaviour
 
             if (visible)
             {
+                if (m_target != null)
+                    m_indicator.SetTarget(m_target);
+
                 m_indicator.gameObject.SetActive(true);
                 m_indicator.SetVisible(true);
                 return;
@@ -39,6 +45,9 @@ public sealed class ShelterFlowController : MonoBehaviour
     [FormerlySerializedAs("m_returnFacilityObjective")]
     [SerializeField] private ObjectiveTarget m_operationObjective = new();
     [SerializeField] private ObjectiveTarget m_medicalObjective = new();
+
+    [Header("Flow Sources")]
+    [SerializeField] private ManufacturingManager m_manufacturingManager;
 
     [Header("Startup")]
     [Tooltip("Scene 시작 시 제조 시설 안내 단계부터 자동으로 시작함")]
@@ -57,12 +66,23 @@ public sealed class ShelterFlowController : MonoBehaviour
     private void Awake()
     {
         CacheShelterDataManager();
+        CacheManufacturingManager();
     }
 
     private void OnEnable()
     {
+        ManufacturingManager manufacturingManager = CacheManufacturingManager();
+        if (manufacturingManager != null)
+            manufacturingManager.CraftCompleted += HandleCraftCompleted;
+
         if (m_hasStarted)
             ApplyCurrentState();
+    }
+
+    private void OnDisable()
+    {
+        if (m_manufacturingManager != null)
+            m_manufacturingManager.CraftCompleted -= HandleCraftCompleted;
     }
 
     private void Start()
@@ -123,6 +143,11 @@ public sealed class ShelterFlowController : MonoBehaviour
             return;
 
         EnterState(ShelterFlowState.GuideToOperation);
+    }
+
+    private void HandleCraftCompleted()
+    {
+        NotifyFirstCraftCompleted();
     }
 
     /// <summary>플레이어가 출격 시설 안내 Trigger에 도착했음을 통지합니다.</summary>
@@ -202,6 +227,14 @@ public sealed class ShelterFlowController : MonoBehaviour
             m_shelterDataManager = FindFirstObjectByType<ShelterSceneDataManager>();
 
         return m_shelterDataManager;
+    }
+
+    private ManufacturingManager CacheManufacturingManager()
+    {
+        if (m_manufacturingManager == null)
+            m_manufacturingManager = FindFirstObjectByType<ManufacturingManager>();
+
+        return m_manufacturingManager;
     }
 
     private static bool HasSuccessfulFieldResult()

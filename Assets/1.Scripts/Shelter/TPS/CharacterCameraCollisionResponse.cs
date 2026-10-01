@@ -47,8 +47,6 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
     [SerializeField] private Transform m_renderRoot;
 
     [Header("Collision Detection")]
-    [Tooltip("기본 Camera Distance보다 이 값 이상 짧아졌을 때 충돌 압축 상태로 판단합니다.")]
-    [SerializeField, Min(0.001f)] private float m_compressionThreshold = 0.05f;
     [Tooltip("Collider 접촉이 잠깐 끊겨도 높이와 디더가 튀지 않도록 충돌 상태를 유지하는 시간입니다.")]
     [SerializeField, Min(0f)] private float m_collisionReleaseDelay = 0.2f;
 
@@ -63,8 +61,6 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
     [SerializeField, Min(0.01f)] private float m_heightBlendOutDuration = 0.4f;
 
     [Header("Collision Camera Safety")]
-    [Tooltip("충돌 중 카메라와 캐릭터 중심 사이에 확보할 최소 거리입니다.")]
-    [SerializeField, Min(0f)] private float m_minimumCameraClearance = 0.6f;
     [Tooltip("충돌 중 근접한 캐릭터가 Near Clip Plane에 잘리지 않도록 사용할 값입니다.")]
     [SerializeField, Min(0.01f)] private float m_collisionNearClipPlane = 0.1f;
 
@@ -81,8 +77,6 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
     private readonly List<CameraRigState> m_rigStates = new List<CameraRigState>();
     private readonly List<RendererState> m_rendererStates = new List<RendererState>();
     private readonly List<Material> m_runtimeMaterials = new List<Material>();
-    private readonly RaycastHit[] m_cameraClearanceHits = new RaycastHit[16];
-
     private MaterialPropertyBlock m_propertyBlock;
     private Texture2D m_ditherMask;
     private CharacterController m_characterController;
@@ -158,11 +152,9 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
 
     private void OnValidate()
     {
-        m_compressionThreshold = Mathf.Max(0.001f, m_compressionThreshold);
         m_collisionReleaseDelay = Mathf.Max(0f, m_collisionReleaseDelay);
         m_heightBlendInDuration = Mathf.Max(0.01f, m_heightBlendInDuration);
         m_heightBlendOutDuration = Mathf.Max(0.01f, m_heightBlendOutDuration);
-        m_minimumCameraClearance = Mathf.Max(0f, m_minimumCameraClearance);
         m_collisionNearClipPlane = Mathf.Max(0.01f, m_collisionNearClipPlane);
         m_minimumVisibility = Mathf.Clamp01(m_minimumVisibility);
         m_fullDitherDistance = Mathf.Max(0f, m_fullDitherDistance);
@@ -178,7 +170,13 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
 
         CinemachineThirdPersonFollow activeRig = FindActiveRig();
         bool followsThisCharacter = activeRig != null && FollowsThisCharacter(activeRig);
-        bool collisionDetected = followsThisCharacter && IsCollisionCompressed(activeRig);
+        DirectionalCameraCollisionExtension collisionExtension = activeRig != null
+            ? activeRig.GetComponent<DirectionalCameraCollisionExtension>()
+            : null;
+        bool collisionDetected = followsThisCharacter &&
+                                 collisionExtension != null &&
+                                 collisionExtension.isActiveAndEnabled &&
+                                 collisionExtension.IsColliding;
 
         if (!followsThisCharacter)
             m_lastCollisionTime = float.NegativeInfinity;
@@ -193,7 +191,7 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
         float deltaTime = Time.deltaTime;
         UpdateCameraOffset(collisionActive, deltaTime);
         ApplyCameraOffset();
-        ApplyCameraSafety(activeRig, collisionActive);
+        UpdateCameraNearClipPlane(collisionActive);
 
         float desiredVisibility = collisionActive
             ? CalculateCollisionVisibility()
@@ -252,12 +250,41 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
             if (rig == null)
                 continue;
 
+            EnsureDirectionalCollision(rig);
+
             m_rigStates.Add(new CameraRigState
             {
                 Rig = rig,
                 BaseShoulderOffset = rig.ShoulderOffset
             });
         }
+    }
+
+    private static void EnsureDirectionalCollision(CinemachineThirdPersonFollow rig)
+    {
+        CinemachineThirdPersonFollow.ObstacleSettings obstacleSettings =
+            rig.AvoidObstacles;
+        DirectionalCameraCollisionExtension collisionExtension =
+            rig.GetComponent<DirectionalCameraCollisionExtension>();
+
+        if (collisionExtension == null && Application.isPlaying)
+        {
+            collisionExtension =
+                rig.gameObject.AddComponent<DirectionalCameraCollisionExtension>();
+        }
+
+        if (collisionExtension != null)
+        {
+            collisionExtension.Configure(
+                obstacleSettings.CollisionFilter,
+                obstacleSettings.IgnoreTag,
+                obstacleSettings.CameraRadius,
+                obstacleSettings.DampingFromCollision
+            );
+        }
+
+        obstacleSettings.Enabled = false;
+        rig.AvoidObstacles = obstacleSettings;
     }
 
     private void CacheCameraNearClipPlane()
@@ -423,16 +450,6 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
                (followTarget == transform || followTarget.IsChildOf(transform));
     }
 
-    private bool IsCollisionCompressed(CinemachineThirdPersonFollow rig)
-    {
-        if (rig.CurrentObstacle != null)
-            return true;
-
-        rig.GetRigPositions(out _, out _, out Vector3 hand);
-        float actualDistance = Vector3.Distance(hand, rig.VirtualCamera.State.RawPosition);
-        return actualDistance < rig.CameraDistance - m_compressionThreshold;
-    }
-
     private void UpdateCameraOffset(bool collisionActive, float deltaTime)
     {
         float targetBlend = collisionActive ? 1f : 0f;
@@ -475,85 +492,6 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
             shoulderOffset.y += m_currentHeightOffset;
             state.Rig.ShoulderOffset = shoulderOffset;
         }
-    }
-
-    private void ApplyCameraSafety(
-        CinemachineThirdPersonFollow activeRig,
-        bool collisionActive)
-    {
-        UpdateCameraNearClipPlane(collisionActive);
-
-        if (!collisionActive || activeRig == null || m_outputCamera == null ||
-            m_minimumCameraClearance <= 0f)
-        {
-            return;
-        }
-
-        Vector3 characterCenter = m_characterController != null
-            ? m_characterController.bounds.center
-            : transform.position;
-        Vector3 cameraOffset = m_outputCamera.transform.position - characterCenter;
-        float currentDistance = cameraOffset.magnitude;
-        if (currentDistance >= m_minimumCameraClearance)
-            return;
-
-        Vector3 direction = currentDistance > 0.001f
-            ? cameraOffset / currentDistance
-            : -m_outputCamera.transform.forward;
-        float availableDistance = FindAvailableCameraDistance(
-            activeRig,
-            characterCenter,
-            direction
-        );
-
-        if (availableDistance <= currentDistance)
-            return;
-
-        m_outputCamera.transform.position =
-            characterCenter + direction * availableDistance;
-    }
-
-    private float FindAvailableCameraDistance(
-        CinemachineThirdPersonFollow activeRig,
-        Vector3 origin,
-        Vector3 direction)
-    {
-        CinemachineThirdPersonFollow.ObstacleSettings obstacleSettings =
-            activeRig.AvoidObstacles;
-        int hitCount = Physics.RaycastNonAlloc(
-            origin,
-            direction,
-            m_cameraClearanceHits,
-            m_minimumCameraClearance,
-            obstacleSettings.CollisionFilter,
-            QueryTriggerInteraction.Ignore
-        );
-        float availableDistance = m_minimumCameraClearance;
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            RaycastHit hit = m_cameraClearanceHits[i];
-            if (hit.collider == null ||
-                hit.collider.transform == transform ||
-                hit.collider.transform.IsChildOf(transform))
-            {
-                continue;
-            }
-
-            if (!string.IsNullOrEmpty(obstacleSettings.IgnoreTag) &&
-                hit.collider.CompareTag(obstacleSettings.IgnoreTag))
-            {
-                continue;
-            }
-
-            float safeDistance = Mathf.Max(
-                0f,
-                hit.distance - obstacleSettings.CameraRadius
-            );
-            availableDistance = Mathf.Min(availableDistance, safeDistance);
-        }
-
-        return availableDistance;
     }
 
     private void UpdateCameraNearClipPlane(bool collisionActive)
