@@ -1,14 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// 물리 중력 대신 상승/하강 구간이 분리된 결정적 포물선 수식으로 폭발 투사체를 이동시킵니다.
+/// 물리 중력 대신 상승/하강 구간이 분리된 결정적 포물선 수식으로 투척물을 이동시킵니다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class ParabolicProjectileMover : MonoBehaviour
 {
     private readonly RaycastHit[] m_hits = new RaycastHit[16];
 
-    private ExplosiveProjectile m_projectile;
+    private ProjectileBase m_projectile;
     private Rigidbody m_rigidbody;
     private Transform m_owner;
     private Vector3 m_start;
@@ -19,6 +19,8 @@ public class ParabolicProjectileMover : MonoBehaviour
     private bool m_hasPlannedCollision;
     private float m_plannedCollisionTime;
     private Vector3 m_plannedCollisionPosition;
+    private Vector3 m_plannedContactPoint;
+    private Vector3 m_plannedSurfaceNormal;
     private float m_collisionRadius;
     private int m_collisionLayers;
     private float m_elapsedTime;
@@ -101,7 +103,7 @@ public class ParabolicProjectileMover : MonoBehaviour
 
     /// <summary>생성 직후 이동에 필요한 경로와 충돌 조건을 설정합니다.</summary>
     public void Initialize(
-        ExplosiveProjectile projectile,
+        ProjectileBase projectile,
         Vector3 start,
         Vector3 initialVelocity,
         float ascentDownwardAcceleration,
@@ -110,6 +112,8 @@ public class ParabolicProjectileMover : MonoBehaviour
         bool hasPlannedCollision,
         float plannedCollisionTime,
         Vector3 plannedCollisionPosition,
+        Vector3 plannedContactPoint,
+        Vector3 plannedSurfaceNormal,
         float collisionRadius,
         LayerMask collisionLayers,
         Transform owner)
@@ -125,6 +129,8 @@ public class ParabolicProjectileMover : MonoBehaviour
         m_hasPlannedCollision = hasPlannedCollision;
         m_plannedCollisionTime = Mathf.Max(0.0f, plannedCollisionTime);
         m_plannedCollisionPosition = plannedCollisionPosition;
+        m_plannedContactPoint = plannedContactPoint;
+        m_plannedSurfaceNormal = plannedSurfaceNormal;
         m_collisionRadius = Mathf.Max(0.0f, collisionRadius);
         m_collisionLayers = collisionLayers;
         m_elapsedTime = 0.0f;
@@ -143,7 +149,10 @@ public class ParabolicProjectileMover : MonoBehaviour
         if (m_hasPlannedCollision && m_plannedCollisionTime <= 0.0f)
         {
             m_rigidbody.position = m_plannedCollisionPosition;
-            m_projectile.DetonateAt(m_plannedCollisionPosition);
+            m_projectile.ImpactAt(
+                m_plannedCollisionPosition,
+                m_plannedContactPoint,
+                m_plannedSurfaceNormal);
             return;
         }
 
@@ -168,7 +177,7 @@ public class ParabolicProjectileMover : MonoBehaviour
                 : previous;
 
             m_rigidbody.position = centerAtHit;
-            m_projectile.DetonateAt(centerAtHit);
+            m_projectile.ImpactAt(centerAtHit, hit.point, hit.normal);
             return;
         }
 
@@ -176,7 +185,10 @@ public class ParabolicProjectileMover : MonoBehaviour
         {
             m_elapsedTime = m_plannedCollisionTime;
             m_rigidbody.position = m_plannedCollisionPosition;
-            m_projectile.DetonateAt(m_plannedCollisionPosition);
+            m_projectile.ImpactAt(
+                m_plannedCollisionPosition,
+                m_plannedContactPoint,
+                m_plannedSurfaceNormal);
             return;
         }
 
