@@ -3582,6 +3582,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     public void SetPlayerControlled(bool value)
     {
+        if (m_isPlayerControlled && !value)
+        {
+            // 투척 프리셋은 공용 HUD 전체 값을 임시로 덮습니다. 다음 대원의 프로필을 적용하기 전에
+            // 반드시 현재 대원이 복원해야 LateUpdate 순서와 무관하게 이전 값이 남지 않습니다.
+            ExplosiveProjectileShooter projectileShooter = GetComponent<ExplosiveProjectileShooter>();
+            if (projectileShooter != null)
+            {
+                projectileShooter.ReleaseCrosshairOverrideIfOwned();
+            }
+        }
+
         m_isPlayerControlled = value;
 
         if (value)
