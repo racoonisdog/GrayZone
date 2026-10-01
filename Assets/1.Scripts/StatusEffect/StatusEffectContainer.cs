@@ -479,8 +479,13 @@ public sealed class StatusEffectContainer : MonoBehaviour
 
         while (entry.NextTickTime <= now && entry.NextTickTime <= entry.ExpireTime)
         {
-            int damage = definition.PeriodicDamage * Mathf.Max(1, entry.Stacks);
-            if (!CombatDamage.TryApplyDamage(m_damageable, entry.SourceFaction, damage, entry.Source))
+            int damage = definition.ResolvePeriodicDamage(
+                definition.PeriodicDamage * Mathf.Max(1, entry.Stacks),
+                m_damageable.Faction);
+
+            // 감소율 100%로 0이 되면 이번 틱은 건너뛰고 다음 틱 시각만 넘깁니다.
+            if (damage > 0
+                && !CombatDamage.TryApplyDamage(m_damageable, entry.SourceFaction, damage, entry.Source))
             {
                 break;
             }
