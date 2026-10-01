@@ -37,6 +37,10 @@ public sealed class TutorialManager : MonoBehaviour
     [Tooltip("켜면 씬 시작 시 첫 페이지부터 튜토리얼을 시작합니다. 끄면 Begin()을 불러야 시작합니다.")]
     [SerializeField] private bool m_playOnStart = true;
 
+    [Tooltip("켜면 방어전 1회차(DefenseSceneDataManager.DefenseRound == 1)에서만 튜토리얼을 시작합니다. " +
+             "2회차부터는 튜토리얼 없이 상호작용 3초 유지로 바로 시작합니다. 회차 정보가 없으면(씬 단독 실행 등) 튜토리얼을 시작합니다.")]
+    [SerializeField] private bool m_onlyFirstDefenseRound = true;
+
     [Tooltip("튜토리얼 페이지 목록입니다. 위에서부터 0번, 1번… 순서로 진행합니다.")]
     [SerializeField] private List<TutorialPage> m_pages = new();
 
@@ -250,8 +254,9 @@ public sealed class TutorialManager : MonoBehaviour
 
     private void Start()
     {
-        if (!m_playOnStart)
+        if (!m_playOnStart || !IsTutorialRound())
         {
+            // 튜토리얼을 하지 않는 판입니다. 입력 잠금과 우선권을 걸지 않으므로 방어전 시작 홀드는 원래대로 동작합니다.
             ResolveView()?.Hide();
             return;
         }
@@ -265,6 +270,23 @@ public sealed class TutorialManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 이번 판에 튜토리얼을 진행할지 여부입니다. 방어전 1회차에서만 진행합니다.
+    /// </summary>
+    /// <remarks>
+    /// 회차는 클리어 횟수 + 1이라, 1회차를 실패하고 다시 들어오면 튜토리얼도 다시 나옵니다.
+    /// </remarks>
+    private bool IsTutorialRound()
+    {
+        if (!m_onlyFirstDefenseRound)
+        {
+            return true;
+        }
+
+        DefenseSceneDataManager data = DefenseSceneDataManager.Instance;
+        return data == null || data.DefenseRound <= 1;
+    }
+
     private void Update()
     {
         if (!IsRunning)
@@ -274,6 +296,17 @@ public sealed class TutorialManager : MonoBehaviour
 
         // 트랩을 보고 있는지는 매 프레임 바뀌므로 잠금도 매 프레임 맞춥니다. 값이 같으면 아무것도 하지 않습니다.
         ApplyInputState();
+
+        ResolveView()?.SetGaugeProgress(ComputeGaugeProgress(m_pages[m_currentIndex]));
+
+        // 조작키 안내나 일시정지 메뉴로 시간이 멈춘 동안에는 넘기지 않습니다.
+        // 탭 판정은 실제 시간을 쓰기 때문에, 막지 않으면 안내를 보는 중에 누른 F로 페이지가 넘어갑니다.
+        if (Time.timeScale <= 0.0f)
+        {
+            m_tapPressTime = NoPress;
+            m_keyHoldTimer = 0.0f;
+            return;
+        }
 
         TutorialPage page = m_pages[m_currentIndex];
         if (!IsInputCounting(page))
@@ -287,7 +320,7 @@ public sealed class TutorialManager : MonoBehaviour
                 // 탭은 뗄 때 판정하므로 상호작용 입력이 이미 풀려 있습니다. 억제할 것이 없습니다.
                 if (IsInteractTapMet())
                 {
-                    Advance();
+                    CompletePageByInput(page);
                 }
                 break;
 
@@ -295,7 +328,7 @@ public sealed class TutorialManager : MonoBehaviour
                 if (IsKeyConditionMet(page))
                 {
                     SuppressActiveInteract();
-                    Advance();
+                    CompletePageByInput(page);
                 }
                 break;
         }
@@ -336,6 +369,36 @@ public sealed class TutorialManager : MonoBehaviour
         if (!m_pages[pageIndex].WaitEvent)
         {
             Debug.LogWarning($"[{nameof(TutorialManager)}] {fieldName}={pageIndex}번 페이지의 이벤트 대기가 꺼져 있어 이벤트가 무시됩니다.", this);
+        }
+    }
+
+    /// <summary>
+    /// 넘김 키 게이지에 보여 줄 진행도(0~1)입니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 시작 페이지는 <see cref="DefenseManager"/>의 시작 홀드 진행도(3초)를 그대로 보여 줍니다.
+    /// KeyHold 페이지는 키 유지 진행도를, InteractTap 페이지는 탭으로 인정되는 누름 동안 꽉 찬 링을 보여 줍니다.
+    /// </remarks>
+    private float ComputeGaugeProgress(TutorialPage page)
+    {
+        if (m_currentIndex == m_defenseStartPage && page.WaitEvent && !m_eventResolved && m_defenseManager != null)
+        {
+            return m_defenseManager.EmptySpaceHoldStartProgress;
+        }
+
+        if (!IsInputCounting(page))
+        {
+            return 0.0f;
+        }
+
+        switch (page.AdvanceInput)
+        {
+            case TutorialAdvanceInput.KeyHold:
+                return KeyHoldProgress;
+            case TutorialAdvanceInput.InteractTap:
+                return m_tapPressTime >= 0.0f ? 1.0f : 0.0f;
+            default:
+                return 0.0f;
         }
     }
 
@@ -440,7 +503,9 @@ public sealed class TutorialManager : MonoBehaviour
             return false;
         }
 
-        m_keyHoldTimer += Time.deltaTime;
+        // 실제 시간으로 셉니다. 게임 시간은 프레임이 느릴 때 최대 프레임 시간으로 잘려, 3초를 눌러도 덜 찹니다.
+        // 시간이 멈춘 동안(조작키 안내 등)은 Update에서 판정 자체를 건너뜁니다.
+        m_keyHoldTimer += Time.unscaledDeltaTime;
         return m_keyHoldTimer >= page.HoldSeconds;
     }
 
@@ -449,14 +514,42 @@ public sealed class TutorialManager : MonoBehaviour
         int next = m_currentIndex + 1;
         if (next >= m_pages.Count)
         {
-            m_currentIndex = NoPage;
-            ApplyInputState();
-            ResolveView()?.Hide();
-            OnCompleted?.Invoke();
+            FinishTutorial();
             return;
         }
 
         EnterPage(next);
+    }
+
+    /// <summary>마지막 조건까지 채워 튜토리얼을 끝냅니다. 안내를 내리고 입력 잠금을 풉니다.</summary>
+    private void FinishTutorial()
+    {
+        m_currentIndex = NoPage;
+        ApplyInputState();
+        ResolveView()?.Hide();
+        OnCompleted?.Invoke();
+    }
+
+    /// <summary>
+    /// 넘김 입력으로 현재 페이지 조건을 채웠을 때 처리합니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 시작 페이지는 튜토리얼을 먼저 끝낸 뒤 방어전을 시작합니다. 순서를 반대로 하면 시작 이벤트를 받은
+    /// <see cref="HandleDefenseStarted"/>가 튜토리얼을 중간 종료로 처리합니다.
+    /// </remarks>
+    private void CompletePageByInput(TutorialPage page)
+    {
+        if (!page.StartDefenseOnAdvance)
+        {
+            Advance();
+            return;
+        }
+
+        FinishTutorial();
+        if (m_defenseManager != null && !m_defenseManager.IsGameStarted)
+        {
+            m_defenseManager.StartDefense();
+        }
     }
 
     private void EnterPage(int index)
@@ -468,6 +561,7 @@ public sealed class TutorialManager : MonoBehaviour
 
         ApplyInputState();
         ResolveView()?.Show(m_pages[index]);
+        ResolveView()?.SetGaugeProgress(0.0f);
         OnPageChanged?.Invoke(index);
     }
 
@@ -617,7 +711,20 @@ public sealed class TutorialManager : MonoBehaviour
         m_defenseManager.OnDefenseVictoryReady -= HandleVictoryReady;
     }
 
-    private void HandleDefenseStarted() => NotifyEventEnd(m_defenseStartPage);
+    /// <summary>
+    /// 방어전이 시작되면 해당 페이지에 이벤트를 보내고, 그래도 튜토리얼이 남아 있으면 닫습니다.
+    /// </summary>
+    /// <remarks>
+    /// 상호작용 3초 시작은 튜토리얼 중에도 막지 않습니다(DefenseManager 규칙). 그 경로로 시작되면 남은 안내는 의미가 없어 내립니다.
+    /// </remarks>
+    private void HandleDefenseStarted()
+    {
+        NotifyEventEnd(m_defenseStartPage);
+        if (IsRunning)
+        {
+            End();
+        }
+    }
 
     private void HandleRestStarted() => NotifyEventEnd(m_restStartPage);
 
