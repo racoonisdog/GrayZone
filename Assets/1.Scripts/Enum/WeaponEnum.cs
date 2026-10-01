@@ -44,6 +44,18 @@ public enum WeaponType
     Grenade             // 투척물
 }
 
+/// <summary>
+/// 총기의 탄약을 재장전하는 방식입니다.
+/// </summary>
+public enum ReloadMode
+{
+    /// <summary>재장전 시간이 끝날 때 부족한 탄약을 한 번에 채웁니다.</summary>
+    Magazine,
+
+    /// <summary>총 재장전 시간을 장탄량으로 나눈 간격마다 탄약을 1발씩 채웁니다.</summary>
+    IndividualRounds,
+}
+
 // 아래 두 enum은 Gun(런타임)와 밸런스 SO가 같은 타입을 공유하기 위해
 // 각 클래스 중첩 정의에서 이곳으로 옮겼습니다. 두 곳에 따로 정의하면 멤버 이름이
 // 어긋났을 때 BindManager의 이름 기반 변환이 조용히 실패합니다.
@@ -62,8 +74,6 @@ public enum SpreadDistribution
 
     /// <summary>중심에 가중된 정규분포로 흩뜨립니다(기본).</summary>
     Gaussian,
-
-    // Shotgun(콘 3분할) 등은 추후 추가 예정입니다.
 }
 
 /// <summary>

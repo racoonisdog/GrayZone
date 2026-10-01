@@ -102,6 +102,19 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private int totalFieldKillCount;
     [SerializeField] private List<int> fieldKillHistory = new();
 
+    /// <summary>방어전을 클리어하고 귀환까지 마친 횟수입니다. 다음 방어전 회차를 정하는 기준이며 저장됩니다.</summary>
+    [Min(0)][SerializeField] private int defenseClearCount;
+
+    /// <summary>
+    /// 방어전에서 승리했지만 아직 귀환 정산이 반영되지 않은 스테이지 ID입니다. 없으면 빈 문자열입니다.
+    /// </summary>
+    /// <remarks>
+    /// 필드 결과의 임무 완료 표시는 일반 필드 임무에서도 쓰여서, 결과만 보고는 방어전인지 알 수 없습니다.
+    /// 그래서 방어전 쪽이 승리 시점에 이 값을 남기고, 정산이 성공으로 반영될 때 클리어 횟수를 올립니다.
+    /// 저장하지 않습니다. 정산 전에 게임을 끄면 그 판은 클리어로 세지 않습니다.
+    /// </remarks>
+    private string pendingDefenseVictoryStageId = string.Empty;
+
     private ShelterSceneDataManager activeShelterSceneDataManager;
 
     /// <summary>현재 보유한 전체 캐릭터 수입니다.</summary>
@@ -189,6 +202,29 @@ public class GameDataManager : MonoBehaviour
 
     public int TotalFieldKillCount => Mathf.Max(0, totalFieldKillCount);
     public IReadOnlyList<int> FieldKillHistory => fieldKillHistory;
+
+    /// <summary>방어전을 클리어하고 귀환까지 마친 횟수입니다.</summary>
+    public int DefenseClearCount => Mathf.Max(0, defenseClearCount);
+
+    /// <summary>다음에 진행할 방어전 회차입니다. 클리어 횟수 + 1이며, 실패하면 같은 회차를 다시 합니다.</summary>
+    public int NextDefenseRound => DefenseClearCount + 1;
+
+    /// <summary>
+    /// 방어전 승리를 기록해 두고, 이어지는 귀환 정산이 성공이면 클리어 횟수를 올리게 합니다.
+    /// </summary>
+    /// <param name="stageId">승리한 방어전의 스테이지 ID(씬 이름)입니다.</param>
+    /// <remarks>승리한 뒤 귀환하지 못하고 실패하면 클리어로 세지 않습니다.</remarks>
+    public void MarkDefenseVictoryPending(string stageId)
+    {
+        pendingDefenseVictoryStageId = stageId?.Trim() ?? string.Empty;
+    }
+
+    /// <summary>검증용으로 방어전 클리어 횟수를 직접 정합니다. 0보다 작으면 0으로 봅니다.</summary>
+    /// <param name="count">설정할 클리어 횟수입니다.</param>
+    public void SetDefenseClearCount(int count)
+    {
+        defenseClearCount = Mathf.Max(0, count);
+    }
 
     /// <summary>중복 인스턴스를 거부하고 모든 평탄 정본 필드를 정규화합니다.</summary>
     private void Awake()
@@ -551,6 +587,7 @@ public class GameDataManager : MonoBehaviour
 
         ApplyLastFieldResult(resultData);
         RecordFieldKillHistory(resultData.TotalKillCount);
+        ApplyPendingDefenseVictory(resultData);
 
         if (activeShelterSceneDataManager != null)
         {
@@ -558,6 +595,30 @@ public class GameDataManager : MonoBehaviour
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 기록해 둔 방어전 승리가 이번 정산에서 성공으로 끝났으면 클리어 횟수를 올리고, 기록을 비웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 스테이지 ID가 같고 결과가 성공이며 임무 완료일 때만 셉니다. 다른 스테이지의 정산이거나 실패면 세지 않고 기록만 지웁니다.
+    /// </remarks>
+    private void ApplyPendingDefenseVictory(FieldResultData resultData)
+    {
+        if (string.IsNullOrEmpty(pendingDefenseVictoryStageId))
+        {
+            return;
+        }
+
+        string stageId = resultData.StageId?.Trim() ?? string.Empty;
+        if (resultData.Outcome == FieldOutcome.Success
+            && resultData.MissionCompleted
+            && string.Equals(stageId, pendingDefenseVictoryStageId, StringComparison.Ordinal))
+        {
+            defenseClearCount = DefenseClearCount + 1;
+        }
+
+        pendingDefenseVictoryStageId = string.Empty;
     }
 
     /// <summary>최근 필드 결과의 평탄 필드를 독립된 결과 패킷으로 조립해 반환합니다.</summary>
@@ -684,6 +745,7 @@ public class GameDataManager : MonoBehaviour
             wireUpgradeLevel = WireUpgradeLevel,
             totalFieldKillCount = TotalFieldKillCount,
             fieldKillHistory = new List<int>(fieldKillHistory),
+            defenseClearCount = DefenseClearCount,
             manufacturing = ManufacturingFacilitySaveDataMapper.FromRuntime(manufacturing)
         };
 
@@ -761,6 +823,9 @@ public class GameDataManager : MonoBehaviour
         fieldKillHistory = saveData.fieldKillHistory != null
             ? new List<int>(saveData.fieldKillHistory)
             : new List<int>();
+        // 이 필드가 없던 예전 저장 파일은 0으로 읽혀 1회차부터 시작합니다.
+        defenseClearCount = Mathf.Max(0, saveData.defenseClearCount);
+        pendingDefenseVictoryStageId = string.Empty;
         resourceAmounts = new List<ResourceAmountState>();
         characters = new List<CharacterSnapshotData>();
         shelterCharacterAssignments = new List<ShelterCharacterAssignmentData>();

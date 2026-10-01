@@ -1,81 +1,123 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// 한 적에게 걸린 버프 목록을 관리합니다. 적용, 교체, 시간 만료를 담당합니다.
-/// </summary>
+/// <summary>한 적에게 적용 중인 적 전용 버프와 단일 소유권을 관리합니다.</summary>
 /// <remarks>
-/// <see cref="EnemyController"/>가 하나씩 소유하는 일반 클래스입니다. 모든 적이 버프를 받을 수 있으므로
-/// 받는 쪽 기능은 공통 코드에 있고, 버프를 거는 쪽(예: <see cref="HowlAbility"/>)은 적용만 요청합니다.
-///
-/// <b>한 번 걸면 지속 시간이 끝날 때까지 유지합니다.</b> 버프를 건 개체가 먼저 죽어도 풀리지 않습니다.
-/// 건 쪽을 추적해 해제하면 여러 개체가 같은 버프를 갱신하는 경우의 예외 규칙이 늘어나므로 1회성 부여로 정했습니다
-/// (기획 결정 2026-09-28).
-///
-/// 이동 속도는 <see cref="EnemyController.AddMoveSpeedMultiplier"/>에 <b>버프 에셋을 키로</b> 겁니다.
-/// 같은 종류는 키가 같아 한 번만 적용되고, 함정 감속과도 키가 겹치지 않습니다.
+/// 같은 버프는 동시에 한 하울러만 소유할 수 있습니다. 소유자가 살아 있는 동안 잔여시간은 감소하지 않고,
+/// 소유자가 죽거나 비활성화된 뒤부터 에셋의 지속시간이 흐릅니다. 그 시점부터 다른 하울러가 소유권을
+/// 가져오면 잔여시간은 새 버프의 전체 지속시간으로 다시 설정됩니다.
 /// </remarks>
 public sealed class EnemyBuffSet
 {
-    /// <summary>걸려 있는 버프 하나의 기록입니다.</summary>
     private struct Entry
     {
-        /// <summary>버프 종류입니다.</summary>
         public EnemyBuffSO Buff;
-
-        /// <summary>만료 시각(Time.time 기준)입니다.</summary>
-        public float ExpireTime;
+        public EnemyController Owner;
+        public float RemainingDuration;
+        public float LastTickTime;
     }
 
-    private readonly EnemyController m_owner;
+    private readonly EnemyController m_recipient;
     private readonly List<Entry> m_entries = new List<Entry>();
+    private StatusEffectContainer m_visuals;
 
-    /// <summary>버프 목록을 만듭니다.</summary>
-    /// <param name="owner">버프 효과를 반영할 적입니다.</param>
-    public EnemyBuffSet(EnemyController owner)
+    public EnemyBuffSet(EnemyController recipient)
     {
-        m_owner = owner;
+        m_recipient = recipient;
     }
 
-    /// <summary>걸려 있는 버프 수입니다.</summary>
     public int Count => m_entries.Count;
 
-    /// <summary>지정한 종류의 버프가 걸려 있는지 확인합니다.</summary>
-    /// <param name="buff">확인할 버프 종류입니다.</param>
     public bool Has(EnemyBuffSO buff) => IndexOf(buff) >= 0;
 
+    public EnemyController GetOwner(EnemyBuffSO buff)
+    {
+        int index = IndexOf(buff);
+        return index >= 0 ? m_entries[index].Owner : null;
+    }
+
+    public float GetRemainingDuration(EnemyBuffSO buff)
+    {
+        int index = IndexOf(buff);
+        return index >= 0 ? Mathf.Max(0.0f, m_entries[index].RemainingDuration) : 0.0f;
+    }
+
+    /// <summary>해당 버프를 지금 지정한 소유자가 새로 확보할 수 있는지 확인합니다.</summary>
+    public bool CanAcceptOwner(EnemyBuffSO buff, EnemyController owner)
+    {
+        if (buff == null || owner == null || !IsAlive(owner))
+        {
+            return false;
+        }
+
+        int index = IndexOf(buff);
+        if (index < 0)
+        {
+            return true;
+        }
+
+        Entry entry = m_entries[index];
+        if (entry.Owner == owner)
+        {
+            // 이미 이 소유자의 버프를 유지 중인 대상은 재하울링 인원으로 세지 않습니다.
+            return false;
+        }
+
+        // 기존 소유자가 살아 있는 동안 다른 하울러는 같은 버프의 소유권을 가질 수 없습니다.
+        return !IsAlive(entry.Owner);
+    }
+
     /// <summary>
-    /// 버프를 겁니다. 같은 종류가 이미 있으면 새 버프 기준으로 교체하고 지속 시간을 다시 셉니다.
+    /// 버프를 적용하거나 죽은 소유자의 자리를 새 소유자로 교체합니다.
     /// </summary>
-    /// <param name="buff">걸 버프 종류입니다.</param>
-    public void Apply(EnemyBuffSO buff)
+    /// <returns>새 적용 또는 소유권 교체가 일어났으면 true입니다.</returns>
+    public bool Apply(EnemyBuffSO buff, EnemyController owner = null)
     {
         if (buff == null)
         {
-            return;
+            return false;
         }
 
-        var entry = new Entry
-        {
-            Buff = buff,
-            ExpireTime = Time.time + buff.Duration,
-        };
-
         int index = IndexOf(buff);
+        float now = Time.time;
         if (index >= 0)
         {
-            m_entries[index] = entry;
+            Entry existing = m_entries[index];
+            bool existingOwnerAlive = IsAlive(existing.Owner);
+
+            if (existingOwnerAlive && existing.Owner != owner)
+            {
+                return false;
+            }
+
+            // 소유권 없는 기존 호출은 살아 있는 하울러가 잡은 버프를 덮어쓸 수 없습니다.
+            if (existingOwnerAlive && owner == null)
+            {
+                return false;
+            }
+
+            existing.Owner = owner;
+            existing.RemainingDuration = buff.Duration;
+            existing.LastTickTime = now;
+            m_entries[index] = existing;
         }
         else
         {
-            m_entries.Add(entry);
+            m_entries.Add(new Entry
+            {
+                Buff = buff,
+                Owner = owner,
+                RemainingDuration = buff.Duration,
+                LastTickTime = now,
+            });
         }
 
-        m_owner.AddMoveSpeedMultiplier(buff, buff.MoveSpeedMultiplier);
+        m_recipient.AddMoveSpeedMultiplier(buff, buff.MoveSpeedMultiplier);
+        Visuals?.PlayOrRefreshVisual(buff, buff.RecipientVisual, buff.Duration);
+        return true;
     }
 
-    /// <summary>만료 시각이 지난 버프를 해제합니다.</summary>
-    /// <remarks>걸린 버프가 없으면 바로 돌아가므로 매 프레임 불러도 됩니다.</remarks>
+    /// <summary>소유자 생존 여부에 따라 버프 잔여시간을 동결하거나 감소시킵니다.</summary>
     public void Tick()
     {
         if (m_entries.Count == 0)
@@ -86,23 +128,45 @@ public sealed class EnemyBuffSet
         float now = Time.time;
         for (int i = m_entries.Count - 1; i >= 0; i--)
         {
-            if (now >= m_entries[i].ExpireTime)
+            Entry entry = m_entries[i];
+            float deltaTime = Mathf.Max(0.0f, now - entry.LastTickTime);
+            entry.LastTickTime = now;
+
+            if (IsAlive(entry.Owner))
             {
-                EnemyBuffSO buff = m_entries[i].Buff;
-                m_entries.RemoveAt(i);
-                m_owner.RemoveMoveSpeedMultiplier(buff);
+                // 시각 이펙트도 소유자가 살아 있는 동안 만료되지 않게 같은 키의 수명만 갱신합니다.
+                Visuals?.PlayOrRefreshVisual(entry.Buff, entry.Buff.RecipientVisual, entry.Buff.Duration);
+                m_entries[i] = entry;
+                continue;
             }
+
+            entry.RemainingDuration -= deltaTime;
+            if (entry.RemainingDuration > 0.0f)
+            {
+                m_entries[i] = entry;
+                continue;
+            }
+
+            m_entries.RemoveAt(i);
+            m_recipient.RemoveMoveSpeedMultiplier(entry.Buff);
+            Visuals?.StopVisual(entry.Buff);
         }
     }
 
-    /// <summary>
-    /// 기록만 비웁니다. 이동 속도 배율은 호출하는 쪽이 이미 비웠을 때 씁니다.
-    /// </summary>
-    /// <remarks>풀 반환 시 <see cref="EnemyController.ClearSpawnConfiguration"/>이 배율을 한꺼번에 비운 뒤 부릅니다.</remarks>
+    /// <summary>풀 반환 시 버프 기록과 연결된 시각 이펙트를 정리합니다.</summary>
     public void ClearRecordsOnly()
     {
+        for (int i = 0; i < m_entries.Count; i++)
+        {
+            Visuals?.StopVisual(m_entries[i].Buff);
+        }
+
         m_entries.Clear();
     }
+
+    private StatusEffectContainer Visuals => m_visuals != null
+        ? m_visuals
+        : m_visuals = StatusEffectContainer.GetOrAdd(m_recipient.gameObject);
 
     private int IndexOf(EnemyBuffSO buff)
     {
@@ -115,5 +179,12 @@ public sealed class EnemyBuffSet
         }
 
         return -1;
+    }
+
+    private static bool IsAlive(EnemyController owner)
+    {
+        return owner != null
+            && owner.isActiveAndEnabled
+            && (owner.Health == null || !owner.Health.IsDead);
     }
 }

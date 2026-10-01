@@ -317,8 +317,8 @@ public class EnemyAttack : MonoBehaviour
         Component victim = member;
         if (member != null)
         {
-            if (!IsAliveMember(member) || (m_owner != null && m_owner.IsDefenseEnemy &&
-                m_owner.DefenseDisposition == EnemyDefenseDisposition.TargetFirst)) return false;
+            // 방어 대상 우선과, 아직 전환하지 않은 혼합형은 스쿼드원을 맞히지 않습니다.
+            if (!IsAliveMember(member) || (m_owner != null && m_owner.IsIgnoringSquad)) return false;
         }
         else
         {

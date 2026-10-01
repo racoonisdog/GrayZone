@@ -196,6 +196,16 @@ public class AttackState : EnemyStateBase
             return;
         }
 
+        // 반복형 능력은 공격 한 사이클이 끝난 경계에서만 끼어듭니다.
+        // 공격 판정이나 후딜을 중간에 취소하지 않으면서 재하울링 같은 조건을 확인할 수 있습니다.
+        // EnemyAbility가 돌려주는 상태는 Combat의 하위 상태입니다. 방어 목표 공격은 별도 최상위
+        // AttackState이므로 여기서 하울링 같은 능력을 시작하면 Combat은 활성화되지 않은 채 하위 상태만
+        // 바뀌고, 방어 공격도 다음 프레임에 계속되는 잘못된 중첩이 생깁니다.
+        if (!m_defenseObjective && Controller.Combat.TryBeginAbilityAction())
+        {
+            return;
+        }
+
         SquadMemberController target = Controller.Sensor != null ? Controller.Sensor.CurrentTarget : null;
         bool canAttackAgain = Controller.Attack != null && (m_defenseObjective
             ? Controller.Attack.CanStartDefenseAttack(Controller.DefenseObjective)

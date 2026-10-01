@@ -16,6 +16,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private static readonly int AnimStateGrenadeThrow = Animator.StringToHash("Grenade Throw");
     private static readonly int AnimStateGrenadeCrouchThrow = Animator.StringToHash("Grenade Crouch Throw");
 
+    // CrosshairController는 분대 전체가 하나를 공유합니다. 대원별 인스턴스에 복원 스냅샷을 두면
+    // 조작 대원 전환/사망/비활성화 순서에 따라 이전 대원이 새 대원의 HUD를 덮을 수 있습니다.
+    // 따라서 투척 프리셋은 공용 HUD 기준으로 한 명만 소유하고, 그 소유자만 원래 값을 복원합니다.
+    private static ExplosiveProjectileShooter s_crosshairOverrideOwner;
+    private static CrosshairController s_crosshairOverrideTarget;
+    private static CrosshairPreset s_crosshairOverrideBaseline;
+
     [System.Serializable]
     private sealed class CrosshairPreset
     {
@@ -273,7 +280,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private Renderer[] m_weaponRenderers;
     private bool[] m_weaponRendererEnabledStates;
     private bool m_grenadeEquipmentVisible;
-    private CrosshairPreset m_savedCrosshairPreset;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetCrosshairOverrideState()
+    {
+        // Domain Reload를 끈 Play Mode에서도 이전 세션의 Unity 오브젝트 참조를 들고 있지 않습니다.
+        s_crosshairOverrideOwner = null;
+        s_crosshairOverrideTarget = null;
+        s_crosshairOverrideBaseline = null;
+    }
 
     private void Awake()
     {
@@ -287,12 +302,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         ResolveInventoryManager();
         ResolveGrenadeSelectionUI();
         CreateTrajectoryLine();
-        ApplyCrosshairMode(m_input != null && m_input.ThrowMode);
+        ApplyCrosshairMode(false);
     }
 
     private void LateUpdate()
     {
-        bool throwModeActive = m_input != null && m_input.ThrowMode;
+        // 공용 HUD는 현재 직접 조작 중인 캐릭터만 변경합니다. AI가 된 이전 캐릭터가
+        // 자기 입력 상태로 수류탄 프리셋을 다시 쓰면 일반 크로스헤어와 값이 섞입니다.
+        bool ownsPlayerCrosshair = m_aimController != null && m_aimController.IsPlayerControlled;
+        bool throwModeActive = ownsPlayerCrosshair && m_input != null && m_input.ThrowMode;
         SetGrenadeAnimationMode(throwModeActive);
         SetGrenadeEquipmentVisible(throwModeActive);
         SetHeldGrenadeVisible(throwModeActive && !IsGrenadeThrowAnimationActive());
@@ -376,6 +394,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void OnDestroy()
     {
+        ReleaseCrosshairOverrideIfOwned();
+
         if (m_heldGrenadeVisualInstance != null)
         {
             Destroy(m_heldGrenadeVisualInstance);
@@ -673,7 +693,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     {
         if (m_crosshairModeInitialized && m_throwCrosshairActive == throwModeActive)
         {
-            return;
+            bool ownsExpectedOverride = ReferenceEquals(s_crosshairOverrideOwner, this)
+                && s_crosshairOverrideTarget == m_defaultCrosshair;
+            if ((throwModeActive && ownsExpectedOverride)
+                || (!throwModeActive && !ReferenceEquals(s_crosshairOverrideOwner, this)))
+            {
+                return;
+            }
         }
 
         ResolveDefaultCrosshair();
@@ -681,18 +707,68 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         {
             if (m_defaultCrosshair != null && m_throwCrosshairPreset != null)
             {
-                m_savedCrosshairPreset = CrosshairPreset.Capture(m_defaultCrosshair);
+                bool alreadyOwnsTarget = ReferenceEquals(s_crosshairOverrideOwner, this)
+                    && s_crosshairOverrideTarget == m_defaultCrosshair;
+                if (!alreadyOwnsTarget)
+                {
+                    RestoreAndClearCrosshairOverride();
+                    s_crosshairOverrideOwner = this;
+                    s_crosshairOverrideTarget = m_defaultCrosshair;
+                    s_crosshairOverrideBaseline = CrosshairPreset.Capture(m_defaultCrosshair);
+                }
+
                 m_throwCrosshairPreset.Apply(m_defaultCrosshair);
             }
         }
-        else if (m_defaultCrosshair != null && m_savedCrosshairPreset != null)
+        else
         {
-            m_savedCrosshairPreset.Apply(m_defaultCrosshair);
-            m_savedCrosshairPreset = null;
+            ReleaseCrosshairOverrideIfOwned();
         }
 
-        m_throwCrosshairActive = throwModeActive;
+        m_throwCrosshairActive = throwModeActive
+            && ReferenceEquals(s_crosshairOverrideOwner, this);
         m_crosshairModeInitialized = true;
+    }
+
+    /// <summary>
+    /// 이 대원이 소유한 투척 조준선 임시값을 즉시 해제하고, 적용 전 공용 HUD 값으로 복원합니다.
+    /// </summary>
+    /// <remarks>
+    /// 조작권을 다음 대원에게 넘기기 전에 호출해야 새 대원의 프로필 위로 이전 대원의 스냅샷이
+    /// 뒤늦게 덮이지 않습니다. 소유자가 아닌 대원은 공용 HUD를 변경하지 않습니다.
+    /// </remarks>
+    public void ReleaseCrosshairOverrideIfOwned()
+    {
+        if (ReferenceEquals(s_crosshairOverrideOwner, this))
+        {
+            RestoreAndClearCrosshairOverride();
+        }
+
+        m_throwCrosshairActive = false;
+        m_crosshairModeInitialized = true;
+    }
+
+    private static void RestoreAndClearCrosshairOverride()
+    {
+        CrosshairController target = s_crosshairOverrideTarget;
+        CrosshairPreset baseline = s_crosshairOverrideBaseline;
+        ExplosiveProjectileShooter previousOwner = s_crosshairOverrideOwner;
+
+        // 복원 중 다른 코드가 현재 소유자를 조회해도 이미 임시 레이어가 끝난 상태로 보이게 합니다.
+        s_crosshairOverrideOwner = null;
+        s_crosshairOverrideTarget = null;
+        s_crosshairOverrideBaseline = null;
+
+        if (target != null && baseline != null)
+        {
+            baseline.Apply(target);
+        }
+
+        if (!ReferenceEquals(previousOwner, null))
+        {
+            previousOwner.m_throwCrosshairActive = false;
+            previousOwner.m_crosshairModeInitialized = true;
+        }
     }
 
     private void ResolveDefaultCrosshair()

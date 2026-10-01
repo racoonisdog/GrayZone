@@ -37,6 +37,10 @@ public sealed class TutorialManager : MonoBehaviour
     [Tooltip("켜면 씬 시작 시 첫 페이지부터 튜토리얼을 시작합니다. 끄면 Begin()을 불러야 시작합니다.")]
     [SerializeField] private bool m_playOnStart = true;
 
+    [Tooltip("켜면 방어전 1회차(DefenseSceneDataManager.DefenseRound == 1)에서만 튜토리얼을 시작합니다. " +
+             "2회차부터는 튜토리얼 없이 상호작용 3초 유지로 바로 시작합니다. 회차 정보가 없으면(씬 단독 실행 등) 튜토리얼을 시작합니다.")]
+    [SerializeField] private bool m_onlyFirstDefenseRound = true;
+
     [Tooltip("튜토리얼 페이지 목록입니다. 위에서부터 0번, 1번… 순서로 진행합니다.")]
     [SerializeField] private List<TutorialPage> m_pages = new();
 
@@ -72,6 +76,12 @@ public sealed class TutorialManager : MonoBehaviour
 
     /// <summary>InteractTap 판정용으로 상호작용을 누른 시각입니다. 누르지 않았으면 <see cref="NoPress"/>입니다.</summary>
     private float m_tapPressTime = NoPress;
+
+    /// <summary>튜토리얼 조건이 상호작용 입력을 쓰고 있는지 여부입니다. 풀리는 순간을 알아내려고 들고 있습니다.</summary>
+    private bool m_interactClaimed;
+
+    /// <summary>상호작용 대상을 보고 있어 페이지의 상호작용 잠금을 대상에게 양보했는지 여부입니다.</summary>
+    private bool m_interactYieldedToTarget;
 
     /// <summary>씬에 있는 활성 튜토리얼 매니저입니다. 없으면 null입니다.</summary>
     public static TutorialManager Instance => s_instance;
@@ -244,8 +254,9 @@ public sealed class TutorialManager : MonoBehaviour
 
     private void Start()
     {
-        if (!m_playOnStart)
+        if (!m_playOnStart || !IsTutorialRound())
         {
+            // 튜토리얼을 하지 않는 판입니다. 입력 잠금과 우선권을 걸지 않으므로 방어전 시작 홀드는 원래대로 동작합니다.
             ResolveView()?.Hide();
             return;
         }
@@ -259,10 +270,41 @@ public sealed class TutorialManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 이번 판에 튜토리얼을 진행할지 여부입니다. 방어전 1회차에서만 진행합니다.
+    /// </summary>
+    /// <remarks>
+    /// 회차는 클리어 횟수 + 1이라, 1회차를 실패하고 다시 들어오면 튜토리얼도 다시 나옵니다.
+    /// </remarks>
+    private bool IsTutorialRound()
+    {
+        if (!m_onlyFirstDefenseRound)
+        {
+            return true;
+        }
+
+        DefenseSceneDataManager data = DefenseSceneDataManager.Instance;
+        return data == null || data.DefenseRound <= 1;
+    }
+
     private void Update()
     {
         if (!IsRunning)
         {
+            return;
+        }
+
+        // 트랩을 보고 있는지는 매 프레임 바뀌므로 잠금도 매 프레임 맞춥니다. 값이 같으면 아무것도 하지 않습니다.
+        ApplyInputState();
+
+        ResolveView()?.SetGaugeProgress(ComputeGaugeProgress(m_pages[m_currentIndex]));
+
+        // 조작키 안내나 일시정지 메뉴로 시간이 멈춘 동안에는 넘기지 않습니다.
+        // 탭 판정은 실제 시간을 쓰기 때문에, 막지 않으면 안내를 보는 중에 누른 F로 페이지가 넘어갑니다.
+        if (Time.timeScale <= 0.0f)
+        {
+            m_tapPressTime = NoPress;
+            m_keyHoldTimer = 0.0f;
             return;
         }
 
@@ -278,7 +320,7 @@ public sealed class TutorialManager : MonoBehaviour
                 // 탭은 뗄 때 판정하므로 상호작용 입력이 이미 풀려 있습니다. 억제할 것이 없습니다.
                 if (IsInteractTapMet())
                 {
-                    Advance();
+                    CompletePageByInput(page);
                 }
                 break;
 
@@ -286,7 +328,7 @@ public sealed class TutorialManager : MonoBehaviour
                 if (IsKeyConditionMet(page))
                 {
                     SuppressActiveInteract();
-                    Advance();
+                    CompletePageByInput(page);
                 }
                 break;
         }
@@ -330,6 +372,36 @@ public sealed class TutorialManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 넘김 키 게이지에 보여 줄 진행도(0~1)입니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 시작 페이지는 <see cref="DefenseManager"/>의 시작 홀드 진행도(3초)를 그대로 보여 줍니다.
+    /// KeyHold 페이지는 키 유지 진행도를, InteractTap 페이지는 탭으로 인정되는 누름 동안 꽉 찬 링을 보여 줍니다.
+    /// </remarks>
+    private float ComputeGaugeProgress(TutorialPage page)
+    {
+        if (m_currentIndex == m_defenseStartPage && page.WaitEvent && !m_eventResolved && m_defenseManager != null)
+        {
+            return m_defenseManager.EmptySpaceHoldStartProgress;
+        }
+
+        if (!IsInputCounting(page))
+        {
+            return 0.0f;
+        }
+
+        switch (page.AdvanceInput)
+        {
+            case TutorialAdvanceInput.KeyHold:
+                return KeyHoldProgress;
+            case TutorialAdvanceInput.InteractTap:
+                return m_tapPressTime >= 0.0f ? 1.0f : 0.0f;
+            default:
+                return 0.0f;
+        }
+    }
+
     /// <summary>현재 페이지에서 넘김 입력을 셀 차례인지 여부입니다. 이벤트 조건이 있으면 이벤트가 온 뒤부터입니다.</summary>
     private bool IsInputCounting(TutorialPage page)
     {
@@ -343,6 +415,9 @@ public sealed class TutorialManager : MonoBehaviour
     /// 누를 때 판정하면 트랩 설치처럼 길게 누르는 상호작용을 시작하는 순간 페이지가 넘어갑니다.
     /// 그래서 <see cref="m_tapMaxSeconds"/>보다 짧게 누르고 뗐을 때만 인정합니다.
     /// 입력을 세기 시작한 뒤에 누른 것만 인정합니다. 이전부터 누르고 있던 입력은 누른 시각이 없어 무시됩니다.
+    /// <para>
+    /// 상호작용 대상(트랩 등)을 보고 있으면 그 누름은 대상의 것이라 세지 않습니다. 누를 때와 뗄 때 둘 다 봅니다.
+    /// </para>
     /// </remarks>
     private bool IsInteractTapMet()
     {
@@ -355,7 +430,7 @@ public sealed class TutorialManager : MonoBehaviour
 
         if (action.WasPressedThisFrame())
         {
-            m_tapPressTime = Time.unscaledTime;
+            m_tapPressTime = HasActiveInteractionTarget() ? NoPress : Time.unscaledTime;
             return false;
         }
 
@@ -375,7 +450,7 @@ public sealed class TutorialManager : MonoBehaviour
         if (action.WasReleasedThisFrame())
         {
             m_tapPressTime = NoPress;
-            return true;
+            return !HasActiveInteractionTarget();
         }
 
         return false;
@@ -428,7 +503,9 @@ public sealed class TutorialManager : MonoBehaviour
             return false;
         }
 
-        m_keyHoldTimer += Time.deltaTime;
+        // 실제 시간으로 셉니다. 게임 시간은 프레임이 느릴 때 최대 프레임 시간으로 잘려, 3초를 눌러도 덜 찹니다.
+        // 시간이 멈춘 동안(조작키 안내 등)은 Update에서 판정 자체를 건너뜁니다.
+        m_keyHoldTimer += Time.unscaledDeltaTime;
         return m_keyHoldTimer >= page.HoldSeconds;
     }
 
@@ -437,14 +514,42 @@ public sealed class TutorialManager : MonoBehaviour
         int next = m_currentIndex + 1;
         if (next >= m_pages.Count)
         {
-            m_currentIndex = NoPage;
-            ApplyInputState();
-            ResolveView()?.Hide();
-            OnCompleted?.Invoke();
+            FinishTutorial();
             return;
         }
 
         EnterPage(next);
+    }
+
+    /// <summary>마지막 조건까지 채워 튜토리얼을 끝냅니다. 안내를 내리고 입력 잠금을 풉니다.</summary>
+    private void FinishTutorial()
+    {
+        m_currentIndex = NoPage;
+        ApplyInputState();
+        ResolveView()?.Hide();
+        OnCompleted?.Invoke();
+    }
+
+    /// <summary>
+    /// 넘김 입력으로 현재 페이지 조건을 채웠을 때 처리합니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 시작 페이지는 튜토리얼을 먼저 끝낸 뒤 방어전을 시작합니다. 순서를 반대로 하면 시작 이벤트를 받은
+    /// <see cref="HandleDefenseStarted"/>가 튜토리얼을 중간 종료로 처리합니다.
+    /// </remarks>
+    private void CompletePageByInput(TutorialPage page)
+    {
+        if (!page.StartDefenseOnAdvance)
+        {
+            Advance();
+            return;
+        }
+
+        FinishTutorial();
+        if (m_defenseManager != null && !m_defenseManager.IsGameStarted)
+        {
+            m_defenseManager.StartDefense();
+        }
     }
 
     private void EnterPage(int index)
@@ -456,6 +561,7 @@ public sealed class TutorialManager : MonoBehaviour
 
         ApplyInputState();
         ResolveView()?.Show(m_pages[index]);
+        ResolveView()?.SetGaugeProgress(0.0f);
         OnPageChanged?.Invoke(index);
     }
 
@@ -464,7 +570,13 @@ public sealed class TutorialManager : MonoBehaviour
     /// </summary>
     /// <remarks>
     /// 잠금: 페이지가 닫아 둔 입력은 이벤트가 해결되면 엽니다.
-    /// 우선권: 조건이 상호작용 입력인 페이지에서는 상호작용 대상 탐지를 멈춰, 그 입력이 튜토리얼 조건에 먼저 쓰이게 합니다.
+    /// <para>
+    /// 우선권: 상호작용 대상(트랩 등)을 보고 있으면 대상, 아니면 튜토리얼 조건이 상호작용 입력을 씁니다.
+    /// 방어전 중의 규칙과 같습니다(<see cref="DefenseManager"/>의 시작 홀드도 대상이 없을 때만 셉니다).
+    /// 그래서 대상 탐지는 멈추지 않고, 조건이 상호작용 입력인 페이지에서 대상을 보고 있는 동안에만
+    /// 페이지의 상호작용 잠금을 풀어 대상에게 넘깁니다. 대상을 보지 않을 때 잠금을 유지하는 이유는,
+    /// 방어전 시작 페이지 전에 빈 곳을 3초 눌러 방어전이 시작되는 것을 이 잠금이 막고 있기 때문입니다.
+    /// </para>
     /// </remarks>
     private void ApplyInputState()
     {
@@ -482,17 +594,56 @@ public sealed class TutorialManager : MonoBehaviour
             claimInteract = UsesInteractForCondition(page, m_currentIndex);
         }
 
-        PlayerInputController.SetInputLock(locks);
+        bool yieldToTarget = claimInteract
+                             && (locks & PlayerInputLock.Interact) != 0
+                             && HasActiveInteractionTarget();
+        if (yieldToTarget)
+        {
+            locks &= ~PlayerInputLock.Interact;
+        }
 
-        bool wasClaimed = InteractionController.IsTargetingSuppressed;
-        InteractionController.SetTargetingSuppressed(claimInteract);
-
-        // 우선권을 푸는 순간 F를 누르고 있으면, 그 누름이 새 입력처럼 보여 눈앞의 트랩 설치로 이어집니다.
-        // 뗄 때까지 상호작용을 막아 조건을 채운 입력이 다른 동작으로 넘어가지 않게 합니다.
-        if (wasClaimed && !claimInteract)
+        // 누른 채로 조준이 대상에 옮겨 가면, 잠금이 풀리는 순간 그 누름이 새 입력처럼 보여 바로 상호작용이 시작됩니다.
+        // 대상을 본 뒤 새로 누른 입력만 쓰도록 뗄 때까지 막습니다.
+        if (yieldToTarget && !m_interactYieldedToTarget && IsActiveInteractionPressed())
         {
             SuppressActiveInteract();
         }
+
+        m_interactYieldedToTarget = yieldToTarget;
+
+        PlayerInputController.SetInputLock(locks);
+
+        // 대상 탐지는 멈추지 않습니다. 예전에 튜토리얼이 멈춰 둔 상태가 남지 않도록 항상 풀어 둡니다.
+        InteractionController.SetTargetingSuppressed(false);
+
+        // 우선권을 푸는 순간 F를 누르고 있으면, 그 누름이 새 입력처럼 보여 눈앞의 트랩 설치로 이어집니다.
+        // 뗄 때까지 상호작용을 막아 조건을 채운 입력이 다른 동작으로 넘어가지 않게 합니다.
+        if (m_interactClaimed && !claimInteract)
+        {
+            SuppressActiveInteract();
+        }
+
+        m_interactClaimed = claimInteract;
+    }
+
+    /// <summary>현재 조작 멤버가 상호작용 대상(트랩 등)을 보고 있는지 여부입니다.</summary>
+    private static bool HasActiveInteractionTarget()
+    {
+        SquadMemberController activeMember = SquadManager.Instance?.PlayerSquadMember;
+        if (activeMember == null)
+        {
+            return false;
+        }
+
+        InteractionController interaction = activeMember.GetComponent<InteractionController>();
+        return interaction != null && interaction.Current != null;
+    }
+
+    /// <summary>현재 조작 멤버의 상호작용 키가 실제로 눌려 있는지 여부입니다. 잠금과 억제의 영향을 받지 않습니다.</summary>
+    private static bool IsActiveInteractionPressed()
+    {
+        InputAction action = ResolveActiveInteractionAction();
+        return action != null && action.IsPressed();
     }
 
     /// <summary>
@@ -560,7 +711,20 @@ public sealed class TutorialManager : MonoBehaviour
         m_defenseManager.OnDefenseVictoryReady -= HandleVictoryReady;
     }
 
-    private void HandleDefenseStarted() => NotifyEventEnd(m_defenseStartPage);
+    /// <summary>
+    /// 방어전이 시작되면 해당 페이지에 이벤트를 보내고, 그래도 튜토리얼이 남아 있으면 닫습니다.
+    /// </summary>
+    /// <remarks>
+    /// 상호작용 3초 시작은 튜토리얼 중에도 막지 않습니다(DefenseManager 규칙). 그 경로로 시작되면 남은 안내는 의미가 없어 내립니다.
+    /// </remarks>
+    private void HandleDefenseStarted()
+    {
+        NotifyEventEnd(m_defenseStartPage);
+        if (IsRunning)
+        {
+            End();
+        }
+    }
 
     private void HandleRestStarted() => NotifyEventEnd(m_restStartPage);
 

@@ -3,6 +3,7 @@ __Type,,GunBalanceSO
 __Guid,,79421e9565ae4bfbae970dbcb5176c96
 __Path,,Assets/5.Data/ScriptableObject/Weapon/Rifle1WeaponBalance.asset
 Gun_m_maxBullet,최대 탄약 수입니다. (0 이상),30
+Gun_m_segmentAmmoGaugeByRound,켜면 크로스헤어 장탄 아크를 최대 장탄수만큼 끊어 한 칸이 한 발을 나타내게 합니다.,FALSE
 Gun_m_shootDelay,사격 후 다음 사격이 가능해질 때까지의 지연 시간입니다. (0 이상),0.12
 Gun_m_reloadTime,"재장전에 걸리는 시간(초)입니다. 이 값이 정본이며 탄약 충전·조준선 게이지·재장전 애니메이션 배속이 모두 여기에 맞춰집니다. 애니메이션은 완료 이벤트가 이 시간에 오도록 자동으로 배속됩니다(예: 1배속 클립이 2.67초면 1.33을 넣으면 2배속). (0 이상)",1.3335
 Gun_m_hitscanDamage,명중 한 발이 주는 기본 피해량입니다. 약점 배율과 거리 감쇠는 여기에 곱해집니다. (0 이상),1
@@ -10,15 +11,22 @@ Gun_m_allowHeadshot,이 무기가 약점 판정을 사용하는지 여부입니�
 Gun_m_headshotDamageMultiplier,약점 부위를 맞혔을 때 곱하는 피해 배율입니다. 약점 판정이 꺼져 있으면 사용하지 않습니다. (0 이상),2
 Gun_m_hitscanRange,탄이 도달하는 최대 사거리(m)입니다. 이 거리를 넘어가면 아무것도 맞히지 않습니다. (0 이상),100
 Gun_m_knockbackImpulse,명중 시 대상을 밀어내는 넉백 충격량(N·s)입니다. 사망한 대상은 래그돌이 이 힘을 받습니다. 0이면 피격 대상이 정한 최소치만 적용됩니다. (0 이상),0
-Gun_m_hipfireMinSpread,힙파이어(비조준) 시 최소 방사각(도). (0 이상),1
-Gun_m_hipfireMaxSpread,힙파이어(비조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),3
-Gun_m_airborneExtraSpread,공중에 떠 있는 동안 힙파이어·ADS 방사각에 함께 더해지는 각도(도). 연사 누적과 별개로 즉시 적용됩니다. (0 이상),2
+Gun_m_hipfireStandingMinSpread,힙파이어·서기 자세의 최소 방사각(도). (0 이상),1
+Gun_m_hipfireStandingMaxSpread,힙파이어·서기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),3
+Gun_m_hipfireCrouchMinSpread,힙파이어·앉기 자세의 최소 방사각(도). 앉는 도중에는 서기 값에서 이 값으로 보간됩니다. (0 이상),0.6
+Gun_m_hipfireCrouchMaxSpread,힙파이어·앉기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),1.8
+Gun_m_hipfireAirborneMinSpread,힙파이어·공중 자세의 최소 방사각(도). 공중에서는 앉기 여부와 무관하게 이 범위를 사용합니다. (0 이상),3
+Gun_m_hipfireAirborneMaxSpread,힙파이어·공중 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),5
 Gun_m_hipfireMinSpreadShotCount,힙파이어에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상),0
 Gun_m_hipfireSpreadIncreasePerShot,힙파이어 발사마다 누적되는 방사각 증가량(도). (0 이상),0.25
 Gun_m_hipfireSpreadRecoveryPerSecond,힙파이어 사격을 멈춘 뒤 초당 회복(감소)하는 방사각(도/초). (0 이상),8
 Gun_m_hipfireSpreadRecoveryDelay,발사 입력을 놓은 뒤 이 시간(초)이 지나면 힙파이어 탄퍼짐 회복을 시작하고 연사 발수 카운트를 리셋합니다. 입력을 유지하는 동안에는 회복하지 않습니다. (0 이상),0.15
-Gun_m_adsMinSpread,ADS(조준) 시 최소 방사각(도). 0이면 정밀 사격입니다. (0 이상),0
-Gun_m_adsMaxSpread,ADS(조준) 시 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),1
+Gun_m_adsStandingMinSpread,ADS·서기 자세의 최소 방사각(도). 0이면 정밀 사격입니다. (0 이상),0
+Gun_m_adsStandingMaxSpread,ADS·서기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),1
+Gun_m_adsCrouchMinSpread,ADS·앉기 자세의 최소 방사각(도). 앉는 도중에는 서기 값에서 이 값으로 보간됩니다. (0 이상),0
+Gun_m_adsCrouchMaxSpread,ADS·앉기 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),0.6
+Gun_m_adsAirborneMinSpread,ADS·공중 자세의 최소 방사각(도). 공중에서는 앉기 여부와 무관하게 이 범위를 사용합니다. (0 이상),2
+Gun_m_adsAirborneMaxSpread,ADS·공중 자세의 최대 방사각(도). 연사 누적값은 이 값을 넘지 않습니다. (0 이상),3
 Gun_m_adsMinSpreadShotCount,ADS에서 이 발수까지는 최소 방사각을 유지하고 연사 증가값을 누적하지 않습니다. (0 이상),0
 Gun_m_adsSpreadIncreasePerShot,ADS 발사마다 누적되는 방사각 증가량(도). (0 이상),0.125
 Gun_m_adsSpreadRecoveryPerSecond,ADS 사격을 멈춘 뒤 초당 회복(감소)하는 방사각(도/초). (0 이상),8

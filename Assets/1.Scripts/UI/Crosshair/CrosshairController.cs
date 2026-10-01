@@ -307,6 +307,9 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("재장전 중 재장전 진행도 아크에 사용할 색상입니다.")]
     [SerializeField] private Color m_reloadAmmoGaugeColor = new Color32(217, 217, 217, 255);
 
+    [Tooltip("용숨결탄처럼 특수탄으로 표시할 분할 장탄 아크 색상입니다.")]
+    [SerializeField] private Color m_specialAmmoGaugeColor = new Color32(255, 122, 24, 255);
+
     [Tooltip("게이지 아크의 선 두께(픽셀)입니다. Figma 원본은 100px 크기 기준 5px입니다.")]
     [SerializeField] private float m_ammoGaugeThicknessPixels = 5.0f;
 
@@ -319,6 +322,10 @@ public class CrosshairController : MonoBehaviour
     [Range(0.0f, 360.0f)]
     [Tooltip("아크 전체 구간(도)입니다. Figma 원본은 우하단 4분원(90도)이며, 360이면 완전한 링으로 채워집니다.")]
     [SerializeField] private float m_ammoGaugeSweepDegrees = 90.0f;
+
+    [Min(0.0f)]
+    [Tooltip("탄 단위 분할 게이지에서 각 탄 구간 사이를 비울 각도(도)입니다.")]
+    [SerializeField] private float m_ammoGaugeSegmentGapDegrees = 2.0f;
 
     [Tooltip("켜면 진행분 아크 뒤에 전체 구간 배경 바를 표시합니다.")]
     [FormerlySerializedAs("m_showAmmoGaugeTrack")]
@@ -508,6 +515,9 @@ public class CrosshairController : MonoBehaviour
     private bool m_blockMarkerVisible;
     private float m_crosshairOpacity = 1.0f;
     private float m_ammoGaugeFill = 1.0f;
+    private bool m_segmentAmmoGaugeByRound;
+    private int m_ammoGaugeSegmentCount = 1;
+    private int m_specialAmmoGaugeRoundCount;
     private Color m_hitMarkerActiveColor;
     private float m_hitMarkerTimer;
 
@@ -525,6 +535,8 @@ public class CrosshairController : MonoBehaviour
     private float m_lastSpreadDegrees;
     private SpreadDistribution m_lastDistribution = SpreadDistribution.Gaussian;
     private float m_lastConcentration = 3.0f;
+    // -1이면 현재 무기의 분포·집중도에서 계산한 표시 배율을 사용합니다.
+    private float m_spreadDisplayFactorOverride = -1.0f;
     private float m_lastSpreadDisplayFactor = 1.0f;
     private float m_lastCameraFovDegrees = 60.0f;
 
@@ -551,6 +563,9 @@ public class CrosshairController : MonoBehaviour
 
     /// <summary>발사 반동 UI 펄스 사용 여부입니다.</summary>
     public bool ShotRecoilPulseEnabled => m_enableShotRecoilPulse;
+
+    /// <summary>현재 직접 지정된 탄퍼짐 표시 배율입니다. 음수면 무기 분포에서 자동 계산합니다.</summary>
+    public float SpreadDisplayFactorOverride => m_spreadDisplayFactorOverride;
 
     /// <summary>발사 한 발의 크로스헤어 벌어짐 최대값(픽셀)입니다.</summary>
     public float ShotRecoilPulseAmplitudePixels => Mathf.Max(0.0f, m_shotRecoilPulseAmplitudePixels);
@@ -886,7 +901,10 @@ public class CrosshairController : MonoBehaviour
         m_lastSpreadDegrees = Mathf.Max(0.0f, spreadDegrees);
         m_lastDistribution = distribution;
         m_lastConcentration = Mathf.Max(1.0f, concentration);
-        m_lastSpreadDisplayFactor = CalculateDisplayFactor(m_lastDistribution, m_lastConcentration);
+        float calculatedDisplayFactor = CalculateDisplayFactor(m_lastDistribution, m_lastConcentration);
+        m_lastSpreadDisplayFactor = m_spreadDisplayFactorOverride >= 0.0f
+            ? m_spreadDisplayFactorOverride
+            : calculatedDisplayFactor;
         m_lastCameraFovDegrees = Mathf.Max(1.0f, cameraFovDegrees);
 
         // 여기서는 탄퍼짐 기여분의 **목표만** 갱신합니다. 실제 접근은 프레임당 한 번
@@ -1130,6 +1148,14 @@ public class CrosshairController : MonoBehaviour
     public void SetSpreadDisplayBasis(SpreadDisplayBasis value)
     {
         m_spreadDisplayBasis = value;
+        SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
+    }
+
+    /// <summary>조준선 표시 배율을 직접 고정합니다. 음수면 무기 분포·집중도 계산값을 사용합니다.</summary>
+    /// <param name="value">[0, 1]의 고정 배율 또는 음수(자동 계산)입니다. 실제 탄 궤적은 바꾸지 않습니다.</param>
+    public void SetSpreadDisplayFactorOverride(float value)
+    {
+        m_spreadDisplayFactorOverride = value < 0.0f ? -1.0f : Mathf.Clamp01(value);
         SetSpreadInternal(m_lastSpreadDegrees, m_lastDistribution, m_lastConcentration, m_lastCameraFovDegrees, true);
     }
 
@@ -1630,7 +1656,8 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 탄약 게이지 채움 비율(0~1)을 설정합니다. 평소에는 현재 탄약 비율, 재장전 중에는 재장전 진행도를 전달합니다.
+    /// 탄약 게이지 채움 비율(0~1)을 설정합니다. 연속 게이지는 재장전 진행도를,
+    /// 발 단위 분할 게이지는 실제 장탄 비율을 전달받습니다.
     /// </summary>
     /// <param name="fill">게이지 채움 비율(0~1)입니다.</param>
     public void SetAmmoGaugeFill(float fill)
@@ -1642,6 +1669,47 @@ public class CrosshairController : MonoBehaviour
         }
 
         m_ammoGaugeFill = fill;
+        if (m_ammoGaugeElement != null)
+        {
+            m_ammoGaugeElement.MarkDirtyRepaint();
+        }
+    }
+
+    /// <summary>현재 분할 장탄 아크에서 주황색으로 표시되는 특수탄 수입니다.</summary>
+    public int SpecialAmmoGaugeRoundCount => m_specialAmmoGaugeRoundCount;
+
+    /// <summary>특수탄 장탄 아크 색입니다.</summary>
+    public Color SpecialAmmoGaugeColor => m_specialAmmoGaugeColor;
+
+    /// <summary>현재 무기의 장탄 아크를 탄 단위로 분할할지와 구간 수를 설정합니다.</summary>
+    /// <param name="enabled">분할 표시를 사용하면 <c>true</c>입니다.</param>
+    /// <param name="roundCount">최대 장탄수이며, 분할 시 한 구간이 한 발을 나타냅니다.</param>
+    public void SetAmmoGaugeSegmentation(bool enabled, int roundCount)
+    {
+        int clampedCount = Mathf.Max(1, roundCount);
+        if (m_segmentAmmoGaugeByRound == enabled && m_ammoGaugeSegmentCount == clampedCount)
+        {
+            return;
+        }
+
+        m_segmentAmmoGaugeByRound = enabled;
+        m_ammoGaugeSegmentCount = clampedCount;
+        if (m_ammoGaugeElement != null)
+        {
+            m_ammoGaugeElement.MarkDirtyRepaint();
+        }
+    }
+
+    /// <summary>분할 장탄 아크에서 앞쪽부터 특수탄 색으로 표시할 실제 장탄 수를 설정합니다.</summary>
+    public void SetSpecialAmmoGaugeRounds(int roundCount)
+    {
+        int clampedCount = Mathf.Clamp(roundCount, 0, m_ammoGaugeSegmentCount);
+        if (m_specialAmmoGaugeRoundCount == clampedCount)
+        {
+            return;
+        }
+
+        m_specialAmmoGaugeRoundCount = clampedCount;
         if (m_ammoGaugeElement != null)
         {
             m_ammoGaugeElement.MarkDirtyRepaint();
@@ -2146,16 +2214,134 @@ public class CrosshairController : MonoBehaviour
         painter.lineCap = LineCap.Butt;
         painter.lineWidth = thickness;
 
+        bool segmented = m_segmentAmmoGaugeByRound && m_ammoGaugeSegmentCount > 1;
         if (m_showAmmoGaugeBackground && m_ammoGaugeBackgroundAlpha > 0.0f)
         {
             Color backgroundColor = m_ammoGaugeBackgroundColor;
             backgroundColor.a *= m_ammoGaugeBackgroundAlpha;
-            DrawGaugeArc(painter, arcCenter, radius, startAngle, sweep, m_ammoGaugeFillDirection, backgroundColor);
+            if (segmented)
+            {
+                DrawSegmentedGaugeArc(painter, arcCenter, radius, startAngle, sweep, 1.0f, backgroundColor);
+            }
+            else
+            {
+                DrawGaugeArc(painter, arcCenter, radius, startAngle, sweep, m_ammoGaugeFillDirection, backgroundColor);
+            }
         }
 
         float fill = Application.isPlaying ? m_ammoGaugeFill : 1.0f;
         Color fillColor = GetAmmoGaugeFillColor(fill);
-        DrawGaugeArc(painter, arcCenter, radius, startAngle, sweep * fill, m_ammoGaugeFillDirection, fillColor);
+        if (segmented)
+        {
+            if (m_specialAmmoGaugeRoundCount > 0)
+            {
+                DrawMixedSegmentedGaugeArc(
+                    painter,
+                    arcCenter,
+                    radius,
+                    startAngle,
+                    sweep,
+                    fill,
+                    m_ammoGaugeColor,
+                    m_specialAmmoGaugeColor,
+                    m_specialAmmoGaugeRoundCount);
+            }
+            else
+            {
+                DrawSegmentedGaugeArc(painter, arcCenter, radius, startAngle, sweep, fill, fillColor);
+            }
+        }
+        else
+        {
+            DrawGaugeArc(painter, arcCenter, radius, startAngle, sweep * fill, m_ammoGaugeFillDirection, fillColor);
+        }
+    }
+
+    /// <summary>장전 순서 앞쪽의 특수탄은 주황색, 뒤이어 들어온 일반탄은 기본색으로 나누어 그립니다.</summary>
+    private void DrawMixedSegmentedGaugeArc(
+        Painter2D painter,
+        Vector2 center,
+        float radius,
+        float startAngle,
+        float sweep,
+        float fill,
+        Color normalColor,
+        Color specialColor,
+        int specialRoundCount)
+    {
+        int count = Mathf.Max(1, m_ammoGaugeSegmentCount);
+        float gap = Mathf.Min(
+            Mathf.Max(0.0f, m_ammoGaugeSegmentGapDegrees),
+            sweep / Mathf.Max(1.0f, count * 2.0f));
+        float segmentSweep = (sweep - gap * (count - 1)) / count;
+        if (segmentSweep <= 0.0f)
+        {
+            return;
+        }
+
+        float filledSegments = Mathf.Clamp01(fill) * count;
+        int specialSegments = Mathf.Clamp(specialRoundCount, 0, Mathf.CeilToInt(filledSegments));
+        float directionSign = m_ammoGaugeFillDirection == AmmoGaugeFillDirection.CounterClockwise ? -1.0f : 1.0f;
+        for (int i = 0; i < count; i++)
+        {
+            float segmentFill = Mathf.Clamp01(filledSegments - i);
+            if (segmentFill <= 0.0f)
+            {
+                break;
+            }
+
+            float segmentStart = startAngle + directionSign * i * (segmentSweep + gap);
+            DrawGaugeArc(
+                painter,
+                center,
+                radius,
+                segmentStart,
+                segmentSweep * segmentFill,
+                m_ammoGaugeFillDirection,
+                i < specialSegments ? specialColor : normalColor);
+        }
+    }
+
+    /// <summary>전체 아크를 장탄수만큼 나누고, 각 구간 사이에 지정한 각도만큼 빈틈을 둡니다.</summary>
+    private void DrawSegmentedGaugeArc(
+        Painter2D painter,
+        Vector2 center,
+        float radius,
+        float startAngle,
+        float sweep,
+        float fill,
+        Color color)
+    {
+        int count = Mathf.Max(1, m_ammoGaugeSegmentCount);
+        float gap = Mathf.Min(
+            Mathf.Max(0.0f, m_ammoGaugeSegmentGapDegrees),
+            sweep / Mathf.Max(1.0f, count * 2.0f));
+        float segmentSweep = (sweep - gap * (count - 1)) / count;
+        if (segmentSweep <= 0.0f)
+        {
+            return;
+        }
+
+        float filledSegments = Mathf.Clamp01(fill) * count;
+        float directionSign = m_ammoGaugeFillDirection == AmmoGaugeFillDirection.CounterClockwise ? -1.0f : 1.0f;
+        for (int i = 0; i < count; i++)
+        {
+            float segmentFill = Mathf.Clamp01(filledSegments - i);
+            if (segmentFill <= 0.0f)
+            {
+                break;
+            }
+
+            float segmentStart = startAngle + directionSign * i * (segmentSweep + gap);
+            DrawGaugeArc(
+                painter,
+                center,
+                radius,
+                segmentStart,
+                segmentSweep * segmentFill,
+                m_ammoGaugeFillDirection,
+                color);
+        }
     }
 
     /// <summary>
@@ -2192,7 +2378,10 @@ public class CrosshairController : MonoBehaviour
 
         painter.strokeColor = color;
         painter.BeginPath();
-        painter.Arc(center, radius, startAngle, startAngle + sweep, arcDirection);
+        float endAngle = fillDirection == AmmoGaugeFillDirection.CounterClockwise
+            ? startAngle - sweep
+            : startAngle + sweep;
+        painter.Arc(center, radius, startAngle, endAngle, arcDirection);
         painter.Stroke();
     }
 

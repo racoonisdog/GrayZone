@@ -643,10 +643,17 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>재장전 상태 여부입니다. true이면 전력질주 대신 기본 이동 속도를 사용합니다.</summary>
     private bool m_isReload;
 
+    /// <summary>스킬 등 외부 효과가 적용하는 이동 속도 배율입니다.</summary>
+    /// <remarks>밸런스 원본은 건드리지 않고 런타임 계산에만 합성합니다.</remarks>
+    private float m_movementSpeedMultiplier = 1.0f;
+
+    /// <summary>스킬 등 외부 효과가 적용하는 자세 전환 속도 배율입니다.</summary>
+    private float m_actionSpeedMultiplier = 1.0f;
+
     /// <summary>기본 이동 속도입니다.</summary>
-    public float MoveSpeed => m_moveSpeed;
+    public float MoveSpeed => m_moveSpeed * m_movementSpeedMultiplier;
     /// <summary>전력질주 이동 속도입니다.</summary>
-    public float SprintSpeed => m_sprintSpeed;
+    public float SprintSpeed => m_sprintSpeed * m_movementSpeedMultiplier;
     /// <summary>전진 입력에 적용하는 이동 속도 배율입니다.</summary>
     public float ForwardSpeedMultiplier => m_forwardSpeedMultiplier;
     /// <summary>후진 입력에 적용하는 이동 속도 배율입니다.</summary>
@@ -654,7 +661,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>좌·우 입력에 공통 적용하는 이동 속도 배율입니다.</summary>
     public float StrafeSpeedMultiplier => m_strafeSpeedMultiplier;
     /// <summary>웅크린 상태의 이동 속도입니다.</summary>
-    public float CrouchSpeed => m_crouchSpeed;
+    public float CrouchSpeed => m_crouchSpeed * m_movementSpeedMultiplier;
     /// <summary>현재 앉기 정도입니다. 0이면 선 자세, 1이면 완전히 앉은 자세이고 그 사이는 전환 중입니다.</summary>
     /// <remarks>높이 보간에 쓰는 값을 그대로 내보냅니다. 탄퍼짐처럼 자세에 따라 달라지는 값이 같은 곡선을 타야 합니다.</remarks>
     public float CrouchBlend => m_crouchBlend;
@@ -695,7 +702,13 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     public float MoveStartStopDuration => m_moveStartStopDuration;
 
     /// <summary>웅크림·걷기·달리기 단계 사이를 오가는 데 걸리는 시간(초)입니다.</summary>
-    public float MoveStateBlendDuration => m_moveStateBlendDuration;
+    public float MoveStateBlendDuration => ScaleActionDuration(m_moveStateBlendDuration);
+
+    /// <summary>현재 외부 이동 속도 배율입니다.</summary>
+    public float MovementSpeedMultiplier => m_movementSpeedMultiplier;
+
+    /// <summary>현재 외부 자세 전환 속도 배율입니다.</summary>
+    public float ActionSpeedMultiplier => m_actionSpeedMultiplier;
 
     public float SpeedChangeRate => m_speedChangeRate;
 
@@ -776,6 +789,23 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     /// <param name="value">새로 적용할 값입니다.</param>
     public void SetCrouchSpeed(float value) => m_crouchSpeed = Mathf.Max(0.0f, value);
+
+    /// <summary>스킬 등 외부 효과가 적용하는 이동 속도 배율을 설정합니다.</summary>
+    public void SetMovementSpeedMultiplier(float value)
+    {
+        m_movementSpeedMultiplier = Mathf.Max(0.01f, value);
+    }
+
+    /// <summary>스킬 등 외부 효과가 적용하는 자세 전환 속도 배율을 설정합니다.</summary>
+    public void SetActionSpeedMultiplier(float value)
+    {
+        m_actionSpeedMultiplier = Mathf.Max(0.01f, value);
+    }
+
+    private float ScaleActionDuration(float duration)
+    {
+        return Mathf.Max(0.0f, duration) / m_actionSpeedMultiplier;
+    }
     /// <summary>
     /// 회전 보간 시간을 설정합니다. 0에서 0.3 사이로 보정합니다.
     /// </summary>
@@ -1570,9 +1600,10 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
         float target = wantsCrouch ? 1.0f : 0.0f;
 
-        m_crouchBlend = m_crouchTransitionDuration <= 0.0f
+        float crouchTransitionDuration = ScaleActionDuration(m_crouchTransitionDuration);
+        m_crouchBlend = crouchTransitionDuration <= 0.0f
             ? target
-            : Mathf.MoveTowards(m_crouchBlend, target, Time.deltaTime / m_crouchTransitionDuration);
+            : Mathf.MoveTowards(m_crouchBlend, target, Time.deltaTime / crouchTransitionDuration);
 
         ApplyCrouchBlend();
     }
@@ -1602,7 +1633,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         m_animator.SetFloat(m_animIDMoveState, MoveStateCrouch);
         m_animator.CrossFadeInFixedTime(
             GroundedLocomotionStateHash,
-            m_crouchLandingTransitionDuration,
+            ScaleActionDuration(m_crouchLandingTransitionDuration),
             0);
     }
 
@@ -2038,9 +2069,12 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         if (m_input.look.sqrMagnitude >= Threshold && !m_lockCameraPosition)
         {
             float deltaTimeMultiplier = IsCurrentDeviceMouse ? 1.0f : Time.deltaTime;
+            float lookSensitivity = IsCurrentDeviceMouse && GameSettingManager.Instance != null
+                ? GameSettingManager.Instance.MouseSensitivity
+                : 1.0f;
 
-            float yawDelta = m_input.look.x * deltaTimeMultiplier;
-            float pitchDelta = m_input.look.y * deltaTimeMultiplier;
+            float yawDelta = m_input.look.x * deltaTimeMultiplier * lookSensitivity;
+            float pitchDelta = m_input.look.y * deltaTimeMultiplier * lookSensitivity;
 
             if (m_recoilCompensationAbsorb)
             {
@@ -2122,7 +2156,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         // 여러 번 부르면 같은 프레임 안에서 경계가 두 번 움직입니다.
         m_canSprintForward = EvaluateSprintForward();
 
-        float targetSpeed = m_input.sprint && m_canSprintForward ? m_sprintSpeed : m_moveSpeed;
+        float targetSpeed = m_input.sprint && m_canSprintForward ? SprintSpeed : MoveSpeed;
 
         // 속도 제약은 시점이 아니라 상태에 걸립니다. 비전투 백뷰에서는 전력질주가 그대로 살아 있습니다.
         //
@@ -2135,14 +2169,14 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         // 문서 개정 전까지 이 편차를 문서 쪽 실수로 오해해 되돌리지 말 것.
         if (m_isCombatStance)
         {
-            targetSpeed = m_moveSpeed;
+            targetSpeed = MoveSpeed;
         }
 
         // 웅크리기는 전투 자세보다 뒤에서 덮습니다. 조준하며 웅크려도 웅크림 속도가 유지되어야 하고,
         // 이 순서 덕분에 웅크린 동안은 전력질주가 따로 막지 않아도 자연히 잠깁니다.
         if (IsCrouchActive)
         {
-            targetSpeed = m_crouchSpeed;
+            targetSpeed = CrouchSpeed;
         }
 
         if (m_input.move == Vector2.zero)
@@ -2167,7 +2201,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         {
             m_switchSettleFrames--;
 
-            float maxSelfSpeed = Mathf.Max(m_moveSpeed, m_sprintSpeed);
+            float maxSelfSpeed = Mathf.Max(MoveSpeed, SprintSpeed);
             currentHorizontalSpeed = Mathf.Min(currentHorizontalSpeed, maxSelfSpeed);
         }
 
@@ -2467,9 +2501,10 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             target = MoveStateRun;
         }
 
-        m_moveState = m_moveStateBlendDuration <= 0.0f
+        float moveStateBlendDuration = MoveStateBlendDuration;
+        m_moveState = moveStateBlendDuration <= 0.0f
             ? target
-            : Mathf.MoveTowards(m_moveState, target, Time.deltaTime / m_moveStateBlendDuration);
+            : Mathf.MoveTowards(m_moveState, target, Time.deltaTime / moveStateBlendDuration);
 
         return m_moveState;
     }

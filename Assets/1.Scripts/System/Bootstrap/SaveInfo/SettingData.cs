@@ -4,13 +4,14 @@ using System.Collections.Generic;
 [Serializable]
 public class SettingData
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public int schemaVersion = CurrentSchemaVersion;
     public long updatedAtUnixTimeUtc;
 
     public DisplaySettingData display = new DisplaySettingData();
     public AudioSettingData audio = new AudioSettingData();
+    public GameplaySettingData gameplay = new GameplaySettingData();
 
     // JSON string payload for future custom settings.
     public List<CustomSettingEntry> customData = new List<CustomSettingEntry>();
@@ -34,6 +35,13 @@ public class SettingData
         public float masterVolume = 1f;
         public float bgmVolume = 1f;
         public float sfxVolume = 1f;
+    }
+
+    [Serializable]
+    public class GameplaySettingData
+    {
+        public float mouseSensitivity = 1f;
+        public bool cameraKickEnabled = true;
     }
 
     [Serializable]

@@ -119,6 +119,26 @@ public class CombatState : EnemyStateBase
         SetSubState(next ?? Chase);
     }
 
+    /// <summary>현재 행동 경계에서 실행할 특수 능력이 있으면 그 상태로 전환합니다.</summary>
+    /// <returns>능력 상태로 전환했으면 true입니다.</returns>
+    public bool TryBeginAbilityAction()
+    {
+        IReadOnlyList<EnemyAbility> abilities = Controller.Abilities;
+        for (int i = 0; i < abilities.Count; i++)
+        {
+            EnemyStateBase next = abilities[i].OnCombatActionOpportunity();
+            if (next == null || next == m_sub)
+            {
+                continue;
+            }
+
+            SetSubState(next);
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// 경직으로 현재 하위 행동을 취소합니다.
     /// </summary>

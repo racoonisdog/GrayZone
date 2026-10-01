@@ -1,4 +1,5 @@
 using UnityEngine;
+using VInspector;
 
 /// <summary>
 /// 밟히면 잠시 뒤 한 번 터지고 끝나는 설치형 폭발물의 공통 기반입니다.
@@ -14,7 +15,7 @@ using UnityEngine;
 /// <c>m_damage</c>는 폭발 한 번의 피해량으로 씁니다.
 /// </remarks>
 [RequireComponent(typeof(Collider))]
-public abstract class ExplosiveTrap : Trap
+public abstract class ExplosiveTrap : Trap, IChainDetonatable
 {
     [Header("Explosive")]
     [Tooltip("이 폭발물을 밟은 것으로 볼 레이어입니다. 기본은 Enemy만 봅니다.")]
@@ -29,6 +30,16 @@ public abstract class ExplosiveTrap : Trap
 
     [Tooltip("켜면 터지는 순간 실제 피해 범위를 반투명하게 잠깐 띄웁니다. 수치 확인용입니다.")]
     [SerializeField] protected bool m_showExplosionRangeVisual = true;
+
+    [Header("Chain Detonation")]
+    [Tooltip("켜면 다른 폭발(수류탄, 다른 함정)이나 화염(용숨결 등)의 범위 안에 들었을 때 함께 터집니다. 청사진 상태에서는 반응하지 않습니다.")]
+    [SerializeField] private bool m_chainDetonationEnabled = true;
+
+    [Tooltip("휘말린 뒤 실제로 터지기까지의 시간(초)입니다. 0이면 그 자리에서 터집니다. 조금 두면 연쇄가 차례로 터지는 것이 눈에 보입니다. 이미 밟혀 신관이 타는 중이면 남은 시간과 이 값 중 짧은 쪽을 씁니다.")]
+    [ShowIf(nameof(m_chainDetonationEnabled))]
+    [Min(0.0f)]
+    [SerializeField] private float m_chainFuseTime = 0.15f;
+    [EndIf]
 
     [Header("Explosive Debug")]
     [Tooltip("켜면 터지기 전에도 피해 범위를 계속 반투명하게 띄웁니다. Scene View 기즈모와 달리 게임 화면에서도 보입니다. 확인용이므로 빌드에 넣을 때는 꺼 두세요.")]
@@ -249,6 +260,30 @@ public abstract class ExplosiveTrap : Trap
 
         m_isFuseBurning = true;
         m_fuseTimer = m_fuseTime;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 토글이 꺼져 있거나, 청사진 상태이거나, 이미 터졌으면 반응하지 않습니다. 한 번 터진 함정은
+    /// <see cref="HasExploded"/>가 먼저 켜지므로 두 함정이 서로를 부르며 되풀이되지 않습니다.
+    /// </remarks>
+    public bool TryChainDetonate(GameObject source)
+    {
+        if (!m_chainDetonationEnabled || IsBlueprint || HasExploded)
+        {
+            return false;
+        }
+
+        if (m_chainFuseTime <= 0.0f)
+        {
+            Explode();
+            return true;
+        }
+
+        // 이미 밟혀 타는 중이면 더 늦추지 않습니다. 휘말렸는데 오히려 늦게 터지면 어색합니다.
+        m_fuseTimer = m_isFuseBurning ? Mathf.Min(m_fuseTimer, m_chainFuseTime) : m_chainFuseTime;
+        m_isFuseBurning = true;
+        return true;
     }
 
     /// <summary>

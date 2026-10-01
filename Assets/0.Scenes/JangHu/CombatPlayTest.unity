@@ -25718,8 +25718,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\uBAA9\uD45C 2"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
+  m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -31474,8 +31474,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\uC791\uC804 \uC2E4\uD328"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
+  m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -32591,8 +32591,12 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 028e118b4e935cc44b7c079076d606f1, type: 2}
   - {fileID: 11400000, guid: 5d03a3c5c45a09c4a83470e33486db91, type: 2}
   m_spawnAreaSize: {x: 10, y: 10}
+  m_forwardGizmoLength: 3
+  m_snapToGround: 1
+  m_groundSnapMaxDistance: 5
   m_minimumSpawnDistance: 1.5
   m_spawnEnabled: 1
+  m_poolPrewarmCountPerFrame: 2
   m_waypoints:
   - {fileID: 1763799555}
   m_targetPosition: {fileID: 0}
@@ -48344,11 +48348,17 @@ MonoBehaviour:
   resourceAmounts: []
   itemStorageEntries: []
   characters: []
+  shelterFlowState: 0
   playableSquadRuntimeIds: []
   shelterCharacterAssignments: []
   facilityStates: []
   manufacturing:
     m_jobs: []
+  trapUpgradeLevel: 0
+  spikeUpgradeLevel: 0
+  explosiveUpgradeLevel: 0
+  shooterUpgradeLevel: 0
+  wireUpgradeLevel: 0
   lastSettledFieldId: 
   lastFieldStageId: 
   lastFieldOutcome: 0
@@ -50194,6 +50204,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_dangerLevel: 1
   m_isDefenseEnemy: 0
   m_defenseDisposition: 0
   m_balanceSO: {fileID: 0}
@@ -50214,9 +50225,6 @@ MonoBehaviour:
   noiseSearchRadius: 5
   combatSearchDuration: 6
   combatSearchRadius: 6
-  howlRadius: 25
-  howlBroadcastTime: 1.2
-  howlDuration: 3
   targetReevaluateInterval: 1
   targetSwitchPathDistanceDelta: 2
   m_knockbackMass: 60
@@ -50227,7 +50235,6 @@ MonoBehaviour:
   attackDirectionLockTime: 0.25
   attackImpactTime: 0.45
   attackRecoveryDuration: 0.75
-  m_debugDrawHowlRadius: 1
   m_debugDrawWanderRadius: 0
   m_debugLogStagger: 0
 --- !u!136 &1007016848
@@ -50292,6 +50299,9 @@ MonoBehaviour:
   m_currentHp: 0
   m_hpSlider: {fileID: 274185137304026102}
   m_hpText: {fileID: 0}
+  m_billboardHpBar: 1
+  m_hpBarRoot: {fileID: 0}
+  m_hpBarBillboardYawOnly: 1
   m_staggerThreshold: 3
   m_staggerDecayPerSecond: 1
   m_staggerImmunityDuration: 0.2
@@ -52007,6 +52017,12 @@ MonoBehaviour:
   m_member1Key: 41
   m_member2Key: 42
   m_member3Key: 43
+  m_orderMember1Key: 31
+  m_orderMember2Key: 19
+  m_orderCancelHoldDuration: 0.5
+  m_orderMaxDistance: 60
+  m_orderNavMeshSampleRadius: 2
+  m_orderFeedback: {fileID: 11400000, guid: 81e71d9cdc3d1d242a796b62f1c69a0e, type: 2}
   m_enemyIntelInterval: 0.2
   m_intelObstacleLayer:
     serializedVersion: 2
@@ -67207,7 +67223,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: E
+  m_text: F
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
@@ -90732,8 +90748,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\uC2A4\uCFFC\uB4DC \uC804\uC6D0\uC774 \uC804\uD22C\uC5D0\uC11C \uC774\uD0C8\uD588\uC2B5\uB2C8\uB2E4."
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
+  m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -91447,8 +91463,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\uD655\uC778"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
+  m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -92951,6 +92967,7 @@ MonoBehaviour:
   m_templateSpawnAreaSize: {x: 10, y: 10}
   m_templateMinimumSpawnDistance: 1.5
   m_templateSpawnEnabled: 1
+  m_templatePoolPrewarmCountPerFrame: 2
   m_debugDrawChildSpawnAreas: 0
 --- !u!1 &1829134087
 GameObject:
@@ -100304,8 +100321,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\uBAA9\uD45C 1"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
+  m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -111096,8 +111113,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\uBAA9\uD45C 3"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
+  m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -111278,7 +111295,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: E
+  m_text: F
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: dbf88cfb5e81719489a4b34125101311, type: 2}
   m_sharedMaterial: {fileID: -4918244384515085885, guid: dbf88cfb5e81719489a4b34125101311, type: 2}

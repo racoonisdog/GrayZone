@@ -46,6 +46,16 @@ public abstract class EnemyAbility : MonoBehaviour
     /// <returns>이어갈 하위 상태입니다. null이면 추격으로 갑니다.</returns>
     public virtual EnemyStateBase OnLeadInAttackFinished() => null;
 
+    /// <summary>
+    /// 일반 전투 행동 하나가 끝났거나 추격 중일 때 능력 행동을 시작할지 판단합니다.
+    /// </summary>
+    /// <returns>지금 실행할 능력 상태입니다. 실행하지 않으면 null입니다.</returns>
+    /// <remarks>
+    /// 교전 진입 전용인 <see cref="OnCombatEnter"/>와 달리 전투 도중 반복해서 생길 수 있는 조건에 씁니다.
+    /// 공격 도중에는 호출하지 않고 추격 또는 공격 후딜 종료 경계에서만 호출하므로 현재 행동을 중간에 끊지 않습니다.
+    /// </remarks>
+    public virtual EnemyStateBase OnCombatActionOpportunity() => null;
+
     /// <summary>경직으로 현재 하위 행동이 끊기기 직전에 알립니다.</summary>
     /// <param name="interruptedSub">끊기는 하위 상태입니다.</param>
     /// <param name="wasOwnLeadInAttack">끊기는 행동이 이 능력이 요청한 선행 공격인지 여부입니다.</param>
