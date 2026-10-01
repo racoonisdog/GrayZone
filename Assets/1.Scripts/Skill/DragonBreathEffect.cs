@@ -105,10 +105,12 @@ public sealed class DragonBreathEffect : MonoBehaviour
         float radius = DamageRadius;
         float range = DamageRange;
         Vector3 center = origin + direction * (range * 0.5f);
+        Vector3 halfExtents = new Vector3(radius, radius, range * 0.5f);
+        Quaternion rotation = Quaternion.LookRotation(direction, Vector3.up);
         Collider[] overlaps = Physics.OverlapBox(
             center,
-            new Vector3(radius, radius, range * 0.5f),
-            Quaternion.LookRotation(direction, Vector3.up),
+            halfExtents,
+            rotation,
             m_damageLayerMask,
             QueryTriggerInteraction.Collide);
 
@@ -122,6 +124,14 @@ public sealed class DragonBreathEffect : MonoBehaviour
 
             TryDamage(candidate);
         }
+
+        // 화염 범위 안의 폭발물 함정도 불이 붙어 터집니다. 피해 레이어와 상관없이 따로 찾습니다.
+        ExplosionDamage.TriggerChainDetonation(
+            center,
+            halfExtents,
+            rotation,
+            candidate => IntersectsCylinder(candidate, origin, direction, radius, range),
+            m_attacker);
     }
 
     private static bool IntersectsCylinder(Collider candidate, Vector3 origin, Vector3 direction, float radius, float range)

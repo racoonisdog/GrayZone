@@ -68,11 +68,18 @@ public static class ExplosionDamage
             targetLayers,
             QueryTriggerInteraction.Collide);
 
-        return ApplyDamage(
-            colliders,
-            targetCollider => IntersectsCylinder(targetCollider, center, explosionRadius, halfHeight),
-            damage,
+        Func<Collider, bool> isInsideRange =
+            targetCollider => IntersectsCylinder(targetCollider, center, explosionRadius, halfHeight);
+        int damagedCount = ApplyDamage(colliders, isInsideRange, damage, attacker);
+
+        TriggerChainDetonation(
+            center,
+            new Vector3(explosionRadius, halfHeight, explosionRadius),
+            Quaternion.identity,
+            isInsideRange,
             attacker);
+
+        return damagedCount;
     }
 
     /// <summary>
@@ -139,19 +146,85 @@ public static class ExplosionDamage
 
         Quaternion inverseRotation = Quaternion.Inverse(rotation);
 
-        return ApplyDamage(
-            colliders,
-            targetCollider => IntersectsTrapezoid(
-                targetCollider,
-                origin,
-                rotation,
-                inverseRotation,
-                explosionRange,
-                halfNearWidth,
-                halfFarWidth,
-                halfHeight),
-            damage,
+        Func<Collider, bool> isInsideRange = targetCollider => IntersectsTrapezoid(
+            targetCollider,
+            origin,
+            rotation,
+            inverseRotation,
+            explosionRange,
+            halfNearWidth,
+            halfFarWidth,
+            halfHeight);
+        int damagedCount = ApplyDamage(colliders, isInsideRange, damage, attacker);
+
+        TriggerChainDetonation(
+            boxCenter,
+            new Vector3(halfMaxWidth, halfHeight, explosionRange * 0.5f),
+            rotation,
+            isInsideRange,
             attacker);
+
+        return damagedCount;
+    }
+
+    /// <summary>
+    /// 범위 안에 있는 <see cref="IChainDetonatable"/>을 찾아 함께 터지도록 알립니다.
+    /// </summary>
+    /// <param name="boxCenter">후보를 모을 상자의 중심입니다.</param>
+    /// <param name="boxHalfExtents">후보를 모을 상자의 절반 크기입니다.</param>
+    /// <param name="boxRotation">후보를 모을 상자의 회전입니다.</param>
+    /// <param name="isInsideRange">상자로 모은 후보 중 실제 범위 안에 든 것만 고르는 판정입니다.</param>
+    /// <param name="source">연쇄를 일으킨 대상입니다. 모르면 <c>null</c>입니다.</param>
+    /// <returns>이번 호출로 터지기 시작한 대상의 수입니다.</returns>
+    /// <remarks>
+    /// 피해 대상 레이어와 따로 모든 레이어를 봅니다. 함정은 Trap 레이어에 있어 피해 대상(Enemy)에 들지
+    /// 않고, 나중에 붙을 드럼통 같은 소품은 또 다른 레이어에 있을 수 있기 때문입니다.
+    /// 폭발뿐 아니라 화염(<see cref="DragonBreathEffect"/>)도 이 메서드로 연쇄를 일으킵니다.
+    ///
+    /// 후보를 다 모은 뒤에 한꺼번에 알립니다. 받는 쪽이 그 자리에서 터지면 이 메서드가 다시 불리므로,
+    /// 모으는 도중에 부르면 순서가 꼬이기 쉽습니다.
+    /// </remarks>
+    public static int TriggerChainDetonation(
+        Vector3 boxCenter,
+        Vector3 boxHalfExtents,
+        Quaternion boxRotation,
+        Func<Collider, bool> isInsideRange,
+        GameObject source)
+    {
+        Collider[] colliders = Physics.OverlapBox(
+            boxCenter,
+            boxHalfExtents,
+            boxRotation,
+            Physics.AllLayers,
+            QueryTriggerInteraction.Collide);
+
+        List<IChainDetonatable> targets = new List<IChainDetonatable>();
+        HashSet<IChainDetonatable> seenTargets = new HashSet<IChainDetonatable>();
+
+        foreach (Collider candidate in colliders)
+        {
+            if (candidate == null || !isInsideRange(candidate))
+            {
+                continue;
+            }
+
+            IChainDetonatable target = candidate.GetComponentInParent<IChainDetonatable>();
+            if (target != null && seenTargets.Add(target))
+            {
+                targets.Add(target);
+            }
+        }
+
+        int detonatedCount = 0;
+        foreach (IChainDetonatable target in targets)
+        {
+            if (target.TryChainDetonate(source))
+            {
+                detonatedCount++;
+            }
+        }
+
+        return detonatedCount;
     }
 
     /// <summary>범위 판정을 통과한 대상에게 한 번씩 피해를 넣습니다.</summary>
