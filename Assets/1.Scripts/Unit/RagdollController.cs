@@ -313,7 +313,28 @@ public sealed class RagdollController : MonoBehaviour
         // 충격량을 몸 전체의 속도로 환산합니다. 뼈 질량으로 나누지 않는 이유는 생존 넉백과 같은
         // 유효 질량을 써야 무기 값 하나로 두 경로를 함께 조절할 수 있기 때문입니다.
         // 뼈 질량(부위당 0.5~3kg)으로 나누면 같은 숫자가 시체에서 수십 배 빠르게 나와 튜닝이 갈라집니다.
-        float speed = impulse / effectiveMass;
+        return ApplyHitVelocityChange(direction, hitPoint, impulse / effectiveMass, hitBone);
+    }
+
+    /// <summary>피격 방향으로 활성 래그돌에 지정한 속도 변화를 직접 적용합니다.</summary>
+    /// <param name="direction">폭발 중심에서 피격 지점으로 향하는 방향입니다.</param>
+    /// <param name="hitPoint">피격 지점의 월드 좌표입니다.</param>
+    /// <param name="speed">래그돌의 기준 발사 속도입니다.</param>
+    /// <param name="hitBone">맞은 부위의 리지드바디입니다. 알 수 없으면 null입니다.</param>
+    /// <returns>하나 이상의 래그돌 뼈에 속도 변화를 적용했으면 true입니다.</returns>
+    public bool ApplyHitVelocityChange(
+        Vector3 direction,
+        Vector3 hitPoint,
+        float speed,
+        Rigidbody hitBone)
+    {
+        if (!m_isRagdollActive
+            || speed <= 0.0f
+            || direction.sqrMagnitude <= Mathf.Epsilon)
+        {
+            return false;
+        }
+
         Rigidbody target = IsRagdollBone(hitBone) ? hitBone : FindNearestBone(hitPoint);
         Vector3 unitDirection = direction.normalized;
         bool applied = false;

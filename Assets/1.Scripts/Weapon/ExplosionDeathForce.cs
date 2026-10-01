@@ -10,11 +10,10 @@ public sealed class ExplosionDeathForce : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_impulse = 600.0f;
 
-    [Tooltip("충격량을 전체 오브젝트의 발사 속도로 환산할 때 사용할 유효 질량입니다.")]
-    [Min(0.1f)]
-    [SerializeField] private float m_effectiveMass = 60.0f;
+    [Tooltip("래그돌과 루트 Rigidbody의 폭발 발사 속도를 Max Launch Speed로 제한할지 여부입니다.")]
+    [SerializeField] private bool m_limitLaunchSpeed = true;
 
-    [Tooltip("전체 오브젝트가 폭발로 얻을 수 있는 최대 속도입니다.")]
+    [Tooltip("속도 제한을 사용할 때 래그돌과 루트 Rigidbody가 폭발로 얻을 수 있는 최대 속도입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_maxLaunchSpeed = 8.0f;
 
@@ -22,7 +21,7 @@ public sealed class ExplosionDeathForce : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_upwardBias = 0.0f;
 
-    /// <summary>폭발 피해로 사망한 Enemy라면 루트 Rigidbody를 이용해 오브젝트 전체를 밀어냅니다.</summary>
+    /// <summary>폭발 피해로 사망한 Enemy의 래그돌을 먼저 밀고, 래그돌이 없을 때만 루트 Rigidbody를 사용합니다.</summary>
     public bool TryApply(IDamageable target, Vector3 explosionCenter)
     {
         if (target == null || !target.IsDead || target.Faction != Faction.Enemy)
@@ -43,13 +42,9 @@ public sealed class ExplosionDeathForce : MonoBehaviour
         }
 
         Rigidbody body = enemy.GetComponent<Rigidbody>();
-        if (body == null)
-        {
-            return false;
-        }
-
-        Collider bodyCollider = enemy.GetComponent<Collider>();
-        Vector3 enemyPosition = body.worldCenterOfMass;
+        Vector3 enemyPosition = body != null
+            ? body.worldCenterOfMass
+            : enemy.transform.position;
         Vector3 direction = enemyPosition - explosionCenter;
 
         if (direction.sqrMagnitude <= Mathf.Epsilon)
@@ -66,21 +61,28 @@ public sealed class ExplosionDeathForce : MonoBehaviour
             direction = (direction + Vector3.up * m_upwardBias).normalized;
         }
 
-        // 실제 뼈 Rigidbody/Joint 래그돌이 구성되면 아래 기존 경로를 다시 사용할 수 있습니다.
-        // return enemy.ApplyKnockback(
-        //     direction,
-        //     enemyPosition,
-        //     Mathf.Max(0.0f, m_impulse),
-        //     null);
+        float launchSpeed = Mathf.Max(0.0f, m_impulse) / enemy.GetMass();
+        if (m_limitLaunchSpeed)
+        {
+            launchSpeed = Mathf.Min(launchSpeed, Mathf.Max(0.0f, m_maxLaunchSpeed));
+        }
 
-        float launchSpeed = Mathf.Min(
-            Mathf.Max(0.0f, m_impulse) / Mathf.Max(0.1f, m_effectiveMass),
-            Mathf.Max(0.0f, m_maxLaunchSpeed));
         if (launchSpeed <= 0.0f)
         {
             return false;
         }
 
+        if (enemy.ApplyRagdollVelocityChange(direction, enemyPosition, launchSpeed, null))
+        {
+            return true;
+        }
+
+        if (body == null)
+        {
+            return false;
+        }
+
+        Collider bodyCollider = enemy.GetComponent<Collider>();
         ExplosionWholeBodyMotion motion = enemy.GetComponent<ExplosionWholeBodyMotion>();
         if (motion == null)
         {

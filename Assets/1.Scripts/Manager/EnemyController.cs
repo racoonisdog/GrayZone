@@ -123,10 +123,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Tooltip("새 후보가 현재 대상보다 이만큼(m) 더 가까워야 대상을 바꿉니다. 경계에서 대상이 떨리는 것을 막습니다.")]
     [SerializeField] private float targetSwitchPathDistanceDelta = 2f;
 
-    [Header("Knockback")]
-    [Tooltip("넉백 충격량을 속도로 바꿀 때 쓰는 유효 질량(kg)입니다. 속도 = 충격량 / 이 값이므로, 크게 하면 같은 충격량에 덜 밀립니다.")]
+    [Header("Physics")]
+    [Tooltip("피격 및 폭발 충격량을 속도로 바꿀 때 쓰는 유효 질량(kg)입니다. 속도 = 충격량 / 이 값이므로, 크게 하면 같은 충격량에 덜 밀립니다.")]
+    [FormerlySerializedAs("m_knockbackMass")]
     [Min(0.1f)]
-    [SerializeField] private float m_knockbackMass = 60.0f;
+    [SerializeField] private float m_mass = 60.0f;
+
+    [Header("Knockback")]
 
     [Tooltip("넉백 속도가 초당 줄어드는 비율입니다. 4면 약 0.25초 만에 거의 멈춥니다. 클수록 짧고 탁 밀립니다.")]
     [Min(0.1f)]
@@ -369,7 +372,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 효과이며, 이 함수가 상태를 보고 두 경로 중 하나를 고릅니다. 때리는 쪽은 어느 쪽인지 몰라도 됩니다.
     ///
     /// 살아 있는 경우 충격량을 유효 질량으로 나눠 속도로 바꿉니다. 뼈 하나가 아니라 몸 전체가 밀리므로
-    /// 래그돌 뼈 질량이 아니라 <see cref="m_knockbackMass"/>를 씁니다.
+    /// 래그돌 뼈 질량이 아니라 <see cref="m_mass"/>를 씁니다.
     /// 수평 성분만 씁니다. 살아 있는 개체는 NavMesh 위에 붙어 있어 위아래 성분이 의미가 없고,
     /// 아래로 밀면 지면에 박히려는 변위가 되어 이동이 끊깁니다.
     /// </remarks>
@@ -381,7 +384,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         {
             return ragdollController != null
                 && ragdollController.ApplyHitImpulse(
-                    direction, hitPoint, impulse, hitBone, m_knockbackMass);
+                    direction, hitPoint, impulse, hitBone, GetMass());
         }
 
         if (impulse <= 0.0f)
@@ -395,7 +398,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return false;
         }
 
-        float speed = Mathf.Min(impulse / m_knockbackMass, m_maxKnockbackSpeed);
+        float speed = Mathf.Min(impulse / GetMass(), m_maxKnockbackSpeed);
         if (speed <= 0.0f)
         {
             return false;
@@ -409,6 +412,25 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         }
 
         return true;
+    }
+
+    /// <summary>사망 후 활성화된 래그돌에 지정한 속도 변화를 직접 적용합니다.</summary>
+    /// <returns>래그돌 뼈에 속도 변화를 적용했으면 true입니다.</returns>
+    public bool ApplyRagdollVelocityChange(
+        Vector3 direction,
+        Vector3 hitPoint,
+        float speed,
+        Rigidbody hitBone)
+    {
+        return m_current == Dead
+            && ragdollController != null
+            && ragdollController.ApplyHitVelocityChange(direction, hitPoint, speed, hitBone);
+    }
+
+    /// <summary>피격 및 폭발 충격량 계산에 사용할 이 적의 유효 질량(kg)을 반환합니다.</summary>
+    public float GetMass()
+    {
+        return Mathf.Max(0.1f, m_mass);
     }
 
     /// <summary>
@@ -866,6 +888,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         m_balanceSO = balance;
 
+        m_mass = balance.Mass;
         wanderRadius = balance.WanderRadius;
         wanderInterval = balance.WanderInterval;
         wanderSpeed = balance.WanderSpeed;
