@@ -1,4 +1,5 @@
 using UnityEngine;
+using VInspector;
 
 /// <summary>Shotgun 탄창 전체를 일반 히트스캔 대신 용숨결 판정을 쓰는 특수탄으로 장전하는 청솔의 스킬입니다.</summary>
 public sealed class ChungSolDragonBreathSkill : CharacterSkill
@@ -6,6 +7,10 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     [Tooltip("용숨결탄 전용 재장전 속도 배율입니다. 2이면 일반 재장전보다 2배 빠르게 모션과 장전이 완료됩니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_reloadSpeedMultiplier = 1.0f;
+
+    [Foldout("Debug")]
+    [Tooltip("켜면 용숨결탄 사격 시 특수탄 잔량과 실제 샷건 장탄이 줄지 않습니다. 개발 모드에서만 효과가 있습니다.")]
+    [SerializeField] private bool m_debugInfiniteDragonBreathMagazine;
 
     private Gun m_gun;
     private AimController m_aimController;
@@ -24,6 +29,14 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     /// <summary>현재 발사 순서의 맨 앞 탄환이 용숨결탄인지 여부입니다.</summary>
     public bool IsCurrentRoundDragonBreath => m_specialRoundsRemaining > 0;
     public float ReloadSpeedMultiplier => Mathf.Max(0.01f, m_reloadSpeedMultiplier);
+    public bool DebugInfiniteDragonBreathMagazine
+    {
+        get => m_debugInfiniteDragonBreathMagazine;
+        set => m_debugInfiniteDragonBreathMagazine = value;
+    }
+
+    private bool IsInfiniteDragonBreathMagazineDebugActive =>
+        m_debugInfiniteDragonBreathMagazine && GameDevMode.DebugFeaturesEnabled;
 
     protected override void Awake()
     {
@@ -131,7 +144,20 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             return false;
         }
 
-        m_specialRoundsRemaining--;
+        if (IsInfiniteDragonBreathMagazineDebugActive)
+        {
+            // Gun은 특수탄 대체 콜백 전에 실제 장탄을 먼저 1발 줄입니다.
+            // 일반 무한 장탄 디버그가 꺼져 있을 때만 그 1발을 복구해 두 카운터를 함께 유지합니다.
+            if (m_gun != null && !m_gun.DebugInfiniteMagazine)
+            {
+                m_gun.SetCurrentBullet(m_gun.CurrentBullet + 1);
+            }
+        }
+        else
+        {
+            m_specialRoundsRemaining--;
+        }
+
         effect.Play(shot.Origin, shot.Direction.normalized, Faction.Player, gameObject);
         NotifyStateChanged();
         return true;

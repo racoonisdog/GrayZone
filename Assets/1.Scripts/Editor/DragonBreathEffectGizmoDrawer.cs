@@ -2,14 +2,20 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-/// <summary>풀링 때문에 비활성 상태인 용숨결 오브젝트도 Scene 뷰에서 판정 범위를 계속 표시합니다.</summary>
+/// <summary>활성 상태인 청솔 스킬을 기준으로 비활성 용숨결 자식의 판정 범위를 표시합니다.</summary>
 internal static class DragonBreathEffectGizmoDrawer
 {
     private static readonly Color RangeColor = new Color(1.0f, 0.35f, 0.02f, 0.9f);
 
     [DrawGizmo(GizmoType.Selected | GizmoType.NonSelected)]
-    private static void DrawRange(DragonBreathEffect effect, GizmoType gizmoType)
+    private static void DrawLoadedRange(ChungSolDragonBreathSkill skill, GizmoType gizmoType)
     {
+        if (skill == null || skill.SpecialRoundsRemaining <= 0)
+        {
+            return;
+        }
+
+        DragonBreathEffect effect = skill.GetComponentInChildren<DragonBreathEffect>(true);
         if (effect == null || !effect.DrawDebugRange)
         {
             return;
