@@ -281,6 +281,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private bool[] m_weaponRendererEnabledStates;
     private bool m_grenadeEquipmentVisible;
 
+    /// <summary>Q/E 또는 마우스 휠로 순환 선택하는 투척물 Prefab 목록입니다.</summary>
+    public IReadOnlyList<ProjectileBase> ProjectilePrefabs => m_projectilePrefabs;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetCrosshairOverrideState()
     {
