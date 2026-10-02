@@ -11,15 +11,9 @@ public sealed class ManufacturingUI : MonoBehaviour
     [SerializeField] private GameObject m_root;
     [SerializeField] private bool m_hideOnAwake = true;
 
-    [Header("Manufacturing Slots")]
-    [SerializeField] private ManufacturingSlotView[] m_slots;
-
     [Header("Create View")]
     [SerializeField] private ManufacturingCreateView m_createView;
     [SerializeField] private TMP_Text m_noticeText;
-
-    [Header("Staff")]
-    [SerializeField] private ManufacturingStaffSlotController m_staffSlotController;
 
     private ManufacturingManager m_currentManager;
     private ManufacturingCreateView m_boundCreateView;
@@ -95,13 +89,12 @@ public sealed class ManufacturingUI : MonoBehaviour
 
         CacheChildViews();
         BindCreateView();
-        CloseCreateView();
-        if (m_staffSlotController != null)
-            m_staffSlotController.gameObject.SetActive(false);
-        // 임시 빌드에서는 제작 헬퍼 UI와 헬퍼 생산력 연결을 사용하지 않는다.
-        // m_staffSlotController?.SetManager(m_currentManager);
         ClearNotice();
-        Refresh();
+        if (m_createView == null || !m_createView.Open(0))
+        {
+            SetNotice("제작 화면을 열 수 없습니다.");
+            Close();
+        }
     }
 
     public void Close()
@@ -116,64 +109,8 @@ public sealed class ManufacturingUI : MonoBehaviour
     public void Refresh()
     {
         CacheChildViews();
-        if (m_slots == null)
-            return;
-
-        bool allowSlotInput = m_createView == null || !m_createView.IsOpen;
-        for (int i = 0; i < m_slots.Length; i++)
-        {
-            ManufacturingSlotView slot = m_slots[i];
-            if (slot == null)
-                continue;
-
-            ManufacturingJobRuntimeData job = null;
-            ManufacturingRecipeDefinition recipe = null;
-            /* 날짜 기반 제작 작업 표시를 다시 사용할 때 복구할 기존 상태 조회.
-            job = FindJob(i);
-            if (job != null)
-                m_currentManager?.TryGetRecipe(job.RecipeId, out recipe);
-            */
-
-            slot.Bind(
-                i,
-                m_currentManager != null && m_currentManager.IsCraftingSlotUnlocked(i),
-                m_currentManager != null && m_currentManager.IsCraftingSlotAvailable(i),
-                job,
-                recipe,
-                m_currentManager != null ? m_currentManager.FinalProductivity : 0,
-                HandleSlotClicked,
-                HandleCancelClicked);
-            slot.SetInteractionEnabled(allowSlotInput);
-        }
-
-        // 임시 빌드에서는 제작 헬퍼 UI를 표시하지 않는다.
-        // m_staffSlotController?.RefreshSlots();
-    }
-
-    private void HandleSlotClicked(int slotIndex)
-    {
-        if (m_currentManager == null
-            || !m_currentManager.IsCraftingSlotUnlocked(slotIndex)
-            || !m_currentManager.IsCraftingSlotAvailable(slotIndex)
-            || (m_createView != null && m_createView.IsOpen))
-        {
-            return;
-        }
-
-        if (m_createView == null)
-        {
-            SetNotice("제작 상세 창을 찾을 수 없습니다.");
-            return;
-        }
-
-        ClearNotice();
-        if (!m_createView.Open(slotIndex))
-        {
-            SetNotice("선택한 슬롯에서 제작을 시작할 수 없습니다.");
-            return;
-        }
-
-        Refresh();
+        if (m_createView != null && m_createView.IsOpen)
+            m_createView.Refresh();
     }
 
     private void HandleCreateRequested(ManufacturingCreateRequest request)
@@ -238,38 +175,9 @@ public sealed class ManufacturingUI : MonoBehaviour
         Refresh();
     }
 
-    private void HandleCancelClicked(int slotIndex)
-    {
-        if (m_currentManager != null && m_currentManager.TryCancelJob(slotIndex))
-        {
-            ClearNotice();
-            Refresh();
-        }
-        else
-        {
-            SetNotice("제작 작업을 취소할 수 없습니다.");
-        }
-    }
-
-    private ManufacturingJobRuntimeData FindJob(int slotIndex)
-    {
-        if (m_currentManager == null)
-            return null;
-
-        var jobs = m_currentManager.Jobs;
-        for (int i = 0; i < jobs.Count; i++)
-        {
-            if (jobs[i] != null && jobs[i].SlotIndex == slotIndex)
-                return jobs[i];
-        }
-
-        return null;
-    }
-
     private void HandleCreateViewClosed()
     {
-        ClearNotice();
-        Refresh();
+        Close();
     }
 
     private void BindCreateView()
@@ -304,12 +212,6 @@ public sealed class ManufacturingUI : MonoBehaviour
 
     private void CacheChildViews()
     {
-        if (m_slots == null || m_slots.Length == 0)
-            m_slots = GetComponentsInChildren<ManufacturingSlotView>(true);
-
-        if (m_staffSlotController == null)
-            m_staffSlotController = GetComponentInChildren<ManufacturingStaffSlotController>(true);
-
         if (m_createView == null)
             m_createView = GetComponentInChildren<ManufacturingCreateView>(true);
     }

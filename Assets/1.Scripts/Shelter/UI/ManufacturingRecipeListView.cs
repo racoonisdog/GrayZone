@@ -11,6 +11,8 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
     [Header("References")]
     [SerializeField] private RectTransform m_contentRoot;
     [SerializeField] private ManufacturingRecipeListItemView m_rowPrefab;
+    [SerializeField] private ManufacturingRecipeListItemView[] m_preplacedRows =
+        Array.Empty<ManufacturingRecipeListItemView>();
     [SerializeField] private ManufacturingManager m_manager;
     [SerializeField] private ItemListTooltipPresenter m_tooltipPresenter;
 
@@ -50,10 +52,7 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
         if (m_isPrewarmed)
             return true;
 
-        RectTransform contentRoot = m_contentRoot != null
-            ? m_contentRoot
-            : transform as RectTransform;
-        if (contentRoot == null || m_rowPrefab == null || m_manager == null)
+        if (m_manager == null)
         {
             LogSetupErrorOnce();
             return false;
@@ -62,6 +61,18 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
         // TODO(CSV): CSV 연동 시 Inspector 배열 순서 대신 명시적인 displayOrder와
         // recipeId 보조 정렬을 사용해 한 번 정렬한 목록을 생성합니다.
         IReadOnlyList<ManufacturingRecipeDefinition> recipes = m_manager.Recipes;
+        if (m_preplacedRows != null && m_preplacedRows.Length > 0)
+            return PrewarmPreplacedRows(recipes);
+
+        RectTransform contentRoot = m_contentRoot != null
+            ? m_contentRoot
+            : transform as RectTransform;
+        if (contentRoot == null || m_rowPrefab == null)
+        {
+            LogSetupErrorOnce();
+            return false;
+        }
+
         HashSet<string> registeredRecipeIds = new(StringComparer.Ordinal);
         for (int i = 0; i < recipes.Count; i++)
         {
@@ -89,6 +100,47 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
 
         m_isPrewarmed = true;
         return true;
+    }
+
+    private bool PrewarmPreplacedRows(
+        IReadOnlyList<ManufacturingRecipeDefinition> recipes)
+    {
+        if (m_preplacedRows.Length < recipes.Count)
+        {
+            LogSetupErrorOnce();
+            return false;
+        }
+
+        HashSet<string> registeredRecipeIds = new(StringComparer.Ordinal);
+        for (int i = 0; i < m_preplacedRows.Length; i++)
+        {
+            ManufacturingRecipeListItemView row = m_preplacedRows[i];
+            if (i >= recipes.Count)
+            {
+                row?.Clear();
+                continue;
+            }
+
+            ManufacturingRecipeDefinition recipe = recipes[i];
+            if (row == null
+                || recipe == null
+                || string.IsNullOrWhiteSpace(recipe.RecipeId)
+                || !registeredRecipeIds.Add(recipe.RecipeId))
+            {
+                LogInvalidRecipeOnce(i);
+                continue;
+            }
+
+            row.SetTooltipPresenter(m_tooltipPresenter);
+            row.Bind(
+                recipe,
+                m_manager.IsRecipeUnlocked(recipe),
+                HandleRowClicked);
+            m_rows.Add(new CachedRecipeRow(recipe, row));
+        }
+
+        m_isPrewarmed = m_rows.Count == recipes.Count;
+        return m_isPrewarmed;
     }
 
     /// <summary>
@@ -173,7 +225,7 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
 
         Debug.LogError(
             $"[{nameof(ManufacturingRecipeListView)}] "
-            + "Content root, row prefab, and ManufacturingManager must be assigned.",
+            + "Assign ManufacturingManager and either preplaced rows or a content root and row prefab.",
             this);
         m_setupErrorLogged = true;
     }
