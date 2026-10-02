@@ -19,6 +19,12 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public sealed class FireTrap : Trap
 {
+    /// <inheritdoc />
+    protected override string DefaultDisplayName => "화염 지대";
+
+    /// <inheritdoc />
+    protected override string DefaultDescription => "범위 안에 머무는 적에게 지속 화염 피해를 줍니다";
+
     /// <summary>범위 안에 있는 대상 하나의 상태입니다.</summary>
     private sealed class Occupant
     {

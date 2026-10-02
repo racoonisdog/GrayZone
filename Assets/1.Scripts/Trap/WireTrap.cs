@@ -15,6 +15,12 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public sealed class WireTrap : Trap
 {
+    /// <inheritdoc />
+    protected override string DefaultDisplayName => "윤형 철조망";
+
+    /// <inheritdoc />
+    protected override string DefaultDescription => "적의 진입속도를 늦추고 소량의 데미지를 줍니다";
+
     /// <summary>범위 안에 있는 대상 하나의 상태입니다.</summary>
     private struct Occupant
     {

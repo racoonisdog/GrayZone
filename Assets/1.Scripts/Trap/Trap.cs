@@ -82,6 +82,13 @@ public abstract class Trap : MonoBehaviour, IInteractable
     [Min(0.0f)]
     [SerializeField] private float m_buildHoldDuration = 1.0f;
 
+    [Header("Display")]
+    [Tooltip("함정 안내 HUD에 표시할 이름입니다. 비워 두면 함정 종류의 기본 이름을 씁니다.")]
+    [SerializeField] private string m_displayName;
+
+    [Tooltip("함정 안내 HUD에 표시할 한 줄 설명입니다. 비워 두면 함정 종류의 기본 설명을 씁니다.")]
+    [SerializeField] private string m_description;
+
     [Foldout("Build Visual")]
     [Tooltip("청사진 상태 동안 이 함정의 모든 렌더러에 입힐 머테리얼입니다. 비워 두면 외형이 바뀌지 않습니다.")]
     [SerializeField] private Material m_blueprintMaterial;
@@ -252,6 +259,19 @@ public abstract class Trap : MonoBehaviour, IInteractable
 
     /// <summary>설치 비용입니다. 수량이 0이면 비용이 없는 것으로 봅니다.</summary>
     public ResourceCost BuildCost => new ResourceCost(m_buildCostResourceId, m_buildCostAmount);
+
+    /// <summary>함정 안내 HUD에 표시할 이름입니다. 인스펙터 값이 비어 있으면 <see cref="DefaultDisplayName"/>입니다.</summary>
+    public string DisplayName => string.IsNullOrWhiteSpace(m_displayName) ? DefaultDisplayName : m_displayName;
+
+    /// <summary>함정 안내 HUD에 표시할 설명입니다. 인스펙터 값이 비어 있으면 <see cref="DefaultDescription"/>입니다.</summary>
+    public string Description => string.IsNullOrWhiteSpace(m_description) ? DefaultDescription : m_description;
+
+    /// <summary>함정 종류의 기본 이름입니다. 파생이 덮어쓰지 않으면 오브젝트 이름을 씁니다.</summary>
+    /// <remarks>프리팹마다 문구를 넣지 않아도 HUD가 비지 않게 하려고 종류별 기본값을 둡니다.</remarks>
+    protected virtual string DefaultDisplayName => gameObject.name;
+
+    /// <summary>함정 종류의 기본 설명입니다. 파생이 덮어쓰지 않으면 빈 문자열입니다.</summary>
+    protected virtual string DefaultDescription => string.Empty;
 
     /// <summary>이 함정에 비용이 걸려 있는지 여부입니다.</summary>
     private bool HasBuildCost => m_buildCostAmount > 0 && !string.IsNullOrWhiteSpace(m_buildCostResourceId);

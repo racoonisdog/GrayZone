@@ -13,6 +13,12 @@ using VInspector;
 /// </remarks>
 public sealed class MineTrap : ExplosiveTrap
 {
+    /// <inheritdoc />
+    protected override string DefaultDisplayName => "지뢰";
+
+    /// <inheritdoc />
+    protected override string DefaultDescription => "밟은 적 주변을 폭발시켜 큰 피해를 줍니다";
+
     [Header("Mine")]
     [Tooltip("폭발 피해를 줄 원통의 수평 반지름(m)입니다.")]
     [Min(0.0f)]

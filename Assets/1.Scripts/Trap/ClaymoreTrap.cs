@@ -17,6 +17,12 @@ using VInspector;
 /// </remarks>
 public sealed class ClaymoreTrap : ExplosiveTrap
 {
+    /// <inheritdoc />
+    protected override string DefaultDisplayName => "클레이모어";
+
+    /// <inheritdoc />
+    protected override string DefaultDescription => "밟히면 정면으로 폭발해 앞쪽 적에게 피해를 줍니다";
+
     [Header("Claymore")]
     [Tooltip("정면으로 뻗는 거리(m)입니다.")]
     [Min(0.0f)]

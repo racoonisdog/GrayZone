@@ -133,14 +133,22 @@ public class InteractionController : MonoBehaviour
     }
 
     /// <summary>조준 레이를 막지 않을 레이어 마스크를 확정합니다. 지정이 없으면 이름 기본값으로 채웁니다.</summary>
+    /// <remarks>
+    /// Unity 기본 <c>Ignore Raycast</c> 레이어는 지정 여부와 관계없이 항상 통과시킵니다. 방어 구역 판정 박스
+    /// (OnlyTargetZone, 약 24x1x24m 트리거)처럼 적 판정용 볼륨을 이 레이어에 두면 함정 앞에서 레이를 멈추지 않습니다.
+    /// 이 레이캐스트는 마스크를 직접 넘기므로 Unity가 기본으로 해 주는 Ignore Raycast 제외가 적용되지 않습니다.
+    /// </remarks>
     private int ResolveNonBlockingMask()
     {
+        int ignoreRaycastLayer = LayerMask.NameToLayer("Ignore Raycast");
+        int ignoreRaycastMask = ignoreRaycastLayer >= 0 ? 1 << ignoreRaycastLayer : 0;
+
         if (m_nonBlockingLayers.value != 0)
         {
-            return m_nonBlockingLayers.value;
+            return m_nonBlockingLayers.value | ignoreRaycastMask;
         }
 
-        int mask = 0;
+        int mask = ignoreRaycastMask;
         for (int i = 0; i < s_defaultNonBlockingLayerNames.Length; i++)
         {
             int layer = LayerMask.NameToLayer(s_defaultNonBlockingLayerNames[i]);
@@ -215,7 +223,8 @@ public class InteractionController : MonoBehaviour
     ///
     /// <para>레이를 <c>Collide</c>로 쏘고 거리순으로 훑는 이유: 상호작용 대상은 트리거 콜라이더인 경우가 많아
     /// 트리거를 무시하면 ①이 성립하지 않습니다. 반대로 트리거를 포함해 첫 히트에서 끊으면 아무 트리거 볼륨에
-    /// 막힙니다. 그래서 히트를 정렬해 훑으며 "상호작용 대상이면 채택, 아니면 차폐물로 보고 중단"으로 가릅니다.
+    /// 막힙니다. 그래서 히트를 정렬해 훑으며 "상호작용 대상이면 채택, 통과 레이어(캐릭터·적·Ignore Raycast)는 통과,
+    /// 나머지는 차폐물로 보고 중단"으로 가릅니다.
     /// 이 방식은 레이어 마스크에 의존하지 않아 구조물 레이어가 정리되지 않은 현재 상태에서도 동작합니다.</para>
     ///
     /// <para>거리·근접 판정에 <see cref="Collider.ClosestPoint"/>를 쓰는 이유: 피벗으로 재면 인벤토리 박스나 문처럼
