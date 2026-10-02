@@ -63,6 +63,9 @@ public sealed class RagdollController : MonoBehaviour
 
     private Animator m_animator;
     private Rigidbody[] m_ragdollBodies = System.Array.Empty<Rigidbody>();
+
+    /// <summary>래그돌 바디마다 원래 보간 값입니다. 살아 있는 동안은 끄고 래그돌이 켜질 때 되돌립니다.</summary>
+    private RigidbodyInterpolation[] m_ragdollInterpolation = System.Array.Empty<RigidbodyInterpolation>();
     private CharacterJoint[] m_ragdollJoints = System.Array.Empty<CharacterJoint>();
     private Collider[] m_ragdollColliders = System.Array.Empty<Collider>();
     private Collider[] m_gameplayColliders = System.Array.Empty<Collider>();
@@ -245,6 +248,7 @@ public sealed class RagdollController : MonoBehaviour
 
             ConfigureBodyForRagdoll(body);
             body.isKinematic = false;
+            body.interpolation = i < m_ragdollInterpolation.Length ? m_ragdollInterpolation[i] : RigidbodyInterpolation.Interpolate;
             ApplyInheritedVelocity(body, i);
             body.WakeUp();
         }
@@ -695,6 +699,7 @@ public sealed class RagdollController : MonoBehaviour
         {
             Rigidbody body = m_ragdollBodies[i];
             body.isKinematic = true;
+            body.interpolation = RigidbodyInterpolation.None;
             body.linearVelocity = Vector3.zero;
             body.angularVelocity = Vector3.zero;
         }
@@ -812,9 +817,23 @@ public sealed class RagdollController : MonoBehaviour
     /// </remarks>
     private void PrepareAnimationDrivenState()
     {
+        if (m_ragdollInterpolation.Length != m_ragdollBodies.Length)
+        {
+            // 래그돌 생성 도구가 넣은 보간 값을 기억했다가 래그돌이 켜질 때만 되돌립니다.
+            m_ragdollInterpolation = new RigidbodyInterpolation[m_ragdollBodies.Length];
+            for (int i = 0; i < m_ragdollBodies.Length; i++)
+            {
+                m_ragdollInterpolation[i] = m_ragdollBodies[i].interpolation;
+            }
+        }
+
         for (int i = 0; i < m_ragdollBodies.Length; i++)
         {
             m_ragdollBodies[i].isKinematic = true;
+            // 애니메이션이 뼈를 움직이는 동안 kinematic 바디에 보간이 켜져 있으면, 물리가 기억한 자세로 뼈를
+            // 되돌려 애니메이터가 쓴 자세와 다툽니다. 화면 밖이라 애니메이터 갱신이 멈춘 사이 이 다툼이 쌓이면
+            // 뼈가 몸에서 수십~수백 m 떨어져 모델이 보이지 않게 됩니다(2026-10-03 방어전 실측).
+            m_ragdollBodies[i].interpolation = RigidbodyInterpolation.None;
         }
 
         for (int i = 0; i < m_ragdollColliders.Length; i++)

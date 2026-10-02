@@ -239,8 +239,53 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>이 시간(초) 넘게 막혀 있으면 다른 공격 포인트를 다시 고릅니다.</summary>
     private const float DefenseAttackPointRepickDelay = 1.5f;
 
-    /// <summary>공격 포인트를 쓸 때 접근 정지 거리의 최댓값(m)입니다. 손이 목표 표면에 닿도록 바짝 붙게 합니다.</summary>
-    private const float DefenseAttackPointStoppingDistance = 0.3f;
+    /// <summary>방어전 접근을 시작하기 전의 회피 우선순위입니다. 접근을 끝낼 때 되돌립니다.</summary>
+    private int m_defenseApproachAvoidancePriority;
+
+    /// <summary>대기 줄에서 다른 포인트의 빈 앞자리를 다시 확인하기까지 남은 시간(초)입니다.</summary>
+    private float m_defenseWaitRecheckTime;
+
+    /// <summary>대기 위치를 좌우로 흩뜨릴 개체별 값(-1~1)입니다. 포인트를 고를 때마다 새로 뽑습니다.</summary>
+    private float m_defenseWaitLateralSeed;
+
+    /// <summary>대기 줄에서 다음 허공 휘두르기까지 남은 시간(초)입니다.</summary>
+    private float m_defenseWaitFlourishTimer;
+
+    /// <summary>지금 하고 있는 허공 휘두르기가 끝나는 시각입니다. 0이면 하고 있지 않습니다.</summary>
+    private float m_defenseWaitFlourishEndTime;
+
+    /// <summary>허공 휘두르기 사이 간격의 최솟값(초)입니다.</summary>
+    private const float DefenseWaitFlourishMinInterval = 2.5f;
+
+    /// <summary>허공 휘두르기 사이 간격의 최댓값(초)입니다.</summary>
+    private const float DefenseWaitFlourishMaxInterval = 6.0f;
+
+    /// <summary>허공 휘두르기 한 번의 길이(초)입니다. 공격 클립 길이에 맞춥니다.</summary>
+    private const float DefenseWaitFlourishDuration = 1.5f;
+
+    /// <summary>성문을 때리는 동안의 회피 우선순위입니다. 낮을수록 다른 에이전트가 비켜 갑니다.</summary>
+    private const int DefenseAttackAvoidancePriority = 20;
+
+    /// <summary>앞자리로 다가가는 동안의 회피 우선순위입니다.</summary>
+    private const int DefenseApproachAvoidancePriority = 40;
+
+    /// <summary>대기 줄에 있는 동안의 회피 우선순위입니다. 가장 낮게 두어 들어가는 적에게 비켜섭니다.</summary>
+    private const int DefenseWaitAvoidancePriority = 80;
+
+    /// <summary>대기 위치에 도착했다고 볼 정지 거리(m)입니다.</summary>
+    private const float DefenseWaitStoppingDistance = 0.3f;
+
+    /// <summary>대기 위치에서 이 거리(m) 안이면 도착으로 보고 멈춥니다. 옆 대기 적에게 조금 밀려도 다시 맞추려 떨지 않게 합니다.</summary>
+    private const float DefenseWaitArriveDistance = 0.8f;
+
+    /// <summary>대기 위치까지 이만큼(m) 남았는데 막혀 멈췄으면 그 자리에서 기다립니다.</summary>
+    private const float DefenseWaitSettleDistance = 1.5f;
+
+    /// <summary>대기 줄에서 다른 포인트의 빈 앞자리를 확인하는 간격(초)입니다.</summary>
+    private const float DefenseWaitRecheckInterval = 1.0f;
+
+    /// <summary>방어전 접근 목적지가 이 거리(m) 넘게 바뀔 때만 경로를 다시 잡습니다.</summary>
+    private const float DefenseDestinationRefreshDistance = 0.3f;
 
     /// <summary>스포너의 목표 위치 또는 그 부모에 연결된 방어 목표 체력입니다. 좌표 전용 마커면 null입니다.</summary>
     public DefenseEventHealth DefenseObjective => m_defenseObjective;
@@ -1862,6 +1907,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         // 다음 피격에서 다시 전환할 수 있게 둡니다.
         if (m_current == Combat) m_hybridAggroActive = false;
 
+        EndDefenseWaitFlourish();
         m_current?.Exit();
         if (next == Combat || next == Dead)
         {
@@ -2075,23 +2121,42 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             if (!m_hasDefenseApproachSettings)
             {
                 m_defenseApproachStoppingDistance = agent.stoppingDistance;
+                m_defenseApproachAvoidancePriority = agent.avoidancePriority;
                 m_hasDefenseApproachSettings = true;
             }
-            float approachStoppingDistance = m_defenseAttackPoint != null
-                ? DefenseAttackPointStoppingDistance
-                : Mathf.Max(0.0f, enemyAttack.AttackStartRange * 0.5f);
-            agent.stoppingDistance = Mathf.Min(m_defenseApproachStoppingDistance, approachStoppingDistance);
+
             Vector3 direction = attackPoint - transform.position;
             direction.y = 0f;
             if (direction.sqrMagnitude > 0.0001f)
                 transform.rotation = Quaternion.RotateTowards(transform.rotation,
                     Quaternion.LookRotation(direction), RotationSpeed * Time.deltaTime);
+
+            // 앞자리가 없으면 포인트 뒤쪽 대기 줄에 서서 기다립니다. 앞자리 적과 같은 점으로 비집고 들어가면
+            // 서로 밀며 떨리기 때문입니다. 앞자리가 비면 포인트가 가장 가까운 대기 적을 올려 줍니다.
+            if (m_defenseAttackPoint != null && !m_defenseAttackPoint.IsHolder(this))
+            {
+                TickDefenseAttackPointWaiting();
+                return true;
+            }
+
+            EndDefenseWaitFlourish();
+
+            float approachStoppingDistance = m_defenseAttackPoint != null
+                ? m_defenseAttackPoint.StandDistance
+                : Mathf.Max(0.0f, enemyAttack.AttackStartRange * 0.5f);
+            // 공격 포인트의 서는 거리는 피격 영역에 맞춘 값이라 그대로 씁니다. 포인트가 없으면 원래 값보다 늘리지 않습니다.
+            agent.stoppingDistance = m_defenseAttackPoint != null
+                ? approachStoppingDistance
+                : Mathf.Min(m_defenseApproachStoppingDistance, approachStoppingDistance);
+            SetDefenseAvoidancePriority(DefenseApproachAvoidancePriority);
             if (enemyAttack.CanStartDefenseAttack(m_defenseObjective))
             {
+                // 때리는 동안 뒤에서 오는 적에게 밀려 자리를 잃지 않게 회피 우선순위를 가장 높입니다.
+                SetDefenseAvoidancePriority(DefenseAttackAvoidancePriority);
                 TransitionTo(m_defenseAttack);
                 return true;
             }
-            MoveTo(attackPoint);
+            MoveToDefenseDestination(attackPoint);
             UpdateDefenseAttackPointBlocked();
             return true;
         }
@@ -2175,15 +2240,19 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_defenseAttackPoint = m_defenseObjective != null
             ? m_defenseObjective.PickAttackPoint(transform.position, avoid)
             : null;
-        m_defenseAttackPoint?.AddOccupant();
+        m_defenseAttackPoint?.AddOccupant(this);
+        m_defenseWaitLateralSeed = Random.Range(-1.0f, 1.0f);
+        m_defenseWaitRecheckTime = DefenseWaitRecheckInterval;
+        m_defenseWaitFlourishTimer = Random.Range(0.5f, DefenseWaitFlourishMaxInterval);
     }
 
     /// <summary>고른 공격 포인트를 놓습니다. 교전으로 빠지거나 죽거나 풀로 돌아갈 때 부릅니다.</summary>
     private void ReleaseDefenseAttackPoint()
     {
+        EndDefenseWaitFlourish();
         if (m_defenseAttackPoint != null)
         {
-            m_defenseAttackPoint.RemoveOccupant();
+            m_defenseAttackPoint.RemoveOccupant(this);
         }
 
         m_defenseAttackPoint = null;
@@ -2217,8 +2286,134 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     private void RestoreDefenseApproachSettings()
     {
         if (!m_hasDefenseApproachSettings) return;
-        if (agent != null) agent.stoppingDistance = m_defenseApproachStoppingDistance;
+        if (agent != null)
+        {
+            agent.stoppingDistance = m_defenseApproachStoppingDistance;
+            agent.avoidancePriority = m_defenseApproachAvoidancePriority;
+        }
         m_hasDefenseApproachSettings = false;
+    }
+
+    /// <summary>
+    /// 공격 포인트의 대기 줄에서 기다립니다. 대기 위치까지 가서 멈추고, 다른 포인트에 앞자리가 나면 옮겨 갑니다.
+    /// </summary>
+    /// <remarks>
+    /// 대기 위치에 도착하면 이동을 멈춥니다. 목적지를 계속 다시 잡으면 앞 적과 맞닿은 채로 밀며 떨리기 때문입니다.
+    /// 회피 우선순위는 가장 낮게 두어, 앞자리로 들어가는 적이 지나갈 때 비켜서게 합니다.
+    /// </remarks>
+    private void TickDefenseAttackPointWaiting()
+    {
+        agent.stoppingDistance = DefenseWaitStoppingDistance;
+        SetDefenseAvoidancePriority(DefenseWaitAvoidancePriority);
+        m_defenseAttackPointBlockedTime = 0.0f;
+
+        m_defenseWaitRecheckTime -= Time.deltaTime;
+        if (m_defenseWaitRecheckTime <= 0.0f)
+        {
+            m_defenseWaitRecheckTime = DefenseWaitRecheckInterval;
+            if (m_defenseObjective != null && m_defenseObjective.HasFreeAttackPoint(m_defenseAttackPoint))
+            {
+                EndDefenseWaitFlourish();
+                AssignDefenseAttackPoint(m_defenseAttackPoint);
+                return;
+            }
+        }
+
+        Vector3 waitPosition = m_defenseAttackPoint.GetWaitPosition(this, m_defenseWaitLateralSeed);
+        // 앞 대기 적에 막혀 거의 다 와서 멈췄으면 거기서 기다립니다. 끝까지 밀고 들어가면 다시 떨리기 때문입니다.
+        // 경로가 아직 없으면 remainingDistance가 0이라 "거의 다 왔다"로 잘못 읽힙니다. 지금 대기 위치로 가는 경로가
+        // 있을 때만 막힘으로 봅니다. 줄이 당겨져 대기 위치가 바뀌었으면 옛 경로로는 판정하지 않고 다시 걸어갑니다.
+        Vector3 destinationDelta = agent.destination - waitPosition;
+        destinationDelta.y = 0.0f;
+        bool headingToWaitPosition = agent.hasPath && !agent.pathPending &&
+            destinationDelta.sqrMagnitude < DefenseDestinationRefreshDistance * DefenseDestinationRefreshDistance;
+        bool blockedNearby = headingToWaitPosition && agent.velocity.sqrMagnitude < 0.04f &&
+            agent.remainingDistance < DefenseWaitSettleDistance;
+        Vector3 waitDelta = waitPosition - transform.position;
+        waitDelta.y = 0.0f;
+        bool closeEnough = waitDelta.sqrMagnitude <= DefenseWaitArriveDistance * DefenseWaitArriveDistance;
+        if (closeEnough || blockedNearby)
+        {
+            StopMoving();
+            UpdateDefenseWaitFlourish();
+            return;
+        }
+
+        EndDefenseWaitFlourish();
+        MoveToDefenseDestination(waitPosition);
+    }
+
+    /// <summary>
+    /// 방어전 접근 중 목적지를 정합니다. 목적지가 거의 그대로면 다시 지정하지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 매 프레임 같은 목적지를 다시 지정하면 밀릴 때마다 경로를 새로 계산하며 방향이 흔들립니다.
+    /// 멈춰 있던 에이전트는 다시 움직이게 하려고 항상 지정합니다.
+    /// </remarks>
+    private void MoveToDefenseDestination(Vector3 destination)
+    {
+        if (agent != null && agent.isOnNavMesh && !agent.isStopped && (agent.hasPath || agent.pathPending))
+        {
+            Vector3 delta = agent.destination - destination;
+            delta.y = 0.0f;
+            if (delta.sqrMagnitude < DefenseDestinationRefreshDistance * DefenseDestinationRefreshDistance)
+            {
+                return;
+            }
+        }
+
+        MoveTo(destination);
+    }
+
+    /// <summary>
+    /// 대기 줄에 서 있는 동안 가끔 허공에 공격 동작을 합니다.
+    /// </summary>
+    /// <remarks>
+    /// 줄에 선 적이 가만히 서 있기만 하면 순서를 기다리는 것처럼 보여서, 애니메이션만 한 번씩 재생합니다.
+    /// 공격 상태로 들어가지 않으므로 클립의 판정 켜기 이벤트(<see cref="OnAttackHitboxOn"/>)가 와도 판정은 켜지지 않습니다.
+    /// 간격은 개체마다 무작위라 줄 전체가 같이 휘두르지 않습니다.
+    /// </remarks>
+    private void UpdateDefenseWaitFlourish()
+    {
+        if (m_defenseWaitFlourishEndTime > 0.0f)
+        {
+            if (Time.time >= m_defenseWaitFlourishEndTime)
+            {
+                EndDefenseWaitFlourish();
+            }
+
+            return;
+        }
+
+        m_defenseWaitFlourishTimer -= Time.deltaTime;
+        if (m_defenseWaitFlourishTimer > 0.0f || m_isStaggered)
+        {
+            return;
+        }
+
+        PlayAttackAnimation(1);
+        m_defenseWaitFlourishEndTime = Time.time + DefenseWaitFlourishDuration;
+        m_defenseWaitFlourishTimer = Random.Range(DefenseWaitFlourishMinInterval, DefenseWaitFlourishMaxInterval);
+    }
+
+    /// <summary>하고 있던 허공 휘두르기를 멈춥니다. 걷기 시작하거나 앞자리로 가거나 상태가 바뀔 때 부릅니다.</summary>
+    private void EndDefenseWaitFlourish()
+    {
+        if (m_defenseWaitFlourishEndTime <= 0.0f)
+        {
+            return;
+        }
+
+        m_defenseWaitFlourishEndTime = 0.0f;
+        EndAttackAnimation();
+    }
+
+    private void SetDefenseAvoidancePriority(int priority)
+    {
+        if (agent != null && agent.avoidancePriority != priority)
+        {
+            agent.avoidancePriority = priority;
+        }
     }
 
     /// <summary>현재 Defense 성향에서 스폰 웨이포인트를 처리해야 하는지 반환합니다.</summary>

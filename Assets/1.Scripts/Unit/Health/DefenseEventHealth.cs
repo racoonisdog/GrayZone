@@ -62,6 +62,22 @@ public class DefenseEventHealth : HealthSystemBase
     /// <summary>등록된 공격 포인트가 있는지 여부입니다. 없으면 적은 가장 가까운 표면을 때립니다.</summary>
     public bool HasAttackPoints => m_attackPoints.Count > 0;
 
+    /// <summary>지정한 포인트 말고 앞자리가 비어 있는 공격 포인트가 있는지 확인합니다. 대기 줄의 적이 옮겨 갈지 정할 때 씁니다.</summary>
+    /// <param name="except">확인에서 뺄 포인트입니다. 대개 지금 기다리는 포인트입니다.</param>
+    public bool HasFreeAttackPoint(DefenseAttackPoint except)
+    {
+        for (int i = 0; i < m_attackPoints.Count; i++)
+        {
+            DefenseAttackPoint point = m_attackPoints[i];
+            if (point != null && point != except && point.HasFreeSlot)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>공격 포인트를 등록합니다. <see cref="DefenseAttackPoint"/>가 활성화될 때 부릅니다.</summary>
     public void RegisterAttackPoint(DefenseAttackPoint point)
     {
