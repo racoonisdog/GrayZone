@@ -145,7 +145,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
-    [Tooltip("Q/E 또는 마우스 휠로 순환 선택할 ProjectileBase Prefab 목록입니다.")]
+    [Tooltip("마우스 휠로 순환 선택할 ProjectileBase Prefab 목록입니다.")]
     [SerializeField] private List<ProjectileBase> m_projectilePrefabs = new List<ProjectileBase>();
 
     [UnityEngine.Serialization.FormerlySerializedAs("m_projectilePrefab")]
@@ -284,7 +284,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private bool[] m_weaponRendererEnabledStates;
     private bool m_grenadeEquipmentVisible;
 
-    /// <summary>Q/E 또는 마우스 휠로 순환 선택하는 투척물 Prefab 목록입니다.</summary>
+    /// <summary>마우스 휠로 순환 선택하는 투척물 Prefab 목록입니다.</summary>
     public IReadOnlyList<ProjectileBase> ProjectilePrefabs => m_projectilePrefabs;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
