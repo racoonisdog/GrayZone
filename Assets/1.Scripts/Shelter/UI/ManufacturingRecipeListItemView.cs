@@ -14,6 +14,8 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
     [SerializeField] private Sprite m_fallbackIcon;
     [SerializeField] private TMP_Text m_nameText;
     [SerializeField] private ItemListSlotHoverInfo m_hoverInfo;
+    [SerializeField] private TMP_Text m_requiredFacilityLevelText;
+    [SerializeField] private TMP_Text m_lockedMessageText;
 
     private string m_recipeId;
     private bool m_isSelectable;
@@ -67,6 +69,17 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
                 : $"{recipe.DisplayName}\nLv.{recipe.RequiredFacilityLevel}";
         }
 
+        bool isLocked = !isSelectable;
+        if (m_requiredFacilityLevelText != null)
+        {
+            m_requiredFacilityLevelText.text =
+                recipe.RequiredFacilityLevel.ToString();
+            m_requiredFacilityLevelText.gameObject.SetActive(isLocked);
+        }
+
+        if (m_lockedMessageText != null)
+            m_lockedMessageText.gameObject.SetActive(isLocked);
+
         if (m_hoverInfo != null)
         {
             m_hoverInfo.Bind(
@@ -108,6 +121,15 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
 
         if (m_nameText != null)
             m_nameText.text = string.Empty;
+
+        if (m_requiredFacilityLevelText != null)
+        {
+            m_requiredFacilityLevelText.text = string.Empty;
+            m_requiredFacilityLevelText.gameObject.SetActive(false);
+        }
+
+        if (m_lockedMessageText != null)
+            m_lockedMessageText.gameObject.SetActive(false);
 
         if (m_hoverInfo != null)
             m_hoverInfo.Clear();
