@@ -39,6 +39,7 @@ public sealed class KeyInfoOverlay : MonoBehaviour
     private float m_previousTimeScale = 1.0f;
     private bool m_isOpen;
     private bool m_closeRequested;
+    private GUIStyle m_hintStyle;
 
     /// <summary>안내가 현재 떠 있는지 여부입니다.</summary>
     public bool IsOpen => m_isOpen;
@@ -99,6 +100,28 @@ public sealed class KeyInfoOverlay : MonoBehaviour
 
         m_closeRequested = false;
         Close();
+    }
+
+    private void OnGUI()
+    {
+        if (m_panelRoot == null || m_isOpen || m_toggleKey == Key.None || MissionOverlayVisibility.IsShown)
+        {
+            return;
+        }
+
+        // 조작법 안내는 개발용 트레이너의 활성 여부와 무관하게 실제 안내 패널이 있는 씬에서 표시합니다.
+        // 기존 F9 안내와 같은 좌상단 위치와 기본 글자 크기를 사용합니다.
+        if (m_hintStyle == null)
+        {
+            m_hintStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 12,
+                fontStyle = FontStyle.Bold,
+                normal = { textColor = Color.white },
+            };
+        }
+
+        GUI.Label(new Rect(10, 10, 600, 24), $"{m_toggleKey} : 조작법 열기", m_hintStyle);
     }
 
     /// <summary>

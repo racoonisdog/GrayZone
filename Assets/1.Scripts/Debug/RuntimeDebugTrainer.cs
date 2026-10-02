@@ -748,8 +748,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         if (!m_open)
         {
-            GUI.Label(new Rect(10, 10, 600, 24), $"{m_toggleKey}: 런타임 디버그 트레이너 열기 / 닫기", m_headerStyle);
-
             // 창을 그리지 않고 빠져나갈 때도 전역 스킨은 되돌립니다. 남겨 두면 다른 IMGUI 창이 이 배율을 물려받습니다.
             RestoreSkin();
             return;

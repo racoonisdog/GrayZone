@@ -358,6 +358,17 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("크로스헤어 중심에서 우하단 대각 방향으로 탄약 게이지를 얼마나 떨어뜨릴지(픽셀)입니다. x·y 각 축에 동일 적용됩니다.")]
     [SerializeField] private float m_ammoGaugeDiagonalOffset = 40.0f;
 
+    [Header("Ammo Gauge Bullet")]
+    [Tooltip("켜면 탄약 게이지 옆에 재장전 탄약 아이콘(m_reloadBulletImage)을 하나 더 표시합니다. 게이지가 보일 때만 보입니다.")]
+    [SerializeField] private bool m_showAmmoGaugeBullet = true;
+
+    [Tooltip("탄약 게이지 옆 탄약 아이콘의 표시 크기(픽셀)입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_ammoGaugeBulletSizePixels = 24.0f;
+
+    [Tooltip("탄약 게이지 중심에서 아이콘 중심까지의 거리(픽셀)입니다. x는 오른쪽, y는 아래쪽이 양수입니다.")]
+    [SerializeField] private Vector2 m_ammoGaugeBulletOffset = new Vector2(62.0f, -12.0f);
+
     [Foldout("Hit Feedback")]
     [Header("Hit Marker")]
     [Tooltip("켜면 적을 맞혔을 때 중앙에 X자 히트마커를 잠깐 표시합니다.")]
@@ -541,6 +552,7 @@ public class CrosshairController : MonoBehaviour
     private VisualElement m_subShapeElement;
     private VisualElement m_subStrokeElement;
     private VisualElement m_reloadBulletElement;
+    private VisualElement m_ammoGaugeBulletElement;
     private VisualElement m_ammoGaugeElement;
     private VisualElement m_hitMarkerElement;
     private VisualElement m_killSkullElement;
@@ -2101,6 +2113,7 @@ public class CrosshairController : MonoBehaviour
         }
 
         m_reloadBulletElement = FindOrCreateChild(m_crosshairElement, "ReloadBullet");
+        m_ammoGaugeBulletElement = FindOrCreateChild(m_crosshairElement, "AmmoGaugeBullet");
 
         m_hitMarkerElement = FindOrCreateChild(m_crosshairElement, "HitMarker");
         if (m_hitMarkerElement != null)
@@ -2336,6 +2349,7 @@ public class CrosshairController : MonoBehaviour
 
         ApplyReloadBullet(center, reloadSwap);
         ApplyAmmoGauge(center);
+        ApplyAmmoGaugeBullet(center);
         LayoutHitMarker(center);
         LayoutKillSkull(center);
     }
@@ -2397,6 +2411,40 @@ public class CrosshairController : MonoBehaviour
         m_ammoGaugeElement.style.backgroundColor = Color.clear;
         m_ammoGaugeElement.style.backgroundImage = new StyleBackground(StyleKeyword.None);
         m_ammoGaugeElement.MarkDirtyRepaint();
+    }
+
+    /// <summary>
+    /// 탄약 게이지 옆에 재장전 탄약 아이콘과 같은 이미지를 하나 더 배치합니다. 게이지와 같은 조건에서만 보입니다.
+    /// </summary>
+    /// <remarks>
+    /// 위치는 게이지 중심 기준 오프셋이라, 게이지 크기나 대각 오프셋을 바꿔도 아이콘이 게이지를 따라갑니다.
+    /// 재장전 깜빡임은 중앙 아이콘에만 적용하고 이 아이콘은 항상 불투명하게 둡니다.
+    /// </remarks>
+    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
+    private void ApplyAmmoGaugeBullet(float center)
+    {
+        if (m_ammoGaugeBulletElement == null)
+        {
+            return;
+        }
+
+        bool gaugeVisible = m_showAmmoGauge
+                         && m_ammoGaugeSizePixels > 0.0f
+                         && (m_ammoGaugeAlwaysVisible || m_isReloading || !Application.isPlaying);
+        if (!gaugeVisible || !m_showAmmoGaugeBullet || m_reloadBulletImage == null || m_ammoGaugeBulletSizePixels <= 0.0f)
+        {
+            HideElement(m_ammoGaugeBulletElement);
+            return;
+        }
+
+        float size = m_ammoGaugeBulletSizePixels;
+        float gaugeCenter = center + m_ammoGaugeDiagonalOffset;
+        ApplyTextureImage(
+            m_ammoGaugeBulletElement,
+            m_reloadBulletImage,
+            gaugeCenter + m_ammoGaugeBulletOffset.x - size * 0.5f,
+            gaugeCenter + m_ammoGaugeBulletOffset.y - size * 0.5f,
+            size);
     }
 
     /// <summary>
