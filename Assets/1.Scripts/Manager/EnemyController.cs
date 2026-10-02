@@ -230,8 +230,33 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     private bool m_hasDefenseApproachSettings;
     private float m_defenseApproachStoppingDistance;
 
+    /// <summary>방어 목표에서 이 개체가 고른 공격 포인트입니다. 포인트가 없는 목표면 null입니다.</summary>
+    private DefenseAttackPoint m_defenseAttackPoint;
+
+    /// <summary>공격 포인트로 가다가 막혀 서 있던 시간(초)입니다.</summary>
+    private float m_defenseAttackPointBlockedTime;
+
+    /// <summary>이 시간(초) 넘게 막혀 있으면 다른 공격 포인트를 다시 고릅니다.</summary>
+    private const float DefenseAttackPointRepickDelay = 1.5f;
+
+    /// <summary>공격 포인트를 쓸 때 접근 정지 거리의 최댓값(m)입니다. 손이 목표 표면에 닿도록 바짝 붙게 합니다.</summary>
+    private const float DefenseAttackPointStoppingDistance = 0.3f;
+
     /// <summary>스포너의 목표 위치 또는 그 부모에 연결된 방어 목표 체력입니다. 좌표 전용 마커면 null입니다.</summary>
     public DefenseEventHealth DefenseObjective => m_defenseObjective;
+
+    /// <summary>방어 목표에서 이 개체가 고른 공격 포인트입니다. 고르지 않았거나 포인트가 없는 목표면 null입니다.</summary>
+    public DefenseAttackPoint DefenseAttackPoint => m_defenseAttackPoint;
+
+    /// <summary>
+    /// 지금 목적지까지 더 다가갈 수 없는 상태(도착)인지 여부입니다.
+    /// </summary>
+    /// <remarks>
+    /// 공격 포인트가 목표 표면에 있어도 NavMesh는 목표 둘레가 비어 있어 그 점까지 걸어가지 못할 수 있습니다.
+    /// 그때 공격 시작 거리만 보면 영원히 공격하지 못하므로, 도착했으면 일반 공격 거리로 시작하게 하는 데 씁니다.
+    /// </remarks>
+    public bool HasSettledDefenseApproach => agent != null && agent.enabled && agent.isOnNavMesh &&
+        !agent.pathPending && agent.remainingDistance <= agent.stoppingDistance + 0.2f;
 
     /// <summary>현재 방어 목표 공격 상태를 실행하고 있는지 여부입니다.</summary>
     public bool IsAttackingDefenseObjective => m_defenseAttack != null && m_current == m_defenseAttack;
@@ -912,6 +937,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     public void ClearDefenseSpawnConfiguration()
     {
         RestoreDefenseApproachSettings();
+        ReleaseDefenseAttackPoint();
         m_isDefenseSpawn = false;
         m_defenseWaypoints.Clear();
         m_defenseTargetPosition = null;
@@ -1837,7 +1863,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         if (m_current == Combat) m_hybridAggroActive = false;
 
         m_current?.Exit();
-        if (next == Combat || next == Dead) RestoreDefenseApproachSettings();
+        if (next == Combat || next == Dead)
+        {
+            RestoreDefenseApproachSettings();
+            // 교전으로 빠지거나 죽으면 공격 포인트를 놓아 다른 적이 고를 수 있게 합니다. 돌아오면 다시 고릅니다.
+            ReleaseDefenseAttackPoint();
+        }
         m_current = next;
         m_current.Enter();
     }
@@ -2033,6 +2064,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         }
 
         // 좌표 도착과 공격 가능 조건은 다릅니다. 목표물은 표면으로 접근하고 기존 공격 타이밍을 재사용합니다.
+        if (usesObjective)
+        {
+            EnsureDefenseAttackPoint();
+        }
+
         if (usesObjective &&
             enemyAttack != null && enemyAttack.TryGetDefenseAttackPoint(m_defenseObjective, out Vector3 attackPoint))
         {
@@ -2041,8 +2077,10 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
                 m_defenseApproachStoppingDistance = agent.stoppingDistance;
                 m_hasDefenseApproachSettings = true;
             }
-            agent.stoppingDistance = Mathf.Min(m_defenseApproachStoppingDistance,
-                Mathf.Max(0.0f, enemyAttack.AttackStartRange * 0.5f));
+            float approachStoppingDistance = m_defenseAttackPoint != null
+                ? DefenseAttackPointStoppingDistance
+                : Mathf.Max(0.0f, enemyAttack.AttackStartRange * 0.5f);
+            agent.stoppingDistance = Mathf.Min(m_defenseApproachStoppingDistance, approachStoppingDistance);
             Vector3 direction = attackPoint - transform.position;
             direction.y = 0f;
             if (direction.sqrMagnitude > 0.0001f)
@@ -2054,6 +2092,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
                 return true;
             }
             MoveTo(attackPoint);
+            UpdateDefenseAttackPointBlocked();
             return true;
         }
 
@@ -2107,6 +2146,72 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         m_hybridAggroActive = true;
         m_defenseWaypointIndex = m_defenseWaypoints.Count;
+    }
+
+    /// <summary>방어 목표에 공격 포인트가 있으면, 아직 고르지 않았을 때 하나 고릅니다.</summary>
+    /// <remarks>목표가 바뀌었거나 고른 포인트가 꺼졌으면 다시 고릅니다. 포인트가 없는 목표면 고른 것을 놓습니다.</remarks>
+    private void EnsureDefenseAttackPoint()
+    {
+        if (m_defenseObjective == null || !m_defenseObjective.HasAttackPoints)
+        {
+            ReleaseDefenseAttackPoint();
+            return;
+        }
+
+        if (m_defenseAttackPoint != null && m_defenseAttackPoint.isActiveAndEnabled &&
+            m_defenseAttackPoint.Owner == m_defenseObjective)
+        {
+            return;
+        }
+
+        AssignDefenseAttackPoint(null);
+    }
+
+    /// <summary>지금 포인트를 놓고 새 공격 포인트를 고릅니다.</summary>
+    /// <param name="avoid">가능하면 고르지 않을 포인트입니다. 막혀서 다시 고를 때 지금 포인트를 넘깁니다.</param>
+    private void AssignDefenseAttackPoint(DefenseAttackPoint avoid)
+    {
+        ReleaseDefenseAttackPoint();
+        m_defenseAttackPoint = m_defenseObjective != null
+            ? m_defenseObjective.PickAttackPoint(transform.position, avoid)
+            : null;
+        m_defenseAttackPoint?.AddOccupant();
+    }
+
+    /// <summary>고른 공격 포인트를 놓습니다. 교전으로 빠지거나 죽거나 풀로 돌아갈 때 부릅니다.</summary>
+    private void ReleaseDefenseAttackPoint()
+    {
+        if (m_defenseAttackPoint != null)
+        {
+            m_defenseAttackPoint.RemoveOccupant();
+        }
+
+        m_defenseAttackPoint = null;
+        m_defenseAttackPointBlockedTime = 0.0f;
+    }
+
+    /// <summary>
+    /// 공격 포인트로 가는 길이 막혀 서 있으면 시간을 재고, 오래 막히면 다른 포인트를 고릅니다.
+    /// </summary>
+    /// <remarks>
+    /// 막힘은 "거의 멈춰 있는데 목적지까지 남은 거리가 있는" 상태로 봅니다. 대개 앞에서 같은 포인트를 때리는 적에게
+    /// 막힌 경우입니다. 그대로 두면 뒤에 선 적이 끝까지 공격하지 못하므로 옆 포인트로 흩어 보냅니다.
+    /// </remarks>
+    private void UpdateDefenseAttackPointBlocked()
+    {
+        if (m_defenseAttackPoint == null || agent == null || agent.pathPending)
+        {
+            return;
+        }
+
+        bool blocked = agent.velocity.sqrMagnitude < 0.04f &&
+            agent.remainingDistance > agent.stoppingDistance + 0.5f;
+        m_defenseAttackPointBlockedTime = blocked ? m_defenseAttackPointBlockedTime + Time.deltaTime : 0.0f;
+
+        if (m_defenseAttackPointBlockedTime >= DefenseAttackPointRepickDelay)
+        {
+            AssignDefenseAttackPoint(m_defenseAttackPoint);
+        }
     }
 
     private void RestoreDefenseApproachSettings()

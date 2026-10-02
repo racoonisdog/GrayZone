@@ -38,6 +38,8 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
     {
         DrawDefenseStateSection();
         GUILayout.Space(6);
+        DrawDefenseLevelSection();
+        GUILayout.Space(6);
         DrawDefenseFlowSection();
         GUILayout.Space(6);
         DrawDefenseEnemySection();
@@ -79,6 +81,53 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
         {
             string stage = data.DefenseStage != null ? data.DefenseStage.name : "없음";
             GUILayout.Label($"회차 {data.DefenseRound} ({stage})   기록 단계 {data.Phase}   처치 {data.KillCount}   임무 완료 {data.MissionCompleted}");
+        }
+    }
+
+    /// <summary>
+    /// 방어전 업그레이드 레벨을 보여 주고, 지정사수 레벨을 바로 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 씬에서 효과가 있는 업그레이드는 지금 지정사수(Shooter)뿐이라 그것만 바꿀 수 있습니다.
+    /// 나머지는 입장 데이터에 들어온 값을 확인하는 용도입니다. 바꾼 값은 Play를 끄면 사라집니다.
+    /// </remarks>
+    private void DrawDefenseLevelSection()
+    {
+        GUILayout.Label("■ 방어전 레벨", m_headerStyle);
+
+        DefenseManager defense = DefenseManager.Instance;
+        if (defense == null)
+        {
+            return;
+        }
+
+        int maxLevel = defense.MarksmanTierCount;
+        GUILayout.Label($"지정사수 레벨 {defense.MarksmanLevel} / {maxLevel}   ({(defense.HasMarksmanLevelOverride ? "디버그 지정" : "입장 데이터")})");
+
+        GUILayout.BeginHorizontal();
+        for (int level = 0; level <= maxLevel; level++)
+        {
+            if (GUILayout.Button($"{level}레벨"))
+            {
+                defense.DebugSetMarksmanLevel(level);
+                m_defenseActionResult = $"지정사수를 {level}레벨로 다시 배치했습니다.";
+            }
+        }
+
+        if (GUILayout.Button("입장 데이터 값으로"))
+        {
+            defense.DebugSetMarksmanLevel(-1);
+            m_defenseActionResult = $"지정사수 레벨을 입장 데이터 값({defense.MarksmanLevel})으로 되돌렸습니다.";
+        }
+        GUILayout.EndHorizontal();
+
+        DefenseSceneDataManager data = DefenseSceneDataManager.Instance;
+        if (data != null)
+        {
+            GUILayout.Label(
+                $"입장 데이터: 함정 {data.GetUpgradeLevel(ScrambleUpgradeType.Trap)}   가시 {data.GetUpgradeLevel(ScrambleUpgradeType.Spike)}   " +
+                $"폭발물 {data.GetUpgradeLevel(ScrambleUpgradeType.Explosive)}   지정사수 {data.GetUpgradeLevel(ScrambleUpgradeType.Shooter)}   " +
+                $"철조망 {data.GetUpgradeLevel(ScrambleUpgradeType.Wire)}");
         }
     }
 

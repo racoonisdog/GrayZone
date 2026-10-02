@@ -152,4 +152,23 @@ public class Melee : MonoBehaviour
 
         m_attack.TryApplyDamageTo(this, other);
     }
+
+    /// <summary>
+    /// 방어 목표(성문 등)에 한해 판정 콜라이더가 겹쳐 있는 동안에도 피해를 넘깁니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어 목표는 크고 움직이지 않아, 붙어서 때리는 동안 손이 계속 그 안에 있습니다. 그러면 판정이 켜지기
+    /// 전부터 겹쳐 있어 진입 이벤트가 오지 않을 때가 많습니다(실측 10타 중 4타만 적중).
+    /// 스쿼드원은 위 진입 규칙을 그대로 따르도록 여기서 제외합니다.
+    /// 한 공격에 여러 번 맞지 않는 것은 <see cref="EnemyAttack.TryApplyDamageTo"/>의 적중 기록이 보장합니다.
+    /// </remarks>
+    private void OnTriggerStay(Collider other)
+    {
+        if (m_attack == null || other == null || other.GetComponentInParent<DefenseEventHealth>() == null)
+        {
+            return;
+        }
+
+        m_attack.TryApplyDamageTo(this, other);
+    }
 }

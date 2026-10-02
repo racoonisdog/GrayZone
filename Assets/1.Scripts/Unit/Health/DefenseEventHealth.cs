@@ -45,6 +45,77 @@ public class DefenseEventHealth : HealthSystemBase
     [Tooltip("파괴 시 패배 처리를 할지 여부입니다. 끄면 이벤트만 발생하고 게임오버를 요청하지 않습니다.")]
     [SerializeField] private bool m_requestGameOverOnDestroyed = true;
 
+    [Foldout("Attack Points")]
+    [Tooltip("공격 포인트를 고를 때 이미 그 포인트를 고른 적 한 마리당 더하는 거리(m)입니다. 클수록 적이 여러 포인트로 퍼집니다. " +
+             "자식 공격 포인트(DefenseAttackPoint)가 없으면 쓰지 않습니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_attackPointCrowdPenalty = 3.0f;
+
+    [Tooltip("공격 포인트를 고를 때 더하는 무작위 거리의 최댓값(m)입니다. 같은 조건의 적이 늘 같은 포인트를 고르지 않게 합니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_attackPointRandomRange = 2.0f;
+
+    /// <summary>이 목표에 등록된 공격 포인트입니다. 자식 <see cref="DefenseAttackPoint"/>가 스스로 등록합니다.</summary>
+    private readonly System.Collections.Generic.List<DefenseAttackPoint> m_attackPoints =
+        new System.Collections.Generic.List<DefenseAttackPoint>();
+
+    /// <summary>등록된 공격 포인트가 있는지 여부입니다. 없으면 적은 가장 가까운 표면을 때립니다.</summary>
+    public bool HasAttackPoints => m_attackPoints.Count > 0;
+
+    /// <summary>공격 포인트를 등록합니다. <see cref="DefenseAttackPoint"/>가 활성화될 때 부릅니다.</summary>
+    public void RegisterAttackPoint(DefenseAttackPoint point)
+    {
+        if (point != null && !m_attackPoints.Contains(point))
+        {
+            m_attackPoints.Add(point);
+        }
+    }
+
+    /// <summary>공격 포인트 등록을 해제합니다. <see cref="DefenseAttackPoint"/>가 비활성화될 때 부릅니다.</summary>
+    public void UnregisterAttackPoint(DefenseAttackPoint point)
+    {
+        m_attackPoints.Remove(point);
+    }
+
+    /// <summary>
+    /// 지정 위치에서 다가오는 적이 때릴 공격 포인트를 고릅니다.
+    /// </summary>
+    /// <param name="fromPosition">고르는 적의 위치입니다.</param>
+    /// <param name="avoid">가능하면 고르지 않을 포인트입니다. 막혀서 다시 고를 때 지금 포인트를 넘깁니다. 없으면 null입니다.</param>
+    /// <returns>고른 포인트입니다. 등록된 포인트가 없으면 null입니다.</returns>
+    /// <remarks>
+    /// 점수는 수평 거리 + 그 포인트를 고른 적 수 × 붐빔 거리 + 무작위 거리이고, 가장 낮은 것을 고릅니다.
+    /// 무작위 값은 고를 때마다 새로 뽑습니다. 고르는 일은 접근을 시작할 때와 막혔을 때만 일어나서 자주 바뀌지 않습니다.
+    /// 피하려는 포인트에는 붐빔 거리를 두 번 더합니다. 다른 포인트가 모두 더 붐비면 다시 고를 수 있게 하기 위해서입니다.
+    /// </remarks>
+    public DefenseAttackPoint PickAttackPoint(Vector3 fromPosition, DefenseAttackPoint avoid)
+    {
+        DefenseAttackPoint best = null;
+        float bestScore = float.PositiveInfinity;
+
+        for (int i = m_attackPoints.Count - 1; i >= 0; i--)
+        {
+            DefenseAttackPoint point = m_attackPoints[i];
+            if (point == null)
+            {
+                m_attackPoints.RemoveAt(i);
+                continue;
+            }
+
+            Vector3 delta = point.Position - fromPosition;
+            delta.y = 0.0f;
+            float crowd = point.OccupantCount + (point == avoid ? 2 : 0);
+            float score = delta.magnitude + crowd * m_attackPointCrowdPenalty + UnityEngine.Random.value * m_attackPointRandomRange;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = point;
+            }
+        }
+
+        return best;
+    }
+
     /// <summary>이미 발동한 경고 단계입니다. 같은 경고가 반복해서 뜨지 않게 기록합니다.</summary>
     private bool[] m_warningFired;
 

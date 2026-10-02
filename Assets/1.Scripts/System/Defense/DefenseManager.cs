@@ -994,6 +994,44 @@ public sealed class DefenseManager : CombatSceneManager
         }
     }
 
+    /// <summary>지금 지정사수 배치에 쓰는 레벨입니다. 디버그 지정 값이 있으면 그 값입니다.</summary>
+    /// <remarks>디버그 창이 매 프레임 읽으므로, 데이터 매니저가 없을 때도 경고를 내지 않습니다.</remarks>
+    public int MarksmanLevel
+    {
+        get
+        {
+            if (m_debugMarksmanLevelOverride >= 0)
+            {
+                return m_debugMarksmanLevelOverride;
+            }
+
+            DefenseSceneDataManager defenseData = ResolveDefenseSceneDataManager();
+            if (defenseData != null)
+            {
+                return defenseData.GetUpgradeLevel(ScrambleUpgradeType.Shooter);
+            }
+
+            return GameDataManager.Instance != null ? GameDataManager.Instance.ShooterUpgradeLevel : 0;
+        }
+    }
+
+    /// <summary>지정사수 칸 수입니다. 이 값이 배치할 수 있는 최대 레벨입니다.</summary>
+    public int MarksmanTierCount => m_marksmanTiers != null ? m_marksmanTiers.Length : 0;
+
+    /// <summary>지정사수 레벨을 디버그 값으로 지정했는지 여부입니다. 아니면 입장 데이터 값을 씁니다.</summary>
+    public bool HasMarksmanLevelOverride => m_debugMarksmanLevelOverride >= 0;
+
+    /// <summary>
+    /// 디버그용: 지정사수 레벨을 지정하고 바로 다시 배치합니다.
+    /// </summary>
+    /// <param name="level">배치할 레벨입니다. -1이면 지정을 풀고 입장 데이터 값으로 돌아갑니다.</param>
+    /// <remarks>Play 중에만 바뀌는 런타임 값입니다. 씬의 Inspector 값은 바꾸지 않습니다.</remarks>
+    public void DebugSetMarksmanLevel(int level)
+    {
+        m_debugMarksmanLevelOverride = Mathf.Max(-1, level);
+        ApplyMarksmanPlacement();
+    }
+
     private int ResolveMarksmanLevel()
     {
         if (m_debugMarksmanLevelOverride >= 0)

@@ -622,6 +622,10 @@ public class EnemyTargetSensor : MonoBehaviour
     /// </remarks>
     public void NotifyDamagedBy(SquadMemberController attacker)
     {
+        // 방어전 경로 이동 중에는 감지 갱신이 돌지 않아 기록 슬롯이 아직 비어 있을 수 있습니다.
+        // 그대로 찾으면 첫 피격의 공격자를 놓쳐, 혼합형이 전환하자마자 교전을 끝냅니다.
+        SyncSquadMembers();
+
         TargetInfo info = FindInfo(attacker);
         if (info == null || !IsAliveMember(attacker))
         {
