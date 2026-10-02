@@ -101,6 +101,7 @@ public class GameOverUIController : MonoBehaviour
     {
         // 화면이 꺼질 때 멈춘 시간이 남지 않게 합니다.
         RestoreTime();
+        MissionOverlayVisibility.Unregister(this);
 
         if (m_backgroundVideo != null)
         {
@@ -189,6 +190,7 @@ public class GameOverUIController : MonoBehaviour
 
         m_isLeaving = false;
         gameObject.SetActive(true);
+        MissionOverlayVisibility.Register(this);
         m_selectionIndicator?.ResetSelection();
         PlayBackgroundVideo();
 

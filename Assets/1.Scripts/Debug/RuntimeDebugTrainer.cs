@@ -738,7 +738,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled)
+        // 작전 실패·귀환 오버레이가 떠 있으면 그리지 않습니다. 전역 스킨을 바꾸기 전에 빠져나가므로 되돌릴 것도 없습니다.
+        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled || MissionOverlayVisibility.IsShown)
         {
             return;
         }

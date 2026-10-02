@@ -314,7 +314,7 @@ public class CrosshairDebugInspector : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!m_open || !m_inspectorEnabled || !GameDevMode.DebugFeaturesEnabled)
+        if (!m_open || !m_inspectorEnabled || !GameDevMode.DebugFeaturesEnabled || MissionOverlayVisibility.IsShown)
         {
             return;
         }

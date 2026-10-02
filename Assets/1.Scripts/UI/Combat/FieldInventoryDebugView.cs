@@ -102,7 +102,7 @@ public sealed class FieldInventoryDebugView : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!m_isOpen || m_inventoryManager == null)
+        if (!m_isOpen || m_inventoryManager == null || MissionOverlayVisibility.IsShown)
         {
             return;
         }

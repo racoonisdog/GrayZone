@@ -126,6 +126,7 @@ public class ResultUIController : MonoBehaviour
     private void OnDisable()
     {
         RestoreTime();
+        MissionOverlayVisibility.Unregister(this);
     }
 
     /// <summary>
@@ -142,6 +143,7 @@ public class ResultUIController : MonoBehaviour
 
         m_isLeaving = false;
         gameObject.SetActive(true);
+        MissionOverlayVisibility.Register(this);
 
         if (m_pauseTimeWhileShown && !m_pausedTime)
         {
