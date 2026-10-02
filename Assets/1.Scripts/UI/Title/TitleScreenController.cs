@@ -40,6 +40,12 @@ public sealed class TitleScreenController : MonoBehaviour
     {
         ConfigureBackgroundVideo();
         ConfigureMenuSelection();
+
+        // 메뉴 버튼 동작(새 게임·불러오기·나가기)은 따로 둔 컴포넌트가 맡습니다. 씬에 미리 붙어 있으면 그것을 씁니다.
+        if (GetComponent<TitleMenuActions>() == null)
+        {
+            gameObject.AddComponent<TitleMenuActions>();
+        }
     }
 
     private void OnEnable()
