@@ -11,9 +11,11 @@ using UnityEngine;
 /// <c>agent.speed</c>를 자기 기준값으로 다시 대입합니다. 들어올 때 속도를 깎아 두어도 다음 상태 전환에서
 /// 원래대로 돌아옵니다. 그래서 <see cref="EnemyController.AddForceWalk"/>로 달리기를 막아
 /// 속도를 구하는 지점 자체가 걷기 값을 내놓게 합니다.
+///
+/// 스파이크(<see cref="SpikeTrap"/>)는 이 함정을 그대로 쓰고, 지속 감속 대신 진입 순간 감속과 피해에 무게를 둡니다.
 /// </remarks>
 [RequireComponent(typeof(Collider))]
-public sealed class WireTrap : Trap
+public class WireTrap : Trap
 {
     /// <inheritdoc />
     protected override string DefaultDisplayName => "윤형 철조망";
@@ -45,6 +47,31 @@ public sealed class WireTrap : Trap
     [Tooltip("적 하나가 범위에 들어올 때마다 깎을 내구도입니다. 0이면 닳지 않습니다. 내구도가 다 닳으면 재설치 정책에 따라 처리됩니다.")]
     [Min(0)]
     [SerializeField] private int m_durabilityCostPerTarget = 1;
+
+    [Header("Entry Slow")]
+    [Tooltip("적이 들어온 순간 잠깐 거는 이동 속도 배율입니다. 0.2면 80% 감속입니다. 위의 지속 배율에 곱해집니다. 1이면 쓰지 않습니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_entrySlowMultiplier = 1.0f;
+
+    [Tooltip("진입 순간 감속을 유지할 시간(초)입니다. 들어온 적마다 한 번씩 걸리고, 시간이 지나면 지속 배율로 돌아갑니다. 0이면 쓰지 않습니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_entrySlowDuration = 0.0f;
+
+    /// <summary>업그레이드로 지속 이동 속도 배율에 곱하는 값입니다. 1이면 프리팹 값 그대로입니다.</summary>
+    private float m_upgradeMoveSpeedScale = 1.0f;
+
+    /// <summary>진입 순간 감속이 끝나는 시각(Time.time)입니다. 적마다 따로 셉니다.</summary>
+    private readonly Dictionary<EnemyController, float> m_entrySlowEndTimes =
+        new Dictionary<EnemyController, float>();
+
+    /// <summary>진입 순간 감속이 끝난 적들입니다. 순회 도중 사전을 고치지 않으려고 따로 모읍니다.</summary>
+    private readonly List<EnemyController> m_entrySlowEndedBuffer = new List<EnemyController>();
+
+    /// <summary>범위 안에 있는 동안 걸리는 이동 속도 배율입니다. 업그레이드가 곱해져 있습니다.</summary>
+    public float MoveSpeedMultiplier => Mathf.Clamp01(m_moveSpeedMultiplier * m_upgradeMoveSpeedScale);
+
+    /// <summary>진입 순간 감속을 쓰는지 여부입니다.</summary>
+    private bool UsesEntrySlow => m_entrySlowDuration > 0.0f && m_entrySlowMultiplier < 1.0f;
 
     /// <summary>지금 범위 안에 있는 적들입니다.</summary>
     private readonly Dictionary<EnemyController, Occupant> m_occupants =
@@ -147,7 +174,18 @@ public sealed class WireTrap : Trap
             TickTimer = DamageInterval,
         });
 
-        enemy.AddMoveSpeedMultiplier(this, m_moveSpeedMultiplier);
+        // 진입 순간 감속이 있으면 먼저 그 값으로 걸고, 시간이 지나면 Update가 지속 배율로 되돌립니다.
+        // 같은 키(this)로 다시 걸면 값만 바뀌므로, 해제 경로는 지속 감속과 같습니다.
+        if (UsesEntrySlow)
+        {
+            enemy.AddMoveSpeedMultiplier(this, MoveSpeedMultiplier * m_entrySlowMultiplier);
+            m_entrySlowEndTimes[enemy] = Time.time + m_entrySlowDuration;
+        }
+        else
+        {
+            enemy.AddMoveSpeedMultiplier(this, MoveSpeedMultiplier);
+        }
+
         if (m_forceWalk)
         {
             enemy.AddForceWalk(this);
@@ -155,9 +193,10 @@ public sealed class WireTrap : Trap
 
         // 방식과 무관하게 들어온 순간 한 번은 줍니다. Tick은 그 뒤로 간격마다 더 주는 것이고,
         // Once는 여기서 끝입니다. 밟자마자 아무 일도 안 일어나면 함정이 고장 난 것처럼 보입니다.
-        if (damageable != null && !damageable.IsDead && m_damage > 0)
+        int damage = Damage;
+        if (damageable != null && !damageable.IsDead && damage > 0)
         {
-            damageable.TakeDamage(m_damage, gameObject);
+            damageable.TakeDamage(damage, gameObject);
         }
 
         // 내구도는 머무는 시간이 아니라 걸린 적 수로 깎습니다. 시간으로 깎으면 한 마리가 오래 갇혀
@@ -193,6 +232,8 @@ public sealed class WireTrap : Trap
     /// </remarks>
     private void Update()
     {
+        UpdateEntrySlow();
+
         if (m_occupants.Count == 0)
         {
             return;
@@ -200,6 +241,7 @@ public sealed class WireTrap : Trap
 
         bool tickMode = m_damageMode == TrapDamageMode.Tick;
         float interval = DamageInterval;
+        int damage = Damage;
 
         m_keyBuffer.Clear();
         foreach (EnemyController key in m_occupants.Keys)
@@ -237,9 +279,9 @@ public sealed class WireTrap : Trap
             // 프레임이 크게 튀었을 때 피해가 갑자기 몰리는 쪽이 더 나쁩니다.
             if (occupant.TickTimer <= 0.0f)
             {
-                if (m_damage > 0)
+                if (damage > 0)
                 {
-                    occupant.Damageable.TakeDamage(m_damage, gameObject);
+                    occupant.Damageable.TakeDamage(damage, gameObject);
                 }
 
                 occupant.TickTimer = interval;
@@ -254,6 +296,66 @@ public sealed class WireTrap : Trap
         }
 
         m_removalBuffer.Clear();
+    }
+
+    /// <summary>
+    /// 진입 순간 감속이 끝난 적을 지속 배율로 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// 그 사이 범위를 벗어났거나 죽어서 이미 풀린 적은 목록에서만 뺍니다. 다시 걸면 범위 밖에서 느려진 채로 남습니다.
+    /// </remarks>
+    private void UpdateEntrySlow()
+    {
+        if (m_entrySlowEndTimes.Count == 0)
+        {
+            return;
+        }
+
+        float now = Time.time;
+        foreach (KeyValuePair<EnemyController, float> pair in m_entrySlowEndTimes)
+        {
+            if (pair.Key == null || now >= pair.Value)
+            {
+                m_entrySlowEndedBuffer.Add(pair.Key);
+            }
+        }
+
+        for (int i = 0; i < m_entrySlowEndedBuffer.Count; i++)
+        {
+            EnemyController enemy = m_entrySlowEndedBuffer[i];
+            m_entrySlowEndTimes.Remove(enemy);
+
+            if (enemy != null && m_occupants.ContainsKey(enemy))
+            {
+                enemy.AddMoveSpeedMultiplier(this, MoveSpeedMultiplier);
+            }
+        }
+
+        m_entrySlowEndedBuffer.Clear();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>철조망은 Wire 업그레이드로 감속과 내구도가 늘어납니다. 스파이크는 이 동작을 바꿉니다.</remarks>
+    protected override void OnApplyUpgrade(TrapUpgradeTableSO table, DefenseSceneDataManager data)
+    {
+        m_upgradeMoveSpeedScale = 1.0f;
+        ApplyLevelUpgrade(table, data);
+    }
+
+    /// <summary>
+    /// 이 함정 종류의 업그레이드 레벨을 적용합니다. 호출 전에 감속 배율과 내구도·피해 보너스는 기본값입니다.
+    /// </summary>
+    protected virtual void ApplyLevelUpgrade(TrapUpgradeTableSO table, DefenseSceneDataManager data)
+    {
+        if (table == null
+            || data == null
+            || !table.TryGetWire(data.GetUpgradeLevel(ScrambleUpgradeType.Wire), out TrapUpgradeTableSO.WireLevel level))
+        {
+            return;
+        }
+
+        m_upgradeMoveSpeedScale = Mathf.Clamp01(level.MoveSpeedScale);
+        SetUpgradeBonus(level.BonusDurability, 1.0f);
     }
 
     /// <summary>함정이 꺼질 때 걸어 둔 감속을 전부 풉니다.</summary>
@@ -288,6 +390,8 @@ public sealed class WireTrap : Trap
         m_occupants.Clear();
         m_keyBuffer.Clear();
         m_removalBuffer.Clear();
+        m_entrySlowEndTimes.Clear();
+        m_entrySlowEndedBuffer.Clear();
     }
 
     /// <summary>이 콜라이더가 이 함정이 반응할 대상인지 여부입니다.</summary>
@@ -305,10 +409,12 @@ public sealed class WireTrap : Trap
             if (!ReferenceEquals(enemy, null))
             {
                 m_occupants.Remove(enemy);
+                m_entrySlowEndTimes.Remove(enemy);
             }
             return;
         }
 
+        m_entrySlowEndTimes.Remove(enemy);
         if (m_occupants.Remove(enemy))
         {
             enemy.RemoveMoveSpeedMultiplier(this);

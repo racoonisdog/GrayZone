@@ -1,0 +1,157 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &1198057972137601938
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9893902
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.14528252
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: -16.707
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 6036205979934096456, guid: 87a921eb81ff86342addf20531d615a1, type: 3}
+    - target: {fileID: -5754084199372789682, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_Mesh
+      value: 
+      objectReference: {fileID: 2986572588485981911, guid: 87a921eb81ff86342addf20531d615a1, type: 3}
+    - target: {fileID: 919132149155446097, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_Name
+      value: Spike_Trap
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      propertyPath: m_Layer
+      value: 18
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1736715369646675435}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1804613225528513659}
+  m_SourcePrefab: {fileID: 100100000, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+--- !u!1 &2044971442358654659 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 4570054595c16404b9adbcbab66f6685, type: 3}
+  m_PrefabInstance: {fileID: 1198057972137601938}
+  m_PrefabAsset: {fileID: 0}
+--- !u!65 &1736715369646675435
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2044971442358654659}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 0.6, z: 0.5}
+  m_Center: {x: 0, y: 0.3, z: 0}
+--- !u!114 &1804613225528513659
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2044971442358654659}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8437bab397faa04eb0352fdd3685eac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  m_startPlaced: 0
+  m_buildCostResourceId: trap_material
+  m_buildCostAmount: 0
+  m_buildPrompt: "\uC124\uCE58"
+  m_buildHoldDuration: 1
+  m_displayName: 
+  m_description: 
+  m_blueprintMaterial: {fileID: 2100000, guid: cf43b62aa6a65f148a402c99cb003910, type: 2}
+  m_disableShadowWhileBlueprint: 1
+  m_blueprintVisualRoot: {fileID: 0}
+  m_builtVisualRoot: {fileID: 0}
+  m_maxHealth: 20
+  m_currentHealth: 0
+  m_rebuildPolicy: 1
+  m_buildChargesPerDefense: 0
+  m_remainingBuildCharges: -1
+  m_damage: 8
+  m_damageMode: 0
+  m_damageTickInterval: 1
+  m_drawRangeGizmo: 1
+  m_idleGizmoColor: {r: 0.2, g: 0.9, b: 1, a: 0.5}
+  m_activeGizmoColor: {r: 1, g: 0.15, b: 0.1, a: 0.8}
+  m_targetLayers:
+    serializedVersion: 2
+    m_Bits: 512
+  m_moveSpeedMultiplier: 1
+  m_forceWalk: 1
+  m_durabilityCostPerTarget: 1
+  m_entrySlowMultiplier: 0.2
+  m_entrySlowDuration: 0.2

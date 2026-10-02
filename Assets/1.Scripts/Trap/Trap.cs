@@ -162,11 +162,17 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// <summary>지금 남은 내구도입니다. 다시 설치하면 <see cref="MaxHealth"/>로 회복됩니다.</summary>
     public int Health => m_currentHealth;
 
-    /// <summary>다시 설치했을 때 회복되는 최대 내구도입니다.</summary>
-    public int MaxHealth => m_maxHealth;
+    /// <summary>업그레이드로 최대 내구도에 더한 값입니다. <see cref="ApplyUpgrade"/>가 정합니다.</summary>
+    private int m_upgradeBonusHealth;
 
-    /// <summary>한 번에 주는 피해량입니다.</summary>
-    public int Damage => m_damage;
+    /// <summary>업그레이드로 피해량에 곱하는 배율입니다. <see cref="ApplyUpgrade"/>가 정합니다.</summary>
+    private float m_upgradeDamageMultiplier = 1.0f;
+
+    /// <summary>다시 설치했을 때 회복되는 최대 내구도입니다. 업그레이드로 더한 값이 들어 있습니다.</summary>
+    public int MaxHealth => m_maxHealth + m_upgradeBonusHealth;
+
+    /// <summary>한 번에 주는 피해량입니다. 업그레이드 배율을 곱하고 올림한 값입니다.</summary>
+    public int Damage => Mathf.CeilToInt(m_damage * m_upgradeDamageMultiplier);
 
     /// <summary>이 함정이 피해를 주는 방식입니다.</summary>
     public TrapDamageMode DamageMode => m_damageMode;
@@ -279,10 +285,67 @@ public abstract class Trap : MonoBehaviour, IInteractable
     protected virtual void Awake()
     {
         CacheVisuals();
-        m_currentHealth = m_maxHealth;
+        m_currentHealth = MaxHealth;
         ResetBuildCharges();
         IsBuilt = m_startPlaced;
         ApplyBuildStateVisual();
+    }
+
+    /// <summary>방어전 업그레이드 레벨을 적용합니다.</summary>
+    /// <remarks>
+    /// Awake가 아니라 Start에서 하는 이유는, 방어전 데이터 매니저가 입장 데이터(업그레이드 레벨)를 자기 Start에서 만들기 때문입니다.
+    /// 데이터 매니저는 실행 순서가 -100이라 함정의 Start보다 먼저 돕니다.
+    /// </remarks>
+    protected virtual void Start()
+    {
+        ApplyUpgrade();
+    }
+
+    /// <summary>
+    /// 이번 방어전의 업그레이드 레벨을 다시 읽어 강화값을 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 데이터 매니저나 업그레이드 표가 없는 씬에서는 기본값으로 되돌립니다. 여러 번 불러도 결과가 같습니다.
+    /// 최대 내구도가 바뀌면 남은 내구도도 같은 양만큼 옮깁니다. 이미 깎인 양은 그대로 둡니다.
+    /// </remarks>
+    public void ApplyUpgrade()
+    {
+        int previousMaxHealth = MaxHealth;
+
+        m_upgradeBonusHealth = 0;
+        m_upgradeDamageMultiplier = 1.0f;
+
+        DefenseSceneDataManager data = DefenseSceneDataManager.Instance;
+        TrapUpgradeTableSO table = data != null ? data.TrapUpgradeTable : null;
+        OnApplyUpgrade(table, data);
+
+        int delta = MaxHealth - previousMaxHealth;
+        if (delta != 0 && !IsDepleted)
+        {
+            m_currentHealth = Mathf.Max(1, m_currentHealth + delta);
+        }
+    }
+
+    /// <summary>
+    /// 파생 함정이 자기 업그레이드 강화값을 적용할 자리입니다. 기본은 아무것도 하지 않습니다.
+    /// </summary>
+    /// <param name="table">업그레이드 표입니다. 없으면 null입니다.</param>
+    /// <param name="data">방어전 데이터 매니저입니다. 방어전 씬이 아니면 null입니다.</param>
+    /// <remarks>
+    /// 이 함수가 불리기 전에 내구도 보너스와 피해 배율은 기본값으로 되돌려져 있습니다.
+    /// 파생은 <see cref="SetUpgradeBonus"/>로 값을 넣고, 자기만의 강화값(범위, 감속 등)도 여기서 다시 계산합니다.
+    /// </remarks>
+    protected virtual void OnApplyUpgrade(TrapUpgradeTableSO table, DefenseSceneDataManager data)
+    {
+    }
+
+    /// <summary>업그레이드로 늘어난 최대 내구도와 피해 배율을 정합니다.</summary>
+    /// <param name="bonusHealth">최대 내구도에 더할 값입니다.</param>
+    /// <param name="damageMultiplier">피해량에 곱할 배율입니다.</param>
+    protected void SetUpgradeBonus(int bonusHealth, float damageMultiplier)
+    {
+        m_upgradeBonusHealth = Mathf.Max(0, bonusHealth);
+        m_upgradeDamageMultiplier = Mathf.Max(0.0f, damageMultiplier);
     }
 
     /// <summary>
@@ -523,7 +586,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
         }
 
         IsDepleted = false;
-        m_currentHealth = m_maxHealth;
+        m_currentHealth = MaxHealth;
         ApplyBuildStateVisual();
         OnRearmed();
     }

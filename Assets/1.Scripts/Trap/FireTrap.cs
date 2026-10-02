@@ -112,8 +112,10 @@ public sealed class FireTrap : Trap
     /// 뒤이어 <see cref="Trap.Build"/>를 불러도 <see cref="OnBuilt"/>가 오지 않습니다.
     /// 화염병이 생성하는 화염 지대가 이 경우라 여기서 직접 점화합니다.
     /// </remarks>
-    private void Start()
+    protected override void Start()
     {
+        base.Start();
+
         if (IsBuilt)
         {
             Ignite();

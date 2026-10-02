@@ -48,6 +48,10 @@ public sealed class DefenseSceneDataManager : CombatSceneDataManager
     [Min(-1)]
     [SerializeField] private int m_debugRoundOverride = -1;
 
+    [Foldout("Trap Upgrade")]
+    [Tooltip("셸터 Scramble 업그레이드 레벨별로 함정을 얼마나 강화할지 적은 표입니다. 비워 두면 함정은 프리팹 기본값 그대로입니다.")]
+    [SerializeField] private TrapUpgradeTableSO m_trapUpgradeTable;
+
     // 부모의 필드 런타임 상태(m_entryData 등)와 이름이 겹치지 않도록 defense 접두사를 붙입니다.
     // 실행 중에만 쓰는 값이고 Awake에서 비우므로 예전 이름의 저장값은 옮기지 않습니다.
     [Foldout("Defense Runtime State")]
@@ -87,6 +91,9 @@ public sealed class DefenseSceneDataManager : CombatSceneDataManager
     {
         return m_defenseEntryData?.Upgrades.GetLevel(type) ?? 0;
     }
+
+    /// <summary>함정 업그레이드 표입니다. 없으면 null이고, 이때 함정은 강화되지 않습니다.</summary>
+    public TrapUpgradeTableSO TrapUpgradeTable => m_trapUpgradeTable;
 
     /// <summary>이번 방어전 회차입니다. 입장 데이터가 아직 없으면 지금 만들어 정합니다.</summary>
     public int DefenseRound => EnsureDefenseEntryData().Round;
