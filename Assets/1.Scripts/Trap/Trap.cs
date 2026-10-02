@@ -214,6 +214,13 @@ public abstract class Trap : MonoBehaviour, IInteractable
         m_remainingBuildCharges = HasBuildChargeLimit ? m_buildChargesPerDefense : -1;
     }
 
+    /// <summary>설치 횟수를 처음 값으로 다시 채우고 외형을 맞춥니다. 디버그 트레이너 전용입니다.</summary>
+    public void DebugRefillBuildCharges()
+    {
+        ResetBuildCharges();
+        ApplyBuildStateVisual();
+    }
+
     /// <summary>
     /// 설치 가능 구간이 열리거나 닫혔음을 알립니다. 방어전 매니저가 구간이 바뀔 때마다 부릅니다.
     /// </summary>

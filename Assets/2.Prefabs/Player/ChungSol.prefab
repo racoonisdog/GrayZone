@@ -690,6 +690,14 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2726920372953862480, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_characterId
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2726920372953862480, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_displayName
+      value: "\uCCAD\uC194"
+      objectReference: {fileID: 0}
+    - target: {fileID: 2726920372953862480, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_hudPortrait
       value: 
       objectReference: {fileID: 21300000, guid: bd10d8bf73420494bb267b6fb5f93887, type: 3}
@@ -1018,6 +1026,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChungSolDragonBreathSkill
   m_cooldownDuration: 30
   m_reloadSpeedMultiplier: 1
+  m_debugInfiniteDragonBreathMagazine: 0
 --- !u!114 &6624136254035395959
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1030,6 +1039,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c3ef14b2e8c45944e96ed711ce481800, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StatusEffectContainer
+  m_effectAnchor: {fileID: 0}
+  m_modelTintRoot: {fileID: 0}
 --- !u!4 &8042323803606219392 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4526457136588419995, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}

@@ -144,6 +144,9 @@ public abstract class CombatSceneManager : MonoBehaviour, IInputModeController
         }
     }
 
+    /// <summary>이 씬이 소음 차폐(<see cref="NoiseManager"/>)를 쓰는지 여부입니다. 쓰지 않으면 없어도 경고하지 않습니다.</summary>
+    protected virtual bool UsesNoiseManager => true;
+
     /// <summary>빠진 자식 매니저를 한 번에 알립니다.</summary>
     /// <remarks>
     /// 이것들이 없으면 탄흔·사운드·시체 처리가 조용히 멈춥니다. 원인을 찾기 어려운 침묵이라 시작할 때 짚어 둡니다.
@@ -165,7 +168,7 @@ public abstract class CombatSceneManager : MonoBehaviour, IInputModeController
             Debug.LogWarning($"[{GetType().Name}] EnemyManager 자식 오브젝트를 찾지 못했습니다. 시체 처리 설정이 적용되지 않습니다.", this);
         }
 
-        if (m_noiseManager == null)
+        if (m_noiseManager == null && UsesNoiseManager)
         {
             Debug.LogWarning($"[{GetType().Name}] NoiseManager 자식 오브젝트를 찾지 못했습니다. 소음이 벽에 막히지 않고 그대로 전달됩니다.", this);
         }

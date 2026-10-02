@@ -33,6 +33,12 @@ public abstract class CharacterSkill : MonoBehaviour
     /// <summary>스킬을 지금 사용할 수 있는지 여부입니다.</summary>
     public bool IsReady => CooldownRemaining <= 0.0f && !IsActive;
 
+    /// <summary>남은 쿨다운을 없앱니다. 디버그 트레이너 전용입니다. 진행 중인 지속 효과는 건드리지 않습니다.</summary>
+    public void DebugResetCooldown()
+    {
+        m_nextReadyTime = 0.0f;
+    }
+
     /// <summary>지속 효과 또는 장전된 특수탄이 활성 상태인지 여부입니다.</summary>
     public virtual bool IsActive => false;
 

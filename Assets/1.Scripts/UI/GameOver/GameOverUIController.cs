@@ -1,60 +1,168 @@
-﻿using System;
+using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using UnityEngine.Video;
 
 /// <summary>
-/// 스쿼드 전멸로 필드가 끝났을 때 표시하는 게임오버 화면입니다.
+/// 작전 실패(게임오버) 오버레이입니다. 스쿼드 전멸이나 방어전 정문 파괴로 전투가 끝났을 때 표시합니다.
 /// </summary>
 /// <remarks>
-/// <see cref="ResultUIController"/>와 같은 방식입니다: 이 컴포넌트는 아무 UI도 만들지 않고,
-/// 씬에 미리 배치된 자식(Title/Message/ConfirmButton)을 이름으로 찾아 값만 채웁니다.
-/// 탐색은 계층 전체를 재귀적으로 훑으므로 정리용 상위 그룹 밑으로 옮겨도 계속 동작합니다.
+/// 디자인 기준: Figma `Misson Fail Prototype 2_3`. 제목("작전 실패")과 "작전 중단. 퇴각합니다." 문구는 배경 이미지에 들어 있고,
+/// 아래에 "마지막 저장 지점 부터"와 "타이틀로" 메뉴가 있습니다. 메뉴 선택 장식은 타이틀 화면과 같은
+/// <see cref="MenuSelectionIndicator"/>가 그립니다.
+///
+/// 표시되는 동안 <see cref="Time.timeScale"/>을 0으로 멈춥니다. 시간이 멈춰 있으면 ESC 일시정지 메뉴도 열리지 않습니다.
+/// 메뉴를 누르면 시간을 되돌린 뒤 씬을 옮깁니다.
 ///
 /// 귀환 정산(Result UI)과 별개의 화면입니다. 기획 `전투 시스템` §5.9.2가 전멸을 정상 철수와
-/// 다른 종료로 규정하고, PR-005 완료 기준이 "귀환 정산 화면 없이" 게임오버를 요구하므로
-/// Result UI를 재사용하지 않습니다. 이 경로는 <c>FinalizeField</c>를 부르지 않아 결과값도 만들지 않습니다.
-///
-/// 이 컴포넌트는 표시만 담당합니다. 전멸 감지는 <see cref="SquadManager.OnSquadEliminated"/>가,
-/// 상태 고정은 <see cref="FieldSceneDataManager"/>가, 화면 전환 결정은 <see cref="FieldManager"/>가 맡습니다.
+/// 다른 종료로 규정하므로 Result UI를 재사용하지 않고, 정산값(FinalizeField)도 만들지 않습니다.
+/// 전멸 감지는 <see cref="SquadManager.OnSquadEliminated"/>, 상태 고정은 <see cref="CombatSceneDataManager"/>,
+/// 화면 전환 결정은 <see cref="CombatSceneManager"/>가 맡습니다.
 /// </remarks>
 [DisallowMultipleComponent]
 public class GameOverUIController : MonoBehaviour
 {
-    [Header("References (비워두면 자식 이름으로 자동 탐색)")]
-    [Tooltip("게임오버 제목을 표시하는 텍스트입니다. 비어 있으면 자식 'Title'을 찾습니다.")]
-    [SerializeField] private TextMeshProUGUI m_titleText;
+    [Header("Background")]
+    [Tooltip("선택 사항입니다. 배경 영상(예: Mission_fail.mp4)을 재생할 VideoPlayer입니다. 시간이 멈춰도 재생되도록 실제 시간으로 돌립니다.")]
+    [SerializeField] private VideoPlayer m_backgroundVideo;
 
-    [Tooltip("게임오버 사유를 표시하는 텍스트입니다. 비어 있으면 자식 'Message'를 찾습니다.")]
+    [Tooltip("배경 영상을 전체 화면에 표시할 RawImage입니다. 영상이 없으면 이 RawImage의 텍스처를 그대로 씁니다.")]
+    [SerializeField] private RawImage m_backgroundImage;
+
+    [Tooltip("배경 영상을 이 시간(초)에서 멈추고 그 장면을 유지합니다. Mission_fail.mp4는 끝에서 검게 사라지므로 밝은 구간(약 0.8~2.7초)에서 멈춥니다. 0 이하이면 끝까지 재생합니다.")]
+    [SerializeField, Min(0f)] private float m_backgroundHoldTime = 2.3f;
+
+    [Header("Menu")]
+    [Tooltip("마지막 저장을 불러와 셸터로 돌아가는 버튼입니다(\"마지막 저장 지점 부터\").")]
+    [SerializeField] private Button m_retryFromSaveButton;
+
+    [Tooltip("타이틀 화면으로 가는 버튼입니다(\"타이틀로\").")]
+    [SerializeField] private Button m_titleButton;
+
+    [Tooltip("메뉴 버튼 양옆에 선택 장식을 띄우는 컴포넌트입니다. 타이틀 화면과 같은 방식입니다.")]
+    [SerializeField] private MenuSelectionIndicator m_selectionIndicator;
+
+    [Tooltip("선택 사항입니다. 사유 문구를 따로 보여 줄 텍스트입니다. 디자인상 문구가 배경에 들어 있으면 비워 둡니다.")]
     [SerializeField] private TextMeshProUGUI m_messageText;
 
-    [Tooltip("게임오버를 확인하는 버튼입니다. 비어 있으면 자식 'ConfirmButton'을 찾습니다.")]
-    [SerializeField] private Button m_confirmButton;
+    [Header("Scenes")]
+    [Tooltip("\"마지막 저장 지점 부터\"를 눌렀을 때 저장을 불러온 뒤 갈 씬 이름입니다. 빌드 설정에 있어야 합니다.")]
+    [SerializeField] private string m_retrySceneName = "ShelterScene_Jung";
 
-    [Header("Text")]
-    [Tooltip("게임오버 화면의 제목입니다.")]
-    [SerializeField] private string m_title = "작전 실패";
+    [Tooltip("\"타이틀로\"를 눌렀을 때 갈 씬 이름입니다. 빌드 설정에 있어야 합니다.")]
+    [SerializeField] private string m_titleSceneName = "TitleScene";
 
-    [Tooltip("전원 전투 이탈로 게임오버가 된 사유 문구입니다.")]
+    [Header("Behaviour")]
+    [Tooltip("켜면 화면이 떠 있는 동안 시간을 멈춥니다.")]
+    [SerializeField] private bool m_pauseTimeWhileShown = true;
+
+    [Tooltip("스쿼드 전멸로 실패했을 때의 사유 문구입니다. 사유 텍스트가 있을 때만 씁니다.")]
     [SerializeField] private string m_squadEliminatedMessage = "스쿼드 전원이 전투에서 이탈했습니다.";
 
-    /// <summary>확인 버튼을 눌렀을 때 발생합니다.</summary>
-    /// <remarks>
-    /// 이 컴포넌트는 씬을 전환하지 않습니다. 게임오버 후 이동 대상이 확정되면 구독자가 처리합니다.
-    /// </remarks>
-    public event Action OnConfirmed;
+    private float m_timeScaleBeforeShow = 1.0f;
+    private bool m_pausedTime;
+    private bool m_isLeaving;
+    private RenderTexture m_backgroundRenderTexture;
+
+    /// <summary>메뉴를 눌러 씬을 떠나기 직전에 발생합니다. 인자는 갈 씬 이름입니다.</summary>
+    public event Action<string> OnConfirmed;
 
     /// <summary>게임오버 화면이 현재 표시 중인지 여부입니다.</summary>
     public bool IsShown => gameObject.activeSelf;
 
-    private void Reset()
-    {
-        AutoFindReferences();
-    }
-
     private void Awake()
     {
-        AutoFindReferences();
+        if (m_retryFromSaveButton != null)
+        {
+            m_retryFromSaveButton.onClick.AddListener(RetryFromLastSave);
+        }
+
+        if (m_titleButton != null)
+        {
+            m_titleButton.onClick.AddListener(GoToTitle);
+        }
+    }
+
+    private void Update()
+    {
+        // 시간이 멈춰 있어도 Update는 돕니다. 영상이 밝은 구간에 닿으면 멈춰 그 장면을 유지합니다.
+        if (m_backgroundVideo != null
+            && m_backgroundHoldTime > 0f
+            && m_backgroundVideo.isPlaying
+            && m_backgroundVideo.time >= m_backgroundHoldTime)
+        {
+            m_backgroundVideo.Pause();
+        }
+    }
+
+    private void OnDisable()
+    {
+        // 화면이 꺼질 때 멈춘 시간이 남지 않게 합니다.
+        RestoreTime();
+
+        if (m_backgroundVideo != null)
+        {
+            m_backgroundVideo.Stop();
+        }
+    }
+
+    private void OnDestroy()
+    {
+        ReleaseBackgroundTexture();
+    }
+
+    /// <summary>배경 영상을 처음부터 실제 시간 기준으로 재생합니다. 시간이 멈춘 동안에도 흐릅니다.</summary>
+    private void PlayBackgroundVideo()
+    {
+        if (m_backgroundVideo == null || m_backgroundVideo.clip == null || m_backgroundImage == null)
+        {
+            return;
+        }
+
+        if (m_backgroundRenderTexture == null)
+        {
+            int width = Mathf.Max(16, (int)m_backgroundVideo.clip.width);
+            int height = Mathf.Max(16, (int)m_backgroundVideo.clip.height);
+            m_backgroundRenderTexture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)
+            {
+                name = "Game Over Background Video",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            m_backgroundRenderTexture.Create();
+        }
+
+        m_backgroundVideo.playOnAwake = false;
+        m_backgroundVideo.isLooping = false;
+        m_backgroundVideo.waitForFirstFrame = true;
+        m_backgroundVideo.audioOutputMode = VideoAudioOutputMode.None;
+        m_backgroundVideo.timeUpdateMode = VideoTimeUpdateMode.UnscaledGameTime;
+        m_backgroundVideo.renderMode = VideoRenderMode.RenderTexture;
+        m_backgroundVideo.targetTexture = m_backgroundRenderTexture;
+        m_backgroundImage.texture = m_backgroundRenderTexture;
+
+        m_backgroundVideo.Stop();
+        m_backgroundVideo.time = 0.0;
+        m_backgroundVideo.Play();
+    }
+
+    private void ReleaseBackgroundTexture()
+    {
+        if (m_backgroundRenderTexture == null)
+        {
+            return;
+        }
+
+        if (m_backgroundVideo != null && m_backgroundVideo.targetTexture == m_backgroundRenderTexture)
+        {
+            m_backgroundVideo.targetTexture = null;
+        }
+
+        m_backgroundRenderTexture.Release();
+        Destroy(m_backgroundRenderTexture);
+        m_backgroundRenderTexture = null;
     }
 
     /// <summary>
@@ -69,102 +177,101 @@ public class GameOverUIController : MonoBehaviour
     }
 
     /// <summary>
-    /// 지정한 사유 문구로 게임오버 화면을 표시합니다.
+    /// 지정한 사유 문구로 게임오버 화면을 표시하고 시간을 멈춥니다.
     /// </summary>
-    /// <param name="message">표시할 사유 문구입니다. 비어 있으면 기존 문구를 유지합니다.</param>
+    /// <param name="message">사유 텍스트가 있을 때 표시할 문구입니다. 비어 있으면 기존 문구를 유지합니다.</param>
     public void Show(string message)
     {
-        AutoFindReferences();
-
-        if (m_titleText != null)
-        {
-            m_titleText.text = m_title;
-        }
-
         if (m_messageText != null && !string.IsNullOrEmpty(message))
         {
             m_messageText.text = message;
         }
 
+        m_isLeaving = false;
         gameObject.SetActive(true);
+        m_selectionIndicator?.ResetSelection();
+        PlayBackgroundVideo();
 
-        // 필드 EventSystem을 켜 두지 않으면 확인 버튼 클릭이 들어오지 않습니다.
+        if (m_pauseTimeWhileShown && !m_pausedTime)
+        {
+            m_timeScaleBeforeShow = Time.timeScale > 0.0f ? Time.timeScale : 1.0f;
+            Time.timeScale = 0.0f;
+            m_pausedTime = true;
+        }
+
+        // 필드 EventSystem을 켜 두지 않으면 버튼 클릭이 들어오지 않습니다.
         // 메서드 이름은 Result UI 기준이지만 동작은 오버레이 공용입니다.
         TestSceneUiEventSystemBridge.EnableForResultUI();
     }
 
-    /// <summary>게임오버 화면을 숨깁니다.</summary>
+    /// <summary>게임오버 화면을 숨기고 멈춘 시간을 되돌립니다.</summary>
     /// <remarks>
     /// 인게임 HUD는 여기서 끄지 않습니다. 조준선 패널이 이 캔버스보다 아래에 있어
     /// UI 레이어가 가립니다. 자세한 배경은 <see cref="ResultUIController.Hide"/>에 적어 두었습니다.
     /// </remarks>
     public void Hide()
     {
+        RestoreTime();
         gameObject.SetActive(false);
     }
 
-    /// <summary>
-    /// ConfirmButton의 Inspector OnClick에서 호출하는 확인 진입점입니다.
-    /// </summary>
-    /// <remarks>
-    /// 게임오버 후 이동 대상(셸터 / 타이틀)이 확정되지 않아 씬 전환을 하지 않습니다.
-    /// TODO(PR-005): 이동 대상이 정해지면 구독자 쪽에서 전환을 연결합니다.
-    /// </remarks>
-    public void Confirm()
+    /// <summary>"마지막 저장 지점 부터": 마지막 저장을 불러온 뒤 셸터 씬으로 갑니다.</summary>
+    /// <remarks>저장을 불러오지 못해도 씬은 옮깁니다. 이 경우 지금 메모리의 진행 상태로 셸터에 들어갑니다.</remarks>
+    public void RetryFromLastSave()
     {
-        OnConfirmed?.Invoke();
+        if (m_isLeaving)
+        {
+            return;
+        }
+
+        GameSaveManager saveManager = FindFirstObjectByType<GameSaveManager>(FindObjectsInactive.Include);
+        if (saveManager == null || !saveManager.LoadGame())
+        {
+            Debug.LogWarning("[GameOverUIController] 마지막 저장을 불러오지 못했습니다. 현재 진행 상태로 셸터에 들어갑니다.", this);
+        }
+
+        LeaveTo(m_retrySceneName);
     }
 
-    /// <summary>
-    /// 씬에 미리 배치된 자식들을 이름으로 찾아 참조를 채웁니다. 이미 할당된 참조는 덮어쓰지 않습니다.
-    /// </summary>
-    private void AutoFindReferences()
+    /// <summary>"타이틀로": 타이틀 씬으로 갑니다.</summary>
+    public void GoToTitle()
     {
-        if (m_titleText == null)
+        if (m_isLeaving)
         {
-            Transform title = FindDeep(transform, "Title");
-            if (title != null)
-            {
-                m_titleText = title.GetComponent<TextMeshProUGUI>();
-            }
+            return;
         }
 
-        if (m_messageText == null)
-        {
-            Transform message = FindDeep(transform, "Message");
-            if (message != null)
-            {
-                m_messageText = message.GetComponent<TextMeshProUGUI>();
-            }
-        }
-
-        if (m_confirmButton == null)
-        {
-            Transform button = FindDeep(transform, "ConfirmButton");
-            if (button != null)
-            {
-                m_confirmButton = button.GetComponent<Button>();
-            }
-        }
+        LeaveTo(m_titleSceneName);
     }
 
-    /// <summary>지정한 이름의 자손 Transform을 하위 계층 전체에서 재귀적으로 찾습니다(직계 자식 한정 아님).</summary>
-    private static Transform FindDeep(Transform root, string name)
+    private void LeaveTo(string sceneName)
     {
-        foreach (Transform child in root)
+        if (string.IsNullOrWhiteSpace(sceneName))
         {
-            if (child.name == name)
-            {
-                return child;
-            }
-
-            Transform found = FindDeep(child, name);
-            if (found != null)
-            {
-                return found;
-            }
+            Debug.LogError("[GameOverUIController] 이동할 씬 이름이 비어 있습니다.", this);
+            return;
         }
 
-        return null;
+        if (!Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            Debug.LogError($"[GameOverUIController] '{sceneName}' 씬이 빌드 설정에 없어 이동할 수 없습니다.", this);
+            return;
+        }
+
+        m_isLeaving = true;
+        OnConfirmed?.Invoke(sceneName);
+        RestoreTime();
+        SceneManager.LoadScene(sceneName);
+    }
+
+    private void RestoreTime()
+    {
+        if (!m_pausedTime)
+        {
+            return;
+        }
+
+        Time.timeScale = m_timeScaleBeforeShow;
+        m_pausedTime = false;
     }
 }
