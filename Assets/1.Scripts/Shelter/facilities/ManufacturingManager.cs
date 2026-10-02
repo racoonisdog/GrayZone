@@ -96,10 +96,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
     [Range(1, 4)]
     [SerializeField] private int secondHelperSlotUnlockLevel = 3;
 
-    private bool m_isUnlocked = true;
     private bool m_isFuelShortageActive;
-    // 임시 빌드 전용: 슬롯별 1회 사용 상태. 세이브하지 않으며 방어전 귀환 연결점에서 재충전한다.
-    private readonly bool[] m_craftingSlotAvailable = new bool[TotalCraftingSlotCount];
 
     /// <summary>작업 생성, 진행, 취소 또는 시설 상태가 바뀌었을 때 발생합니다.</summary>
     public event Action StateChanged;
@@ -128,10 +125,10 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
     public int UpgradeLevel => CurrentLevel;
     public int MaxUpgradeLevel => MaxLevelIndex;
     public int DisplayLevel => CurrentLevel + 1;
-    public bool IsUnlocked => m_isUnlocked;
+    public bool IsUnlocked => true;
     public int CraftingSlotCount => TotalCraftingSlotCount;
     public int HelperSlotCount => TotalHelperSlotCount;
-    public int UnlockedCraftingSlotCount => Mathf.Clamp(DisplayLevel, 1, TotalCraftingSlotCount);
+    public int UnlockedCraftingSlotCount => TotalCraftingSlotCount;
     public int HelperCapacity => HelperSlotsForLevel(CurrentLevel);
     public int CurrentHelperCount => CountAssignedHelpers();
     public int MaxOrderQuantity => maxOrderQuantity;
@@ -151,7 +148,6 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
     private void Awake()
     {
         CacheDependencies();
-        RechargeAllCraftingSlots();
     }
 
     private void OnValidate()
@@ -206,7 +202,6 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
 
     public void ApplyUnlockState(bool isUnlocked)
     {
-        m_isUnlocked = isUnlocked;
         RefreshLevelVisuals();
         NotifyStateChanged();
     }
@@ -282,27 +277,23 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
         return lines;
     }
 
-    /// <summary>제조 슬롯이 현재 시설 레벨에서 사용 가능한지 반환합니다.</summary>
+    /// <summary>고정된 단일 제조 슬롯인지 반환합니다.</summary>
     public bool IsCraftingSlotUnlocked(int slotIndex)
     {
-        return m_isUnlocked
-            && slotIndex >= 0
-            && slotIndex < CraftingSlotsForLevel(CurrentLevel);
+        return slotIndex >= 0 && slotIndex < TotalCraftingSlotCount;
     }
 
     /// <summary>헬퍼 슬롯이 현재 시설 레벨에서 사용 가능한지 반환합니다.</summary>
     public bool IsHelperSlotUnlocked(int slotIndex)
     {
-        return m_isUnlocked
-            && slotIndex >= 0
+        return slotIndex >= 0
             && slotIndex < HelperSlotsForLevel(CurrentLevel);
     }
 
     /// <summary>레시피가 현재 시설 레벨에서 사용 가능한지 반환합니다.</summary>
     public bool IsRecipeUnlocked(ManufacturingRecipeDefinition recipe)
     {
-        return m_isUnlocked
-            && recipe != null
+        return recipe != null
             && recipe.RequiredFacilityLevel <= DisplayLevel;
     }
 
@@ -508,12 +499,10 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
         return true;
     }
 
-    /// <summary>임시 빌드 전용: 지정 제작 슬롯의 1회 사용 가능 상태를 반환합니다.</summary>
+    /// <summary>지정 인덱스가 고정된 단일 제조 슬롯인지 반환합니다.</summary>
     public bool IsCraftingSlotAvailable(int slotIndex)
     {
-        return slotIndex >= 0
-            && slotIndex < m_craftingSlotAvailable.Length
-            && m_craftingSlotAvailable[slotIndex];
+        return IsCraftingSlotUnlocked(slotIndex);
     }
 
     /// <summary>
@@ -622,22 +611,10 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
             return false;
         }
 
-        m_craftingSlotAvailable[slotIndex] = false;
         dataManager.MarkDirty();
         NotifyJobsChanged();
         CraftCompleted?.Invoke();
         return true;
-    }
-
-    /// <summary>
-    /// 임시 빌드 전용 방어전 귀환 연결점입니다. 방어전 결과 확정 후 셸터 진입 시 호출합니다.
-    /// </summary>
-    public void RechargeAllCraftingSlots()
-    {
-        for (int i = 0; i < m_craftingSlotAvailable.Length; i++)
-            m_craftingSlotAvailable[i] = true;
-
-        NotifyJobsChanged();
     }
 
     /// <summary>
@@ -702,8 +679,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
 
     public bool CanAssignHelper(ShelterMemberRuntimeData character)
     {
-        if (!m_isUnlocked
-            || character == null
+        if (character == null
             || CurrentHelperCount >= HelperCapacity
             || character.IsDead
             || character.IsAssignedToFacility)
@@ -754,8 +730,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
     /*
     private void OnDayAdvanced(int previousDay, int nextDay)
     {
-        if (!m_isUnlocked
-            || !TryGetContext(
+        if (!TryGetContext(
                 out ShelterSceneDataManager dataManager,
                 out StorageFacility storage,
                 out ManufacturingRuntimeData runtimeData))
@@ -900,7 +875,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
 
     private int CraftingSlotsForLevel(int level)
     {
-        return Mathf.Clamp(level + 1, 1, TotalCraftingSlotCount);
+        return TotalCraftingSlotCount;
     }
 
     private int HelperSlotsForLevel(int level)
@@ -1102,10 +1077,7 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
         if (levelVisuals == null)
             return;
 
-        if (m_isUnlocked)
-            levelVisuals.ShowLevel(CurrentLevel);
-        else
-            levelVisuals.HideAll();
+        levelVisuals.ShowLevel(CurrentLevel);
     }
 
     private void NotifyJobsChanged()

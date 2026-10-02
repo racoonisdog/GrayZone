@@ -8,7 +8,7 @@ using UnityEngine;
 [Serializable]
 public sealed class ManufacturingRuntimeData
 {
-    public const int SlotCount = 4;
+    public const int SlotCount = 1;
 
     [SerializeField] private List<ManufacturingJobRuntimeData> m_jobs = new();
 
@@ -27,7 +27,7 @@ public sealed class ManufacturingRuntimeData
     {
         EnsureValid();
         job = null;
-        if (slotIndex < 0)
+        if (slotIndex < 0 || slotIndex >= SlotCount)
             return false;
 
         job = m_jobs.Find(item => item.SlotIndex == slotIndex);
@@ -44,7 +44,9 @@ public sealed class ManufacturingRuntimeData
             return false;
 
         job.EnsureValid();
-        if (!job.IsValid || TryGetJob(job.SlotIndex, out _))
+        if (!job.IsValid
+            || job.SlotIndex >= SlotCount
+            || TryGetJob(job.SlotIndex, out _))
             return false;
 
         m_jobs.Add(job.Clone());
@@ -98,7 +100,10 @@ public sealed class ManufacturingRuntimeData
         {
             ManufacturingJobRuntimeData job = m_jobs[i];
             job?.EnsureValid();
-            if (job == null || !job.IsValid || !occupiedSlots.Add(job.SlotIndex))
+            if (job == null
+                || !job.IsValid
+                || job.SlotIndex >= SlotCount
+                || !occupiedSlots.Add(job.SlotIndex))
             {
                 m_jobs.RemoveAt(i);
                 continue;
