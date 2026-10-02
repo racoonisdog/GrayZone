@@ -122,6 +122,12 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// 조절하는 대상이 가까운 것끼리 묶고, 자주 만지는 것을 앞에 둡니다.
     /// 캐릭터·애니메이션·무기·조준은 지금 조작 중인 유닛을 만지는 탭이고, 필드·디버그는 그 바깥입니다.
     /// </remarks>
+    /// <summary>투척물 구역의 버튼이 한 번에 넣는 수량입니다.</summary>
+    private const int DebugThrowableGrantAmount = 999;
+
+    /// <summary>마지막 투척물 지급 결과 문구입니다. 공간이 모자라 못 넣은 수량을 알려 줍니다.</summary>
+    private string m_throwableGrantResult = string.Empty;
+
     private static readonly string[] MainTabNames =
     {
         "캐릭터",
@@ -807,6 +813,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
                     break;
 
                 case 4:
+                    DrawThrowableSection();
+                    GUILayout.Space(6);
                     DrawEnemySpawnSection();
                     GUILayout.Space(6);
                     DrawSquadAiControlSection();
@@ -2039,6 +2047,107 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         Debug.Log($"[RuntimeDebugTrainer] 전멸 게임오버 요청: {killed}명 전투 이탈 처리.", squadManager);
+    }
+
+    /// <summary>
+    /// 스쿼드 공용 인벤토리의 투척물(수류탄·화염병) 수량을 보여 주고 늘리는 버튼을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 투척물 종류는 씬의 <see cref="ExplosiveProjectileShooter"/>가 들고 있는 Prefab 목록에서 모읍니다.
+    /// 슬롯 수와 스택 한도를 넘는 수량은 들어가지 않으므로 넣지 못한 수량을 함께 표시합니다.
+    /// 조준선 창(F10)에 있던 것을 옮겨 왔습니다. 조준선 창은 조준선만 다룹니다.
+    /// </remarks>
+    private void DrawThrowableSection()
+    {
+        GUILayout.Label("■ 투척물", m_headerStyle);
+
+        SquadInventoryManager inventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
+        if (inventory == null)
+        {
+            GUILayout.Label("SquadInventoryManager를 찾을 수 없습니다.");
+            return;
+        }
+
+        List<ProjectileBase> projectiles = CollectSceneThrowables();
+        if (projectiles.Count == 0)
+        {
+            GUILayout.Label("씬에 등록된 투척물 Prefab이 없습니다. 투척기 목록과 아이템 정의 연결을 확인하세요.");
+            return;
+        }
+
+        for (int i = 0; i < projectiles.Count; i++)
+        {
+            ProjectileBase projectile = projectiles[i];
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"{ResolveThrowableName(projectile)}: {inventory.CountOf(projectile.InventoryItemDefinitionId)}");
+            if (GUILayout.Button($"+{DebugThrowableGrantAmount}", GUILayout.Width(80)))
+            {
+                m_throwableGrantResult = GrantThrowable(inventory, projectile);
+            }
+            GUILayout.EndHorizontal();
+        }
+
+        if (GUILayout.Button($"투척물 전부 +{DebugThrowableGrantAmount}", GUILayout.Height(26)))
+        {
+            m_throwableGrantResult = string.Empty;
+            for (int i = 0; i < projectiles.Count; i++)
+            {
+                m_throwableGrantResult += GrantThrowable(inventory, projectiles[i]);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(m_throwableGrantResult))
+        {
+            GUILayout.Label(m_throwableGrantResult);
+        }
+    }
+
+    /// <summary>투척물을 지정 수량만큼 넣고, 공간이 모자라 남은 수량이 있으면 안내 문구를 돌려줍니다.</summary>
+    private static string GrantThrowable(SquadInventoryManager inventory, ProjectileBase projectile)
+    {
+        inventory.TryAcquire(projectile.InventoryItemDefinitionId, DebugThrowableGrantAmount, out int leftover);
+        return leftover > 0
+            ? $"{ResolveThrowableName(projectile)} {leftover}개 공간 부족  "
+            : string.Empty;
+    }
+
+    /// <summary>씬의 투척기들이 쓰는 투척물 Prefab을 아이템 ID 기준으로 중복 없이 모읍니다.</summary>
+    private static List<ProjectileBase> CollectSceneThrowables()
+    {
+        var result = new List<ProjectileBase>();
+        var itemIds = new HashSet<string>();
+        ExplosiveProjectileShooter[] shooters = FindObjectsByType<ExplosiveProjectileShooter>(
+            FindObjectsInactive.Include,
+            FindObjectsSortMode.None);
+
+        for (int i = 0; i < shooters.Length; i++)
+        {
+            IReadOnlyList<ProjectileBase> prefabs = shooters[i].ProjectilePrefabs;
+            if (prefabs == null)
+            {
+                continue;
+            }
+
+            for (int j = 0; j < prefabs.Count; j++)
+            {
+                ProjectileBase projectile = prefabs[j];
+                if (projectile != null
+                    && !string.IsNullOrWhiteSpace(projectile.InventoryItemDefinitionId)
+                    && itemIds.Add(projectile.InventoryItemDefinitionId))
+                {
+                    result.Add(projectile);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static string ResolveThrowableName(ProjectileBase projectile)
+    {
+        return projectile.InventoryItemDefinition != null
+            ? projectile.InventoryItemDefinition.DisplayName
+            : projectile.name;
     }
 
     private void DrawEnemySpawnSection()

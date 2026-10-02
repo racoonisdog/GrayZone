@@ -90,6 +90,16 @@ public class CrosshairController : MonoBehaviour
         CounterClockwise,
     }
 
+    /// <summary>처치 펄스가 조준선 팔을 움직이는 방향입니다.</summary>
+    public enum KillPulseDirection
+    {
+        /// <summary>바깥으로 튀었다가 돌아옵니다.</summary>
+        Expand,
+
+        /// <summary>가운데로 모였다가 돌아옵니다.</summary>
+        Contract,
+    }
+
     [Foldout("References")]
     [Tooltip("조준선 UXML을 표시하는 UIDocument입니다. 비워두면 같은 GameObject에서 찾습니다.")]
     [SerializeField] private UIDocument m_document;
@@ -409,8 +419,8 @@ public class CrosshairController : MonoBehaviour
     [EndIf]
 
     [Header("Kill Skull")]
-    [Tooltip("켜면 적을 처치했을 때 중앙에 해골이 떴다가 페이드아웃됩니다.")]
-    [SerializeField] private bool m_showKillSkull = true;
+    [Tooltip("켜면 적을 처치했을 때 중앙에 해골이 떴다가 페이드아웃됩니다. 지금은 처치 펄스로 대신해 꺼 두었습니다.")]
+    [SerializeField] private bool m_showKillSkull = false;
 
     [Tooltip("킬 시 표시할 해골 텍스처입니다(예: KillStreak.png).")]
     [SerializeField] private Texture2D m_killSkullTexture;
@@ -426,6 +436,30 @@ public class CrosshairController : MonoBehaviour
 
     [Tooltip("해골이 사라지기까지 걸리는 페이드아웃 시간(초)입니다.")]
     [SerializeField] private float m_killSkullFadeDuration = 0.6f;
+
+    [Header("Kill Pulse")]
+    [Tooltip("켜면 적을 처치했을 때 조준선 팔이 잠깐 움직였다가 제자리로 돌아옵니다. 해골 표시와 따로 켜고 끕니다.")]
+    [SerializeField] private bool m_enableKillPulse = true;
+
+    [Tooltip("Expand는 바깥으로 튀었다가 돌아오고, Contract는 가운데로 모였다가 돌아옵니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [SerializeField] private KillPulseDirection m_killPulseDirection = KillPulseDirection.Expand;
+
+    [Tooltip("가장 크게 움직일 때의 간격 변화(픽셀)입니다. Contract에서 현재 간격보다 크면 팔이 가운데에서 멈춥니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [Min(0.0f)]
+    [SerializeField] private float m_killPulseAmplitudePixels = 12.0f;
+
+    [Tooltip("처치 펄스 한 번의 전체 길이(초)입니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [Min(0.0f)]
+    [SerializeField] private float m_killPulseDuration = 0.3f;
+
+    [Tooltip("처치 펄스 곡선입니다. x=정규화 시간, y=움직임 배율(0~1)입니다. 기본값은 빠르게 최대로 간 뒤 천천히 돌아옵니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [SerializeField]
+    private AnimationCurve m_killPulseCurve = ImpulseEnvelope.BuildFastAttackConstantReleaseCurve(0.2f, 1.0f, 0.85f);
+    [EndIf]
 
     [Foldout("Block Marker")]
     [Tooltip("켜면 총구와 조준점 사이가 막혔을 때(아군·장애물 길막) 실제 탄착점 화면 위치에 차단 마커를 표시합니다.")]
@@ -527,6 +561,15 @@ public class CrosshairController : MonoBehaviour
     /// <summary>이번 히트마커에 적용 중인 삼각형 길이(픽셀)입니다. 명중마다 피해량으로 다시 계산합니다.</summary>
     private float m_hitMarkerActiveLengthPixels;
     private float m_killTimer;
+
+    /// <summary>처치 펄스가 한 프레임에 진행할 수 있는 최대 시간(초)입니다.</summary>
+    private const float KillPulseMaxStepSeconds = 1.0f / 30.0f;
+
+    /// <summary>처치 펄스가 시작된 뒤 지난 시간(초)입니다. 음수면 재생 중이 아닙니다.</summary>
+    private float m_killPulseElapsed = -1.0f;
+
+    /// <summary>이번 프레임에 처치 펄스가 간격에 더하는 값(픽셀)입니다. Contract면 음수입니다.</summary>
+    private float m_killPulseOffsetPixels;
     private float m_currentGapPixels;
     private float m_targetSpreadGapPixels;
     private float m_currentShotRecoilPulsePixels;
@@ -599,6 +642,7 @@ public class CrosshairController : MonoBehaviour
         UpdateReloadBlink();
         UpdateHitMarkerFade();
         UpdateKillFade();
+        UpdateKillPulse();
         UpdateShotRecoilPulse();
         UpdateGapSmoothing();
         UpdateBlockMarkerCrosshairOpacity();
@@ -759,6 +803,40 @@ public class CrosshairController : MonoBehaviour
         {
             HideElement(m_killSkullElement);
         }
+    }
+
+    /// <summary>
+    /// 처치 펄스를 진행해 이번 프레임에 간격에 더할 값을 정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 반영은 바로 뒤 <see cref="UpdateGapSmoothing"/>이 부르는 <see cref="ApplyLayout"/>에서 합니다.
+    /// 탄퍼짐·반동 펄스와 달리 보간을 거치지 않게 둔 이유는, 짧고 빠른 움직임이 보간에 깎이면
+    /// 처치 순간의 손맛이 사라지기 때문입니다.
+    /// </remarks>
+    private void UpdateKillPulse()
+    {
+        if (m_killPulseElapsed < 0.0f)
+        {
+            return;
+        }
+
+        float duration = Mathf.Max(0.0f, m_killPulseDuration);
+
+        // 처치 프레임은 래그돌·이펙트 생성으로 길어지기 쉽습니다. 그 한 프레임에 펄스 전체가 지나가 버리면
+        // 아무것도 보이지 않으므로, 한 프레임에 진행하는 시간을 1/30초로 묶습니다.
+        m_killPulseElapsed += Mathf.Min(Time.deltaTime, KillPulseMaxStepSeconds);
+
+        if (!m_enableKillPulse || duration <= 0.0f || m_killPulseElapsed >= duration)
+        {
+            m_killPulseElapsed = -1.0f;
+            m_killPulseOffsetPixels = 0.0f;
+            return;
+        }
+
+        float t = m_killPulseElapsed / duration;
+        float weight = m_killPulseCurve != null ? m_killPulseCurve.Evaluate(t) : 1.0f - t;
+        float sign = m_killPulseDirection == KillPulseDirection.Contract ? -1.0f : 1.0f;
+        m_killPulseOffsetPixels = sign * Mathf.Max(0.0f, m_killPulseAmplitudePixels) * weight;
     }
 
     /// <summary>
@@ -1601,6 +1679,34 @@ public class CrosshairController : MonoBehaviour
         set => m_showKillSkull = value;
     }
 
+    /// <summary>처치 시 조준선 팔을 잠깐 움직이는 펄스를 쓸지 여부입니다.</summary>
+    public bool KillPulseEnabled
+    {
+        get => m_enableKillPulse;
+        set => m_enableKillPulse = value;
+    }
+
+    /// <summary>처치 펄스 방향입니다. 바깥으로 튀거나 가운데로 모입니다.</summary>
+    public KillPulseDirection CurrentKillPulseDirection
+    {
+        get => m_killPulseDirection;
+        set => m_killPulseDirection = value;
+    }
+
+    /// <summary>처치 펄스가 가장 크게 움직일 때의 간격 변화(픽셀)입니다.</summary>
+    public float KillPulseAmplitudePixels
+    {
+        get => m_killPulseAmplitudePixels;
+        set => m_killPulseAmplitudePixels = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>처치 펄스 한 번의 전체 길이(초)입니다.</summary>
+    public float KillPulseDuration
+    {
+        get => m_killPulseDuration;
+        set => m_killPulseDuration = Mathf.Max(0.0f, value);
+    }
+
     /// <summary>히트마커를 표시할지 여부입니다.</summary>
     /// <remarks>표시를 실행하는 <see cref="ShowHitMarker(bool)"/>와 이름이 겹치지 않도록 Enabled를 붙였습니다.</remarks>
     public bool HitMarkerEnabled
@@ -2169,6 +2275,9 @@ public class CrosshairController : MonoBehaviour
     {
         // 파츠 배치 기준 = 앵커(0). 컨테이너가 0×0이라 앵커가 곧 패널 정중앙이 됩니다.
         const float center = 0.0f;
+
+        // 처치 펄스는 보간이 끝난 간격 위에 얹습니다. 모일 때 팔이 중심을 넘어 뒤집히지 않게 0에서 멈춥니다.
+        gapPixels = Mathf.Max(0.0f, gapPixels + m_killPulseOffsetPixels);
 
         m_rootElement.pickingMode = PickingMode.Ignore;
         m_rootElement.style.position = Position.Absolute;
@@ -2741,10 +2850,18 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 처치 시 중앙에 해골을 표시하고, 유지 후 페이드아웃되도록 타이머를 리셋합니다.
+    /// 처치 피드백을 시작합니다. 처치 펄스를 처음부터 다시 재생하고, 해골이 켜져 있으면 해골도 띄웁니다.
     /// </summary>
+    /// <remarks>
+    /// 연속 처치면 펄스를 처음부터 다시 시작합니다. 겹쳐 더하면 연속 킬마다 팔이 계속 멀어지기 때문입니다.
+    /// </remarks>
     public void ShowKill()
     {
+        if (m_enableKillPulse && m_killPulseAmplitudePixels > 0.0f && m_killPulseDuration > 0.0f)
+        {
+            m_killPulseElapsed = 0.0f;
+        }
+
         if (!m_showKillSkull || m_killSkullTexture == null || !CacheVisualElements() || m_killSkullElement == null)
         {
             return;

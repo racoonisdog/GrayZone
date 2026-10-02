@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -107,11 +106,6 @@ public class CrosshairDebugInspector : MonoBehaviour
     private bool m_showHitMarker;
     private bool m_showKillSkull;
     private bool m_showBlockMarker;
-    private bool m_showThrowable = true;
-
-    // 투척물 구역의 버튼이 한 번에 넣는 수량입니다.
-    private const int DebugThrowableGrantAmount = 999;
-    private string m_throwableGrantResult = string.Empty;
 
     // 색은 슬라이더 네 줄을 차지하므로 따로 접어 둡니다.
     private bool m_showMainColor;
@@ -361,8 +355,6 @@ public class CrosshairDebugInspector : MonoBehaviour
 
         m_scroll = GUILayout.BeginScrollView(m_scroll);
 
-        DrawThrowableSection();
-        GUILayout.Space(6);
         DrawShapeSection(crosshair);
         GUILayout.Space(6);
         DrawSubShapeSection(crosshair);
@@ -390,109 +382,6 @@ public class CrosshairDebugInspector : MonoBehaviour
         }
 
         DrawWindowChrome(windowId);
-    }
-
-    /// <summary>
-    /// 스쿼드 공용 인벤토리의 투척물(수류탄·화염병) 수량을 목록으로 보여 주고 늘리는 버튼을 그립니다.
-    /// </summary>
-    /// <remarks>
-    /// 투척물 종류는 씬의 <see cref="ExplosiveProjectileShooter"/>가 들고 있는 Prefab 목록에서 모읍니다.
-    /// 슬롯 수와 스택 한도를 넘는 수량은 들어가지 않으므로 넣지 못한 수량을 함께 표시합니다.
-    /// </remarks>
-    private void DrawThrowableSection()
-    {
-        if (!SectionHeader("■ 투척물", ref m_showThrowable))
-        {
-            return;
-        }
-
-        SquadInventoryManager inventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
-        if (inventory == null)
-        {
-            GUILayout.Label("SquadInventoryManager를 찾을 수 없습니다.");
-            return;
-        }
-
-        List<ProjectileBase> projectiles = CollectSceneThrowables();
-        if (projectiles.Count == 0)
-        {
-            GUILayout.Label("씬에 등록된 투척물 Prefab이 없습니다.");
-            return;
-        }
-
-        for (int i = 0; i < projectiles.Count; i++)
-        {
-            ProjectileBase projectile = projectiles[i];
-            GUILayout.BeginHorizontal();
-            GUILayout.Label($"{ResolveThrowableName(projectile)}: {inventory.CountOf(projectile.InventoryItemDefinitionId)}");
-            if (GUILayout.Button($"+{DebugThrowableGrantAmount}", GUILayout.Width(80)))
-            {
-                m_throwableGrantResult = GrantThrowable(inventory, projectile);
-            }
-            GUILayout.EndHorizontal();
-        }
-
-        if (GUILayout.Button($"투척물 전부 +{DebugThrowableGrantAmount}", GUILayout.Height(26)))
-        {
-            m_throwableGrantResult = string.Empty;
-            for (int i = 0; i < projectiles.Count; i++)
-            {
-                m_throwableGrantResult += GrantThrowable(inventory, projectiles[i]);
-            }
-        }
-
-        if (!string.IsNullOrEmpty(m_throwableGrantResult))
-        {
-            GUILayout.Label(m_throwableGrantResult);
-        }
-    }
-
-    /// <summary>투척물을 지정 수량만큼 넣고, 공간이 모자라 남은 수량이 있으면 안내 문구를 돌려줍니다.</summary>
-    private static string GrantThrowable(SquadInventoryManager inventory, ProjectileBase projectile)
-    {
-        inventory.TryAcquire(projectile.InventoryItemDefinitionId, DebugThrowableGrantAmount, out int leftover);
-        return leftover > 0
-            ? $"{ResolveThrowableName(projectile)} {leftover}개 공간 부족  "
-            : string.Empty;
-    }
-
-    /// <summary>씬의 투척기들이 쓰는 투척물 Prefab을 아이템 ID 기준으로 중복 없이 모읍니다.</summary>
-    private static List<ProjectileBase> CollectSceneThrowables()
-    {
-        var result = new List<ProjectileBase>();
-        var itemIds = new HashSet<string>();
-        ExplosiveProjectileShooter[] shooters = FindObjectsByType<ExplosiveProjectileShooter>(
-            FindObjectsInactive.Include,
-            FindObjectsSortMode.None);
-
-        for (int i = 0; i < shooters.Length; i++)
-        {
-            IReadOnlyList<ProjectileBase> prefabs = shooters[i].ProjectilePrefabs;
-            if (prefabs == null)
-            {
-                continue;
-            }
-
-            for (int j = 0; j < prefabs.Count; j++)
-            {
-                ProjectileBase projectile = prefabs[j];
-                if (projectile != null
-                    && !string.IsNullOrWhiteSpace(projectile.InventoryItemDefinitionId)
-                    && itemIds.Add(projectile.InventoryItemDefinitionId))
-                {
-                    result.Add(projectile);
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private static string ResolveThrowableName(ProjectileBase projectile)
-    {
-        return projectile.InventoryItemDefinition != null
-            ? projectile.InventoryItemDefinition.DisplayName
-            : projectile.name;
     }
 
     private void DrawShapeSection(CrosshairController crosshair)
@@ -671,11 +560,25 @@ public class CrosshairDebugInspector : MonoBehaviour
 
     private void DrawKillSkullSection(CrosshairController crosshair)
     {
-        if (!SectionHeader("■ 처치 해골", ref m_showKillSkull))
+        if (!SectionHeader("■ 처치 표시", ref m_showKillSkull))
         {
             return;
         }
 
+        if (GUILayout.Button("처치 효과 미리보기", GUILayout.Height(24)))
+        {
+            crosshair.ShowKill();
+        }
+
+        crosshair.KillPulseEnabled = GUILayout.Toggle(crosshair.KillPulseEnabled, " 조준선 펄스");
+        crosshair.CurrentKillPulseDirection = (CrosshairController.KillPulseDirection)GUILayout.SelectionGrid(
+            (int)crosshair.CurrentKillPulseDirection,
+            new[] { "튀어나감", "모임" },
+            2);
+        crosshair.KillPulseAmplitudePixels = SliderRow("펄스 크기", crosshair.KillPulseAmplitudePixels, 0f, 60f, "0");
+        crosshair.KillPulseDuration = SliderRow("펄스 길이(초)", crosshair.KillPulseDuration, 0f, 1f);
+
+        GUILayout.Space(4);
         crosshair.ShowKillSkull = GUILayout.Toggle(crosshair.ShowKillSkull, " 해골 표시");
         crosshair.KillSkullSizePixels = SliderRow("크기", crosshair.KillSkullSizePixels, 0f, 200f, "0");
         crosshair.KillSkullHoldDuration = SliderRow("유지(초)", crosshair.KillSkullHoldDuration, 0f, 3f);
