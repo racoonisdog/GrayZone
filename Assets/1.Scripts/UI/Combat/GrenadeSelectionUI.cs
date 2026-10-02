@@ -31,6 +31,9 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
     [Tooltip("현재 선택된 투척물의 인벤토리 수량을 표시할 TMP Text입니다. 비어 있으면 실행 중 아이콘 우측 하단에 자동 생성합니다.")]
     [SerializeField] private TMP_Text m_quantityText;
 
+    [Tooltip("수량 표시 형식입니다. {0}에 수량이 들어갑니다(예: \"x{0}\" → x3, \"{0}\" → 3).")]
+    [SerializeField] private string m_quantityFormat = "x{0}";
+
     [Tooltip("투척물 Prefab과 UI 아이콘 Sprite의 대응 목록입니다.")]
     [SerializeField] private List<IconBinding> m_iconBindings = new List<IconBinding>();
 
@@ -170,7 +173,9 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
         EnsureQuantityText();
         if (m_quantityText != null)
         {
-            m_quantityText.text = $"x{quantity}";
+            m_quantityText.text = string.IsNullOrEmpty(m_quantityFormat)
+                ? quantity.ToString()
+                : string.Format(m_quantityFormat, quantity);
         }
     }
 

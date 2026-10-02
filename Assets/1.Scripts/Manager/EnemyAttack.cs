@@ -171,18 +171,49 @@ public class EnemyAttack : MonoBehaviour
         return CanStartAttackAt(target.transform.position);
     }
 
-    /// <summary>지정된 방어 목표의 살아 있는 콜라이더 표면이 공격 시작 범위에 있는지 확인합니다.</summary>
+    /// <summary>지정된 방어 목표의 공격 지점이 공격 시작 범위에 있는지 확인합니다.</summary>
+    /// <remarks>
+    /// 공격 포인트를 골랐으면 그 포인트의 공격 시작 거리 안에 들어와야 시작합니다. 일반 공격 거리로 시작하면
+    /// 손이 목표 표면에 닿기 전에 멈춰 서서 헛치기 때문입니다. 다만 NavMesh 때문에 더 다가갈 수 없으면(도착)
+    /// 일반 공격 거리로 시작합니다.
+    /// </remarks>
     public bool CanStartDefenseAttack(DefenseEventHealth target)
     {
-        return TryGetDefenseAttackPoint(target, out Vector3 point) && CanStartAttackAt(point);
+        if (!TryGetDefenseAttackPoint(target, out Vector3 point))
+        {
+            return false;
+        }
+
+        DefenseAttackPoint assigned = GetAssignedAttackPoint(target);
+        if (assigned != null)
+        {
+            Vector3 delta = point - transform.position;
+            delta.y = 0.0f;
+            float startDistance = Mathf.Min(m_attackRange, assigned.AttackStartDistance);
+            bool inReach = delta.sqrMagnitude <= startDistance * startDistance;
+            if (!inReach && !(m_owner != null && m_owner.HasSettledDefenseApproach))
+            {
+                return false;
+            }
+        }
+
+        return CanStartAttackAt(point);
     }
 
-    /// <summary>큰 목표물의 중심 대신 가장 가까운 유효 콜라이더 표면을 접근/회전 지점으로 제공합니다.</summary>
+    /// <summary>
+    /// 방어 목표의 접근/회전 지점을 제공합니다. 고른 공격 포인트가 있으면 그 위치, 없으면 가장 가까운 유효 콜라이더 표면입니다.
+    /// </summary>
     /// <remarks>콜라이더가 없는 좌표 마커는 공격 대상으로 만들지 않습니다. 캐시는 목표 교체 때 갱신합니다.</remarks>
     public bool TryGetDefenseAttackPoint(DefenseEventHealth target, out Vector3 point)
     {
         point = default;
         if (target == null || target.IsDead || !target.isActiveAndEnabled) return false;
+        DefenseAttackPoint assigned = GetAssignedAttackPoint(target);
+        if (assigned != null)
+        {
+            point = assigned.Position;
+            return true;
+        }
         if (m_cachedObjective != target)
         {
             m_cachedObjective = target;
@@ -203,6 +234,13 @@ public class EnemyAttack : MonoBehaviour
             }
         }
         return !float.IsPositiveInfinity(best);
+    }
+
+    /// <summary>이 개체가 지정 목표에서 고른 공격 포인트를 돌려줍니다. 고르지 않았거나 다른 목표의 포인트면 null입니다.</summary>
+    private DefenseAttackPoint GetAssignedAttackPoint(DefenseEventHealth target)
+    {
+        DefenseAttackPoint assigned = m_owner != null ? m_owner.DefenseAttackPoint : null;
+        return assigned != null && assigned.isActiveAndEnabled && assigned.Owner == target ? assigned : null;
     }
 
     private bool CanStartAttackAt(Vector3 point)
@@ -229,10 +267,16 @@ public class EnemyAttack : MonoBehaviour
     /// <remarks>
     /// 적중 기록을 비웁니다. 이 시점부터 판정 콜라이더가 다시 피해를 낼 수 있습니다.
     /// 스윙당 1회 고정 모드에서 꺼 두었던 판정 콜라이더를 다시 켜도 되는 시점이기도 합니다.
+    ///
+    /// 판정 콜라이더도 여기서 끕니다. 앞 클립의 끄기 이벤트가 오기 전에 다음 클립이 시작되면(대기 상한 초과,
+    /// 끄기 이벤트가 없는 클립 등) 끄지 않은 콜라이더가 계속 켜진 채로 남습니다. 적중은 진입 순간에만 판정하므로, 그러면
+    /// 손이 대상 안에 머무는 동안 두 번째 타부터 맞지 않습니다. 다음 클립의 켜기 이벤트가 다시 켜면
+    /// 그 뒤에 들어온 대상은 다시 진입으로 잡힙니다.
     /// </remarks>
     public void BeginSwing()
     {
         m_swingHits.Clear();
+        SetHitboxActive(false);
     }
 
     /// <summary>

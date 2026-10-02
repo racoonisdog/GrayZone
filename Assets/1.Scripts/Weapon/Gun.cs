@@ -2403,7 +2403,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             if (m_hasSurfaceImpact)
             {
                 ResolveFeedbackEmitter()?.PlayImpact(m_surfaceImpact);
-                FieldManager.Instance?.EffectManager?.PlaySurfaceResponse(m_surfaceImpact);
+                CombatSceneManager.Instance?.EffectManager?.PlaySurfaceResponse(m_surfaceImpact);
             }
 
             return;

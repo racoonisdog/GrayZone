@@ -23,6 +23,11 @@ public sealed class SkillStatusDebugHud : MonoBehaviour
 
     private void OnGUI()
     {
+        if (MissionOverlayVisibility.IsShown)
+        {
+            return;
+        }
+
         CharacterSkill skill = m_squadManager != null ? m_squadManager.PlayerSquadMemberSkill : null;
         if (skill == null)
         {

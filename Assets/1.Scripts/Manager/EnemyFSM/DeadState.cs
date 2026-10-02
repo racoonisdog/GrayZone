@@ -40,8 +40,8 @@ public class DeadState : EnemyStateBase
     {
         Controller.PlayDeathFeedback();
 
-        EnemyManager settings = FieldManager.Instance != null
-            ? FieldManager.Instance.EnemyManager
+        EnemyManager settings = CombatSceneManager.Instance != null
+            ? CombatSceneManager.Instance.EnemyManager
             : null;
 
         bool useRagdoll;
@@ -52,7 +52,7 @@ public class DeadState : EnemyStateBase
             m_destroyTime = 0.0f;
             useRagdoll = false;
             Debug.LogError(
-                "[DeadState] FieldManager의 EnemyCorpseSettings를 찾지 못했습니다. 시체 처리 설정을 적용할 수 없습니다.",
+                "[DeadState] 씬 컨트롤러(CombatSceneManager)의 EnemyManager를 찾지 못했습니다. 시체 처리 설정을 적용할 수 없습니다.",
                 Controller);
         }
         else

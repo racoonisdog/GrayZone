@@ -116,6 +116,25 @@ public abstract class ExplosiveTrap : Trap, IChainDetonatable
     }
 
     /// <summary>
+    /// Explosive 업그레이드로 폭발 범위에 곱할 배율입니다. 1이면 프리팹 값 그대로입니다.
+    /// </summary>
+    /// <remarks>파생 함정은 피해 판정, 범위 미리보기, 기즈모에 모두 이 배율을 곱한 값을 씁니다.</remarks>
+    protected float RangeMultiplier { get; private set; } = 1.0f;
+
+    /// <inheritdoc />
+    protected override void OnApplyUpgrade(TrapUpgradeTableSO table, DefenseSceneDataManager data)
+    {
+        RangeMultiplier = 1.0f;
+
+        if (table != null
+            && data != null
+            && table.TryGetExplosive(data.GetUpgradeLevel(ScrambleUpgradeType.Explosive), out TrapUpgradeTableSO.ExplosiveLevel level))
+        {
+            RangeMultiplier = Mathf.Max(0.0f, level.RangeMultiplier);
+        }
+    }
+
+    /// <summary>
     /// 트리거 콜라이더가 하나도 없으면 인스펙터에서 경고합니다.
     /// </summary>
     /// <remarks>

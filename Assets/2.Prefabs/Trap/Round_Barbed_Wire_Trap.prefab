@@ -97,7 +97,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   m_startPlaced: 0
-  m_buildCostResourceId: upgrade_part_material
+  m_buildCostResourceId: trap_material
   m_buildCostAmount: 0
   m_buildPrompt: "\uC124\uCE58"
   m_buildHoldDuration: 1

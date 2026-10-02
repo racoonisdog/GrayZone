@@ -13,6 +13,12 @@ using VInspector;
 /// </remarks>
 public sealed class MineTrap : ExplosiveTrap
 {
+    /// <inheritdoc />
+    protected override string DefaultDisplayName => "지뢰";
+
+    /// <inheritdoc />
+    protected override string DefaultDescription => "밟은 적 주변을 폭발시켜 큰 피해를 줍니다";
+
     [Header("Mine")]
     [Tooltip("폭발 피해를 줄 원통의 수평 반지름(m)입니다.")]
     [Min(0.0f)]
@@ -41,17 +47,17 @@ public sealed class MineTrap : ExplosiveTrap
     /// </remarks>
     public Vector3 ExplosionCenter => transform.position + transform.rotation * m_explosionCenterOffset;
 
-    /// <summary>폭발 피해 원통의 수평 반지름입니다.</summary>
-    public float ExplosionRadius => m_explosionRadius;
+    /// <summary>폭발 피해 원통의 수평 반지름입니다. Explosive 업그레이드 배율이 곱해져 있습니다.</summary>
+    public float ExplosionRadius => m_explosionRadius * RangeMultiplier;
 
     /// <inheritdoc />
     protected override int ApplyExplosionDamage()
     {
         return ExplosionDamage.DetonateCylinder(
             ExplosionCenter,
-            m_explosionRadius,
+            ExplosionRadius,
             m_explosionHeight,
-            m_damage,
+            Damage,
             m_damageTargetLayers,
             gameObject,
             m_showExplosionRangeVisual);
@@ -62,14 +68,14 @@ public sealed class MineTrap : ExplosiveTrap
     {
         return ExplosionDamage.CreateCylinderRangeVisual(
             ExplosionCenter,
-            m_explosionRadius,
+            ExplosionRadius,
             m_explosionHeight);
     }
 
     /// <inheritdoc />
     protected override void OnDrawTrapGizmos()
     {
-        if (!m_drawExplosionGizmo || m_explosionRadius <= 0.0f || m_explosionHeight <= 0.0f)
+        if (!m_drawExplosionGizmo || ExplosionRadius <= 0.0f || m_explosionHeight <= 0.0f)
         {
             return;
         }
@@ -83,14 +89,14 @@ public sealed class MineTrap : ExplosiveTrap
         Gizmos.matrix = Matrix4x4.identity;
         Gizmos.color = m_explosionGizmoColor;
 
-        DrawWireCircle(bottom, m_explosionRadius);
-        DrawWireCircle(top, m_explosionRadius);
+        DrawWireCircle(bottom, ExplosionRadius);
+        DrawWireCircle(top, ExplosionRadius);
 
         // 위아래 원만 그리면 높이가 어디까지인지 읽히지 않아 네 방향의 기둥을 함께 긋습니다.
         for (int i = 0; i < 4; i++)
         {
             float angle = i * Mathf.PI * 0.5f;
-            Vector3 offset = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle)) * m_explosionRadius;
+            Vector3 offset = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle)) * ExplosionRadius;
             Gizmos.DrawLine(bottom + offset, top + offset);
         }
 

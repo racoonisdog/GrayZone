@@ -1,18 +1,21 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 전투 종료 후 표시되는 결과창(Result UI)입니다.
+/// 귀환 정산(임무 완료) 오버레이입니다. 귀환 구역에 들어가 전투가 정상 종료되면 표시합니다.
 /// </summary>
 /// <remarks>
-/// <see cref="ReviveHudController"/>와 동일한 방식입니다: 이 컴포넌트는 아무 UI도 만들지 않습니다.
-/// 씬에 미리 배치된 자식(Title/CharacterImage/MissionHeader/ResourceHeader/KillCount/StatusRow1~3/
-/// ResourcePanel/SlotContainer/Slot1~5/ReturnButton)을 이름으로 찾아 값만 채웁니다. 탐색은 계층 전체를
-/// 재귀적으로 훑으므로(<see cref="FindDeep"/>), StatusRow1~3을 SquadProfile 같은 정리용 상위 그룹 밑에
-/// 옮겨도 계속 정상 동작합니다.
+/// 디자인 기준: Figma `Misson Complete Prototype 2`. 배경과 "임무 완료" 타이틀은 이미지이고, 아래에
+/// 처치한 적 수, 획득 자원 슬롯, 캐릭터별 상태(초상화·이름·상태), "쉘터로 복귀" 버튼이 있습니다.
+///
+/// 이 컴포넌트는 UI를 만들지 않고, 씬에 배치된 오브젝트를 인스펙터 참조로 받아 값만 채웁니다.
+/// 캐릭터 칸은 캐릭터 ID로 찾습니다. 결과에 순서가 섞여 들어와도 나린·청솔·서하 칸이 자기 자리에 채워집니다.
+/// 전투 이탈 또는 치명상인 캐릭터는 부상 초상화와 붉은 상태 문구를 씁니다.
+///
+/// 표시되는 동안 <see cref="Time.timeScale"/>을 0으로 멈춥니다. "쉘터로 복귀"를 누르면 시간을 되돌린 뒤 씬을 옮깁니다.
 /// </remarks>
 [DisallowMultipleComponent]
 public class ResultUIController : MonoBehaviour
@@ -25,10 +28,10 @@ public class ResultUIController : MonoBehaviour
         public CharacterInjuryState InjuryState;
         public bool IsCombatOut;
 
-        /// <summary>캐릭터 초상화 선택에 사용하는 고정 식별자입니다. 알 수 없으면 <see cref="PlayerbleCharacterId.Unknown"/>입니다.</summary>
+        /// <summary>캐릭터 칸 선택에 사용하는 고정 식별자입니다. 알 수 없으면 <see cref="PlayerbleCharacterId.Unknown"/>입니다.</summary>
         public PlayerbleCharacterId CharacterId;
 
-        /// <summary>PlayerbleUnitData에서 필드 결과로 직접 전달한 초상화입니다.</summary>
+        /// <summary>PlayerbleUnitData에서 필드 결과로 직접 전달한 초상화입니다. 칸에 초상화가 지정되지 않았을 때만 씁니다.</summary>
         public Sprite Portrait;
     }
 
@@ -40,60 +43,120 @@ public class ResultUIController : MonoBehaviour
         public int Count;
     }
 
-    [Header("References (비워두면 자식 이름으로 자동 탐색)")]
-    [SerializeField] private TextMeshProUGUI m_killCountText;
-    [SerializeField] private RectTransform[] m_statusRows;
-    [SerializeField] private RectTransform[] m_slots;
-    [SerializeField] private Button m_returnButton;
-    [SerializeField] private Image m_characterImage;
+    /// <summary>캐릭터 상태 한 칸입니다. 캐릭터 ID로 결과와 짝을 맞춥니다.</summary>
+    [Serializable]
+    public struct CharacterColumn
+    {
+        [Tooltip("이 칸에 표시할 캐릭터입니다.")]
+        public PlayerbleCharacterId CharacterId;
 
-    [Header("Scene Transition")]
+        [Tooltip("칸 전체 오브젝트입니다. 결과에 이 캐릭터가 없으면 숨깁니다.")]
+        public GameObject Root;
+
+        [Tooltip("초상화 이미지입니다.")]
+        public RawImage Portrait;
+
+        [Tooltip("이름 텍스트입니다.")]
+        public TextMeshProUGUI NameText;
+
+        [Tooltip("상태 텍스트입니다(정상/부상/치명상/전투이탈).")]
+        public TextMeshProUGUI StateText;
+
+        [Tooltip("정상·부상일 때의 초상화입니다.")]
+        public Texture2D NormalPortrait;
+
+        [Tooltip("전투 이탈·치명상일 때의 초상화입니다(노이즈판). 비어 있으면 일반 초상화를 씁니다.")]
+        public Texture2D InjuredPortrait;
+    }
+
+    /// <summary>획득 자원 한 칸입니다.</summary>
+    [Serializable]
+    public struct ResourceSlot
+    {
+        public RawImage Icon;
+        public TextMeshProUGUI Count;
+    }
+
+    [Header("Kills")]
+    [Tooltip("처치한 적 수를 크게 표시할 텍스트입니다. 숫자만 씁니다.")]
+    [SerializeField] private TextMeshProUGUI m_killCountText;
+
+    [Header("Resources")]
+    [Tooltip("획득 자원 칸들입니다. 자원이 칸보다 적으면 남는 칸은 비웁니다.")]
+    [SerializeField] private ResourceSlot[] m_resourceSlots = Array.Empty<ResourceSlot>();
+
+    [Tooltip("자원 수량 표시 형식입니다. {0}에 수량이 들어갑니다.")]
+    [SerializeField] private string m_resourceCountFormat = "x{0}";
+
+    [Header("Characters")]
+    [Tooltip("캐릭터 상태 칸들입니다. 캐릭터 ID로 결과와 짝을 맞춥니다.")]
+    [SerializeField] private CharacterColumn[] m_characterColumns = Array.Empty<CharacterColumn>();
+
+    [Header("Return")]
+    [Tooltip("\"쉘터로 복귀\" 버튼입니다.")]
+    [SerializeField] private Button m_returnButton;
+
     [Tooltip("'셸터로 복귀' 버튼을 누르면 전환할 씬 이름입니다(Build Settings에 등록되어 있어야 합니다).")]
     [SerializeField] private string m_returnSceneName = "TEst";
+
+    [Header("Behaviour")]
+    [Tooltip("켜면 화면이 떠 있는 동안 시간을 멈춥니다.")]
+    [SerializeField] private bool m_pauseTimeWhileShown = true;
+
+    [Header("State Colors")]
+    [SerializeField] private Color m_normalColor = Color.white;
+    [SerializeField] private Color m_injuredColor = new Color(0.95f, 0.65f, 0.15f);
+    [SerializeField] private Color m_criticalColor = new Color(1.0f, 0.0f, 0.0f);
 
     /// <summary>'셸터로 복귀' 버튼을 눌렀을 때 발생합니다.</summary>
     public event Action OnReturnToShelter;
 
-    private static readonly Color s_normalColor = new Color(0.3f, 0.9f, 0.3f);
-    private static readonly Color s_injuredColor = new Color(0.95f, 0.65f, 0.15f);
-    private static readonly Color s_criticalColor = new Color(0.85f, 0.1f, 0.1f);
-    private void Reset()
-    {
-        AutoFindReferences();
-    }
+    private float m_timeScaleBeforeShow = 1.0f;
+    private bool m_pausedTime;
+    private bool m_isLeaving;
 
     private void Awake()
     {
-        AutoFindReferences();
+        if (m_returnButton != null)
+        {
+            m_returnButton.onClick.AddListener(ReturnToShelter);
+        }
+    }
+
+    private void OnDisable()
+    {
+        RestoreTime();
+        MissionOverlayVisibility.Unregister(this);
     }
 
     /// <summary>
     /// 결과 데이터를 채우고 결과창을 표시합니다.
     /// </summary>
     /// <param name="kills">적 처치 수입니다.</param>
-    /// <param name="characters">파티원 상태 목록(StatusRow1~3 순서로 채웁니다. 3명 미만이면 남는 행은 숨깁니다).</param>
-    /// <param name="resources">획득 자원 목록(Slot1~5 순서로 채웁니다. 5개 미만이면 남는 슬롯은 비웁니다).</param>
+    /// <param name="characters">파티원 상태 목록입니다. 캐릭터 ID로 칸을 찾습니다.</param>
+    /// <param name="resources">획득 자원 목록입니다. 칸 순서대로 채웁니다.</param>
     public void ShowResult(int kills, IList<CharacterResult> characters, IList<ResourceResult> resources)
     {
         SetKills(kills);
         SetCharacters(characters);
-        SetCharacterPortrait(characters);
         SetResources(resources);
-        gameObject.SetActive(true);
-        TestSceneUiEventSystemBridge.EnableForResultUI();
 
-        // TODO(Save integration): 결과 오버레이를 연 직후, 확정된 FieldResultData를
-        // GameDataManager에 반영한 뒤 AutoSave()를 요청한다.
-        // AutoSave 반환 규약: 1 = 정상 성공, 0 = 정상 실패, -1 = 비정상 실패.
-        // 1이 오기 전에는 FieldPhase를 Completed로 바꾸거나 셸터 복귀를 허용하지 않는다.
-        // 성공 후 셸터 전환 시 셸터 측은 현재 GameDataManager에서 초기화한다.
-        // 이 경로에서 저장 파일을 다시 읽지는 않으며, 재시작/명시적 불러오기가 파일 복구를 담당한다.
-        // TODO(FieldManager): AutoSave 성공을 받은 뒤에만 ReturnButton을 활성화하는 게이트를 연결한다.
-        // 현재는 테스트 전환 확인 단계라 ReturnToShelter()가 즉시 씬 전환을 수행한다.
+        m_isLeaving = false;
+        gameObject.SetActive(true);
+        MissionOverlayVisibility.Register(this);
+
+        if (m_pauseTimeWhileShown && !m_pausedTime)
+        {
+            m_timeScaleBeforeShow = Time.timeScale > 0.0f ? Time.timeScale : 1.0f;
+            Time.timeScale = 0.0f;
+            m_pausedTime = true;
+        }
+
+        TestSceneUiEventSystemBridge.EnableForResultUI();
     }
 
     /// <summary>전투 매니저가 확정한 귀환 정산 스냅샷을 표시합니다.</summary>
-    public void ShowResult(FieldSceneDataManager.ResultSnapshot result)
+    public void ShowResult(CombatSceneDataManager.ResultSnapshot result)
     {
         if (result == null)
         {
@@ -103,7 +166,7 @@ public class ResultUIController : MonoBehaviour
         List<CharacterResult> characters = new();
         for (int i = 0; i < result.Characters.Count; i++)
         {
-            FieldSceneDataManager.PlayerbleResult character = result.Characters[i];
+            CombatSceneDataManager.PlayerbleResult character = result.Characters[i];
             characters.Add(new CharacterResult
             {
                 Name = character.DisplayName,
@@ -117,7 +180,7 @@ public class ResultUIController : MonoBehaviour
         List<ResourceResult> resources = new();
         for (int i = 0; i < result.Resources.Count; i++)
         {
-            FieldSceneDataManager.ResourceResult resource = result.Resources[i];
+            CombatSceneDataManager.ResourceResult resource = result.Resources[i];
             resources.Add(new ResourceResult
             {
                 Icon = resource.Icon,
@@ -128,7 +191,7 @@ public class ResultUIController : MonoBehaviour
         ShowResult(result.KillCount, characters, resources);
     }
 
-    /// <summary>결과창을 숨깁니다.</summary>
+    /// <summary>결과창을 숨기고 멈춘 시간을 되돌립니다.</summary>
     /// <remarks>
     /// 인게임 HUD는 여기서 끄지 않습니다. 조준선 패널을 이 캔버스보다 아래(sortingOrder −1)로
     /// 두어 UI 레이어가 가리는 쪽으로 처리합니다. 무엇이 무엇 위에 오는지를 UI 시스템이
@@ -137,15 +200,21 @@ public class ResultUIController : MonoBehaviour
     /// </remarks>
     public void Hide()
     {
+        RestoreTime();
         gameObject.SetActive(false);
     }
 
-    /// <summary>
-    /// ReturnButton의 Inspector OnClick에서 호출하는 셸터 복귀 진입점입니다.
-    /// </summary>
+    /// <summary>"쉘터로 복귀" 버튼의 진입점입니다. 시간을 되돌린 뒤 셸터 씬으로 옮깁니다.</summary>
     public void ReturnToShelter()
     {
+        if (m_isLeaving)
+        {
+            return;
+        }
+
+        m_isLeaving = true;
         OnReturnToShelter?.Invoke();
+        RestoreTime();
         TestSceneUiEventSystemBridge.DisableBeforeShelterTransition();
         // 방어전 귀환 반복 테스트를 위해 다음 Shelter 진입에서 DefaultSaveData를 적용한다.
         GameDataManager.Instance?.SetUseDefaultSaveDataOnShelterStart(true);
@@ -156,229 +225,135 @@ public class ResultUIController : MonoBehaviour
     {
         if (m_killCountText != null)
         {
-            m_killCountText.text = $"적 처치 수 : {Mathf.Max(0, kills)}";
+            m_killCountText.text = Mathf.Max(0, kills).ToString();
         }
     }
 
     private void SetCharacters(IList<CharacterResult> characters)
     {
-        if (m_statusRows == null)
+        if (m_characterColumns == null)
         {
             return;
         }
 
-        for (int i = 0; i < m_statusRows.Length; i++)
+        for (int i = 0; i < m_characterColumns.Length; i++)
         {
-            RectTransform row = m_statusRows[i];
-            if (row == null)
+            CharacterColumn column = m_characterColumns[i];
+            bool found = TryFindCharacter(characters, column.CharacterId, out CharacterResult character);
+
+            if (column.Root != null)
+            {
+                column.Root.SetActive(found);
+            }
+
+            if (!found)
             {
                 continue;
             }
 
-            bool hasData = characters != null && i < characters.Count;
-            row.gameObject.SetActive(hasData);
-            if (!hasData)
+            bool isOut = character.IsCombatOut || character.InjuryState == CharacterInjuryState.Critical;
+
+            if (column.NameText != null)
             {
-                continue;
+                column.NameText.text = character.Name;
             }
 
-            CharacterResult character = characters[i];
-            TextMeshProUGUI nameText = row.Find("NameText")?.GetComponent<TextMeshProUGUI>();
-            if (nameText != null)
+            if (column.StateText != null)
             {
-                nameText.text = character.Name;
+                column.StateText.text = ResolveStateLabel(character.InjuryState, character.IsCombatOut);
+                column.StateText.color = ResolveStateColor(character.InjuryState, character.IsCombatOut);
             }
 
-            TextMeshProUGUI stateText = row.Find("StateText")?.GetComponent<TextMeshProUGUI>();
-            if (stateText != null)
+            if (column.Portrait != null)
             {
-                stateText.text = ResolveStateLabel(character.InjuryState, character.IsCombatOut);
-                stateText.color = ResolveStateColor(character.InjuryState, character.IsCombatOut);
-            }
-
-            Transform overlay = row.Find("CriticalOverlay");
-            if (overlay != null)
-            {
-                overlay.gameObject.SetActive(character.IsCombatOut || character.InjuryState == CharacterInjuryState.Critical);
+                // 칸에 지정한 초상화를 먼저 쓰고, 없으면 결과에 실려 온 캐릭터 초상화 텍스처를 씁니다.
+                Texture portrait = isOut && column.InjuredPortrait != null
+                    ? column.InjuredPortrait
+                    : column.NormalPortrait != null
+                        ? column.NormalPortrait
+                        : character.Portrait != null ? character.Portrait.texture : null;
+                column.Portrait.texture = portrait;
+                column.Portrait.enabled = portrait != null;
             }
         }
     }
 
-    /// <summary>
-    /// 이번 필드에 참여한 캐릭터가 직접 전달한 풀바디 초상화 중 첫 번째를 표시합니다.
-    /// </summary>
-    /// <remarks>
-    /// 초상화는 PlayerbleUnitData에서 필드 결과 스냅샷으로 직접 전달됩니다.
-    /// </remarks>
-    private void SetCharacterPortrait(IList<CharacterResult> characters)
+    private static bool TryFindCharacter(IList<CharacterResult> characters, PlayerbleCharacterId id, out CharacterResult result)
     {
-        if (m_characterImage == null)
-        {
-            return;
-        }
-
-        Sprite chosen = null;
-
         if (characters != null)
         {
             for (int i = 0; i < characters.Count; i++)
             {
-                if (characters[i].Portrait != null)
+                if (characters[i].CharacterId == id)
                 {
-                    chosen = characters[i].Portrait;
-                    break;
+                    result = characters[i];
+                    return true;
                 }
             }
         }
 
-        m_characterImage.sprite = chosen;
-        m_characterImage.enabled = chosen != null;
+        result = default;
+        return false;
     }
-
 
     private void SetResources(IList<ResourceResult> resources)
     {
-        if (m_slots == null)
+        if (m_resourceSlots == null)
         {
             return;
         }
 
-        for (int i = 0; i < m_slots.Length; i++)
+        for (int i = 0; i < m_resourceSlots.Length; i++)
         {
-            RectTransform slot = m_slots[i];
-            if (slot == null)
-            {
-                continue;
-            }
-
+            ResourceSlot slot = m_resourceSlots[i];
             bool hasData = resources != null && i < resources.Count;
-            RawImage icon = slot.Find("Icon")?.GetComponent<RawImage>();
-            TextMeshProUGUI count = slot.Find("Count")?.GetComponent<TextMeshProUGUI>();
 
-            if (icon != null)
+            if (slot.Icon != null)
             {
-                icon.texture = hasData ? resources[i].Icon : null;
-                icon.enabled = hasData && resources[i].Icon != null;
+                slot.Icon.texture = hasData ? resources[i].Icon : null;
+                slot.Icon.enabled = hasData && resources[i].Icon != null;
             }
 
-            if (count != null)
+            if (slot.Count != null)
             {
-                count.text = hasData ? resources[i].Count.ToString() : string.Empty;
+                slot.Count.text = hasData ? string.Format(m_resourceCountFormat, resources[i].Count) : string.Empty;
             }
         }
     }
 
-    private static Color ResolveStateColor(CharacterInjuryState injuryState, bool isCombatOut)
+    private Color ResolveStateColor(CharacterInjuryState injuryState, bool isCombatOut)
     {
         if (isCombatOut || injuryState == CharacterInjuryState.Critical)
         {
-            return s_criticalColor;
+            return m_criticalColor;
         }
 
-        return injuryState == CharacterInjuryState.Normal
-            ? s_normalColor
-            : s_injuredColor;
+        return injuryState == CharacterInjuryState.Normal ? m_normalColor : m_injuredColor;
     }
 
     private static string ResolveStateLabel(CharacterInjuryState injuryState, bool isCombatOut)
     {
-        if (isCombatOut || injuryState == CharacterInjuryState.Critical)
+        if (isCombatOut)
+        {
+            return "전투이탈";
+        }
+
+        if (injuryState == CharacterInjuryState.Critical)
         {
             return "치명상";
         }
 
-        return injuryState == CharacterInjuryState.Normal
-            ? "정상"
-            : "부상";
+        return injuryState == CharacterInjuryState.Normal ? "정상" : "부상";
     }
 
-    /// <summary>
-    /// 씬에 미리 배치된 자식들을 이름으로 찾아 참조를 채웁니다. 이미 할당된 참조는 덮어쓰지 않습니다.
-    /// </summary>
-    /// <remarks>
-    /// 이름으로 하위 계층 전체를 재귀 탐색합니다(<see cref="FindDeep"/>). StatusRow1~3처럼 정리용
-    /// 상위 그룹(예: SquadProfile) 밑으로 옮겨도 계속 찾을 수 있도록, 직계 자식만 보는
-    /// <see cref="Transform.Find"/> 대신 이 방식을 씁니다.
-    /// </remarks>
-    private void AutoFindReferences()
+    private void RestoreTime()
     {
-        if (m_killCountText == null)
+        if (!m_pausedTime)
         {
-            Transform kill = FindDeep(transform, "KillCount");
-            if (kill != null)
-            {
-                m_killCountText = kill.GetComponent<TextMeshProUGUI>();
-            }
+            return;
         }
 
-        if (m_statusRows == null || m_statusRows.Length == 0)
-        {
-            List<RectTransform> rows = new List<RectTransform>();
-            for (int i = 1; i <= 3; i++)
-            {
-                Transform row = FindDeep(transform, $"StatusRow{i}");
-                if (row != null)
-                {
-                    rows.Add(row.GetComponent<RectTransform>());
-                }
-            }
-            m_statusRows = rows.ToArray();
-        }
-
-        if (m_slots == null || m_slots.Length == 0)
-        {
-            Transform slotContainer = FindDeep(transform, "SlotContainer");
-            if (slotContainer != null)
-            {
-                List<RectTransform> slots = new List<RectTransform>();
-                for (int i = 1; i <= 5; i++)
-                {
-                    Transform slot = FindDeep(slotContainer, $"Slot{i}");
-                    if (slot != null)
-                    {
-                        slots.Add(slot.GetComponent<RectTransform>());
-                    }
-                }
-                m_slots = slots.ToArray();
-            }
-        }
-
-        if (m_returnButton == null)
-        {
-            Transform button = FindDeep(transform, "ReturnButton");
-            if (button != null)
-            {
-                m_returnButton = button.GetComponent<Button>();
-            }
-        }
-
-        if (m_characterImage == null)
-        {
-            Transform character = FindDeep(transform, "CharacterImage") ?? FindDeep(transform, "Character");
-            if (character != null)
-            {
-                m_characterImage = character.GetComponent<Image>();
-            }
-        }
-    }
-
-    /// <summary>지정한 이름의 자손 Transform을 하위 계층 전체에서 재귀적으로 찾습니다(직계 자식 한정 아님).</summary>
-    private static Transform FindDeep(Transform root, string name)
-    {
-        foreach (Transform child in root)
-        {
-            if (child.name == name)
-            {
-                return child;
-            }
-
-            Transform found = FindDeep(child, name);
-            if (found != null)
-            {
-                return found;
-            }
-        }
-
-        return null;
+        Time.timeScale = m_timeScaleBeforeShow;
+        m_pausedTime = false;
     }
 }

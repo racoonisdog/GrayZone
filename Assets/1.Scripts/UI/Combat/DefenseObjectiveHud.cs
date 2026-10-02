@@ -34,6 +34,19 @@ public class DefenseObjectiveHud : MonoBehaviour
     [Tooltip("경고 문구 텍스트입니다. 비어 있으면 자식 'Warning'을 찾습니다.")]
     [SerializeField] private TMP_Text m_warningText;
 
+    [Tooltip("거점 체력 비율(%)을 표시할 텍스트입니다. 선택 사항입니다.")]
+    [SerializeField] private TMP_Text m_gateHpText;
+
+    [Tooltip("전투 구간에 필드에 남은 적 수를 표시할 텍스트입니다. 전투 구간이 아니면 숨깁니다. 선택 사항입니다.")]
+    [SerializeField] private TMP_Text m_enemyCountText;
+
+    [Tooltip("남은 적 수 표시 형식입니다. {0}에 남은 적 수가 들어갑니다.")]
+    [SerializeField] private string m_enemyCountFormat = "남은 적 {0}";
+
+    [Tooltip("남은 적 수를 다시 셀 간격(초)입니다. 적 수를 세는 비용 때문에 매 프레임 세지 않습니다.")]
+    [Min(0.05f)]
+    [SerializeField] private float m_enemyCountInterval = 0.25f;
+
     [Header("Source")]
     [Tooltip("표시할 거점 체력입니다. 비어 있으면 씬에서 찾습니다.")]
     [SerializeField] private DefenseEventHealth m_objective;
@@ -57,6 +70,12 @@ public class DefenseObjectiveHud : MonoBehaviour
 
     /// <summary>거점이 파괴된 뒤인지 여부입니다. 파괴 문구는 자동으로 지우지 않습니다.</summary>
     private bool m_objectiveDestroyed;
+
+    /// <summary>다음에 남은 적 수를 셀 시각(unscaled)입니다.</summary>
+    private float m_nextEnemyCountTime;
+
+    /// <summary>마지막으로 표시한 남은 적 수입니다. 바뀔 때만 문자열을 새로 만듭니다.</summary>
+    private int m_lastEnemyCount = -1;
 
     /// <summary>HUD가 현재 표시 중인지 여부입니다.</summary>
     public bool IsShown => m_panelRoot != null && m_panelRoot.activeSelf;
@@ -95,6 +114,8 @@ public class DefenseObjectiveHud : MonoBehaviour
 
     private void Update()
     {
+        RefreshEnemyCount();
+
         if (m_objectiveDestroyed || m_warningClearTime <= 0.0f || Time.time < m_warningClearTime)
         {
             return;
@@ -211,6 +232,46 @@ public class DefenseObjectiveHud : MonoBehaviour
         if (m_gaugeFill != null)
         {
             m_gaugeFill.fillAmount = normalized;
+        }
+
+        if (m_gateHpText != null)
+        {
+            // 1% 미만으로 남았을 때 0%로 보이면 이미 무너진 것으로 오해하므로 올림합니다.
+            m_gateHpText.text = $"{Mathf.CeilToInt(normalized * 100.0f)}%";
+        }
+    }
+
+    /// <summary>
+    /// 전투 구간에만 남은 적 수를 표시합니다.
+    /// </summary>
+    /// <remarks>
+    /// 정리 구간에는 <see cref="DefenseManager"/>의 구간 라벨이 같은 수를 보여 주므로 여기서는 숨겨 중복을 피합니다.
+    /// </remarks>
+    private void RefreshEnemyCount()
+    {
+        if (m_enemyCountText == null)
+        {
+            return;
+        }
+
+        bool shouldShow = m_defenseManager != null && m_defenseManager.IsPlaying;
+        if (m_enemyCountText.gameObject.activeSelf != shouldShow)
+        {
+            m_enemyCountText.gameObject.SetActive(shouldShow);
+            m_lastEnemyCount = -1;
+        }
+
+        if (!shouldShow || Time.unscaledTime < m_nextEnemyCountTime)
+        {
+            return;
+        }
+
+        m_nextEnemyCountTime = Time.unscaledTime + m_enemyCountInterval;
+        int count = m_defenseManager.RemainingEnemyCount;
+        if (count != m_lastEnemyCount)
+        {
+            m_lastEnemyCount = count;
+            m_enemyCountText.text = string.Format(m_enemyCountFormat, count);
         }
     }
 

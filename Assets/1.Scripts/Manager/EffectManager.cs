@@ -193,7 +193,7 @@ public sealed class EffectManager : MonoBehaviour
 
         m_lastSoundIndices[feedback] = lastIndex;
 
-        AudioManager audio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager audio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         audio?.PlayOneShotAt(clip, position, AudioPriorityClass.SurfaceDecor);
     }
 }

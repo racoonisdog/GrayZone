@@ -12,6 +12,9 @@ public class ReviveHudController : MonoBehaviour
     [SerializeField] private GameObject m_revivingRoot;
     [SerializeField] private Image m_gaugeFill;
 
+    [Tooltip("구조 키 둘레의 원형 게이지(F_key_gauge)입니다. 막대 게이지와 같은 값으로 채웁니다. 선택 사항입니다.")]
+    [SerializeField] private Image m_keyGaugeFill;
+
     [Header("Squad")]
     [SerializeField] private SquadManager m_squadManager;
 
@@ -124,6 +127,13 @@ public class ReviveHudController : MonoBehaviour
 
     private void SetGauge(float amount)
     {
+        if (m_keyGaugeFill != null)
+        {
+            // 원형 채움 방식(시작 위치·방향)은 씬에서 정한 값을 그대로 씁니다. 아트마다 시작점이 달라서입니다.
+            m_keyGaugeFill.type = Image.Type.Filled;
+            m_keyGaugeFill.fillAmount = Mathf.Clamp01(amount);
+        }
+
         if (m_gaugeFill == null)
         {
             return;

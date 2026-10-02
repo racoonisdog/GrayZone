@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 949f02abe5534b64c9556b557163eca6, type: 3}
+  m_Name: TestGroup_Bridge_HybridPlayer
+  m_EditorClassIdentifier: Assembly-CSharp::SpawnGroupSO
+  m_members:
+  - m_entry: {fileID: 11400000, guid: aa3a02819e382094d8a12b7b4bfdca91, type: 2}
+    m_count: 6
+  - m_entry: {fileID: 11400000, guid: 54d96a7fbdde1124482c6e59171b95c6, type: 2}
+    m_count: 4
+  - m_entry: {fileID: 11400000, guid: 4eb8419710c9f0b4fac05558495e67ba, type: 2}
+    m_count: 1
+  - m_entry: {fileID: 11400000, guid: 069a3e55a004b684a8ff767777675b43, type: 2}
+    m_count: 1
+  - m_entry: {fileID: 11400000, guid: c09e9e66eace53e49b413ec39e7412f5, type: 2}
+    m_count: 1

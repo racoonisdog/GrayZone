@@ -120,8 +120,11 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     [SerializeField] private RawImage m_hpGaugeRawImage;
     [SerializeField] private Image m_hpGaugeImage;
 
-    [Tooltip("조작 중인 대원의 얼굴 초상화(PlayerStatus/PlayerbleProfile)입니다. 비워 두면 Awake에서 이름으로 찾습니다.")]
+    [Tooltip("조작 중인 대원의 얼굴 초상화(PlayerStatus/PlayerbleProfile)입니다. 비워 두면 Awake에서 이름으로 찾고, 그래도 없으면 초상화 갱신을 생략합니다(SquadProfileHud가 초상화를 맡는 HUD).")]
     [SerializeField] private Image m_portraitImage;
+
+    [Tooltip("켜면 체력 텍스트를 '현재/최대'로 표시합니다. 끄면 현재 값만 표시합니다.")]
+    [SerializeField] private bool m_showMaxHpInText;
 
     [Header("Ammo")]
     [Tooltip("현재 탄창 탄약 수 텍스트(Mag_Count)입니다.")]
@@ -184,7 +187,6 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         WarnIfNull(m_magCountText, "탄창 탄약 텍스트(m_magCountText / Mag_Count)");
         WarnIfNull(m_magAllText, "예비 탄약 텍스트(m_magAllText / Mag_All)");
         WarnIfNull(m_squadManager, "SquadManager(m_squadManager)");
-        WarnIfNull(m_portraitImage, "조작 멤버 초상화(m_portraitImage / PlayerStatus/PlayerbleProfile)");
 
         if (m_hpGaugeImage == null && m_hpGaugeRawImage == null)
         {
@@ -411,7 +413,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
         if (m_currentHpText != null)
         {
-            m_currentHpText.text = currentHp.ToString();
+            m_currentHpText.text = m_showMaxHpInText ? $"{currentHp}/{maxHp}" : currentHp.ToString();
         }
 
         if (m_magCountText != null)

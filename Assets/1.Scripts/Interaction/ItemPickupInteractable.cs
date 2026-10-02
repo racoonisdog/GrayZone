@@ -108,8 +108,8 @@ public sealed class ItemPickupInteractable : MonoBehaviour, IInteractable
     /// </summary>
     private static SquadInventoryManager ResolveInventory()
     {
-        return FieldManager.Instance != null
-            ? FieldManager.Instance.SquadInventory
+        return CombatSceneManager.Instance != null
+            ? CombatSceneManager.Instance.SquadInventory
             : null;
     }
 }

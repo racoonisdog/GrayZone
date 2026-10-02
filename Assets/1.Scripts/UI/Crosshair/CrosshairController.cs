@@ -90,6 +90,16 @@ public class CrosshairController : MonoBehaviour
         CounterClockwise,
     }
 
+    /// <summary>처치 펄스가 조준선 팔을 움직이는 방향입니다.</summary>
+    public enum KillPulseDirection
+    {
+        /// <summary>바깥으로 튀었다가 돌아옵니다.</summary>
+        Expand,
+
+        /// <summary>가운데로 모였다가 돌아옵니다.</summary>
+        Contract,
+    }
+
     [Foldout("References")]
     [Tooltip("조준선 UXML을 표시하는 UIDocument입니다. 비워두면 같은 GameObject에서 찾습니다.")]
     [SerializeField] private UIDocument m_document;
@@ -348,6 +358,17 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("크로스헤어 중심에서 우하단 대각 방향으로 탄약 게이지를 얼마나 떨어뜨릴지(픽셀)입니다. x·y 각 축에 동일 적용됩니다.")]
     [SerializeField] private float m_ammoGaugeDiagonalOffset = 40.0f;
 
+    [Header("Ammo Gauge Bullet")]
+    [Tooltip("켜면 탄약 게이지 옆에 재장전 탄약 아이콘(m_reloadBulletImage)을 하나 더 표시합니다. 게이지가 보일 때만 보입니다.")]
+    [SerializeField] private bool m_showAmmoGaugeBullet = true;
+
+    [Tooltip("탄약 게이지 옆 탄약 아이콘의 표시 크기(픽셀)입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_ammoGaugeBulletSizePixels = 24.0f;
+
+    [Tooltip("탄약 게이지 중심에서 아이콘 중심까지의 거리(픽셀)입니다. x는 오른쪽, y는 아래쪽이 양수입니다.")]
+    [SerializeField] private Vector2 m_ammoGaugeBulletOffset = new Vector2(62.0f, -12.0f);
+
     [Foldout("Hit Feedback")]
     [Header("Hit Marker")]
     [Tooltip("켜면 적을 맞혔을 때 중앙에 X자 히트마커를 잠깐 표시합니다.")]
@@ -409,8 +430,8 @@ public class CrosshairController : MonoBehaviour
     [EndIf]
 
     [Header("Kill Skull")]
-    [Tooltip("켜면 적을 처치했을 때 중앙에 해골이 떴다가 페이드아웃됩니다.")]
-    [SerializeField] private bool m_showKillSkull = true;
+    [Tooltip("켜면 적을 처치했을 때 중앙에 해골이 떴다가 페이드아웃됩니다. 지금은 처치 펄스로 대신해 꺼 두었습니다.")]
+    [SerializeField] private bool m_showKillSkull = false;
 
     [Tooltip("킬 시 표시할 해골 텍스처입니다(예: KillStreak.png).")]
     [SerializeField] private Texture2D m_killSkullTexture;
@@ -426,6 +447,30 @@ public class CrosshairController : MonoBehaviour
 
     [Tooltip("해골이 사라지기까지 걸리는 페이드아웃 시간(초)입니다.")]
     [SerializeField] private float m_killSkullFadeDuration = 0.6f;
+
+    [Header("Kill Pulse")]
+    [Tooltip("켜면 적을 처치했을 때 조준선 팔이 잠깐 움직였다가 제자리로 돌아옵니다. 해골 표시와 따로 켜고 끕니다.")]
+    [SerializeField] private bool m_enableKillPulse = true;
+
+    [Tooltip("Expand는 바깥으로 튀었다가 돌아오고, Contract는 가운데로 모였다가 돌아옵니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [SerializeField] private KillPulseDirection m_killPulseDirection = KillPulseDirection.Expand;
+
+    [Tooltip("가장 크게 움직일 때의 간격 변화(픽셀)입니다. Contract에서 현재 간격보다 크면 팔이 가운데에서 멈춥니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [Min(0.0f)]
+    [SerializeField] private float m_killPulseAmplitudePixels = 12.0f;
+
+    [Tooltip("처치 펄스 한 번의 전체 길이(초)입니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [Min(0.0f)]
+    [SerializeField] private float m_killPulseDuration = 0.3f;
+
+    [Tooltip("처치 펄스 곡선입니다. x=정규화 시간, y=움직임 배율(0~1)입니다. 기본값은 빠르게 최대로 간 뒤 천천히 돌아옵니다.")]
+    [ShowIf(nameof(m_enableKillPulse))]
+    [SerializeField]
+    private AnimationCurve m_killPulseCurve = ImpulseEnvelope.BuildFastAttackConstantReleaseCurve(0.2f, 1.0f, 0.85f);
+    [EndIf]
 
     [Foldout("Block Marker")]
     [Tooltip("켜면 총구와 조준점 사이가 막혔을 때(아군·장애물 길막) 실제 탄착점 화면 위치에 차단 마커를 표시합니다.")]
@@ -507,6 +552,7 @@ public class CrosshairController : MonoBehaviour
     private VisualElement m_subShapeElement;
     private VisualElement m_subStrokeElement;
     private VisualElement m_reloadBulletElement;
+    private VisualElement m_ammoGaugeBulletElement;
     private VisualElement m_ammoGaugeElement;
     private VisualElement m_hitMarkerElement;
     private VisualElement m_killSkullElement;
@@ -527,6 +573,15 @@ public class CrosshairController : MonoBehaviour
     /// <summary>이번 히트마커에 적용 중인 삼각형 길이(픽셀)입니다. 명중마다 피해량으로 다시 계산합니다.</summary>
     private float m_hitMarkerActiveLengthPixels;
     private float m_killTimer;
+
+    /// <summary>처치 펄스가 한 프레임에 진행할 수 있는 최대 시간(초)입니다.</summary>
+    private const float KillPulseMaxStepSeconds = 1.0f / 30.0f;
+
+    /// <summary>처치 펄스가 시작된 뒤 지난 시간(초)입니다. 음수면 재생 중이 아닙니다.</summary>
+    private float m_killPulseElapsed = -1.0f;
+
+    /// <summary>이번 프레임에 처치 펄스가 간격에 더하는 값(픽셀)입니다. Contract면 음수입니다.</summary>
+    private float m_killPulseOffsetPixels;
     private float m_currentGapPixels;
     private float m_targetSpreadGapPixels;
     private float m_currentShotRecoilPulsePixels;
@@ -599,6 +654,7 @@ public class CrosshairController : MonoBehaviour
         UpdateReloadBlink();
         UpdateHitMarkerFade();
         UpdateKillFade();
+        UpdateKillPulse();
         UpdateShotRecoilPulse();
         UpdateGapSmoothing();
         UpdateBlockMarkerCrosshairOpacity();
@@ -759,6 +815,40 @@ public class CrosshairController : MonoBehaviour
         {
             HideElement(m_killSkullElement);
         }
+    }
+
+    /// <summary>
+    /// 처치 펄스를 진행해 이번 프레임에 간격에 더할 값을 정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 반영은 바로 뒤 <see cref="UpdateGapSmoothing"/>이 부르는 <see cref="ApplyLayout"/>에서 합니다.
+    /// 탄퍼짐·반동 펄스와 달리 보간을 거치지 않게 둔 이유는, 짧고 빠른 움직임이 보간에 깎이면
+    /// 처치 순간의 손맛이 사라지기 때문입니다.
+    /// </remarks>
+    private void UpdateKillPulse()
+    {
+        if (m_killPulseElapsed < 0.0f)
+        {
+            return;
+        }
+
+        float duration = Mathf.Max(0.0f, m_killPulseDuration);
+
+        // 처치 프레임은 래그돌·이펙트 생성으로 길어지기 쉽습니다. 그 한 프레임에 펄스 전체가 지나가 버리면
+        // 아무것도 보이지 않으므로, 한 프레임에 진행하는 시간을 1/30초로 묶습니다.
+        m_killPulseElapsed += Mathf.Min(Time.deltaTime, KillPulseMaxStepSeconds);
+
+        if (!m_enableKillPulse || duration <= 0.0f || m_killPulseElapsed >= duration)
+        {
+            m_killPulseElapsed = -1.0f;
+            m_killPulseOffsetPixels = 0.0f;
+            return;
+        }
+
+        float t = m_killPulseElapsed / duration;
+        float weight = m_killPulseCurve != null ? m_killPulseCurve.Evaluate(t) : 1.0f - t;
+        float sign = m_killPulseDirection == KillPulseDirection.Contract ? -1.0f : 1.0f;
+        m_killPulseOffsetPixels = sign * Mathf.Max(0.0f, m_killPulseAmplitudePixels) * weight;
     }
 
     /// <summary>
@@ -1445,6 +1535,104 @@ public class CrosshairController : MonoBehaviour
         set { m_ammoGaugeBackgroundAlpha = Mathf.Clamp01(value); RefreshRuntimeLayout(); }
     }
 
+    /// <summary>탄약 게이지 배경의 색입니다. 투명도는 <see cref="AmmoGaugeBackgroundAlpha"/>가 정합니다.</summary>
+    public Color AmmoGaugeBackgroundColor
+    {
+        get => m_ammoGaugeBackgroundColor;
+        set { m_ammoGaugeBackgroundColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>재장전 중 진행도 아크의 색입니다.</summary>
+    public Color ReloadAmmoGaugeColor
+    {
+        get => m_reloadAmmoGaugeColor;
+        set { m_reloadAmmoGaugeColor = value; RefreshRuntimeLayout(); }
+    }
+
+    /// <summary>장탄 아크를 탄 단위로 나눌 때 칸 사이 간격(도)입니다.</summary>
+    public float AmmoGaugeSegmentGapDegrees
+    {
+        get => m_ammoGaugeSegmentGapDegrees;
+        set { m_ammoGaugeSegmentGapDegrees = Mathf.Max(0.0f, value); RefreshRuntimeLayout(); }
+    }
+
+    // 차단 마커 ─────────────────────────────────────────────────
+
+    /// <summary>총구와 조준점 사이가 막혔을 때 차단 마커를 표시할지 여부입니다.</summary>
+    public bool BlockMarkerEnabled
+    {
+        get => m_showBlockMarker;
+        set
+        {
+            m_showBlockMarker = value;
+            if (!value)
+            {
+                HideBlockMarker();
+            }
+        }
+    }
+
+    /// <summary>차단 마커 링의 지름(픽셀)입니다.</summary>
+    public float BlockMarkerRingSizePixels
+    {
+        get => m_blockMarkerRingSizePixels;
+        set { m_blockMarkerRingSizePixels = Mathf.Max(0.0f, value); RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커 링의 선 두께(픽셀)입니다. 0이면 링을 그리지 않습니다.</summary>
+    public float BlockMarkerRingThicknessPixels
+    {
+        get => m_blockMarkerRingThicknessPixels;
+        set { m_blockMarkerRingThicknessPixels = Mathf.Max(0.0f, value); RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커 가운데 점의 지름(픽셀)입니다. 0이면 점을 그리지 않습니다.</summary>
+    public float BlockMarkerDotSizePixels
+    {
+        get => m_blockMarkerDotSizePixels;
+        set { m_blockMarkerDotSizePixels = Mathf.Max(0.0f, value); RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커의 색입니다. 링과 가운데 점이 같은 색을 씁니다.</summary>
+    public Color BlockMarkerColor
+    {
+        get => m_blockMarkerColor;
+        set { m_blockMarkerColor = value; RepaintBlockMarker(); }
+    }
+
+    /// <summary>차단 마커가 보이는 동안 중앙 조준선을 흐리게 할지 여부입니다.</summary>
+    public bool DimCrosshairWhileBlockMarker
+    {
+        get => m_dimCrosshairWhileBlockMarker;
+        set => m_dimCrosshairWhileBlockMarker = value;
+    }
+
+    /// <summary>차단 마커가 보이는 동안의 조준선 투명도입니다.</summary>
+    public float BlockMarkerCrosshairAlpha
+    {
+        get => m_blockMarkerCrosshairAlpha;
+        set => m_blockMarkerCrosshairAlpha = Mathf.Clamp01(value);
+    }
+
+    /// <summary>차단 마커 표시·해제에 맞춰 조준선 투명도가 바뀌는 시간(초)입니다.</summary>
+    public float BlockMarkerCrosshairFadeDuration
+    {
+        get => m_blockMarkerCrosshairFadeDuration;
+        set => m_blockMarkerCrosshairFadeDuration = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>
+    /// 떠 있는 차단 마커를 다시 그리게 합니다.
+    /// </summary>
+    /// <remarks>
+    /// 차단 마커는 나타나는 순간에만 다시 그려집니다. 표시 중에 모양이나 색을 바꾸면 이 호출이 없을 때
+    /// 다음에 다시 나타날 때까지 이전 모양이 남습니다.
+    /// </remarks>
+    private void RepaintBlockMarker()
+    {
+        m_blockMarkerElement?.MarkDirtyRepaint();
+    }
+
     // 적중 표시 ─────────────────────────────────────────────────
 
     /// <summary>히트마커 밑변의 길이(픽셀)입니다.</summary>
@@ -1501,6 +1689,34 @@ public class CrosshairController : MonoBehaviour
     {
         get => m_showKillSkull;
         set => m_showKillSkull = value;
+    }
+
+    /// <summary>처치 시 조준선 팔을 잠깐 움직이는 펄스를 쓸지 여부입니다.</summary>
+    public bool KillPulseEnabled
+    {
+        get => m_enableKillPulse;
+        set => m_enableKillPulse = value;
+    }
+
+    /// <summary>처치 펄스 방향입니다. 바깥으로 튀거나 가운데로 모입니다.</summary>
+    public KillPulseDirection CurrentKillPulseDirection
+    {
+        get => m_killPulseDirection;
+        set => m_killPulseDirection = value;
+    }
+
+    /// <summary>처치 펄스가 가장 크게 움직일 때의 간격 변화(픽셀)입니다.</summary>
+    public float KillPulseAmplitudePixels
+    {
+        get => m_killPulseAmplitudePixels;
+        set => m_killPulseAmplitudePixels = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>처치 펄스 한 번의 전체 길이(초)입니다.</summary>
+    public float KillPulseDuration
+    {
+        get => m_killPulseDuration;
+        set => m_killPulseDuration = Mathf.Max(0.0f, value);
     }
 
     /// <summary>히트마커를 표시할지 여부입니다.</summary>
@@ -1679,7 +1895,11 @@ public class CrosshairController : MonoBehaviour
     public int SpecialAmmoGaugeRoundCount => m_specialAmmoGaugeRoundCount;
 
     /// <summary>특수탄 장탄 아크 색입니다.</summary>
-    public Color SpecialAmmoGaugeColor => m_specialAmmoGaugeColor;
+    public Color SpecialAmmoGaugeColor
+    {
+        get => m_specialAmmoGaugeColor;
+        set { m_specialAmmoGaugeColor = value; RefreshRuntimeLayout(); }
+    }
 
     /// <summary>현재 무기의 장탄 아크를 탄 단위로 분할할지와 구간 수를 설정합니다.</summary>
     /// <param name="enabled">분할 표시를 사용하면 <c>true</c>입니다.</param>
@@ -1893,6 +2113,7 @@ public class CrosshairController : MonoBehaviour
         }
 
         m_reloadBulletElement = FindOrCreateChild(m_crosshairElement, "ReloadBullet");
+        m_ammoGaugeBulletElement = FindOrCreateChild(m_crosshairElement, "AmmoGaugeBullet");
 
         m_hitMarkerElement = FindOrCreateChild(m_crosshairElement, "HitMarker");
         if (m_hitMarkerElement != null)
@@ -2068,6 +2289,9 @@ public class CrosshairController : MonoBehaviour
         // 파츠 배치 기준 = 앵커(0). 컨테이너가 0×0이라 앵커가 곧 패널 정중앙이 됩니다.
         const float center = 0.0f;
 
+        // 처치 펄스는 보간이 끝난 간격 위에 얹습니다. 모일 때 팔이 중심을 넘어 뒤집히지 않게 0에서 멈춥니다.
+        gapPixels = Mathf.Max(0.0f, gapPixels + m_killPulseOffsetPixels);
+
         m_rootElement.pickingMode = PickingMode.Ignore;
         m_rootElement.style.position = Position.Absolute;
         m_rootElement.style.left = 0.0f;
@@ -2125,6 +2349,7 @@ public class CrosshairController : MonoBehaviour
 
         ApplyReloadBullet(center, reloadSwap);
         ApplyAmmoGauge(center);
+        ApplyAmmoGaugeBullet(center);
         LayoutHitMarker(center);
         LayoutKillSkull(center);
     }
@@ -2186,6 +2411,40 @@ public class CrosshairController : MonoBehaviour
         m_ammoGaugeElement.style.backgroundColor = Color.clear;
         m_ammoGaugeElement.style.backgroundImage = new StyleBackground(StyleKeyword.None);
         m_ammoGaugeElement.MarkDirtyRepaint();
+    }
+
+    /// <summary>
+    /// 탄약 게이지 옆에 재장전 탄약 아이콘과 같은 이미지를 하나 더 배치합니다. 게이지와 같은 조건에서만 보입니다.
+    /// </summary>
+    /// <remarks>
+    /// 위치는 게이지 중심 기준 오프셋이라, 게이지 크기나 대각 오프셋을 바꿔도 아이콘이 게이지를 따라갑니다.
+    /// 재장전 깜빡임은 중앙 아이콘에만 적용하고 이 아이콘은 항상 불투명하게 둡니다.
+    /// </remarks>
+    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
+    private void ApplyAmmoGaugeBullet(float center)
+    {
+        if (m_ammoGaugeBulletElement == null)
+        {
+            return;
+        }
+
+        bool gaugeVisible = m_showAmmoGauge
+                         && m_ammoGaugeSizePixels > 0.0f
+                         && (m_ammoGaugeAlwaysVisible || m_isReloading || !Application.isPlaying);
+        if (!gaugeVisible || !m_showAmmoGaugeBullet || m_reloadBulletImage == null || m_ammoGaugeBulletSizePixels <= 0.0f)
+        {
+            HideElement(m_ammoGaugeBulletElement);
+            return;
+        }
+
+        float size = m_ammoGaugeBulletSizePixels;
+        float gaugeCenter = center + m_ammoGaugeDiagonalOffset;
+        ApplyTextureImage(
+            m_ammoGaugeBulletElement,
+            m_reloadBulletImage,
+            gaugeCenter + m_ammoGaugeBulletOffset.x - size * 0.5f,
+            gaugeCenter + m_ammoGaugeBulletOffset.y - size * 0.5f,
+            size);
     }
 
     /// <summary>
@@ -2639,10 +2898,18 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 처치 시 중앙에 해골을 표시하고, 유지 후 페이드아웃되도록 타이머를 리셋합니다.
+    /// 처치 피드백을 시작합니다. 처치 펄스를 처음부터 다시 재생하고, 해골이 켜져 있으면 해골도 띄웁니다.
     /// </summary>
+    /// <remarks>
+    /// 연속 처치면 펄스를 처음부터 다시 시작합니다. 겹쳐 더하면 연속 킬마다 팔이 계속 멀어지기 때문입니다.
+    /// </remarks>
     public void ShowKill()
     {
+        if (m_enableKillPulse && m_killPulseAmplitudePixels > 0.0f && m_killPulseDuration > 0.0f)
+        {
+            m_killPulseElapsed = 0.0f;
+        }
+
         if (!m_showKillSkull || m_killSkullTexture == null || !CacheVisualElements() || m_killSkullElement == null)
         {
             return;

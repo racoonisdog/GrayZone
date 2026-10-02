@@ -145,7 +145,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
-    [Tooltip("Q/E 또는 마우스 휠로 순환 선택할 ProjectileBase Prefab 목록입니다.")]
+    [Tooltip("마우스 휠로 순환 선택할 ProjectileBase Prefab 목록입니다.")]
     [SerializeField] private List<ProjectileBase> m_projectilePrefabs = new List<ProjectileBase>();
 
     [UnityEngine.Serialization.FormerlySerializedAs("m_projectilePrefab")]
@@ -211,6 +211,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [InspectorName("Throw Speed")]
     [Min(0.01f)]
     [SerializeField] private float m_throwSpeedMultiplier = 1.25f;
+
+    [Tooltip("켜면 조준 중에 포물선 궤적 선을 함께 그립니다. 끄면 착탄 지점의 원형 표시만 보입니다.")]
+    [SerializeField] private bool m_showTrajectoryLine = false;
 
     [Tooltip("LineRenderer로 미리 보여 줄 포물선의 최대 누적 길이입니다. 실제 폭탄 이동은 제한하지 않습니다.")]
     [Min(0.1f)]
@@ -281,7 +284,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private bool[] m_weaponRendererEnabledStates;
     private bool m_grenadeEquipmentVisible;
 
-    /// <summary>Q/E 또는 마우스 휠로 순환 선택하는 투척물 Prefab 목록입니다.</summary>
+    /// <summary>마우스 휠로 순환 선택하는 투척물 Prefab 목록입니다.</summary>
     public IReadOnlyList<ProjectileBase> ProjectilePrefabs => m_projectilePrefabs;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -850,18 +853,22 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void DrawTrajectory()
     {
-        // 포물선 궤적 선은 임시로 숨기고 착탄 지점의 원형 표시만 사용합니다.
-        /*
-        m_trajectoryLine.enabled = true;
-        m_trajectoryLine.positionCount = m_trajectoryPointCount;
-
-        for (int i = 0; i < m_trajectoryPointCount; i++)
+        // 궤적 선은 토글이 켜졌을 때만 그립니다. 기본은 착탄 지점의 원형 표시만 씁니다.
+        if (m_showTrajectoryLine)
         {
-            m_trajectoryLine.SetPosition(i, m_trajectoryPoints[i]);
+            m_trajectoryLine.enabled = true;
+            m_trajectoryLine.positionCount = m_trajectoryPointCount;
+
+            for (int i = 0; i < m_trajectoryPointCount; i++)
+            {
+                m_trajectoryLine.SetPosition(i, m_trajectoryPoints[i]);
+            }
         }
-        */
-        m_trajectoryLine.enabled = false;
-        m_trajectoryLine.positionCount = 0;
+        else
+        {
+            m_trajectoryLine.enabled = false;
+            m_trajectoryLine.positionCount = 0;
+        }
 
         DrawExplosionPreview();
     }

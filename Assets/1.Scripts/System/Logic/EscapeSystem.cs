@@ -16,10 +16,10 @@ public class EscapeSystem : MonoBehaviour
     [Tooltip("필드 씬 런타임 데이터와 귀환 정산 결과를 관리하는 씬 전용 데이터 매니저입니다. 비어 있으면 자동 탐색합니다.")]
     [FormerlySerializedAs("m_battleManager")]
     [FormerlySerializedAs("m_battleSceneDataManager")]
-    [SerializeField] private FieldSceneDataManager m_fieldSceneDataManager;
+    [SerializeField] private CombatSceneDataManager m_fieldSceneDataManager;
 
     [Tooltip("결과 UI 진입 시 필드 게임플레이 입력을 UI 모드로 전환하는 필드 씬 루트 컨트롤러입니다.")]
-    [SerializeField] private FieldManager m_fieldManager;
+    [SerializeField] private CombatSceneManager m_fieldManager;
 
     [Header("Result UI")]
     [Tooltip("탈출 시 활성화할 Result UI 루트입니다. 비어 있으면 'Result UI' 이름의 오브젝트를 자동 탐색합니다.")]
@@ -69,12 +69,12 @@ public class EscapeSystem : MonoBehaviour
 
         if (m_fieldSceneDataManager == null)
         {
-            m_fieldSceneDataManager = FindFirstObjectByType<FieldSceneDataManager>();
+            m_fieldSceneDataManager = FindFirstObjectByType<CombatSceneDataManager>();
         }
 
         if (m_fieldManager == null)
         {
-            m_fieldManager = FindFirstObjectByType<FieldManager>();
+            m_fieldManager = FindFirstObjectByType<CombatSceneManager>();
         }
 
         if (m_resultUI == null)
@@ -183,7 +183,7 @@ public class EscapeSystem : MonoBehaviour
 
         if (m_fieldManager != null && m_fieldManager.SetInputMode(InputMode.UI) != 1)
         {
-            Debug.LogWarning("[EscapeSystem] FieldManager가 UI 입력 모드로 전환되지 않아 결과 UI를 열지 않았습니다.", this);
+            Debug.LogWarning("[EscapeSystem] 씬 컨트롤러가 UI 입력 모드로 전환되지 않아 결과 UI를 열지 않았습니다.", this);
             return;
         }
 
