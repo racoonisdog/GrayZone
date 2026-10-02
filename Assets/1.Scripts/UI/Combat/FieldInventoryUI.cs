@@ -49,7 +49,7 @@ public sealed class FieldInventoryUI : MonoBehaviour
     [SerializeField] private SquadInventoryManager m_inventoryManager;
 
     [Tooltip("입력 모드 전환에 쓰는 필드 매니저입니다. 비어 있으면 씬에서 찾습니다. 없으면 캐릭터 입력을 막지 못한 채로 창만 열립니다.")]
-    [SerializeField] private FieldManager m_fieldManager;
+    [SerializeField] private CombatSceneManager m_fieldManager;
 
     [Header("View")]
     [Tooltip("창 전체의 루트입니다. 이 오브젝트를 켜고 끄는 것이 곧 여닫기입니다.")]
@@ -92,7 +92,7 @@ public sealed class FieldInventoryUI : MonoBehaviour
             m_inventoryManager = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
 
         if (m_fieldManager == null)
-            m_fieldManager = FindFirstObjectByType<FieldManager>(FindObjectsInactive.Include);
+            m_fieldManager = FindFirstObjectByType<CombatSceneManager>(FindObjectsInactive.Include);
 
         if (m_viewRoot != null)
             m_viewRoot.SetActive(false);

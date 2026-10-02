@@ -153,7 +153,7 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     {
         m_personalEffectPool?.RecycleAll();
 
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null)
         {
             fieldAudio.UnregisterPersonalSource(m_audioSource);
@@ -368,7 +368,7 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
 
         m_audioSource.loop = false;
 
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null)
         {
             // 무기 소리는 손을 따라 움직여야 해서 풀을 쓰지 않습니다. 대신 개인 사운드로 등록해
@@ -408,8 +408,8 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
         Transform parent = null,
         bool forceLocalParticleSimulation = false)
     {
-        EffectPool sharedBudget = FieldManager.Instance != null && FieldManager.Instance.EffectManager != null
-            ? FieldManager.Instance.EffectManager.Pool
+        EffectPool sharedBudget = CombatSceneManager.Instance != null && CombatSceneManager.Instance.EffectManager != null
+            ? CombatSceneManager.Instance.EffectManager.Pool
             : null;
 
         return EnsurePersonalEffectPool().Spawn(

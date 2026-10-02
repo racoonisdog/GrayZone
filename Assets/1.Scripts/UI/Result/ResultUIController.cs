@@ -93,7 +93,7 @@ public class ResultUIController : MonoBehaviour
     }
 
     /// <summary>전투 매니저가 확정한 귀환 정산 스냅샷을 표시합니다.</summary>
-    public void ShowResult(FieldSceneDataManager.ResultSnapshot result)
+    public void ShowResult(CombatSceneDataManager.ResultSnapshot result)
     {
         if (result == null)
         {
@@ -103,7 +103,7 @@ public class ResultUIController : MonoBehaviour
         List<CharacterResult> characters = new();
         for (int i = 0; i < result.Characters.Count; i++)
         {
-            FieldSceneDataManager.PlayerbleResult character = result.Characters[i];
+            CombatSceneDataManager.PlayerbleResult character = result.Characters[i];
             characters.Add(new CharacterResult
             {
                 Name = character.DisplayName,
@@ -117,7 +117,7 @@ public class ResultUIController : MonoBehaviour
         List<ResourceResult> resources = new();
         for (int i = 0; i < result.Resources.Count; i++)
         {
-            FieldSceneDataManager.ResourceResult resource = result.Resources[i];
+            CombatSceneDataManager.ResourceResult resource = result.Resources[i];
             resources.Add(new ResourceResult
             {
                 Icon = resource.Icon,

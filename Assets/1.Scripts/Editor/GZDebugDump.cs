@@ -672,7 +672,7 @@ namespace GrayZone.EditorTools
                 var ragdoll = controller.GetComponent<RagdollController>();
                 var animator = controller.Animator;
                 var bodies = controller.GetComponentsInChildren<Rigidbody>(true);
-                var settings = FieldManager.Instance != null ? FieldManager.Instance.EnemyManager : null;
+                var settings = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.EnemyManager : null;
                 var corpseSettings = settings != null ? settings.Resolve(controller.EnemyType) : null;
                 bool visible = controller.GetComponentsInChildren<Renderer>(true).Any(r => r.isVisible);
 
@@ -734,7 +734,7 @@ namespace GrayZone.EditorTools
         {
             bool useFilter = !string.IsNullOrWhiteSpace(nameFilter);
 
-            var noiseManager = FieldManager.Instance != null ? FieldManager.Instance.NoiseManager : null;
+            var noiseManager = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.NoiseManager : null;
 
             var dumps = new List<object>();
             foreach (var controller in Object.FindObjectsByType<EnemyController>(

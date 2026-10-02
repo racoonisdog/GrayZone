@@ -235,7 +235,7 @@ public class CrosshairDebugInspector : MonoBehaviour
     /// </remarks>
     private void AcquireInputTakeover()
     {
-        FieldManager fieldManager = FieldManager.Instance;
+        CombatSceneManager fieldManager = CombatSceneManager.Instance;
         if (fieldManager != null)
         {
             fieldManager.SetInputMode(InputMode.UI);
@@ -271,7 +271,7 @@ public class CrosshairDebugInspector : MonoBehaviour
             return;
         }
 
-        FieldManager fieldManager = FieldManager.Instance;
+        CombatSceneManager fieldManager = CombatSceneManager.Instance;
         if (fieldManager != null)
         {
             fieldManager.SetInputMode(InputMode.Gameplay);

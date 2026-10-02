@@ -664,7 +664,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         m_sceneInputModeController = null;
 
-        FieldManager fieldManager = FieldManager.Instance;
+        CombatSceneManager fieldManager = CombatSceneManager.Instance;
         if (fieldManager == null)
         {
             return false;
@@ -1926,7 +1926,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         GUILayout.Label("■ 필드 제어", m_headerStyle);
 
         EscapeSystem escapeSystem = FindFirstObjectByType<EscapeSystem>(FindObjectsInactive.Include);
-        FieldSceneDataManager fieldData = FieldSceneDataManager.Instance;
+        CombatSceneDataManager fieldData = CombatSceneDataManager.Instance;
 
         if (fieldData != null && fieldData.IsFinalized)
         {

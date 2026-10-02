@@ -126,13 +126,13 @@ public class DefenseEventHealth : HealthSystemBase
             return;
         }
 
-        FieldSceneDataManager dataManager = FieldSceneDataManager.Instance != null
-            ? FieldSceneDataManager.Instance
-            : FindFirstObjectByType<FieldSceneDataManager>();
+        CombatSceneDataManager dataManager = CombatSceneDataManager.Instance != null
+            ? CombatSceneDataManager.Instance
+            : FindFirstObjectByType<CombatSceneDataManager>();
 
         if (dataManager == null)
         {
-            Debug.LogWarning("[DefenseEventHealth] FieldSceneDataManager가 없어 패배를 요청하지 못했습니다.", this);
+            Debug.LogWarning("[DefenseEventHealth] 전투 데이터 매니저(CombatSceneDataManager)가 없어 패배를 요청하지 못했습니다.", this);
             return;
         }
 

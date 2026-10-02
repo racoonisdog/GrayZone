@@ -763,7 +763,7 @@ public class EnemyTargetSensor : MonoBehaviour
     /// </remarks>
     private float ResolveNoiseTransmission(Vector3 noisePosition)
     {
-        NoiseManager noiseManager = FieldManager.Instance != null ? FieldManager.Instance.NoiseManager : null;
+        NoiseManager noiseManager = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.NoiseManager : null;
 
         if (noiseManager == null)
         {

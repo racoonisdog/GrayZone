@@ -61,7 +61,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
 
         // 직접 Instantiate하지 않고 EffectManager를 거칩니다. 혈흔이 지형 탄흔과 같은 예산을 나눠 써야
         // 씬 전체의 데칼 총량이 잡힙니다. 각자 만들면 총량을 아무도 모릅니다.
-        EffectManager effects = FieldManager.Instance != null ? FieldManager.Instance.EffectManager : null;
+        EffectManager effects = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.EffectManager : null;
 
         if (effects != null)
         {
@@ -123,7 +123,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
         }
 
         float pitch = 1.0f + Random.Range(-m_pitchVariation, m_pitchVariation);
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null && fieldAudio.PlayOneShotAt(clip, position, priorityClass, m_volume, pitch))
         {
             return;
@@ -149,7 +149,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
 
         m_actionAudioSource.loop = false;
 
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null)
         {
             // 이 소스는 풀 밖에서 소리를 내므로, 개인 사운드로 등록해 씬 전체 동시 발음 총량에 포함시킵니다.
@@ -176,7 +176,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
     /// <summary>개체가 사라질 때 개인 사운드 등록을 해제합니다.</summary>
     private void OnDestroy()
     {
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null)
         {
             fieldAudio.UnregisterPersonalSource(m_actionAudioSource);
