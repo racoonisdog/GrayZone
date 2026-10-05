@@ -334,7 +334,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
-        UpdateGrenadeSelectionUI(true);
+        UpdateGrenadeSelectionUI(throwModeActive);
 
         if (m_input == null || m_aimController == null || !throwModeActive)
         {
