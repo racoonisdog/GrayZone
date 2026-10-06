@@ -117,10 +117,25 @@ public class GameOverUIController : MonoBehaviour
     /// <summary>배경 영상을 처음부터 실제 시간 기준으로 재생합니다. 시간이 멈춘 동안에도 흐릅니다.</summary>
     private void PlayBackgroundVideo()
     {
-        if (m_backgroundVideo == null || m_backgroundVideo.clip == null || m_backgroundImage == null)
+        if (m_backgroundImage == null)
         {
             return;
         }
+
+        if (m_backgroundVideo == null || m_backgroundVideo.clip == null)
+        {
+            // 텍스처가 없는 RawImage는 흰색 사각형으로 그려져 화면 전체가 하얗게 덮입니다.
+            // 영상 참조가 끊겼으면(예: 영상 에셋 GUID가 바뀜) 끄고 뒤의 검은 배경을 보이게 합니다.
+            if (m_backgroundImage.texture == null)
+            {
+                m_backgroundImage.enabled = false;
+                Debug.LogWarning("[GameOverUIController] 배경 영상 클립이 연결되지 않아 배경 이미지를 끕니다. VideoPlayer의 Video Clip을 확인하세요.", this);
+            }
+
+            return;
+        }
+
+        m_backgroundImage.enabled = true;
 
         if (m_backgroundRenderTexture == null)
         {
