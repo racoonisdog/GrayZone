@@ -37,6 +37,19 @@ public static class GameDevMode
         IsDevelopMode = false;
     }
 
+    /// <summary>
+    /// Development Build에서 오류가 나면 화면에 뜨는 Unity 개발 콘솔을 끕니다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이테스트 빌드는 트레이너(F9)를 쓰려고 Development Build로 뽑지만, 오류 콘솔은 쓰지 않습니다.
+    /// 로그는 Player.log에 그대로 남습니다.
+    /// </remarks>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void DisableDeveloperConsole()
+    {
+        Debug.developerConsoleEnabled = false;
+    }
+
     /// <summary>개발 모드를 켜거나 끕니다. <see cref="GameManager"/>가 호출합니다.</summary>
     public static void SetDevelopMode(bool enabled)
     {
