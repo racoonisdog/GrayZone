@@ -46,6 +46,12 @@ public sealed class TrapInfoHud : MonoBehaviour
     [Tooltip("설치 비용이 0인 함정에 표시할 문구입니다.")]
     [SerializeField] private string m_noCostText = "소모 없음";
 
+    [Tooltip("자원이 모자랄 때 비용 옆에 붙일 문구입니다.")]
+    [SerializeField] private string m_insufficientText = "자원이 부족합니다!";
+
+    [Tooltip("자원 부족 문구의 색입니다.")]
+    [SerializeField] private Color m_insufficientColor = new Color32(255, 59, 59, 255);
+
     [Header("Focus Outline")]
     [Tooltip("안내가 뜬 함정에 외곽선을 그립니다.")]
     [SerializeField] private bool m_showFocusOutline = true;
@@ -144,6 +150,9 @@ public sealed class TrapInfoHud : MonoBehaviour
             ApplyTrap(trap);
         }
 
+        // 자원은 보고 있는 동안에도 바뀔 수 있어(다른 함정 설치, 획득) 비용 줄은 매 프레임 맞춥니다.
+        RefreshCost(trap);
+
         SetVisible(true);
         DrawFocusOutline(trap);
 
@@ -188,15 +197,35 @@ public sealed class TrapInfoHud : MonoBehaviour
             m_descriptionText.text = trap.Description;
         }
 
+    }
+
+    /// <summary>설치 비용 줄을 갱신합니다. 자원이 모자라면 비용 옆에 빨간 경고 문구를 붙입니다.</summary>
+    private void RefreshCost(Trap trap)
+    {
         ResourceCost cost = trap.BuildCost;
         bool hasCost = cost.IsValid;
         if (m_costText != null)
         {
             // 비용 줄은 항상 남깁니다. 0일 때 줄째 숨기면 공짜인지 표시 누락인지 구분할 수 없어서입니다.
-            m_costText.text = hasCost ? string.Format(m_costFormat, cost.Amount) : m_noCostText;
+            string text = hasCost ? string.Format(m_costFormat, cost.Amount) : m_noCostText;
+            if (hasCost && Trap.IsDebugFreeBuild)
+            {
+                // 디버그 무료 중임을 알립니다. 표시가 없으면 자원이 왜 안 줄었는지 헷갈립니다.
+                text += "  (디버그 무료)";
+            }
+            else if (hasCost && !trap.CanAffordBuild)
+            {
+                // 비용 칸 하나에 함께 적습니다. 따로 텍스트를 두면 씬마다 배선이 필요합니다.
+                text += $"  <color=#{ColorUtility.ToHtmlStringRGBA(m_insufficientColor)}>{m_insufficientText}</color>";
+            }
+
+            if (m_costText.text != text)
+            {
+                m_costText.text = text;
+            }
         }
 
-        if (m_costIcon != null)
+        if (m_costIcon != null && m_costIcon.activeSelf != hasCost)
         {
             m_costIcon.SetActive(hasCost);
         }

@@ -316,6 +316,17 @@ public class InteractionController : MonoBehaviour
             }
 
             IInteractable interactable = col.GetComponentInParent<IInteractable>();
+
+            // 지금 쓸 수 없는 대상이 감지 범위(트리거)이거나 캐릭터 몸(통과 레이어)이면 통과시킵니다.
+            // 팀원은 몸과 구조 감지 구에 "쓰러진 동료 구조" 대상이 붙어 있어, 쓰러지지 않았어도 레이가 거기서 멈췄습니다.
+            // 그러면 앞에 선 팀원에 가려 그 뒤의 함정을 잡지 못합니다. 나린을 조작할 때는 팀원이 뒤따라와 가려지지 않고,
+            // 다른 멤버를 조작하면 앞의 나린에게 가려져 "나린만 설치된다"로 보였습니다.
+            bool passThroughBody = col.isTrigger || (m_resolvedNonBlockingMask & (1 << col.gameObject.layer)) != 0;
+            if (interactable != null && passThroughBody && !interactable.CanInteract(gameObject))
+            {
+                continue;
+            }
+
             if (interactable != null && interactable is Component comp && comp.gameObject != gameObject)
             {
                 aimed = interactable;
@@ -483,6 +494,15 @@ public class InteractionController : MonoBehaviour
             return;
         }
 
+        // 대상은 잡혔지만 실행 조건(자원 등)이 모자라면 게이지를 채우지 않습니다. 다 찼는데 아무 일도 없으면 고장으로 보입니다.
+        if (!MeetsRequirement(m_current))
+        {
+            CancelActiveHold();
+            m_holdTimer = 0.0f;
+            HoldProgress01 = 0.0f;
+            return;
+        }
+
         float hold = Mathf.Max(0.0f, m_current.HoldDuration);
 
         if (hold <= 0.0f)
@@ -528,7 +548,7 @@ public class InteractionController : MonoBehaviour
     /// </summary>
     private bool Execute()
     {
-        if (m_current == null || !m_current.CanInteract(gameObject))
+        if (m_current == null || !m_current.CanInteract(gameObject) || !MeetsRequirement(m_current))
         {
             return false;
         }
@@ -542,6 +562,13 @@ public class InteractionController : MonoBehaviour
         }
 
         return true;
+    }
+
+    /// <summary>대상의 별도 실행 조건(<see cref="IInteractionRequirement"/>)을 만족하는지 여부입니다. 조건이 없으면 항상 참입니다.</summary>
+    private bool MeetsRequirement(IInteractable target)
+    {
+        return target is not IInteractionRequirement requirement
+            || requirement.MeetsInteractionRequirement(gameObject);
     }
 
     private void BeginActiveHold()

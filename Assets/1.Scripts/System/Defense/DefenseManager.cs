@@ -453,12 +453,13 @@ public sealed class DefenseManager : CombatSceneManager
     /// </summary>
     /// <remarks>
     /// 상시 설치가 아닌 함정은 설치 구간에만 청사진을 보이고 설치를 받습니다. 이미 설치된 함정은 그대로 둡니다.
-    /// 함정 목록은 처음 부를 때 찾습니다. 함정은 씬에 미리 배치되므로 진행 중에 새로 생기지 않습니다.
     /// 진행 중에 켜진 함정은 스스로 <see cref="IsTrapBuildWindowOpen"/>을 읽어 맞춥니다.
     /// </remarks>
     private void RefreshTrapBuildWindow()
     {
-        m_traps ??= FindObjectsByType<Trap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        // 부를 때마다 다시 찾습니다. 화염병·드럼통 불처럼 진행 중에 생기는 함정이 있어, 처음 목록만 쓰면 그것들은
+        // 구간 변화를 받지 못합니다. 구간이 바뀔 때만 불리므로 비용은 작습니다.
+        m_traps = FindObjectsByType<Trap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
         bool isOpen = IsTrapBuildWindowOpen;
         for (int i = 0; i < m_traps.Length; i++)

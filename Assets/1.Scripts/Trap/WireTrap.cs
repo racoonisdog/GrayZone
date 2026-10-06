@@ -23,6 +23,9 @@ public class WireTrap : Trap
     /// <inheritdoc />
     protected override string DefaultDescription => "적의 진입속도를 늦추고 소량의 데미지를 줍니다";
 
+    /// <inheritdoc />
+    protected override TrapKind CostKind => TrapKind.Wire;
+
     /// <summary>범위 안에 있는 대상 하나의 상태입니다.</summary>
     private struct Occupant
     {
@@ -31,6 +34,9 @@ public class WireTrap : Trap
 
         /// <summary>다음 틱까지 남은 시간(초)입니다. Once 방식에서는 쓰지 않습니다.</summary>
         public float TickTimer;
+
+        /// <summary>들어올 때의 적 스폰 세대입니다. 풀로 돌아갔다 다시 나온 개체를 같은 적으로 보지 않기 위해 둡니다.</summary>
+        public uint SpawnGeneration;
     }
 
     [Header("Wire Trap")]
@@ -172,6 +178,7 @@ public class WireTrap : Trap
         {
             Damageable = damageable,
             TickTimer = DamageInterval,
+            SpawnGeneration = enemy.SpawnGeneration,
         });
 
         // 진입 순간 감속이 있으면 먼저 그 값으로 걸고, 시간이 지나면 Update가 지속 배율로 되돌립니다.
@@ -262,6 +269,14 @@ public class WireTrap : Trap
             }
 
             Occupant occupant = m_occupants[enemy];
+
+            // 풀로 돌아갔다 같은 프레임에 다시 스폰되면 위 활성 검사를 빠져나갑니다. 세대가 바뀌었으면 다른 적입니다.
+            if (occupant.SpawnGeneration != enemy.SpawnGeneration)
+            {
+                m_removalBuffer.Add(enemy);
+                continue;
+            }
+
             if (occupant.Damageable == null || occupant.Damageable.IsDead)
             {
                 m_removalBuffer.Add(enemy);

@@ -29,6 +29,9 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     /// <inheritdoc />
     protected override string DefaultDescription => "쏘거나 폭발에 휘말리면 터져 불길을 남깁니다";
 
+    /// <inheritdoc />
+    protected override TrapKind CostKind => TrapKind.FireBarrel;
+
     [Header("Fire Barrel")]
     [Tooltip("터질 때 남길 화염 지대 프리팹입니다. 화염병이 쓰는 FireBoom_Trap을 지정합니다.")]
     [SerializeField] private FireTrap m_firePrefab;

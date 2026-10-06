@@ -244,6 +244,9 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
 
         GUILayout.Label($"함정 {traps.Length}개 (설치됨 {built})");
 
+        // 가격 값은 그대로 두고 차감만 건너뜁니다. 끄면 원래 가격으로 바로 돌아옵니다.
+        Trap.DebugFreeBuild = GUILayout.Toggle(Trap.DebugFreeBuild, " 트랩 전체 무료 (자원 차감 없이 설치)");
+
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("전부 다시 설치 가능하게"))
         {
