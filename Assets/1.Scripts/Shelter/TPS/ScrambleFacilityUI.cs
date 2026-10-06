@@ -15,6 +15,23 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     {
         [SerializeField] private TMP_Text m_requirementText;
 
+        [Header("Card")]
+        [SerializeField] private RectTransform m_cardRoot;
+        [SerializeField] private Image m_iconImage;
+        [SerializeField] private TMP_Text m_nameText;
+        [SerializeField] private TMP_Text m_currentLevelText;
+        [SerializeField] private TMP_Text m_arrowText;
+        [SerializeField] private TMP_Text m_nextLevelText;
+
+        [Tooltip("카드를 선택했을 때 Detail 영역에 표시할 설명입니다.")]
+        [TextArea]
+        [SerializeField] private string m_description;
+
+        public RectTransform CardRoot => m_cardRoot;
+        public Sprite Icon => m_iconImage != null ? m_iconImage.sprite : null;
+        public string DisplayName => m_nameText != null ? m_nameText.text : string.Empty;
+        public string Description => m_description ?? string.Empty;
+
         public void Cache(Transform uiRoot, string rowPath)
         {
             if (uiRoot == null || string.IsNullOrWhiteSpace(rowPath))
@@ -25,11 +42,23 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
                 return;
 
             m_requirementText ??= row.Find("matter")?.GetComponent<TMP_Text>();
+            m_cardRoot ??= row as RectTransform;
+            m_iconImage ??= row.Find("Image")?.GetComponent<Image>();
+            m_nameText ??= row.Find("Info")?.GetComponent<TMP_Text>();
+            m_currentLevelText ??= row.Find("Level/Lv")?.GetComponent<TMP_Text>();
+            m_arrowText ??= row.Find("Level/Arrow")?.GetComponent<TMP_Text>();
+            m_nextLevelText ??= row.Find("Level/Next")?.GetComponent<TMP_Text>();
         }
 
-        public void Refresh(string requirement)
+        public void Refresh(string requirement, int currentLevel, int maxLevel)
         {
             SetText(m_requirementText, requirement);
+
+            bool isMaxLevel = currentLevel >= maxLevel;
+            SetText(m_currentLevelText, isMaxLevel ? "Lv. MAX" : $"Lv. {currentLevel}");
+            SetText(m_nextLevelText, isMaxLevel ? string.Empty : (currentLevel + 1).ToString());
+            SetActive(m_arrowText, !isMaxLevel);
+            SetActive(m_nextLevelText, !isMaxLevel);
         }
     }
 
@@ -69,17 +98,36 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     [SerializeField] private UpgradeRowView m_shooterRow = new();
     [SerializeField] private UpgradeRowView m_wireRow = new();
 
+    [Header("Upgrade Detail (Optional)")]
+    [Tooltip("연결하면 카드 클릭은 선택만 하고, 이 강화 버튼으로 업그레이드합니다. 비워 두면 카드 클릭 즉시 업그레이드합니다.")]
+    [SerializeField] private Button m_upgradeConfirmButton;
+    [SerializeField] private RectTransform m_selectFrame;
+    [SerializeField] private TMP_Text m_detailNameText;
+    [SerializeField] private Image m_detailIconImage;
+    [SerializeField] private TMP_Text m_detailDescriptionText;
+    [SerializeField] private TMP_Text m_detailCurrentLevelText;
+    [SerializeField] private TMP_Text m_detailArrowText;
+    [SerializeField] private TMP_Text m_detailNextLevelText;
+    [SerializeField] private GameObject m_costRoot;
+    [SerializeField] private TMP_Text m_costText;
+    [SerializeField] private ScrambleUpgradeType m_defaultSelectedType = ScrambleUpgradeType.Trap;
+
     [Header("Notice (Optional)")]
     [SerializeField] private TMP_Text m_noticeText;
 
+    private ScrambleUpgradeType m_selectedType;
+
     public bool IsOpen => gameObject.activeSelf;
     public event Action Closed;
+
+    private bool UsesSelection => m_upgradeConfirmButton != null;
 
     private Transform UpgradeContentRoot =>
         m_upgradeRoot != null ? m_upgradeRoot.transform : transform;
 
     private void Awake()
     {
+        m_selectedType = m_defaultSelectedType;
         CacheViews();
         CacheFacility();
         CacheResourceCatalog();
@@ -120,6 +168,7 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         CacheUpgradeRows();
         Bind();
         ClearNotice();
+        m_selectedType = m_defaultSelectedType;
         ShowMenu();
         Refresh();
     }
@@ -164,16 +213,11 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
 
         if (m_battleSceneButton != null)
             m_battleSceneButton.interactable = true;
-        if (m_trapUpgradeButton != null)
-            m_trapUpgradeButton.interactable = m_facility.CanUpgrade(ScrambleUpgradeType.Trap);
-        if (m_spikeUpgradeButton != null)
-            m_spikeUpgradeButton.interactable = m_facility.CanUpgrade(ScrambleUpgradeType.Spike);
-        if (m_explosiveUpgradeButton != null)
-            m_explosiveUpgradeButton.interactable = m_facility.CanUpgrade(ScrambleUpgradeType.Explosive);
-        if (m_shooterUpgradeButton != null)
-            m_shooterUpgradeButton.interactable = m_facility.CanUpgrade(ScrambleUpgradeType.Shooter);
-        if (m_wireUpgradeButton != null)
-            m_wireUpgradeButton.interactable = m_facility.CanUpgrade(ScrambleUpgradeType.Wire);
+        RefreshCardButton(m_trapUpgradeButton, ScrambleUpgradeType.Trap);
+        RefreshCardButton(m_spikeUpgradeButton, ScrambleUpgradeType.Spike);
+        RefreshCardButton(m_explosiveUpgradeButton, ScrambleUpgradeType.Explosive);
+        RefreshCardButton(m_shooterUpgradeButton, ScrambleUpgradeType.Shooter);
+        RefreshCardButton(m_wireUpgradeButton, ScrambleUpgradeType.Wire);
 
         string resourceDisplayName = ResolveUpgradeResourceDisplayName();
         RefreshUpgradeRow(
@@ -196,6 +240,104 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             m_wireRow,
             ScrambleUpgradeType.Wire,
             resourceDisplayName);
+
+        RefreshSelectedDetail();
+    }
+
+    /// <summary>
+    /// 강화 버튼이 연결된 선택 방식에서는 카드를 항상 누를 수 있게 두고,
+    /// 기존 방식에서는 업그레이드 가능 여부로 카드 버튼을 막습니다.
+    /// </summary>
+    private void RefreshCardButton(Button button, ScrambleUpgradeType upgradeType)
+    {
+        if (button != null)
+            button.interactable = UsesSelection || m_facility.CanUpgrade(upgradeType);
+    }
+
+    private void RefreshSelectedDetail()
+    {
+        if (!UsesSelection || m_facility == null)
+            return;
+
+        UpgradeRowView row = GetRow(m_selectedType);
+        int currentLevel = m_facility.GetUpgradeLevel(m_selectedType);
+        int maxLevel = m_facility.GetMaxUpgradeLevel(m_selectedType);
+        bool isMaxLevel = currentLevel >= maxLevel;
+
+        if (m_selectFrame != null && row?.CardRoot != null)
+            m_selectFrame.position = row.CardRoot.position;
+
+        SetText(m_detailNameText, row?.DisplayName ?? string.Empty);
+        SetText(m_detailDescriptionText, row?.Description ?? string.Empty);
+        if (m_detailIconImage != null)
+        {
+            m_detailIconImage.sprite = row?.Icon;
+            m_detailIconImage.enabled = m_detailIconImage.sprite != null;
+        }
+
+        SetText(
+            m_detailCurrentLevelText,
+            isMaxLevel ? "<size=36>Lv.</size> MAX" : $"<size=36>Lv.</size> {currentLevel}");
+        SetText(m_detailNextLevelText, isMaxLevel ? string.Empty : (currentLevel + 1).ToString());
+        SetActive(m_detailArrowText, !isMaxLevel);
+        SetActive(m_detailNextLevelText, !isMaxLevel);
+
+        SetActive(m_costRoot, !isMaxLevel);
+        SetText(m_costText, isMaxLevel ? string.Empty : m_facility.GetUpgradeCost(m_selectedType).ToString());
+
+        m_upgradeConfirmButton.interactable = m_facility.CanUpgrade(m_selectedType);
+    }
+
+    private void SelectUpgrade(ScrambleUpgradeType upgradeType)
+    {
+        ClearNotice();
+        m_selectedType = upgradeType;
+        RefreshSelectedDetail();
+    }
+
+    private void HandleTrapCardClicked() => SelectUpgrade(ScrambleUpgradeType.Trap);
+
+    private void HandleSpikeCardClicked() => SelectUpgrade(ScrambleUpgradeType.Spike);
+
+    private void HandleExplosiveCardClicked() => SelectUpgrade(ScrambleUpgradeType.Explosive);
+
+    private void HandleShooterCardClicked() => SelectUpgrade(ScrambleUpgradeType.Shooter);
+
+    private void HandleWireCardClicked() => SelectUpgrade(ScrambleUpgradeType.Wire);
+
+    private void HandleUpgradeConfirmClicked()
+    {
+        switch (m_selectedType)
+        {
+            case ScrambleUpgradeType.Trap:
+                HandleTrapUpgradeClicked();
+                break;
+            case ScrambleUpgradeType.Spike:
+                HandleSpikeUpgradeClicked();
+                break;
+            case ScrambleUpgradeType.Explosive:
+                HandleExplosiveUpgradeClicked();
+                break;
+            case ScrambleUpgradeType.Shooter:
+                HandleShooterUpgradeClicked();
+                break;
+            case ScrambleUpgradeType.Wire:
+                HandleWireUpgradeClicked();
+                break;
+        }
+    }
+
+    private UpgradeRowView GetRow(ScrambleUpgradeType upgradeType)
+    {
+        return upgradeType switch
+        {
+            ScrambleUpgradeType.Trap => m_trapRow,
+            ScrambleUpgradeType.Spike => m_spikeRow,
+            ScrambleUpgradeType.Explosive => m_explosiveRow,
+            ScrambleUpgradeType.Shooter => m_shooterRow,
+            ScrambleUpgradeType.Wire => m_wireRow,
+            _ => null,
+        };
     }
 
     private void HandleBattleSceneClicked()
@@ -315,16 +457,23 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             m_sortieCancelButton.onClick.AddListener(HandleSortieCancelClicked);
         if (m_battleSceneButton != null)
             m_battleSceneButton.onClick.AddListener(HandleBattleSceneClicked);
-        if (m_trapUpgradeButton != null)
-            m_trapUpgradeButton.onClick.AddListener(HandleTrapUpgradeClicked);
-        if (m_spikeUpgradeButton != null)
-            m_spikeUpgradeButton.onClick.AddListener(HandleSpikeUpgradeClicked);
-        if (m_explosiveUpgradeButton != null)
-            m_explosiveUpgradeButton.onClick.AddListener(HandleExplosiveUpgradeClicked);
-        if (m_shooterUpgradeButton != null)
-            m_shooterUpgradeButton.onClick.AddListener(HandleShooterUpgradeClicked);
-        if (m_wireUpgradeButton != null)
-            m_wireUpgradeButton.onClick.AddListener(HandleWireUpgradeClicked);
+        if (UsesSelection)
+        {
+            m_upgradeConfirmButton.onClick.AddListener(HandleUpgradeConfirmClicked);
+            AddListener(m_trapUpgradeButton, HandleTrapCardClicked);
+            AddListener(m_spikeUpgradeButton, HandleSpikeCardClicked);
+            AddListener(m_explosiveUpgradeButton, HandleExplosiveCardClicked);
+            AddListener(m_shooterUpgradeButton, HandleShooterCardClicked);
+            AddListener(m_wireUpgradeButton, HandleWireCardClicked);
+        }
+        else
+        {
+            AddListener(m_trapUpgradeButton, HandleTrapUpgradeClicked);
+            AddListener(m_spikeUpgradeButton, HandleSpikeUpgradeClicked);
+            AddListener(m_explosiveUpgradeButton, HandleExplosiveUpgradeClicked);
+            AddListener(m_shooterUpgradeButton, HandleShooterUpgradeClicked);
+            AddListener(m_wireUpgradeButton, HandleWireUpgradeClicked);
+        }
         if (m_facility != null)
             m_facility.StateChanged += HandleFacilityStateChanged;
     }
@@ -341,16 +490,13 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             m_sortieCancelButton.onClick.RemoveListener(HandleSortieCancelClicked);
         if (m_battleSceneButton != null)
             m_battleSceneButton.onClick.RemoveListener(HandleBattleSceneClicked);
-        if (m_trapUpgradeButton != null)
-            m_trapUpgradeButton.onClick.RemoveListener(HandleTrapUpgradeClicked);
-        if (m_spikeUpgradeButton != null)
-            m_spikeUpgradeButton.onClick.RemoveListener(HandleSpikeUpgradeClicked);
-        if (m_explosiveUpgradeButton != null)
-            m_explosiveUpgradeButton.onClick.RemoveListener(HandleExplosiveUpgradeClicked);
-        if (m_shooterUpgradeButton != null)
-            m_shooterUpgradeButton.onClick.RemoveListener(HandleShooterUpgradeClicked);
-        if (m_wireUpgradeButton != null)
-            m_wireUpgradeButton.onClick.RemoveListener(HandleWireUpgradeClicked);
+        if (m_upgradeConfirmButton != null)
+            m_upgradeConfirmButton.onClick.RemoveListener(HandleUpgradeConfirmClicked);
+        RemoveListener(m_trapUpgradeButton, HandleTrapCardClicked, HandleTrapUpgradeClicked);
+        RemoveListener(m_spikeUpgradeButton, HandleSpikeCardClicked, HandleSpikeUpgradeClicked);
+        RemoveListener(m_explosiveUpgradeButton, HandleExplosiveCardClicked, HandleExplosiveUpgradeClicked);
+        RemoveListener(m_shooterUpgradeButton, HandleShooterCardClicked, HandleShooterUpgradeClicked);
+        RemoveListener(m_wireUpgradeButton, HandleWireCardClicked, HandleWireUpgradeClicked);
         if (m_facility != null)
             m_facility.StateChanged -= HandleFacilityStateChanged;
     }
@@ -371,6 +517,19 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
 
         if (m_sortieConfirmRoot == null)
             m_sortieConfirmRoot = transform.Find("SortieConfirm")?.gameObject;
+
+        Transform content = UpgradeContentRoot;
+        m_upgradeConfirmButton ??= content.Find("UpgradeButton")?.GetComponent<Button>();
+        m_selectFrame ??= content.Find("SelectFrame") as RectTransform;
+        m_detailNameText ??= content.Find("Detail/Name")?.GetComponent<TMP_Text>();
+        m_detailIconImage ??= content.Find("Detail/Icon")?.GetComponent<Image>();
+        m_detailDescriptionText ??= content.Find("Detail/Description")?.GetComponent<TMP_Text>();
+        m_detailCurrentLevelText ??= content.Find("Detail/Level/Lv")?.GetComponent<TMP_Text>();
+        m_detailArrowText ??= content.Find("Detail/Level/Arrow")?.GetComponent<TMP_Text>();
+        m_detailNextLevelText ??= content.Find("Detail/Level/Next")?.GetComponent<TMP_Text>();
+        if (m_costRoot == null)
+            m_costRoot = content.Find("Resource")?.gameObject;
+        m_costText ??= content.Find("Resource/Number")?.GetComponent<TMP_Text>();
 
         if (m_sortieConfirmRoot != null)
         {
@@ -459,7 +618,7 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             ? "업그레이드 완료"
             : $"{resourceDisplayName} x{m_facility.GetUpgradeCost(upgradeType)}";
 
-        row.Refresh(requirement);
+        row.Refresh(requirement, currentLevel, maxLevel);
     }
 
     private void SetNotice(string message)
@@ -485,5 +644,29 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     {
         if (target != null && target.activeSelf != active)
             target.SetActive(active);
+    }
+
+    private static void SetActive(Component target, bool active)
+    {
+        if (target != null)
+            SetActive(target.gameObject, active);
+    }
+
+    private static void AddListener(Button button, UnityEngine.Events.UnityAction action)
+    {
+        if (button != null)
+            button.onClick.AddListener(action);
+    }
+
+    private static void RemoveListener(
+        Button button,
+        UnityEngine.Events.UnityAction selectAction,
+        UnityEngine.Events.UnityAction upgradeAction)
+    {
+        if (button == null)
+            return;
+
+        button.onClick.RemoveListener(selectAction);
+        button.onClick.RemoveListener(upgradeAction);
     }
 }
