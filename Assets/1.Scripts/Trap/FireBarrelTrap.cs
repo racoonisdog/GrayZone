@@ -18,7 +18,8 @@ using VInspector;
 /// "몇 발 맞으면 터지는지"가 되고, 토글로 총기 피해량을 쓸 수도 있습니다. 연쇄에 휘말리면 체력과 관계없이 터집니다.
 ///
 /// 화염은 화염병과 같은 화염 지대 프리팹(<see cref="FireTrap"/>)을 생성하고 지속 시간만 이 함정의 값으로 바꿉니다.
-/// 화염 지대는 범위 안의 다른 폭발물과 드럼통에 불을 옮기므로, 드럼통끼리의 연쇄는 따로 처리하지 않습니다.
+/// 화염 지대도 범위 안의 다른 폭발물과 드럼통에 불을 옮기지만 반경이 작아서, 터질 때 연쇄 반경(<c>m_chainRadius</c>) 안의
+/// 폭발물도 직접 터뜨립니다.
 /// </remarks>
 public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
 {
@@ -73,7 +74,33 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     [ShowIf(nameof(m_chainDetonationEnabled))]
     [Min(0.0f)]
     [SerializeField] private float m_chainFuseTime = 0.15f;
+
+    [Tooltip("터질 때 이 반경(m) 안의 다른 드럼통과 폭발 함정을 함께 터뜨립니다. 남기는 화염 지대(반경 약 1.2m)보다 멀리 떨어진 드럼통도 이어지게 합니다. 0이면 화염 지대로만 번집니다.")]
+    [ShowIf(nameof(m_chainDetonationEnabled))]
+    [Min(0.0f)]
+    [SerializeField] private float m_chainRadius = 4.0f;
     [EndIf]
+
+    /// <summary>
+    /// 켜면 설치된 드럼통마다 연쇄 반경을 바닥 원으로 그립니다(디버그 트레이너 토글).
+    /// </summary>
+    /// <remarks>Debug.DrawLine 기반이라 Scene 뷰와 Gizmos를 켠 Game 뷰에서 보입니다. 드럼통이 여럿이라 전역 값으로 둡니다.</remarks>
+    public static bool DebugShowChainRadius { get; set; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetDebugStatics()
+    {
+        DebugShowChainRadius = false;
+    }
+
+    /// <summary>터질 때 함께 터뜨리는 반경(m)입니다.</summary>
+    public float ChainRadius => m_chainRadius;
+
+    /// <summary>연쇄 반경을 런타임에 바꿉니다. 디버그 트레이너가 씁니다. 저장되지 않습니다.</summary>
+    public void DebugSetChainRadius(float radius)
+    {
+        m_chainRadius = Mathf.Max(0.0f, radius);
+    }
 
     /// <summary>바닥을 찾을 때 드럼통 위치에서 위로 물러나 쏘는 거리입니다.</summary>
     private const float GroundProbeUp = 0.5f;
@@ -155,6 +182,8 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
 
     private void Update()
     {
+        DrawChainRadiusDebug();
+
         if (!m_isFuseBurning)
         {
             return;
@@ -188,6 +217,52 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
         ApplyShotColliderState();
         SpawnExplosionEffect();
         SpawnFire();
+        TriggerNearbyChain();
+    }
+
+    /// <summary>설치된 드럼통의 연쇄 반경을 바닥 높이의 원으로 한 프레임 그립니다.</summary>
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private void DrawChainRadiusDebug()
+    {
+        if (!DebugShowChainRadius || !IsBuilt || !m_chainDetonationEnabled || m_chainRadius <= 0.0f)
+        {
+            return;
+        }
+
+        const int segments = 32;
+        Vector3 center = ResolveBarrelBase() + Vector3.up * 0.1f;
+        Color color = new Color(1.0f, 0.5f, 0.1f);
+        Vector3 previous = center + new Vector3(m_chainRadius, 0.0f, 0.0f);
+        for (int i = 1; i <= segments; i++)
+        {
+            float angle = i * Mathf.PI * 2.0f / segments;
+            Vector3 next = center + new Vector3(Mathf.Cos(angle) * m_chainRadius, 0.0f, Mathf.Sin(angle) * m_chainRadius);
+            Debug.DrawLine(previous, next, color, 0.0f, false);
+            previous = next;
+        }
+    }
+
+    /// <summary>연쇄 반경 안의 다른 폭발물에 불을 옮깁니다.</summary>
+    /// <remarks>
+    /// 이 시점에 자신은 이미 청사진이라 다시 휘말리지 않습니다. 받는 쪽은 자기 도화선 시간만큼 뒤에 터지므로
+    /// 멀리 늘어선 드럼통도 차례로 터지는 것이 보입니다. 연쇄를 끈 드럼통은 남에게도 옮기지 않습니다.
+    /// </remarks>
+    private void TriggerNearbyChain()
+    {
+        if (!m_chainDetonationEnabled || m_chainRadius <= 0.0f)
+        {
+            return;
+        }
+
+        Vector3 center = ResolveBarrelBase() + Vector3.up * 0.5f;
+        float radius = m_chainRadius;
+        ExplosionDamage.TriggerChainDetonation(
+            center,
+            Vector3.one * radius,
+            Quaternion.identity,
+            candidate => candidate.bounds.SqrDistance(center) <= radius * radius,
+            gameObject);
     }
 
     /// <inheritdoc />

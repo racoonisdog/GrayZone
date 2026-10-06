@@ -105,6 +105,7 @@ MonoBehaviour:
   m_explosionEffectLifetime: 3
   m_chainDetonationEnabled: 1
   m_chainFuseTime: 0.15
+  m_chainRadius: 4
 --- !u!208 &4259966346037241398
 NavMeshObstacle:
   m_ObjectHideFlags: 0
