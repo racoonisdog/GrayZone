@@ -74,7 +74,7 @@ public class MedicalPatientSlotView : MonoBehaviour
     /// <param name="slotIndex">UI 배열과 매니저 상태를 연결하는 슬롯 인덱스</param>
     /// <param name="isUnlocked">슬롯 해금 여부</param>
     /// <param name="isAvailable">임시 빌드에서 아직 사용 가능한 슬롯인지 여부</param>
-    /// <param name="onClicked">슬롯 또는 취소 버튼 클릭 시 호출할 콜백</param>
+    /// <param name="onClicked">배치된 환자 이미지를 클릭했을 때 호출할 취소 콜백</param>
     public void Bind(
         int slotIndex,
         bool isUnlocked,
@@ -195,21 +195,24 @@ public class MedicalPatientSlotView : MonoBehaviour
 
     private void HandleClick()
     {
-        // 슬롯 버튼(빈칸→배치)과 취소 버튼(점유→해제) 모두 여기로 통지.
-        // 빈칸/점유 분기는 컨트롤러가 PatientId로 판단.
-        if (m_isUnlocked && m_isAvailable)
+        if (m_isUnlocked && m_isAvailable && HasPatient)
             m_clicked?.Invoke(this);
     }
 
-    // 빈 슬롯: 슬롯 버튼 활성(배치), 취소 버튼 숨김.
-    // 점유 슬롯: 슬롯 버튼 비활성, 취소 버튼 표시(배치취소).
+    // 빈 슬롯은 직접 선택하지 않는다. 점유된 캐릭터 이미지 버튼만 배치 취소에 사용한다.
     private void UpdateButtonStates()
     {
-        if (m_button != null)
-            m_button.interactable = m_isUnlocked && m_isAvailable && !HasPatient;
+        bool canCancel = m_isUnlocked && m_isAvailable && HasPatient;
+        bool hasSeparateCancelButton = m_cancelButton != null && m_cancelButton != m_button;
 
-        if (m_cancelButton != null)
-            m_cancelButton.gameObject.SetActive(m_isUnlocked && m_isAvailable && HasPatient);
+        if (m_button != null)
+            m_button.interactable = canCancel && !hasSeparateCancelButton;
+
+        if (hasSeparateCancelButton)
+        {
+            m_cancelButton.gameObject.SetActive(canCancel);
+            m_cancelButton.interactable = canCancel;
+        }
     }
 
     private void UpdateVisual()

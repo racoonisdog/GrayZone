@@ -39,6 +39,14 @@ public class TestButton : MonoBehaviour, ICharacterListItemView
     /// <param name="onClicked">클릭 시 캐릭터 런타임 ID를 전달할 콜백</param>
     public void Bind(ShelterMemberRuntimeData character, Action<string> onClicked)
     {
+        Bind(character, true, onClicked);
+    }
+
+    public void Bind(
+        ShelterMemberRuntimeData character,
+        bool isInteractable,
+        Action<string> onClicked)
+    {
         CacheReferences();
 
         if (character == null || string.IsNullOrWhiteSpace(character.RuntimeId))
@@ -71,7 +79,7 @@ public class TestButton : MonoBehaviour, ICharacterListItemView
         {
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(HandleClick);
-            button.interactable = !string.IsNullOrWhiteSpace(runtimeId);
+            button.interactable = isInteractable && !string.IsNullOrWhiteSpace(runtimeId);
         }
     }
 
