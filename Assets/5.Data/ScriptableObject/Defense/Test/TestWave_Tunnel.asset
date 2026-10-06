@@ -16,6 +16,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: acfea46ecafed6b4b9a3016766da82d6, type: 2}
   m_firstSpawnDelayMin: 3
   m_firstSpawnDelayMax: 3
-  m_spawnIntervalMin: 12
+  m_spawnIntervalMin: 13
   m_spawnIntervalMax: 15
   m_previewCombatDuration: 60

@@ -95,6 +95,15 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>1배속 클립에서 재장전 완료 이벤트가 오는 시점(초)입니다. 아직 조회하지 않았으면 음수입니다.</summary>
     private float m_reloadEventTimeAtUnitSpeed = -1.0f;
 
+    /// <summary>연사 명중음이 겹치지 않도록 재사용하는 플레이어용 히트 확인음 인스턴스입니다.</summary>
+    private FMOD.Studio.EventInstance m_hitConfirmInstance;
+
+    /// <summary>히트 확인음 이벤트 누락 경고를 한 번만 출력했는지 여부입니다.</summary>
+    private bool m_loggedMissingHitConfirmEvent;
+
+    /// <summary>FMOD 히트 확인음 이벤트에서 일반 명중과 헤드샷을 구분하는 로컬 파라미터입니다.</summary>
+    private const string HitConfirmHeadshotParameter = "Headshot";
+
     /// <summary>
     /// 총을 드는 동안 사격을 막는 구간이 끝나는 시각(<see cref="Time.time"/> 기준)입니다.
     /// </summary>
@@ -431,6 +440,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private bool m_combatShotPending;
     private bool m_fireRequested;
     private readonly System.Collections.Generic.List<Gun.HitscanShotInfo> m_firedPelletBuffer = new(8);
+    private bool m_wasShootPressed;
 
     /// <summary>
     [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
@@ -445,6 +455,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("사격 사운드입니다. 실제 사격 사운드를 Gun가 처리한다면 비워둘 수 있습니다.")]
     [FormerlySerializedAs("shootingSound")]
     [SerializeField] private AudioClip m_shootingSound;
+
+    [Tooltip("직접 조작 중인 플레이어가 적을 맞혔을 때 재생할 2D FMOD 히트 확인음입니다.")]
+    [SerializeField] private FMODUnity.EventReference m_hitConfirmEvent;
 
     [Tooltip("재장전 애니메이션 이벤트에서 사용할 사운드 배열입니다. 0: 탄창 제거, 1: 탄창 삽입, 2: 재장전 완료.")]
     [FormerlySerializedAs("reloadSound")]
@@ -1056,6 +1069,13 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_weaponController.OnHitFeedback -= OnWeaponHitFeedback;
             m_weaponController.OnReloadCompleted -= OnWeaponReloadCompleted;
         }
+
+        if (m_hitConfirmInstance.isValid())
+        {
+            m_hitConfirmInstance.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
+            m_hitConfirmInstance.release();
+            m_hitConfirmInstance.clearHandle();
+        }
     }
 
     /// <summary>
@@ -1096,6 +1116,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
+        PlayHitConfirmSound(feedback.Headshot);
         LogHitMarkerFeedback();
 
         if (m_crosshairController == null)
@@ -1109,6 +1130,42 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (feedback.Killed)
         {
             m_crosshairController.ShowKill();
+        }
+    }
+
+    /// <summary>
+    /// 플레이어용 히트 확인음을 재생합니다. 같은 인스턴스를 다시 시작해 연사 중에도 소리가 겹쳐 커지지 않게 합니다.
+    /// </summary>
+    private void PlayHitConfirmSound(bool headshot)
+    {
+        if (m_hitConfirmEvent.IsNull)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!m_hitConfirmInstance.isValid())
+            {
+                m_hitConfirmInstance = FMODUnity.RuntimeManager.CreateInstance(m_hitConfirmEvent);
+            }
+
+            m_hitConfirmInstance.setParameterByName(
+                HitConfirmHeadshotParameter,
+                headshot ? 1.0f : 0.0f);
+            m_hitConfirmInstance.start();
+        }
+        catch (FMODUnity.EventNotFoundException)
+        {
+            if (m_loggedMissingHitConfirmEvent)
+            {
+                return;
+            }
+
+            m_loggedMissingHitConfirmEvent = true;
+            Debug.LogWarning(
+                $"[AimController] FMOD 히트 확인음 이벤트를 찾지 못했습니다: {m_hitConfirmEvent.Path}",
+                this);
         }
     }
 
@@ -1294,6 +1351,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_muzzleAlignmentOffset = Quaternion.identity;
         m_combatShotPending = false;
         m_fireRequested = false;
+        m_wasShootPressed = false;
     }
 
     /// <summary>
@@ -1310,16 +1368,23 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private void UpdatePlayerControlledFrame()
     {
+        // 반자동은 눌림 에지를 한 번만 소비합니다. 전투 자세 밖에서 버튼을 놓은 경우에도 다음 클릭을
+        // 새 입력으로 받을 수 있도록 릴리스 상태는 플레이어 입력 프레임 전체에서 추적합니다.
+        if (m_input == null || !m_input.Shoot)
+        {
+            m_wasShootPressed = false;
+        }
+
         // Gun은 입력 소유자가 아니므로, 조준 컨트롤러가 홀드 여부를 전달해 실제 탄퍼짐/크로스헤어 회복도
         // 논리 반동과 같은 입력 기준으로 멈춥니다.
         if (m_weaponController != null)
         {
-            m_weaponController.SetSpreadRecoveryBlockedByHeldFireInput(m_input != null && m_input.Shoot);
+            m_weaponController.SetSpreadRecoveryBlockedByHeldFireInput(IsContinuousFireHeld);
         }
 
         if (m_crosshairController != null && !UsesWeaponMaxSpreadCrosshair)
         {
-            m_crosshairController.SetShotRecoilPulseHoldByFireInput(m_input != null && m_input.Shoot);
+            m_crosshairController.SetShotRecoilPulseHoldByFireInput(IsContinuousFireHeld);
         }
 
         UpdateStanceArbitration();
@@ -2777,7 +2842,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        if (shootPressed)
+        bool shouldRequestShot = shootPressed
+            && (m_weaponController == null
+                || m_weaponController.FireMode == GunFireMode.FullAuto
+                || !m_wasShootPressed);
+
+        m_wasShootPressed = shootPressed;
+
+        if (shouldRequestShot)
         {
             m_animator.SetBool(AnimIDShoot, true);
 
@@ -2788,6 +2860,18 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         m_animator.SetBool(AnimIDShoot, false);
     }
+
+    /// <summary>
+    /// 홀드 입력 자체가 연속 사격을 뜻하는 총기인지 확인합니다.
+    /// </summary>
+    /// <remarks>
+    /// 반자동은 첫 클릭 한 번만 소비하므로 버튼을 계속 누르고 있어도 탄퍼짐과 조준선 반동 회복을
+    /// 막지 않습니다. 실제 사격 직후의 회복 지연은 Gun이 마지막 사격 시각으로 별도 처리합니다.
+    /// </remarks>
+    private bool IsContinuousFireHeld => m_input != null
+        && m_input.Shoot
+        && m_weaponController != null
+        && m_weaponController.FireMode == GunFireMode.FullAuto;
 
     /// <summary>
     /// 상체를 따로 쓰는 행동이 시작되면 진행 중인 재장전을 접습니다.

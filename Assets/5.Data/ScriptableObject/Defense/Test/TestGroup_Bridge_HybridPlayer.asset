@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SpawnGroupSO
   m_members:
   - m_entry: {fileID: 11400000, guid: aa3a02819e382094d8a12b7b4bfdca91, type: 2}
-    m_count: 6
+    m_count: 1
   - m_entry: {fileID: 11400000, guid: 54d96a7fbdde1124482c6e59171b95c6, type: 2}
-    m_count: 4
+    m_count: 1
   - m_entry: {fileID: 11400000, guid: 4eb8419710c9f0b4fac05558495e67ba, type: 2}
     m_count: 1
   - m_entry: {fileID: 11400000, guid: 069a3e55a004b684a8ff767777675b43, type: 2}
