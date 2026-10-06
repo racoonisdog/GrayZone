@@ -50,6 +50,8 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private List<CharacterSnapshotData> characters = new();
 
     [Header("Shelter")]
+    [Tooltip("게임오버 후 셸터로 복귀할 현재 체크포인트 ID입니다.")]
+    [SerializeField] private ShelterCheckpointId shelterCheckpointId = ShelterCheckpointId.BeforeDefense1;
     [Tooltip("셸터 씬이 마지막으로 동기화한 안내 진행 단계입니다.")]
     [SerializeField] private ShelterFlowState shelterFlowState = ShelterFlowState.NotStarted;
     [Tooltip("현재 출전 대상으로 선택된 캐릭터 런타임 ID 목록입니다. 최대 3명입니다.")]
@@ -151,6 +153,15 @@ public class GameDataManager : MonoBehaviour
 
     /// <summary>마지막 셸터 동기화 시점의 안내 진행 단계입니다.</summary>
     public ShelterFlowState ShelterFlowState => shelterFlowState;
+
+    /// <summary>게임오버 후 셸터로 복귀할 현재 체크포인트 ID입니다.</summary>
+    public ShelterCheckpointId ShelterCheckpointId => shelterCheckpointId;
+
+    /// <summary>게임오버 후 셸터로 복귀할 체크포인트 ID를 변경합니다.</summary>
+    public void SetShelterCheckpointId(ShelterCheckpointId checkpointId)
+    {
+        shelterCheckpointId = checkpointId;
+    }
 
     public bool FoodShortagePenaltyActive => foodShortagePenaltyActive;
 
@@ -641,20 +652,57 @@ public class GameDataManager : MonoBehaviour
             lastFieldAcquiredResources);
     }
 
-    /// <summary>현재 전역 평탄 정본을 지정한 프로필의 독립된 저장 패킷으로 변환합니다.</summary>
+    /// <summary>현재 전역 정본에서 Auto 복구에 필요한 최소 상태만 저장 패킷으로 변환합니다.</summary>
     /// <remarks>활성 셸터 작업본은 호출 전에 <see cref="SyncFromShelter()"/>로 정본에 먼저 반영해야 합니다.</remarks>
-    public SaveData CreateSaveData(string profileId)
+    public SaveData CreateSaveData()
     {
         EnsureRuntimeState();
         SaveData saveData = new SaveData
         {
-            profileId = string.IsNullOrWhiteSpace(profileId) ? SaveFilePaths.DefaultProfileId : profileId.Trim(),
-            shared = CreateSharedSaveData(),
-            shelter = CreateShelterSaveData(),
-            lastFieldResult = CreateLastFieldResultSnapshot()
+            shelterCheckpointId = ShelterCheckpointId,
+            trapUpgradeLevel = TrapUpgradeLevel,
+            spikeUpgradeLevel = SpikeUpgradeLevel,
+            explosiveUpgradeLevel = ExplosiveUpgradeLevel,
+            shooterUpgradeLevel = ShooterUpgradeLevel,
+            wireUpgradeLevel = WireUpgradeLevel
         };
 
-        saveData.MarkSavedNow();
+        for (int i = 0; i < resourceAmounts.Count; i++)
+        {
+            ResourceAmountState resource = resourceAmounts[i];
+            if (resource == null)
+            {
+                continue;
+            }
+
+            saveData.resources.Add(new SaveData.ResourceAmountData
+            {
+                resourceId = resource.ResourceId,
+                amount = resource.Amount
+            });
+        }
+
+        for (int i = 0; i < characters.Count; i++)
+        {
+            CharacterSnapshotData snapshot = characters[i];
+            if (snapshot == null || snapshot.CharacterId == PlayerbleCharacterId.Unknown)
+            {
+                continue;
+            }
+
+            saveData.characters.Add(new SaveData.CharacterStateSaveData
+            {
+                characterId = snapshot.CharacterId,
+                currentHp = snapshot.CurrentHp,
+                maxHp = snapshot.MaxHp,
+                injurySeverityGauge = snapshot.InjurySeverityGauge,
+                maxInjuryGauge = snapshot.MaxInjuryGauge,
+                injuryState = snapshot.InjuryState,
+                isDown = snapshot.IsDown,
+                isCombatOut = snapshot.IsCombatOut
+            });
+        }
+
         return saveData;
     }
 
@@ -667,23 +715,14 @@ public class GameDataManager : MonoBehaviour
             return;
         }
 
-        SaveData.SharedSaveData sharedSaveData = saveData.shared ?? new SaveData.SharedSaveData();
-        ApplySharedSaveData(sharedSaveData);
-        ApplyShelterSaveData(saveData.shelter ?? new SaveData.ShelterSaveData());
-
-        // 시설 해금/레벨과 캐릭터 배치를 먼저 구성한 뒤 제조 슬롯 진행 상태를 복원합니다.
-        manufacturing = ManufacturingFacilitySaveDataMapper.ToRuntime(sharedSaveData.manufacturing);
-
-        FieldResultData savedFieldResult = saveData.lastFieldResult ?? saveData.lastBattleResult;
-        if (savedFieldResult != null
-            && !string.IsNullOrWhiteSpace(savedFieldResult.FieldId))
-        {
-            ApplyLastFieldResult(savedFieldResult);
-        }
-        else
-        {
-            ClearLastFieldResult();
-        }
+        shelterCheckpointId = saveData.shelterCheckpointId;
+        SetTrapUpgradeLevel(saveData.trapUpgradeLevel);
+        SetSpikeUpgradeLevel(saveData.spikeUpgradeLevel);
+        SetExplosiveUpgradeLevel(saveData.explosiveUpgradeLevel);
+        SetShooterUpgradeLevel(saveData.shooterUpgradeLevel);
+        SetWireUpgradeLevel(saveData.wireUpgradeLevel);
+        ApplySavedResources(saveData.resources);
+        ApplySavedCharacterStates(saveData.characters);
 
         EnsureRuntimeState();
     }
@@ -730,187 +769,73 @@ public class GameDataManager : MonoBehaviour
         lastFieldAcquiredResources = new List<FieldResourceAmountData>();
     }
 
-    private SaveData.SharedSaveData CreateSharedSaveData()
+    /// <summary>새 게임용 고정 캐릭터 원본을 런타임 정본에 설정합니다.</summary>
+    public void InitializeCharacters(IEnumerable<CharacterSnapshotData> source)
     {
-        SaveData.SharedSaveData saveData = new SaveData.SharedSaveData
-        {
-            lastStageId = lastStageId,
-            shelterStability = ShelterStability,
-            foodShortagePenaltyActive = FoodShortagePenaltyActive,
-            fuelShortagePenaltyActive = FuelShortagePenaltyActive,
-            trapUpgradeLevel = TrapUpgradeLevel,
-            spikeUpgradeLevel = SpikeUpgradeLevel,
-            explosiveUpgradeLevel = ExplosiveUpgradeLevel,
-            shooterUpgradeLevel = ShooterUpgradeLevel,
-            wireUpgradeLevel = WireUpgradeLevel,
-            totalFieldKillCount = TotalFieldKillCount,
-            fieldKillHistory = new List<int>(fieldKillHistory),
-            defenseClearCount = DefenseClearCount,
-            manufacturing = ManufacturingFacilitySaveDataMapper.FromRuntime(manufacturing)
-        };
-
-        for (int i = 0; i < resourceAmounts.Count; i++)
-        {
-            ResourceAmountState resource = resourceAmounts[i];
-            if (resource != null)
-            {
-                saveData.resources.Add(new SaveData.ResourceAmountData
-                {
-                    resourceId = resource.ResourceId,
-                    amount = resource.Amount
-                });
-            }
-        }
-
-        for (int i = 0; i < characters.Count; i++)
-        {
-            CharacterSnapshotData snapshot = characters[i];
-            if (snapshot != null)
-                saveData.characters.Add(snapshot.Clone());
-        }
-
-        return saveData;
-    }
-
-    private SaveData.ShelterSaveData CreateShelterSaveData()
-    {
-        SaveData.ShelterSaveData saveData = new SaveData.ShelterSaveData
-        {
-            currentDay = CurrentDay,
-            flowState = ShelterFlowState,
-            battleSquadRuntimeIds = new List<string>(playableSquadRuntimeIds)
-        };
-
-        for (int i = 0; i < shelterCharacterAssignments.Count; i++)
-        {
-            ShelterCharacterAssignmentData assignment = shelterCharacterAssignments[i];
-            if (assignment == null || !assignment.IsAssigned)
-                continue;
-
-            saveData.characterAssignments.Add(new SaveData.CharacterAssignmentSaveData
-            {
-                runtimeId = assignment.RuntimeId,
-                facilityId = assignment.FacilityId,
-                roomId = assignment.RoomId,
-                kind = assignment.Kind
-            });
-        }
-
-        for (int i = 0; i < facilityStates.Count; i++)
-        {
-            SaveData.FacilitySaveData facilitySaveData = FacilitySaveDataMapper.FromRuntime(facilityStates[i]);
-            if (facilitySaveData != null)
-            {
-                saveData.facilities.Add(facilitySaveData);
-            }
-        }
-
-        return saveData;
-    }
-
-    private void ApplySharedSaveData(SaveData.SharedSaveData saveData)
-    {
-        lastStageId = saveData.lastStageId?.Trim() ?? string.Empty;
-        shelterStability = Mathf.Clamp(saveData.shelterStability, 0, 100);
-        foodShortagePenaltyActive = saveData.foodShortagePenaltyActive;
-        fuelShortagePenaltyActive = saveData.fuelShortagePenaltyActive;
-        SetTrapUpgradeLevel(saveData.trapUpgradeLevel);
-        SetSpikeUpgradeLevel(saveData.spikeUpgradeLevel);
-        SetExplosiveUpgradeLevel(saveData.explosiveUpgradeLevel);
-        SetShooterUpgradeLevel(saveData.shooterUpgradeLevel);
-        SetWireUpgradeLevel(saveData.wireUpgradeLevel);
-        totalFieldKillCount = Mathf.Max(0, saveData.totalFieldKillCount);
-        fieldKillHistory = saveData.fieldKillHistory != null
-            ? new List<int>(saveData.fieldKillHistory)
-            : new List<int>();
-        // 이 필드가 없던 예전 저장 파일은 0으로 읽혀 1회차부터 시작합니다.
-        defenseClearCount = Mathf.Max(0, saveData.defenseClearCount);
-        pendingDefenseVictoryStageId = string.Empty;
-        resourceAmounts = new List<ResourceAmountState>();
         characters = new List<CharacterSnapshotData>();
-        shelterCharacterAssignments = new List<ShelterCharacterAssignmentData>();
-
-        if (saveData.resources != null)
-        {
-            for (int i = 0; i < saveData.resources.Count; i++)
-            {
-                SaveData.ResourceAmountData resource = saveData.resources[i];
-                if (resource != null)
-                {
-                    SetResourceAmount(
-                        resource.resourceId,
-                        resource.amount);
-                }
-            }
-        }
-
-        if (saveData.characters != null && saveData.characters.Count > 0)
-        {
-            for (int i = 0; i < saveData.characters.Count; i++)
-            {
-                CharacterSnapshotData snapshot = saveData.characters[i];
-                if (snapshot != null && !ContainsCharacter(snapshot.RuntimeId, snapshot.DefinitionId))
-                    characters.Add(snapshot.Clone());
-            }
-        }
-        else if (saveData.npcs != null)
-        {
-            for (int i = 0; i < saveData.npcs.Count; i++)
-            {
-                ShelterMemberRuntimeData legacyCharacter = LegacyNpcSaveDataMapper.ToRuntime(saveData.npcs[i]);
-                if (legacyCharacter != null && !ContainsCharacter(legacyCharacter.RuntimeId, legacyCharacter.DefinitionId))
-                {
-                    characters.Add(legacyCharacter.CreateSnapshot());
-                    if (legacyCharacter.IsAssignedToFacility)
-                        shelterCharacterAssignments.Add(new ShelterCharacterAssignmentData(legacyCharacter));
-                }
-            }
-        }
-    }
-
-    private void ApplyShelterSaveData(SaveData.ShelterSaveData saveData)
-    {
-        currentDay = Mathf.Max(1, saveData.currentDay);
-        shelterFlowState = saveData.flowState;
-        itemStorageEntries = new List<ItemStorageEntry>();
-        IEnumerable<string> savedSquadIds = saveData.battleSquadRuntimeIds != null
-            && saveData.battleSquadRuntimeIds.Count > 0
-            ? saveData.battleSquadRuntimeIds
-            : saveData.battleSquadNpcDefinitionIds;
-        playableSquadRuntimeIds = NormalizeCharacterIds(
-            savedSquadIds,
-            ShelterRuntimeData.MaxFieldSquadSize);
-        if (saveData.characterAssignments != null && saveData.characterAssignments.Count > 0)
-        {
-            shelterCharacterAssignments = new List<ShelterCharacterAssignmentData>();
-            for (int i = 0; i < saveData.characterAssignments.Count; i++)
-            {
-                SaveData.CharacterAssignmentSaveData assignment = saveData.characterAssignments[i];
-                if (assignment == null)
-                    continue;
-                ShelterCharacterAssignmentData runtimeAssignment = new ShelterCharacterAssignmentData(
-                    assignment.runtimeId,
-                    assignment.facilityId,
-                    assignment.roomId,
-                    assignment.kind);
-                if (runtimeAssignment.IsAssigned)
-                    shelterCharacterAssignments.Add(runtimeAssignment);
-            }
-        }
-        facilityStates = new List<FacilityRuntimeState>();
-
-        if (saveData.facilities == null)
+        if (source == null)
         {
             return;
         }
 
-        for (int i = 0; i < saveData.facilities.Count; i++)
+        foreach (CharacterSnapshotData snapshot in source)
         {
-            FacilityRuntimeState state = FacilitySaveDataMapper.ToRuntime(saveData.facilities[i]);
-            if (state != null)
+            if (snapshot == null || snapshot.CharacterId == PlayerbleCharacterId.Unknown)
             {
-                facilityStates.Add(state);
+                continue;
             }
+
+            if (!TryGetCharacterIndex(snapshot.CharacterId, out _))
+            {
+                characters.Add(snapshot.Clone());
+            }
+        }
+    }
+
+    private void ApplySavedResources(IEnumerable<SaveData.ResourceAmountData> savedResources)
+    {
+        resourceAmounts = new List<ResourceAmountState>();
+        if (savedResources == null)
+        {
+            return;
+        }
+
+        foreach (SaveData.ResourceAmountData resource in savedResources)
+        {
+            if (resource != null)
+            {
+                SetResourceAmount(resource.resourceId, resource.amount);
+            }
+        }
+    }
+
+    private void ApplySavedCharacterStates(IEnumerable<SaveData.CharacterStateSaveData> savedCharacters)
+    {
+        if (savedCharacters == null)
+        {
+            return;
+        }
+
+        foreach (SaveData.CharacterStateSaveData savedCharacter in savedCharacters)
+        {
+            if (savedCharacter == null
+                || savedCharacter.characterId == PlayerbleCharacterId.Unknown
+                || !TryGetCharacterIndex(savedCharacter.characterId, out int index))
+            {
+                continue;
+            }
+
+            CharacterSnapshotData snapshot = characters[index].Clone();
+            snapshot.SetCombatState(
+                savedCharacter.currentHp,
+                savedCharacter.maxHp,
+                savedCharacter.injurySeverityGauge,
+                savedCharacter.maxInjuryGauge,
+                savedCharacter.injuryState,
+                savedCharacter.isDown,
+                savedCharacter.isCombatOut,
+                snapshot.IsPlayerSquadMember);
+            characters[index] = snapshot;
         }
     }
 
@@ -938,6 +863,27 @@ public class GameDataManager : MonoBehaviour
 
             TryBindFieldCharacterSnapshot(snapshot);
         }
+    }
+
+    private bool TryGetCharacterIndex(PlayerbleCharacterId characterId, out int index)
+    {
+        index = -1;
+        if (characterId == PlayerbleCharacterId.Unknown)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < characters.Count; i++)
+        {
+            CharacterSnapshotData character = characters[i];
+            if (character != null && character.CharacterId == characterId)
+            {
+                index = i;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryGetCharacterIndex(string id, out int index)

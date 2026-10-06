@@ -1,7 +1,10 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class MainSceneSaveManager : MonoBehaviour
 {
+    private const string ShelterSceneName = "ShelterScene_Jung";
+
     public static MainSceneSaveManager Instance { get; private set; }
 
     [Header("New Game")]
@@ -61,6 +64,7 @@ public class MainSceneSaveManager : MonoBehaviour
             return false;
         }
 
+        GameDataManager.Instance.InitializeCharacters(defaultSaveData.CreateStartingCharacterSnapshots());
         GameDataManager.Instance.ApplySaveData(newGameSaveData);
 
         // Temporary test-scene sync. Scene managers should copy from GameDataManager on scene load later.
@@ -74,7 +78,10 @@ public class MainSceneSaveManager : MonoBehaviour
 
     public void OnStartNewGameButtonClicked()
     {
-        StartNewGame();
+        if (StartNewGame())
+        {
+            SceneManager.LoadScene(ShelterSceneName);
+        }
     }
 
     public SaveData CreateNewGameSaveData()

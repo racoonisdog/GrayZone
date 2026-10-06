@@ -19,6 +19,9 @@ public sealed class ShelterFlowController : MonoBehaviour
         [Tooltip("이 단계에서 화살표가 가리킬 월드 타깃")]
         [SerializeField] private Transform m_target;
 
+        [Tooltip("이 단계에서 Onscreen Marker에 사용할 스프라이트. 비워 두면 기본 스프라이트를 사용함")]
+        [SerializeField] private Sprite m_onscreenMarkerSprite;
+
         public void SetIndicatorVisible(bool visible)
         {
             if (m_indicator == null)
@@ -28,6 +31,8 @@ public sealed class ShelterFlowController : MonoBehaviour
             {
                 if (m_target != null)
                     m_indicator.SetTarget(m_target);
+
+                m_indicator.SetOnscreenMarkerSprite(m_onscreenMarkerSprite);
 
                 m_indicator.gameObject.SetActive(true);
                 m_indicator.SetVisible(true);

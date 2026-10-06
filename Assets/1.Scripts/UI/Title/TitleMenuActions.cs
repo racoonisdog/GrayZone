@@ -1,4 +1,3 @@
-using System.IO;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -63,7 +62,7 @@ public sealed class TitleMenuActions : MonoBehaviour
 
         if (m_loadGameButton != null && m_disableLoadWithoutSave)
         {
-            m_loadGameButton.interactable = HasSaveFile();
+            m_loadGameButton.interactable = HasAutoSaveFile();
         }
     }
 
@@ -130,15 +129,18 @@ public sealed class TitleMenuActions : MonoBehaviour
         GameSaveManager saveManager = GameSaveManager.Instance != null
             ? GameSaveManager.Instance
             : FindFirstObjectByType<GameSaveManager>(FindObjectsInactive.Include);
-        if (saveManager == null || !saveManager.LoadGame())
+        if (saveManager == null || !saveManager.LoadAutoGame())
         {
             Debug.LogWarning($"[TitleMenuActions] '{scene.name}'에서 저장을 불러오지 못했습니다. 새 게임 상태로 진행합니다.");
         }
     }
 
-    private static bool HasSaveFile()
+    private static bool HasAutoSaveFile()
     {
-        return File.Exists(SaveFilePaths.GetGameSavePath(SaveFilePaths.DefaultProfileId));
+        GameSaveManager saveManager = GameSaveManager.Instance != null
+            ? GameSaveManager.Instance
+            : FindFirstObjectByType<GameSaveManager>(FindObjectsInactive.Include);
+        return saveManager != null && saveManager.HasAutoSave();
     }
 
     private void ResolveButtons()

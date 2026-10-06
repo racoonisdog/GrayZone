@@ -133,6 +133,9 @@ public class CharacterManager : MonoBehaviour, ICharacterDataContext
     public bool TrySetCurrentHp(string runtimeId, int currentHp, out CharacterActionFailure failure)
         => Editor.TrySetCurrentHp(runtimeId, currentHp, out failure);
 
+    public bool TrySetMedicalFacilityMaxHpBonus(string runtimeId, int bonus, out CharacterActionFailure failure)
+        => Editor.TrySetMedicalFacilityMaxHpBonus(runtimeId, bonus, out failure);
+
     public bool TrySetInjuryGauge(string runtimeId, float injuryGauge, out CharacterActionFailure failure)
         => Editor.TrySetInjuryGauge(runtimeId, injuryGauge, out failure);
 

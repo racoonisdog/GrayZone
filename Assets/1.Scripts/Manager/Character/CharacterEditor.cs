@@ -151,6 +151,24 @@ public sealed class CharacterEditor
         return true;
     }
 
+    public bool TrySetMedicalFacilityMaxHpBonus(string runtimeId, int bonus, out CharacterActionFailure failure)
+    {
+        failure = CharacterActionFailure.None;
+
+        if (!policy.CanUse(CharacterEditCapability.HealthChange, out failure))
+            return false;
+
+        if (!query.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData character))
+        {
+            failure = CharacterActionFailure.CharacterNotFound;
+            return false;
+        }
+
+        bool changed = character.SetMedicalFacilityMaxHpBonus(bonus);
+        NotifyChangedIfNeeded(character, changed);
+        return true;
+    }
+
     public bool TrySetInjuryGauge(string runtimeId, float injuryGauge, out CharacterActionFailure failure)
     {
         failure = CharacterActionFailure.None;

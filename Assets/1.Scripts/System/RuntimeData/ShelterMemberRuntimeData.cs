@@ -16,6 +16,7 @@ public sealed class ShelterMemberRuntimeData
     [SerializeField] private int reliability;
     [SerializeField] private int currentHp = 1;
     [SerializeField] private int maxHp = 1;
+    [SerializeField] private int medicalFacilityMaxHpBonus;
     [SerializeField] private float injuryGauge;
     [SerializeField] private float maxInjuryGauge = 100.0f;
     [SerializeField] private CharacterInjuryState injuryState;
@@ -38,6 +39,7 @@ public sealed class ShelterMemberRuntimeData
     public int Reliability => Mathf.Clamp(reliability, 0, 100);
     public int CurrentHp => Mathf.Clamp(currentHp, 0, MaxHp);
     public int MaxHp => Mathf.Max(1, maxHp);
+    public int MedicalFacilityMaxHpBonus => Mathf.Max(0, medicalFacilityMaxHpBonus);
     public bool IsDead => CurrentHp <= 0 || isCombatOut;
     public float InjuryGauge => Mathf.Clamp(injuryGauge, 0.0f, MaxInjuryGauge);
     public float MaxInjuryGauge => Mathf.Max(1.0f, maxInjuryGauge);
@@ -164,6 +166,20 @@ public sealed class ShelterMemberRuntimeData
         return true;
     }
 
+    public bool SetMedicalFacilityMaxHpBonus(int value)
+    {
+        int normalizedBonus = Mathf.Max(0, value);
+        int previousBonus = MedicalFacilityMaxHpBonus;
+        if (previousBonus == normalizedBonus)
+            return false;
+
+        int baseMaxHp = Mathf.Max(1, MaxHp - previousBonus);
+        medicalFacilityMaxHpBonus = normalizedBonus;
+        maxHp = baseMaxHp + normalizedBonus;
+        currentHp = Mathf.Min(currentHp, MaxHp);
+        return true;
+    }
+
     private bool SetInjuryState(CharacterInjuryState state)
     {
         if (injuryState == state)
@@ -218,7 +234,8 @@ public sealed class ShelterMemberRuntimeData
             IsCombatOut,
             IsPlayerSquadMember,
             KillCount,
-            weaponSnapshot);
+            weaponSnapshot,
+            MedicalFacilityMaxHpBonus);
     }
 
     public bool ApplySnapshot(CharacterSnapshotData snapshot)
@@ -244,6 +261,7 @@ public sealed class ShelterMemberRuntimeData
             : snapshot.DisplayName;
         reliability = snapshot.Reliability;
         maxHp = snapshot.MaxHp;
+        medicalFacilityMaxHpBonus = snapshot.MedicalFacilityMaxHpBonus;
         currentHp = snapshot.IsCombatOut ? 0 : snapshot.CurrentHp;
         maxInjuryGauge = snapshot.MaxInjuryGauge;
         injuryGauge = snapshot.InjurySeverityGauge;

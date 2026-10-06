@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,6 +18,12 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
     [SerializeField] private TMP_Text m_requiredFacilityLevelText;
     [SerializeField] private TMP_Text m_lockedMessageText;
 
+    [Header("Material")]
+    [SerializeField] private TMP_Text m_needCountText;
+
+    [Header("Selection")]
+    [SerializeField] private GameObject m_selectedRoot;
+
     private string m_recipeId;
     private bool m_isSelectable;
     private Action<string> m_clicked;
@@ -29,6 +36,13 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
     public void SetTooltipPresenter(ItemListTooltipPresenter presenter)
     {
         m_tooltipPresenter = presenter;
+    }
+
+    /// <summary>현재 CreateView에서 선택된 레시피인지 표시합니다.</summary>
+    public void SetSelected(bool selected)
+    {
+        if (m_selectedRoot != null && m_selectedRoot.activeSelf != selected)
+            m_selectedRoot.SetActive(selected);
     }
 
     public void Bind(
@@ -64,10 +78,13 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
 
         if (m_nameText != null)
         {
-            m_nameText.text = isSelectable
+            // 별도 레벨 텍스트가 있으면 이름에 레벨을 덧붙이지 않습니다.
+            m_nameText.text = isSelectable || m_requiredFacilityLevelText != null
                 ? recipe.DisplayName
                 : $"{recipe.DisplayName}\nLv.{recipe.RequiredFacilityLevel}";
         }
+
+        BindMaterial(recipe);
 
         bool isLocked = !isSelectable;
         if (m_requiredFacilityLevelText != null)
@@ -134,7 +151,32 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
         if (m_hoverInfo != null)
             m_hoverInfo.Clear();
 
+        ClearMaterial();
+        SetSelected(false);
         gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 레시피의 첫 번째 재료의 1회 제작 필요량을 표시합니다.
+    /// 현재 레시피는 재료 1종만 사용하므로 행에는 대표 재료 하나만 노출합니다.
+    /// </summary>
+    private void BindMaterial(ManufacturingRecipeDefinition recipe)
+    {
+        IReadOnlyList<ManufacturingMaterialCost> costs = recipe.UnitCosts;
+        if (costs == null || costs.Count == 0 || costs[0] == null)
+        {
+            ClearMaterial();
+            return;
+        }
+
+        if (m_needCountText != null)
+            m_needCountText.text = costs[0].Amount.ToString();
+    }
+
+    private void ClearMaterial()
+    {
+        if (m_needCountText != null)
+            m_needCountText.text = string.Empty;
     }
 
     private void HandleClick()

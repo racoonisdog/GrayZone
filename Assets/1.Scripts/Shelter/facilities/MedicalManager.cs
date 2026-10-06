@@ -11,7 +11,7 @@ using System.Collections.Generic;
 public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortageAffected
 {
     private const int MaxLevelIndex = 3; // 레벨 4단계 (인덱스 0,1,2,3)
-    private const int TotalPatientSlotCount = MaxLevelIndex + 1;
+    private const int TotalPatientSlotCount = 3;
 
     [Header("Facility")]
     [SerializeField] private FacilityDefinition definition;
@@ -30,6 +30,8 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     [Header("Recovery")]
     [SerializeField] private int baseRecoveryPerDay = 5; // 일일 기본 회복 %
     [Min(0)]
+    [SerializeField] private int level4MaxHpBonus = 20;
+    [Min(0)]
     [SerializeField] private int fuelShortageEfficiencyDecrease = 2;
     [FormerlySerializedAs("staffHealBonuses")]
     [SerializeField] private HelperRecoveryBonus[] helperRecoveryBonuses = new HelperRecoveryBonus[]
@@ -46,6 +48,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     private readonly bool[] m_patientSlotAvailable = new bool[TotalPatientSlotCount];
     private bool m_isUnlocked = true; // FacilityManager가 세이브 기준으로 덮어씀(의료시설 기본 해금)
     private bool m_isFuelShortageActive;
+    private bool m_isApplyingLevel4MaxHpBonus;
 
     /// <summary>헬퍼 배치가 해제됐을 때 발생</summary>
     public event System.Action<ShelterMemberRuntimeData> OnHelperReleased;
@@ -111,11 +114,13 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     private void OnValidate()
     {
         baseRecoveryPerDay = Mathf.Max(1, baseRecoveryPerDay);
+        level4MaxHpBonus = Mathf.Max(0, level4MaxHpBonus);
         fuelShortageEfficiencyDecrease = Mathf.Max(0, fuelShortageEfficiencyDecrease);
     }
 
     private void Start()
     {
+        SubscribeToCharacterChanges();
         // 방어전을 위한 로직 변경
         /*
         if (GameDateManager.Instance != null)
@@ -128,6 +133,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
 
     private void OnDestroy()
     {
+        UnsubscribeFromCharacterChanges();
         // 방어전을 위한 로직 변경
         /*
         if (GameDateManager.Instance != null)
@@ -143,6 +149,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     /// <param name="level">새 업그레이드 레벨. 실제 값은 <see cref="FacilityManager"/> 기준</param>
     public void ApplyUpgradeLevel(int level)
     {
+        ApplyLevel4MaxHpBonus(level);
         RefreshLevelVisuals();
         NotifyPatientSlotsChanged();
     }
@@ -176,6 +183,8 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         if (!TryGetCharacterManager(out CharacterManager manager))
             return;
 
+        ApplyLevel4MaxHpBonus(CurrentLevel);
+
         patientTreatments.Clear();
         helpers.Clear();
 
@@ -205,7 +214,14 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
                     FacilityId,
                     System.StringComparison.Ordinal))
             {
-                patientTreatments.Add(new MedicalTreatment(character, dailyRecovery));
+                int slotIndex = FindFirstOpenPatientSlot();
+                if (slotIndex < 0)
+                    break;
+
+                patientTreatments.Add(new MedicalTreatment(
+                    slotIndex,
+                    character,
+                    dailyRecovery));
             }
         }
 
@@ -289,14 +305,14 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         if (character == null)
             return false;
 
-        // 임시 빌드에서는 치료 배치 목록을 만들지 않고 HP가 감소한 생존자만 즉시 치료 후보로 사용한다.
+        // 치료 후보 목록은 배치 여부와 관계없이 HP가 감소한 생존자를 계속 표시한다.
         return !character.IsDead && character.CurrentHp < character.MaxHp;
 
         /* 날짜 기반 치료를 다시 사용할 때 복구할 기존 후보 조건.
         if (patientTreatments.Count >= PatientCapacity)
             return false;
 
-        if (FindPatientSlotIndex(character.RuntimeId) >= 0)
+        if (FindPatientTreatmentIndex(character.RuntimeId) >= 0)
             return false;
 
         if (character.IsDead)
@@ -310,7 +326,15 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         */
     }
 
-    /// <summary>임시 빌드 전용: 지정 환자 슬롯의 1회 사용 가능 상태를 반환합니다.</summary>
+    /// <summary>지정 환자 슬롯이 현재 시설 레벨에서 해금됐는지 반환합니다.</summary>
+    public bool IsPatientSlotUnlocked(int slotIndex)
+    {
+        return slotIndex >= 0
+            && slotIndex < m_patientSlotAvailable.Length
+            && slotIndex < PatientCapacity;
+    }
+
+    /// <summary>지정 환자 슬롯이 치료 후 소모되지 않은 상태인지 반환합니다.</summary>
     public bool IsPatientSlotAvailable(int slotIndex)
     {
         return slotIndex >= 0
@@ -318,28 +342,41 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
             && m_patientSlotAvailable[slotIndex];
     }
 
-    /// <summary>
-    /// 임시 빌드 전용: 환자를 즉시 완전 회복시키고 성공한 슬롯을 사용 완료 상태로 전환합니다.
-    /// 의료 의뢰 비용은 이 임시 흐름에서 0입니다.
-    /// </summary>
-    public bool TryUsePatientSlot(int slotIndex, string runtimeId)
+    /// <summary>지정 환자 슬롯이 해금·미사용·미배치 상태인지 반환합니다.</summary>
+    public bool IsPatientSlotOpen(int slotIndex)
     {
-        if (!IsPatientSlotAvailable(slotIndex)
-            || slotIndex >= PatientCapacity
-            || string.IsNullOrWhiteSpace(runtimeId)
-            || !TryGetCharacterManager(out CharacterManager manager)
-            || !manager.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData target)
-            || !CanAssignPatient(target))
+        return IsPatientSlotUnlocked(slotIndex)
+            && IsPatientSlotAvailable(slotIndex)
+            && FindPatientTreatmentIndexBySlot(slotIndex) < 0;
+    }
+
+    /// <summary>지정 캐릭터가 현재 치료 슬롯에 배치돼 있는지 반환합니다.</summary>
+    public bool IsPatientAssigned(string runtimeId)
+        => FindPatientTreatmentIndex(runtimeId) >= 0;
+
+    /// <summary>지정 슬롯에 배치된 환자를 반환합니다.</summary>
+    public bool TryGetPatientInSlot(
+        int slotIndex,
+        out ShelterMemberRuntimeData patient)
+    {
+        int treatmentIndex = FindPatientTreatmentIndexBySlot(slotIndex);
+        if (treatmentIndex < 0)
         {
+            patient = null;
             return false;
         }
 
-        if (!manager.TryCompleteRecovery(runtimeId, out _))
-            return false;
+        patient = patientTreatments[treatmentIndex].Patient;
+        return patient != null;
+    }
 
-        m_patientSlotAvailable[slotIndex] = false;
-        NotifyPatientSlotsChanged();
-        return true;
+    /// <summary>
+    /// 지정 슬롯에 환자를 치료 대기 상태로 배치합니다.
+    /// 실제 완치는 <see cref="TryHealAssignedPatients"/>에서 일괄 처리합니다.
+    /// </summary>
+    public bool TryUsePatientSlot(int slotIndex, string runtimeId)
+    {
+        return TryAssignPatientToSlot(slotIndex, runtimeId);
     }
 
     /// <summary>
@@ -361,20 +398,29 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     public bool TryAssignPatient(string runtimeId)
     {
         if (string.IsNullOrWhiteSpace(runtimeId)) return false;
-        //몇번째 슬롯에 있는지(슬롯에 없는 id면 -1 return)
-        if (FindPatientSlotIndex(runtimeId) >= 0) return true;
+        if (FindPatientTreatmentIndex(runtimeId) >= 0) return true;
 
-        //목록에 있는 숫자가 최대치 보다 높을경우 오류상태
-        if (patientTreatments.Count >= PatientCapacity) return false;
+        int slotIndex = FindFirstOpenPatientSlot();
+        return slotIndex >= 0
+            && TryAssignPatientToSlot(slotIndex, runtimeId);
+    }
 
-        if (!TryGetCharacterManager(out CharacterManager manager)) return false;
-
-        //셸터 데이터에서 NPC를 관리하는 CharacterManager로 부터 데이터를 가져오는 함수
-        if (!manager.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData target))
+    private bool TryAssignPatientToSlot(int slotIndex, string runtimeId)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeId))
             return false;
 
-        if (!CanAssignPatient(target))
+        int existingIndex = FindPatientTreatmentIndex(runtimeId);
+        if (existingIndex >= 0)
+            return patientTreatments[existingIndex].SlotIndex == slotIndex;
+
+        if (!IsPatientSlotOpen(slotIndex)
+            || !TryGetCharacterManager(out CharacterManager manager)
+            || !manager.TryGetCharacter(runtimeId, out ShelterMemberRuntimeData target)
+            || !CanAssignPatient(target))
+        {
             return false;
+        }
 
         if (!manager.TryAssignToFacility(
                 runtimeId,
@@ -388,9 +434,48 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
             return false;
         }
 
-        patientTreatments.Add(new MedicalTreatment(target, GetDailyRecovery()));
+        patientTreatments.Add(new MedicalTreatment(
+            slotIndex,
+            target,
+            GetDailyRecovery()));
         NotifyPatientSlotsChanged();
         return true;
+    }
+
+    /// <summary>
+    /// 현재 치료 슬롯에 배치된 모든 환자를 완치하고 성공한 슬롯을 사용 완료 상태로 전환합니다.
+    /// 일부 환자 처리에 실패하면 해당 환자와 슬롯은 배치 상태로 유지합니다.
+    /// </summary>
+    public bool TryHealAssignedPatients()
+    {
+        if (patientTreatments.Count == 0
+            || !TryGetCharacterManager(out CharacterManager manager))
+        {
+            return false;
+        }
+
+        bool healedAny = false;
+        for (int i = patientTreatments.Count - 1; i >= 0; i--)
+        {
+            MedicalTreatment treatment = patientTreatments[i];
+            ShelterMemberRuntimeData patient = treatment.Patient;
+            if (patient == null
+                || !IsPatientSlotAvailable(treatment.SlotIndex)
+                || !manager.TryCompleteRecovery(patient.RuntimeId, out _))
+            {
+                continue;
+            }
+
+            m_patientSlotAvailable[treatment.SlotIndex] = false;
+            patientTreatments.RemoveAt(i);
+            OnPatientHealed?.Invoke(patient);
+            healedAny = true;
+        }
+
+        if (healedAny)
+            NotifyPatientSlotsChanged();
+
+        return healedAny;
     }
 
     /// <summary>
@@ -400,17 +485,24 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     /// <returns>실제로 해제됐으면 <c>true</c></returns>
     public bool TryReleasePatient(string runtimeId)
     {
-        int slotIndex = FindPatientSlotIndex(runtimeId);
-        if (slotIndex < 0) return false;
+        int treatmentIndex = FindPatientTreatmentIndex(runtimeId);
+        if (treatmentIndex < 0) return false;
         if (!TryGetCharacterManager(out CharacterManager manager)) return false;
 
-        MedicalTreatment treatment = patientTreatments[slotIndex];
+        MedicalTreatment treatment = patientTreatments[treatmentIndex];
         if (!manager.TryReleaseFromFacility(treatment.Patient.RuntimeId, out _))
             return false;
 
-        patientTreatments.RemoveAt(slotIndex);
+        patientTreatments.RemoveAt(treatmentIndex);
         NotifyPatientSlotsChanged();
         return true;
+    }
+
+    /// <summary>지정 치료 슬롯에 배치된 환자를 취소하고 슬롯을 다시 비웁니다.</summary>
+    public bool TryReleasePatientAtSlot(int slotIndex)
+    {
+        return TryGetPatientInSlot(slotIndex, out ShelterMemberRuntimeData patient)
+            && TryReleasePatient(patient.RuntimeId);
     }
 
     /// <summary>
@@ -567,9 +659,9 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     }
     */
 
-    private void CompleteHealing(int slotIndex)
+    private void CompleteHealing(int treatmentIndex)
     {
-        MedicalTreatment treatment = patientTreatments[slotIndex];
+        MedicalTreatment treatment = patientTreatments[treatmentIndex];
         ShelterMemberRuntimeData patient = treatment.Patient;
 
         if (!TryGetCharacterManager(out CharacterManager manager))
@@ -578,7 +670,13 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         if (!manager.TryCompleteRecovery(patient.RuntimeId, out _))
             return;
 
-        patientTreatments.RemoveAt(slotIndex);
+        if (treatment.SlotIndex >= 0
+            && treatment.SlotIndex < m_patientSlotAvailable.Length)
+        {
+            m_patientSlotAvailable[treatment.SlotIndex] = false;
+        }
+
+        patientTreatments.RemoveAt(treatmentIndex);
         OnPatientHealed?.Invoke(patient);
     }
 
@@ -609,7 +707,19 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
             patientTreatments[i].Recalculate(daily);
     }
 
-    private int FindPatientSlotIndex(string runtimeId)
+    private int FindFirstOpenPatientSlot()
+    {
+        int count = Mathf.Min(PatientCapacity, m_patientSlotAvailable.Length);
+        for (int i = 0; i < count; i++)
+        {
+            if (IsPatientSlotOpen(i))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private int FindPatientTreatmentIndex(string runtimeId)
     {
         if (string.IsNullOrWhiteSpace(runtimeId))
             return -1;
@@ -619,6 +729,17 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         {
             MedicalTreatment treatment = patientTreatments[i];
             if (treatment.Patient != null && treatment.Patient.RuntimeId == normalizedRuntimeId)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private int FindPatientTreatmentIndexBySlot(int slotIndex)
+    {
+        for (int i = 0; i < patientTreatments.Count; i++)
+        {
+            if (patientTreatments[i].SlotIndex == slotIndex)
                 return i;
         }
 
@@ -646,13 +767,62 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         return characterManager;
     }
 
+    private void SubscribeToCharacterChanges()
+    {
+        CharacterManager manager = CacheCharacterManager();
+        if (manager != null)
+            manager.CharactersChanged += HandleCharactersChanged;
+    }
+
+    private void UnsubscribeFromCharacterChanges()
+    {
+        if (characterManager != null)
+            characterManager.CharactersChanged -= HandleCharactersChanged;
+    }
+
+    private void HandleCharactersChanged()
+    {
+        ApplyLevel4MaxHpBonus(CurrentLevel);
+    }
+
+    private void ApplyLevel4MaxHpBonus(int level)
+    {
+        if (m_isApplyingLevel4MaxHpBonus
+            || !TryGetCharacterManager(out CharacterManager manager))
+        {
+            return;
+        }
+
+        int bonus = level >= MaxLevelIndex ? level4MaxHpBonus : 0;
+        m_isApplyingLevel4MaxHpBonus = true;
+        try
+        {
+            IReadOnlyList<ShelterMemberRuntimeData> characters = manager.Characters;
+            for (int i = 0; i < characters.Count; i++)
+            {
+                ShelterMemberRuntimeData character = characters[i];
+                if (character != null)
+                {
+                    manager.TrySetMedicalFacilityMaxHpBonus(
+                        character.RuntimeId,
+                        bonus,
+                        out _);
+                }
+            }
+        }
+        finally
+        {
+            m_isApplyingLevel4MaxHpBonus = false;
+        }
+    }
+
     // 레벨별 효과는 시설 특수 정보이므로 코드에 하드코딩(절대값). 확장 = case 추가 + MaxLevelIndex.
     private static int PatientSlotsForLevel(int level) => level switch
     {
         0 => 1,
         1 => 2,
         2 => 3,
-        3 => 4,
+        3 => 3,
         _ => 1
     };
 
@@ -699,7 +869,11 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         for (int i = 0; i < patientTreatments.Count; i++)
         {
             MedicalTreatment treatment = patientTreatments[i];
-            patientStatuses.Add(new PatientStatus(treatment.Patient, treatment.RemainingDays, treatment.TotalDays));
+            patientStatuses.Add(new PatientStatus(
+                treatment.SlotIndex,
+                treatment.Patient,
+                treatment.RemainingDays,
+                treatment.TotalDays));
         }
     }
 
@@ -719,6 +893,7 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
 
     private sealed class MedicalTreatment
     {
+        public int SlotIndex { get; }
         public ShelterMemberRuntimeData Patient { get; }
         public int RemainingDays { get; private set; }
         public int TotalDays { get; private set; }
@@ -727,8 +902,12 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         private float dailyRecovery;
         private float nextRecoveryAmount;
 
-        public MedicalTreatment(ShelterMemberRuntimeData patient, float dailyRecovery)
+        public MedicalTreatment(
+            int slotIndex,
+            ShelterMemberRuntimeData patient,
+            float dailyRecovery)
         {
+            SlotIndex = slotIndex;
             Patient = patient;
             maxGauge = patient.MaxInjuryGauge;
             Recalculate(dailyRecovery);
@@ -764,12 +943,20 @@ public readonly struct PatientStatus
     /// <param name="patient">표시할 환자 NPC</param>
     /// <param name="remainingDays">남은 치료 일수</param>
     /// <param name="totalDays">총 치료 일수</param>
-    public PatientStatus(ShelterMemberRuntimeData patient, int remainingDays, int totalDays)
+    public PatientStatus(
+        int slotIndex,
+        ShelterMemberRuntimeData patient,
+        int remainingDays,
+        int totalDays)
     {
+        SlotIndex = slotIndex;
         Patient = patient;
         RemainingDays = remainingDays;
         TotalDays = totalDays;
     }
+
+    /// <summary>환자가 배치된 치료 슬롯 인덱스입니다.</summary>
+    public int SlotIndex { get; }
 
     /// <summary>표시 대상 환자 NPC</summary>
     public ShelterMemberRuntimeData Patient { get; }

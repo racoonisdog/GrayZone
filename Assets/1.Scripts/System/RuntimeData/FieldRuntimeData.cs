@@ -434,6 +434,7 @@ public sealed class CharacterSnapshotData
     [Range(0, 100)][SerializeField] private int reliability;
     [Min(0)][SerializeField] private int currentHp;
     [Min(1)][SerializeField] private int maxHp = 1;
+    [Min(0)][SerializeField] private int medicalFacilityMaxHpBonus;
     [Min(0.0f)][SerializeField] private float injurySeverityGauge;
     [Min(1.0f)][SerializeField] private float maxInjuryGauge = 100.0f;
     [SerializeField] private CharacterInjuryState injuryState;
@@ -466,6 +467,9 @@ public sealed class CharacterSnapshotData
 
     /// <summary>업그레이드가 반영된 최대 HP입니다.</summary>
     public int MaxHp => Mathf.Max(1, maxHp);
+
+    /// <summary>현재 최대 HP에 포함된 의료시설 4레벨 보너스입니다.</summary>
+    public int MedicalFacilityMaxHpBonus => Mathf.Max(0, medicalFacilityMaxHpBonus);
 
     /// <summary>0이 정상이고 최대값이 가장 심한 부상인 누적 부상 게이지입니다.</summary>
     public float InjurySeverityGauge => Mathf.Clamp(injurySeverityGauge, 0.0f, MaxInjuryGauge);
@@ -502,7 +506,7 @@ public sealed class CharacterSnapshotData
         string displayName, int reliability, int currentHp, int maxHp,
         float injurySeverityGauge, float maxInjuryGauge, CharacterInjuryState injuryState,
         bool isDown, bool isCombatOut, bool isPlayerSquadMember, int killCount,
-        WeaponSnapshotData weapon)
+        WeaponSnapshotData weapon, int medicalFacilityMaxHpBonus = 0)
     {
         this.definitionId = definitionId?.Trim() ?? string.Empty;
         this.runtimeId = runtimeId?.Trim() ?? string.Empty;
@@ -511,6 +515,10 @@ public sealed class CharacterSnapshotData
         this.displayName = displayName?.Trim() ?? string.Empty;
         this.reliability = Mathf.Clamp(reliability, 0, 100);
         this.maxHp = Mathf.Max(1, maxHp);
+        this.medicalFacilityMaxHpBonus = Mathf.Clamp(
+            medicalFacilityMaxHpBonus,
+            0,
+            this.maxHp - 1);
         this.currentHp = Mathf.Clamp(currentHp, 0, this.maxHp);
         this.maxInjuryGauge = Mathf.Max(1.0f, maxInjuryGauge);
         this.injurySeverityGauge = Mathf.Clamp(injurySeverityGauge, 0.0f, this.maxInjuryGauge);
@@ -528,7 +536,8 @@ public sealed class CharacterSnapshotData
         return new CharacterSnapshotData(
             DefinitionId, RuntimeId, CharacterId, NpcType, DisplayName, Reliability,
             CurrentHp, MaxHp, InjurySeverityGauge, MaxInjuryGauge, InjuryState,
-            IsDown, IsCombatOut, IsPlayerSquadMember, KillCount, weapon);
+            IsDown, IsCombatOut, IsPlayerSquadMember, KillCount, weapon,
+            MedicalFacilityMaxHpBonus);
     }
 
     /// <summary>보유 캐릭터 목록에서 유지할 영속 캐릭터 식별 정보를 설정합니다.</summary>
@@ -595,6 +604,7 @@ public sealed class FieldMemberEntryData
     [Range(0, 100)][SerializeField] private int reliability;
     [Min(0)][SerializeField] private int currentHp;
     [Min(1)][SerializeField] private int maxHp = 1;
+    [Min(0)][SerializeField] private int medicalFacilityMaxHpBonus;
     [Min(0.0f)][SerializeField] private float injuryGauge;
     [Min(1.0f)][SerializeField] private float maxInjuryGauge = 100.0f;
     [SerializeField] private CharacterInjuryState injuryState;
@@ -631,6 +641,9 @@ public sealed class FieldMemberEntryData
 
     /// <summary>필드 입장 시점의 최대 HP입니다.</summary>
     public int MaxHp => Mathf.Max(1, maxHp);
+
+    /// <summary>필드 입장 시점 최대 HP에 포함된 의료시설 4레벨 보너스입니다.</summary>
+    public int MedicalFacilityMaxHpBonus => Mathf.Max(0, medicalFacilityMaxHpBonus);
 
     /// <summary>필드 기준으로 환산된 누적 부상 게이지입니다.</summary>
     public float InjuryGauge => Mathf.Clamp(injuryGauge, 0.0f, MaxInjuryGauge);
@@ -682,7 +695,8 @@ public sealed class FieldMemberEntryData
         IsCombatOut,
         IsPlayerSquadMember,
         KillCount,
-        weaponSnapshot);
+        weaponSnapshot,
+        MedicalFacilityMaxHpBonus);
 
     /// <summary>스쿼드원 한 명의 필드 입장 값을 생성합니다.</summary>
     public FieldMemberEntryData(
@@ -748,6 +762,7 @@ public sealed class FieldMemberEntryData
         displayName = source.DisplayName;
         reliability = source.Reliability;
         maxHp = source.MaxHp;
+        medicalFacilityMaxHpBonus = source.MedicalFacilityMaxHpBonus;
         currentHp = source.CurrentHp;
         maxInjuryGauge = source.MaxInjuryGauge;
         injuryGauge = source.InjurySeverityGauge;

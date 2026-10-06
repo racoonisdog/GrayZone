@@ -477,6 +477,8 @@ public class UIManager : MonoBehaviour
         FindFirstObjectByType<CharacterCandidateListPanel>(FindObjectsInactive.Include)?.Dismiss();
         SetInteractionUIActive(false);
         m_facilityUpgradeUI.Open(facilityId);
+        if (m_returnUIAfterFacilityUpgrade == ShelterUIType.Manufacturing)
+            m_manufacturingUI?.SetMenuVisible(false);
         SetActiveUI(ShelterUIType.FacilityUpgrade);
 
         if (m_logMessages)
@@ -595,6 +597,9 @@ public class UIManager : MonoBehaviour
         {
             returnUI = ShelterUIType.None;
         }
+
+        if (returnUI == ShelterUIType.Manufacturing)
+            m_manufacturingUI.SetMenuVisible(true);
 
         SetActiveUI(returnUI);
     }

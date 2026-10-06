@@ -48,6 +48,7 @@ public class PlayerMove : MonoBehaviour
     private Vector3 currentMoveDirection;
     private Vector3 horizontalVelocity;
     private bool jumpedThisFrame;
+    private bool jumpAnimationActive;
 
 #if ENABLE_INPUT_SYSTEM
     private Vector2 playerInputMove;
@@ -145,6 +146,7 @@ public class PlayerMove : MonoBehaviour
         currentMoveDirection = Vector3.zero;
         horizontalVelocity = Vector3.zero;
         animationBlend = 0f;
+        jumpAnimationActive = false;
         UpdateAnimator();
     }
 #endif
@@ -378,13 +380,20 @@ public class PlayerMove : MonoBehaviour
         if (animationBlend < 0.01f)
             animationBlend = 0f;
 
-        float motionSpeed = Mathf.Clamp01(targetSpeed / moveSpeed);
+        // MotionSpeed는 Idle Walk Run Blend 상태의 재생 배율이므로 0이 되면 상태와 전환이 멈춘다
+        float motionSpeed = HasMoveInput ? Mathf.Clamp01(MoveInput.magnitude) : 1f;
         bool isGrounded = IsGrounded;
+
+        // Jump는 점프 시점부터 착지할 때까지 유지해 Animator가 전환 신호를 놓치지 않게 한다
+        if (jumpedThisFrame)
+            jumpAnimationActive = true;
+        else if (isGrounded)
+            jumpAnimationActive = false;
 
         modelAnimator.SetFloat(speedAnimationId, animationBlend);
         modelAnimator.SetFloat(motionSpeedAnimationId, motionSpeed);
         modelAnimator.SetBool(groundedAnimationId, isGrounded);
-        modelAnimator.SetBool(jumpAnimationId, jumpedThisFrame);
+        modelAnimator.SetBool(jumpAnimationId, jumpAnimationActive);
         modelAnimator.SetBool(freeFallAnimationId, !isGrounded && verticalVelocity < groundedStickVelocity);
     }
 }

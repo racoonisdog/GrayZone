@@ -51,6 +51,8 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
     [SerializeField] private bool m_visibleOnStart;
 
     private bool m_visibleRequested;
+    private Image m_onscreenMarkerImage;
+    private Sprite m_defaultOnscreenMarkerSprite;
 
     private void Reset()
     {
@@ -94,6 +96,32 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
     {
         m_visibleRequested = visible;
         UpdateIndicator();
+    }
+
+    /// <summary>화면 안 마커 스프라이트를 변경합니다. null이면 씬에 설정된 기본 스프라이트로 되돌립니다.</summary>
+    public void SetOnscreenMarkerSprite(Sprite sprite)
+    {
+        Image markerImage = ResolveOnscreenMarkerImage();
+        if (markerImage == null)
+        {
+            return;
+        }
+
+        markerImage.sprite = sprite != null ? sprite : m_defaultOnscreenMarkerSprite;
+    }
+
+    private Image ResolveOnscreenMarkerImage()
+    {
+        if (m_onscreenMarkerImage == null && m_onscreenMarker != null)
+        {
+            m_onscreenMarkerImage = m_onscreenMarker.GetComponent<Image>();
+            if (m_onscreenMarkerImage != null)
+            {
+                m_defaultOnscreenMarkerSprite = m_onscreenMarkerImage.sprite;
+            }
+        }
+
+        return m_onscreenMarkerImage;
     }
 
     private void UpdateIndicator()

@@ -4,11 +4,11 @@ using UnityEngine;
 /// <summary>GameDataManager가 생성한 저장 패킷을 JSON 파일로 기록하고 다시 불러오는 저장 입출력 매니저입니다.</summary>
 public class GameSaveManager : MonoBehaviour
 {
+    private const string AutoProfileId = "autosave";
+
     public static GameSaveManager Instance { get; private set; }
 
     [Header("Save Settings")]
-    [Tooltip("프로필 ID가 지정되지 않았을 때 사용할 기본 저장 프로필 ID입니다.")]
-    [SerializeField] private string defaultProfileId = SaveFilePaths.DefaultProfileId;
     [Tooltip("JSON 저장 파일을 사람이 읽기 쉬운 들여쓰기 형식으로 기록할지 여부입니다.")]
     [SerializeField] private bool prettyPrint = true;
 
@@ -30,24 +30,41 @@ public class GameSaveManager : MonoBehaviour
         }
     }
 
-    /// <summary>기본 프로필의 게임 데이터와 사용자 설정을 함께 저장합니다.</summary>
+    /// <summary>현재 전역 정본을 게임오버 복구용 Auto 슬롯에 저장합니다.</summary>
+    public bool SaveAutoGame()
+    {
+        return SaveGameData(AutoProfileId);
+    }
+
+    /// <summary>게임오버 복구용 Auto 슬롯을 전역 정본에 적용합니다.</summary>
+    public bool LoadAutoGame()
+    {
+        return LoadGameData(AutoProfileId);
+    }
+
+    /// <summary>게임오버 복구용 Auto 슬롯 파일이 존재하는지 확인합니다.</summary>
+    public bool HasAutoSave()
+    {
+        return File.Exists(SaveFilePaths.GetGameSavePath(AutoProfileId));
+    }
+
+    /* 기존 수동 저장 진입점은 현재 사용처가 없어 비활성화합니다.
     public bool SaveGame()
     {
-        bool gameSaved = SaveGameData(defaultProfileId);
+        bool gameSaved = SaveGameData(SaveFilePaths.DefaultProfileId);
         bool settingSaved = SaveSettingData();
         return gameSaved && settingSaved;
     }
 
-    /// <summary>기본 프로필의 게임 데이터와 사용자 설정을 함께 불러옵니다.</summary>
     public bool LoadGame()
     {
-        bool gameLoaded = LoadGameData(defaultProfileId);
+        bool gameLoaded = LoadGameData(SaveFilePaths.DefaultProfileId);
         bool settingLoaded = LoadSettingData();
         return gameLoaded && settingLoaded;
     }
+    */
 
-    /// <summary>지정한 프로필의 전역 정본을 독립된 저장 패킷으로 만들어 JSON 파일에 기록합니다.</summary>
-    public bool SaveGameData(string profileId)
+    private bool SaveGameData(string profileId)
     {
         if (GameDataManager.Instance == null)
         {
@@ -55,7 +72,6 @@ public class GameSaveManager : MonoBehaviour
             return false;
         }
 
-        string resolvedProfileId = ResolveProfileId(profileId);
         if (GameDataManager.Instance.HasActiveShelterSceneDataManager
             && !GameDataManager.Instance.SyncFromShelter())
         {
@@ -63,14 +79,13 @@ public class GameSaveManager : MonoBehaviour
             return false;
         }
 
-        SaveData saveData = GameDataManager.Instance.CreateSaveData(resolvedProfileId);
+        SaveData saveData = GameDataManager.Instance.CreateSaveData();
         saveData.schemaVersion = SaveData.CurrentSchemaVersion;
-        string path = GetGameSavePath(resolvedProfileId);
+        string path = GetGameSavePath(profileId);
         return TryWriteJsonFile(path, saveData, "game save");
     }
 
-    /// <summary>지정한 프로필의 JSON 저장 파일을 읽어 GameDataManager의 평탄 정본에 적용합니다.</summary>
-    public bool LoadGameData(string profileId)
+    private bool LoadGameData(string profileId)
     {
         if (GameDataManager.Instance == null)
         {
@@ -78,7 +93,7 @@ public class GameSaveManager : MonoBehaviour
             return false;
         }
 
-        string path = GetGameSavePath(ResolveProfileId(profileId));
+        string path = GetGameSavePath(profileId);
         if (!TryReadJsonFile(path, out SaveData saveData, "game save"))
         {
             return false;
@@ -102,7 +117,7 @@ public class GameSaveManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>현재 사용자 설정을 별도 JSON 파일에 저장합니다.</summary>
+    /* 사용자 설정 저장/로드는 GameSettingManager가 직접 담당하므로 비활성화합니다.
     public bool SaveSettingData()
     {
         if (GameSettingManager.Instance == null)
@@ -111,12 +126,9 @@ public class GameSaveManager : MonoBehaviour
             return false;
         }
 
-        // 사용자 설정 파일의 스키마·마이그레이션·입출력은 GameSettingManager가 단독 소유합니다.
-        // GameSaveManager는 전체 저장 흐름에서 호출만 묶고, GameData와 SettingData를 섞지 않습니다.
         return GameSettingManager.Instance.SaveSettings();
     }
 
-    /// <summary>사용자 설정 JSON 파일을 읽어 GameSettingManager에 적용합니다.</summary>
     public bool LoadSettingData()
     {
         if (GameSettingManager.Instance == null)
@@ -127,6 +139,7 @@ public class GameSaveManager : MonoBehaviour
 
         return GameSettingManager.Instance.LoadSettings();
     }
+    */
 
     /// <summary>지정한 프로필의 게임 저장 파일 절대 경로를 반환합니다.</summary>
     public string GetGameSavePath(string profileId)
@@ -135,12 +148,13 @@ public class GameSaveManager : MonoBehaviour
         return SaveFilePaths.GetGameSavePath(profileId);
     }
 
-    /// <summary>사용자 설정 저장 파일 절대 경로를 반환합니다.</summary>
+    /* 사용자 설정 경로는 GameSettingManager가 직접 사용하므로 비활성화합니다.
     public string GetSettingPath()
     {
         SaveFilePaths.EnsureSaveDirectory();
         return SaveFilePaths.GetSettingPath();
     }
+    */
 
     private bool TryWriteJsonFile<T>(string path, T data, string label)
     {
@@ -190,11 +204,6 @@ public class GameSaveManager : MonoBehaviour
             Debug.LogError($"[GameSaveManager] Failed to read {label}. Path: {path}. Error: {ex.Message}");
             return false;
         }
-    }
-
-    private string ResolveProfileId(string profileId)
-    {
-        return string.IsNullOrWhiteSpace(profileId) ? defaultProfileId : profileId;
     }
 
     private bool TryRejectDuplicate()

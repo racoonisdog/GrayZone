@@ -17,6 +17,7 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
     [SerializeField] private ItemListTooltipPresenter m_tooltipPresenter;
 
     private readonly List<CachedRecipeRow> m_rows = new();
+    private string m_selectedRecipeId = string.Empty;
     private readonly HashSet<int> m_invalidRecipeIndicesLogged = new();
     private bool m_isPrewarmed;
     private bool m_isSubscribed;
@@ -161,7 +162,27 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
                 HandleRowClicked);
         }
 
+        ApplySelection();
         return true;
+    }
+
+    /// <summary>CreateView의 현재 선택 레시피를 행의 선택 표시에 반영합니다.</summary>
+    public void SetSelectedRecipe(string recipeId)
+    {
+        m_selectedRecipeId = recipeId ?? string.Empty;
+        ApplySelection();
+    }
+
+    private void ApplySelection()
+    {
+        for (int i = 0; i < m_rows.Count; i++)
+        {
+            CachedRecipeRow cached = m_rows[i];
+            cached.Row?.SetSelected(string.Equals(
+                cached.Recipe.RecipeId,
+                m_selectedRecipeId,
+                StringComparison.Ordinal));
+        }
     }
 
     public bool TryGetRow(
