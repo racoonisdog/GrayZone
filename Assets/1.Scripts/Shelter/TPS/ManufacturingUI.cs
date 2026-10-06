@@ -1,6 +1,7 @@
 ﻿using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 제조 시설 UI를 열고 제조 슬롯, 레시피 선택, 헬퍼 UI를 매니저 상태로 투영합니다.
@@ -11,12 +12,26 @@ public sealed class ManufacturingUI : MonoBehaviour
     [SerializeField] private GameObject m_root;
     [SerializeField] private bool m_hideOnAwake = true;
 
+    [Header("Menu")]
+    [SerializeField] private GameObject m_menuRoot;
+    [SerializeField] private Button m_createButton;
+    [SerializeField] private Button m_upgradeButton;
+    [SerializeField] private FacilityUpgradeButton m_upgradeAction;
+
+    [Header("Upgrade View")]
+    [Tooltip("Menu의 업그레이드 버튼을 누르면 나타나는 Upgrade 오브젝트입니다.")]
+    [SerializeField] private GameObject m_upgradeRoot;
+
     [Header("Create View")]
     [SerializeField] private ManufacturingCreateView m_createView;
     [SerializeField] private TMP_Text m_noticeText;
 
     private ManufacturingManager m_currentManager;
+    private Button m_boundCreateButton;
+    private Button m_boundUpgradeButton;
     private ManufacturingCreateView m_boundCreateView;
+    private bool m_isClosing;
+    private bool m_isUpgradeViewOpen;
     private bool m_isOpening;
     private bool m_isOpen;
 
@@ -43,11 +58,15 @@ public sealed class ManufacturingUI : MonoBehaviour
     private void OnEnable()
     {
         CacheChildViews();
+        BindCreateButton();
+        BindUpgradeButton();
         BindCreateView();
     }
 
     private void OnDisable()
     {
+        UnbindCreateButton();
+        UnbindUpgradeButton();
         UnbindCreateView();
         UnbindManager();
         if (!m_isOpening)
@@ -56,12 +75,14 @@ public sealed class ManufacturingUI : MonoBehaviour
 
     private void OnDestroy()
     {
+        UnbindCreateButton();
+        UnbindUpgradeButton();
         UnbindCreateView();
     }
 
     /// <summary>
     /// 현재 제조 UI의 최상위 Escape 동작을 처리합니다.
-    /// CreateView가 열려 있으면 그것만 닫고, 아니면 제조 UI 전체를 닫습니다.
+    /// CreateView나 Upgrade 화면이 열려 있으면 그것만 닫고, 아니면 제조 UI 전체를 닫습니다.
     /// </summary>
     public bool TryHandleEscape()
     {
@@ -70,6 +91,13 @@ public sealed class ManufacturingUI : MonoBehaviour
 
         if (m_createView != null && m_createView.TryHandleEscape())
             return true;
+
+        if (m_isUpgradeViewOpen)
+        {
+            SetUpgradeViewOpen(false);
+            SetMenuActive(true);
+            return true;
+        }
 
         Close();
         return true;
@@ -88,9 +116,19 @@ public sealed class ManufacturingUI : MonoBehaviour
         m_isOpening = false;
 
         CacheChildViews();
+        BindCreateButton();
+        BindUpgradeButton();
         BindCreateView();
         ClearNotice();
-        if (m_createView == null || !m_createView.Open(0))
+        SetUpgradeViewOpen(false);
+        if (m_menuRoot != null)
+        {
+            m_isClosing = true;
+            CloseCreateView();
+            m_isClosing = false;
+            SetMenuActive(true);
+        }
+        else if (m_createView == null || !m_createView.Open(0))
         {
             SetNotice("제작 화면을 열 수 없습니다.");
             Close();
@@ -99,7 +137,13 @@ public sealed class ManufacturingUI : MonoBehaviour
 
     public void Close()
     {
+        m_isClosing = true;
         CloseCreateView();
+        m_isClosing = false;
+        SetUpgradeViewOpen(false);
+        SetMenuActive(true);
+        UnbindCreateButton();
+        UnbindUpgradeButton();
         UnbindCreateView();
         UnbindManager();
         SetRootActive(false);
@@ -111,6 +155,26 @@ public sealed class ManufacturingUI : MonoBehaviour
         CacheChildViews();
         if (m_createView != null && m_createView.IsOpen)
             m_createView.Refresh();
+    }
+
+    /// <summary>
+    /// 공용 시설 업그레이드 UI가 열리고 닫힐 때 호출됩니다.
+    /// 업그레이드 UI가 열려 있는 동안 Menu는 숨기고 Upgrade 버튼은 유지하며,
+    /// 닫히면 Upgrade 버튼을 숨기고 Menu로 돌아갑니다.
+    /// </summary>
+    public void SetMenuVisible(bool visible)
+    {
+        if (!m_isOpen)
+            return;
+
+        if (!visible)
+        {
+            SetMenuActive(false);
+            return;
+        }
+
+        SetUpgradeViewOpen(false);
+        SetMenuActive(true);
     }
 
     private void HandleCreateRequested(ManufacturingCreateRequest request)
@@ -177,7 +241,93 @@ public sealed class ManufacturingUI : MonoBehaviour
 
     private void HandleCreateViewClosed()
     {
-        Close();
+        if (m_isClosing || !m_isOpen)
+            return;
+
+        if (m_menuRoot != null)
+            SetMenuActive(true);
+        else
+            Close();
+    }
+
+    private void HandleCreateButtonClicked()
+    {
+        if (!m_isOpen)
+            return;
+
+        ClearNotice();
+        SetMenuActive(false);
+        if (m_createView != null && m_createView.Open(0))
+            return;
+
+        SetMenuActive(true);
+        SetNotice("제작 화면을 열 수 없습니다.");
+    }
+
+    private void HandleUpgradeButtonClicked()
+    {
+        if (!m_isOpen)
+            return;
+
+        // 공용 업그레이드 UI와 함께 Upgrade 버튼을 보여줍니다.
+        // 업그레이드 UI가 닫히면 SetMenuVisible(true)에서 다시 Menu로 돌아갑니다.
+        ClearNotice();
+        SetUpgradeViewOpen(true);
+
+        if (m_upgradeAction != null)
+        {
+            m_upgradeAction.OpenUpgradeUI();
+            return;
+        }
+
+        if (m_currentManager == null)
+            return;
+
+        UIManager uiManager = FindFirstObjectByType<UIManager>();
+        if (uiManager != null)
+            uiManager.OpenFacilityUpgradeUI(m_currentManager.FacilityId);
+        else
+            Debug.LogWarning("[ManufacturingUI] UIManager is not assigned.", this);
+    }
+
+    private void BindCreateButton()
+    {
+        if (m_boundCreateButton == m_createButton)
+            return;
+
+        UnbindCreateButton();
+        m_boundCreateButton = m_createButton;
+        if (m_boundCreateButton != null)
+            m_boundCreateButton.onClick.AddListener(HandleCreateButtonClicked);
+    }
+
+    private void UnbindCreateButton()
+    {
+        if (m_boundCreateButton == null)
+            return;
+
+        m_boundCreateButton.onClick.RemoveListener(HandleCreateButtonClicked);
+        m_boundCreateButton = null;
+    }
+
+    private void BindUpgradeButton()
+    {
+        if (m_boundUpgradeButton == m_upgradeButton)
+            return;
+
+        UnbindUpgradeButton();
+        m_boundUpgradeButton = m_upgradeButton;
+        if (m_boundUpgradeButton != null)
+            m_boundUpgradeButton.onClick.AddListener(HandleUpgradeButtonClicked);
+    }
+
+    private void UnbindUpgradeButton()
+    {
+        if (m_boundUpgradeButton == null)
+            return;
+
+        m_boundUpgradeButton.onClick.RemoveListener(HandleUpgradeButtonClicked);
+        m_boundUpgradeButton = null;
     }
 
     private void BindCreateView()
@@ -212,6 +362,21 @@ public sealed class ManufacturingUI : MonoBehaviour
 
     private void CacheChildViews()
     {
+        if (m_menuRoot == null)
+            m_menuRoot = transform.Find("Menu")?.gameObject;
+
+        if (m_createButton == null && m_menuRoot != null)
+            m_createButton = m_menuRoot.transform.Find("CreateButton")?.GetComponent<Button>();
+
+        if (m_upgradeButton == null && m_menuRoot != null)
+            m_upgradeButton = m_menuRoot.transform.Find("UpgradeButton")?.GetComponent<Button>();
+
+        if (m_upgradeRoot == null)
+            m_upgradeRoot = transform.Find("Upgrade")?.gameObject;
+
+        if (m_upgradeAction == null)
+            m_upgradeAction = GetComponentInChildren<FacilityUpgradeButton>(true);
+
         if (m_createView == null)
             m_createView = GetComponentInChildren<ManufacturingCreateView>(true);
     }
@@ -269,6 +434,24 @@ public sealed class ManufacturingUI : MonoBehaviour
     {
         if (m_root != null && m_root.activeSelf != active)
             m_root.SetActive(active);
+    }
+
+    private void SetMenuActive(bool active)
+    {
+        if (m_menuRoot != null && m_menuRoot.activeSelf != active)
+            m_menuRoot.SetActive(active);
+    }
+
+    private void SetUpgradeViewOpen(bool open)
+    {
+        m_isUpgradeViewOpen = open && m_upgradeRoot != null;
+        SetUpgradeRootActive(m_isUpgradeViewOpen);
+    }
+
+    private void SetUpgradeRootActive(bool active)
+    {
+        if (m_upgradeRoot != null && m_upgradeRoot.activeSelf != active)
+            m_upgradeRoot.SetActive(active);
     }
 
     private void SetOpenState(bool isOpen)
