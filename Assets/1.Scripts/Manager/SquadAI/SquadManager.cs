@@ -128,6 +128,9 @@ public class SquadManager : MonoBehaviour
     [Tooltip("AI 팀원 2(조작 중이 아닌 멤버 중 목록 순서상 둘째)에게 명령하는 키입니다. 짧게 누르면 조준점으로 이동해 사수하고, 길게 누르면 명령을 취소합니다.")]
     [SerializeField] private Key m_orderMember2Key = Key.E;
 
+    [Tooltip("AI 팀원 전원의 이동·사수 명령을 한 번에 취소해 부르는 키입니다. Q/E를 길게 누른 것과 같은 효과를 남은 팀원 모두에게 바로 줍니다.")]
+    [SerializeField] private Key m_recallAllKey = Key.CapsLock;
+
     [Tooltip("명령 키를 이 시간(초) 이상 누르고 있으면 이동·사수 명령을 취소합니다. 이보다 짧게 누르고 떼면 이동 명령입니다.")]
     [Min(0.1f)]
     [SerializeField] private float m_orderCancelHoldDuration = 0.5f;
@@ -491,6 +494,40 @@ public class SquadManager : MonoBehaviour
         bool inputAllowed = IsOrderInputAllowed(allowInThrowMode: true);
         UpdateOrderKey(keyboard, m_orderMember1Key, 0, inputAllowed, ref m_orderMember1State);
         UpdateOrderKey(keyboard, m_orderMember2Key, 1, inputAllowed, ref m_orderMember2State);
+
+        if (inputAllowed && m_recallAllKey != Key.None && keyboard[m_recallAllKey].wasPressedThisFrame)
+        {
+            RecallAllAiMembers();
+        }
+    }
+
+    /// <summary>
+    /// 이동·사수 명령을 받은 AI 팀원 전원을 한 번에 불러들입니다. Q/E를 각각 길게 누른 것과 같습니다.
+    /// </summary>
+    /// <remarks>
+    /// 명령이 없던 팀원은 건드리지 않고 복귀 이펙트도 띄우지 않습니다. 진행 중이던 Q/E 누름도 버려,
+    /// 부른 직후 손을 떼는 Q/E가 새 이동 명령으로 처리되지 않게 합니다.
+    /// </remarks>
+    public void RecallAllAiMembers()
+    {
+        m_orderMember1State = default;
+        m_orderMember2State = default;
+
+        for (int order = 0; ; order++)
+        {
+            SquadMemberController member = ResolveAiMemberByOrder(order);
+            if (member == null)
+            {
+                break;
+            }
+
+            SquadAIController ai = ResolveOrderableAi(member);
+            if (ai != null && ai.HasMoveOrder)
+            {
+                ai.CancelMoveOrder();
+                PlayRecallFeedback(order, member);
+            }
+        }
     }
 
     /// <summary>명령 키 하나의 누름·유지·뗌을 처리합니다.</summary>
