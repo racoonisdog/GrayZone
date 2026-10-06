@@ -31,8 +31,11 @@ public sealed class SeoHaTeamHealSkill : CharacterSkill
 
     public override CharacterSkillType SkillType => CharacterSkillType.SeoHaTeamHeal;
     public override string DisplayName => "응급 치료";
-    public override string Description => "일반 대원은 즉시 회복하고 다운된 동료는 원격으로 구조 게이지를 채웁니다.";
+    public override string Description => "전체 팀원을 회복 또는 구조합니다.";
     public override bool IsActive => m_remoteRescueRoutine != null;
+    public override string HudDetailText => IsActive
+        ? $"원격 구조 중 {ActiveRemaining:0.0}초"
+        : $"회복량 {m_healPercent:0}% (구조 시 회복량 {m_skillReviveHp})";
     public override float ActiveDuration
     {
         get

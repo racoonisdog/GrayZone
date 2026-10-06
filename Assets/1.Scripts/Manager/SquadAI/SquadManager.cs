@@ -243,6 +243,9 @@ public class SquadManager : MonoBehaviour
     /// <summary>현재 PlayerSquadMember에 대응하는 플레이어 공개 데이터입니다.</summary>
     public PlayerbleUnitData PlayerSquadMemberData => GetPlayerData(m_playerSquadMemberIndex);
 
+    /// <summary>현재 조작 캐릭터의 스킬을 발동하는 키입니다. HUD 표시에 씁니다.</summary>
+    public Key SkillKey => m_skillKey;
+
     /// <summary>현재 조작 중인 캐릭터가 보유한 스킬입니다.</summary>
     public CharacterSkill PlayerSquadMemberSkill => GetSkill(m_playerSquadMemberIndex);
 
@@ -332,10 +335,6 @@ public class SquadManager : MonoBehaviour
         }
 
         s_instance = this;
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        SkillStatusDebugHud.EnsureAttached(this);
-#endif
 
         AutoFindReferences();
         NormalizeMemberIndex();

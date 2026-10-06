@@ -48,6 +48,9 @@ public abstract class CharacterSkill : MonoBehaviour
     /// <summary>지속 효과의 남은 시간입니다.</summary>
     public virtual float ActiveRemaining => 0.0f;
 
+    /// <summary>스킬 HUD의 쿨타임 아래 줄에 표시할 상태 문구입니다. 표시할 내용이 없으면 null입니다.</summary>
+    public virtual string HudDetailText => null;
+
     /// <summary>활성·종료 등 큰 상태가 변경될 때 발생합니다. 매 프레임 남은 시간은 속성으로 조회합니다.</summary>
     public event Action<CharacterSkill> OnStateChanged;
 

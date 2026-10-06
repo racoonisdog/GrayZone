@@ -21,9 +21,16 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     private int m_specialRoundsRemaining;
 
     public override CharacterSkillType SkillType => CharacterSkillType.ChungSolDragonBreath;
-    public override string DisplayName => "용숨결탄";
-    public override string Description => "재장전 모션 후 Shotgun 탄창 전체를 전방 범위 피해 특수탄으로 채웁니다.";
+    public override string DisplayName => "화염 탄환";
+    public override string Description => "강력한 화염 탄환을 장전합니다.";
     public override bool IsActive => m_isLoadingSpecialAmmo || m_specialRoundsRemaining > 0;
+
+    /// <summary>장전 중이거나 특수탄이 남아 있을 때만 상태를 보여줍니다. 평소에는 Figma처럼 쿨타임 한 줄만 둡니다.</summary>
+    public override string HudDetailText => m_isLoadingSpecialAmmo
+        ? "특수탄 장전 중"
+        : m_specialRoundsRemaining > 0
+            ? $"화염 탄환 {m_specialRoundsRemaining} / {SpecialRoundsCapacity}"
+            : null;
 
     public bool IsLoadingSpecialAmmo => m_isLoadingSpecialAmmo;
     public int SpecialRoundsRemaining => m_specialRoundsRemaining;

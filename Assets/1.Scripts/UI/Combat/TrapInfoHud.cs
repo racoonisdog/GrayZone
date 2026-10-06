@@ -23,10 +23,10 @@ public sealed class TrapInfoHud : MonoBehaviour
     [Tooltip("함정 이름 텍스트입니다.")]
     [SerializeField] private TMP_Text m_nameText;
 
-    [Tooltip("설치 비용 텍스트입니다. 비용이 없는 함정이면 비용 아이콘과 함께 숨깁니다.")]
+    [Tooltip("설치 비용 텍스트입니다. 비용이 없는 함정이면 '소모 없음' 문구를 표시합니다.")]
     [SerializeField] private TMP_Text m_costText;
 
-    [Tooltip("설치 비용 아이콘입니다. 선택 사항입니다.")]
+    [Tooltip("설치 비용 아이콘입니다. 비용이 없는 함정이면 숨깁니다. 선택 사항입니다.")]
     [SerializeField] private GameObject m_costIcon;
 
     [Tooltip("함정 설명 텍스트입니다.")]
@@ -42,6 +42,9 @@ public sealed class TrapInfoHud : MonoBehaviour
     [Header("Text")]
     [Tooltip("설치 비용 표시 형식입니다. {0}에 수량이 들어갑니다.")]
     [SerializeField] private string m_costFormat = "{0} 소모";
+
+    [Tooltip("설치 비용이 0인 함정에 표시할 문구입니다.")]
+    [SerializeField] private string m_noCostText = "소모 없음";
 
     private InteractionController m_interaction;
     private GameObject m_interactionOwner;
@@ -121,11 +124,8 @@ public sealed class TrapInfoHud : MonoBehaviour
         bool hasCost = cost.IsValid;
         if (m_costText != null)
         {
-            m_costText.gameObject.SetActive(hasCost);
-            if (hasCost)
-            {
-                m_costText.text = string.Format(m_costFormat, cost.Amount);
-            }
+            // 비용 줄은 항상 남깁니다. 0일 때 줄째 숨기면 공짜인지 표시 누락인지 구분할 수 없어서입니다.
+            m_costText.text = hasCost ? string.Format(m_costFormat, cost.Amount) : m_noCostText;
         }
 
         if (m_costIcon != null)

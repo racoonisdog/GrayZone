@@ -14,10 +14,13 @@ public sealed class NarinTeamHasteSkill : CharacterSkill
 
     public override CharacterSkillType SkillType => CharacterSkillType.NarinTeamHaste;
     public override string DisplayName => "전술 가속";
-    public override string Description => "일정 시간 동안 전 대원의 이동·행동 속도를 높입니다.";
+    public override string Description => "팀원 전체의 이동속도와 행동속도를 증가시킵니다";
     public override bool IsActive => m_effectRoutine != null;
     public override float ActiveDuration => ResolveHasteEffect() != null ? ResolveHasteEffect().Duration : 0.0f;
     public override float ActiveRemaining => IsActive ? Mathf.Max(0.0f, m_effectEndTime - Time.time) : 0.0f;
+    public override string HudDetailText => IsActive
+        ? $"지속 시간 {ActiveRemaining:0.0} / {ActiveDuration:0.0}초"
+        : $"지속 시간 {ActiveDuration:0.0}초";
 
     protected override bool ActivateSkill(SquadManager squadManager)
     {

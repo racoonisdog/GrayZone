@@ -534,6 +534,34 @@ PrefabInstance:
       propertyPath: m_handRig
       value: 
       objectReference: {fileID: 437718473433986493}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawAimTraceLine
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawAimPointSphere
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawHitscanDebugRay
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawLookPointSphere
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawCameraForwardRay
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawImpactPointSphere
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_spawnImpactMarkerOnShot
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3918047468217680588, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_LocalScale.x
       value: 1
@@ -743,6 +771,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       insertIndex: -1
       addedObject: {fileID: 8753708020235464621}
+    - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8689687943147051918}
+    - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6396858817655848203}
   m_SourcePrefab: {fileID: 100100000, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
 --- !u!114 &1158824041645402678 stripped
 MonoBehaviour:
@@ -787,6 +821,36 @@ MonoBehaviour:
   m_interactionNoiseRange: 10
   m_interactionNoiseInterval: 0.5
   m_debugDrawNoiseRanges: 0
+--- !u!114 &8689687943147051918
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1512333855631484128}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 541cfd3a171ce754ca0fb8d5bc89287e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeoHaTeamHealSkill
+  m_cooldownDuration: 30
+  m_healPercent: 30
+  m_skillReviveHp: 20
+  m_healVisual: {fileID: 11400000, guid: e4ad4c4f0afb76948b81ec47d1013fb1, type: 2}
+--- !u!114 &6396858817655848203
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1512333855631484128}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ef14b2e8c45944e96ed711ce481800, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StatusEffectContainer
+  m_effectAnchor: {fileID: 0}
+  m_modelTintRoot: {fileID: 0}
 --- !u!4 &2137951434080301018 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4526457136588419995, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
