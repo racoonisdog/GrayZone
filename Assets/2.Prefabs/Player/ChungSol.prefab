@@ -883,6 +883,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChungSolDragonBreathSkill
   m_cooldownDuration: 30
+  m_balanceSO: {fileID: 11400000, guid: e5eab284f60ca204e864aa14e16c6dc0, type: 2}
   m_reloadSpeedMultiplier: 1
   m_debugInfiniteDragonBreathMagazine: 0
 --- !u!114 &6624136254035395959

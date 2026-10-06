@@ -6,8 +6,14 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
 {
     private const string DragonBreathEffectResourcePath = "Skill/DragonBreathEffect";
 
-    [Tooltip("용숨결탄 전용 재장전 속도 배율입니다. 2이면 일반 재장전보다 2배 빠르게 모션과 장전이 완료됩니다.")]
+    [Tooltip("이 스킬의 밸런스 수치 SO입니다(쿨타임, 재장전 배율, 용숨결 피해·판정 범위). 비어 있으면 인스펙터 값과 " +
+             "용숨결 효과 프리팹 값을 그대로 씁니다. 같은 SO를 용숨결 효과 인스턴스에도 주입합니다.")]
+    [SerializeField] private ChungSolDragonBreathSkillSO m_balanceSO;
+
+    [Tooltip("용숨결탄 전용 재장전 속도 배율입니다. 2이면 일반 재장전보다 2배 빠르게 모션과 장전이 완료됩니다. " +
+             "밸런스 SO가 있으면 SO 값으로 덮입니다.")]
     [Min(0.01f)]
+    [BalanceField]
     [SerializeField] private float m_reloadSpeedMultiplier = 1.0f;
 
     [Foldout("Debug")]
@@ -19,6 +25,8 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     private DragonBreathEffect m_effectInstance;
     private bool m_isLoadingSpecialAmmo;
     private int m_specialRoundsRemaining;
+
+    protected override ScriptableObject BalanceSource => m_balanceSO;
 
     public override CharacterSkillType SkillType => CharacterSkillType.ChungSolDragonBreath;
     public override string DisplayName => "화염 탄환";
@@ -204,6 +212,9 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             m_effectInstance = Instantiate(effectPrefab, transform);
             m_effectInstance.name = effectPrefab.name;
         }
+
+        // 용숨결 피해·판정 범위도 청솔 스킬 SO가 정합니다. 효과 프리팹 값은 SO가 없을 때의 기본값입니다.
+        BindBalance(m_effectInstance);
 
         m_effectInstance.gameObject.SetActive(false);
         return m_effectInstance;
