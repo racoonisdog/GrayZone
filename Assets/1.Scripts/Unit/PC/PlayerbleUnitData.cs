@@ -414,7 +414,9 @@ public class PlayerbleUnitData : MonoBehaviour, IAmmoReserve
             m_characterId = snapshot.CharacterId;
         }
 
-        if (!string.IsNullOrWhiteSpace(snapshot.DisplayName))
+        // 전투 씬에는 화면 표시용 한글 이름(나린·청솔·서하)이 설정돼 있습니다. 셸터 데이터의 이름은 영문 ID라
+        // 덮어쓰면 결과 화면·조준선 설정 등에서 영문으로 바뀌고 폰트에 없는 글자가 깨집니다. 씬 이름이 없을 때만 받습니다.
+        if (!string.IsNullOrWhiteSpace(snapshot.DisplayName) && string.IsNullOrWhiteSpace(m_displayName))
         {
             m_displayName = snapshot.DisplayName;
         }

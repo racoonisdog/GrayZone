@@ -91,6 +91,12 @@ public sealed class SquadProfileHud : MonoBehaviour
 
     private readonly Dictionary<RectTransform, float> m_selectedPortraitBaseScale = new();
 
+    // 칸을 아래로 정렬할 때 쓰는 씬 배치 위치(위→아래)와 그 순서의 칸 목록입니다.
+    private readonly List<Vector2> m_slotPositionsTopToBottom = new();
+    private readonly List<ProfileSlot> m_slotOrderTopToBottom = new();
+    private readonly List<ProfileSlot> m_visibleSlots = new();
+    private bool m_slotPositionsCaptured;
+
     private void Awake()
     {
         if (m_squadManager == null)
@@ -122,6 +128,10 @@ public sealed class SquadProfileHud : MonoBehaviour
     {
         IReadOnlyList<PlayerbleUnitData> sources = m_squadManager != null ? m_squadManager.PlayerDataSources : null;
         PlayerbleUnitData controlled = SquadHudSlotOrder.ResolveControlled(sources);
+        bool hasSquad = sources != null && sources.Count > 0;
+
+        CaptureSlotPositions();
+        m_visibleSlots.Clear();
 
         foreach (ProfileSlot slot in m_slots)
         {
@@ -134,7 +144,6 @@ public sealed class SquadProfileHud : MonoBehaviour
 
             // 출격하지 않은 캐릭터(전투 이탈 후 셸터에서 살리지 않음 등)의 칸은 숨깁니다. 칸이 캐릭터마다 고정이라
             // 그대로 두면 빠진 대원의 초상화가 남습니다. 분대 정보가 아직 없을 때는 건드리지 않습니다.
-            bool hasSquad = sources != null && sources.Count > 0;
             if (slot.profileRoot != null && hasSquad)
             {
                 SetActive(slot.profileRoot.gameObject, member != null);
@@ -145,10 +154,78 @@ public sealed class SquadProfileHud : MonoBehaviour
                 continue;
             }
 
+            m_visibleSlots.Add(slot);
             bool isSelected = member != null && member == controlled;
             UpdateSelection(slot, isSelected ? 1.0f : 0.0f, deltaTime);
             ApplyHealth(slot, member);
             ApplyStatus(slot, member);
+        }
+
+        AlignVisibleSlotsToBottom();
+    }
+
+    /// <summary>씬에 배치된 칸 위치를 위에서 아래 순서로 한 번 기억합니다.</summary>
+    private void CaptureSlotPositions()
+    {
+        if (m_slotPositionsCaptured)
+        {
+            return;
+        }
+
+        m_slotPositionsCaptured = true;
+        foreach (ProfileSlot slot in m_slots)
+        {
+            if (slot?.profileRoot != null)
+            {
+                m_slotPositionsTopToBottom.Add(slot.profileRoot.anchoredPosition);
+                m_slotOrderTopToBottom.Add(slot);
+            }
+        }
+
+        // 칸 배열 순서가 화면 순서와 다를 수 있어 y 좌표(위가 큼)로 정렬합니다.
+        m_slotPositionsTopToBottom.Sort((a, b) => b.y.CompareTo(a.y));
+        m_slotOrderTopToBottom.Sort((a, b) => b.profileRoot.anchoredPosition.y.CompareTo(a.profileRoot.anchoredPosition.y));
+    }
+
+    /// <summary>
+    /// 보이는 칸을 원래 순서대로 아래쪽 자리부터 채웁니다. 출격 인원이 적으면 위쪽 자리가 비게 됩니다.
+    /// </summary>
+    /// <remarks>
+    /// 인원 부재(전투 이탈 후 회복하지 않음 등)로 풀 스쿼드가 아닐 때 빈 자리가 중간이나 아래에 생기지 않게
+    /// 남은 초상화를 아래로 붙입니다. 세 명이 모두 있으면 각 칸이 원래 자리에 그대로 놓입니다.
+    /// </remarks>
+    private void AlignVisibleSlotsToBottom()
+    {
+        int total = m_slotPositionsTopToBottom.Count;
+        if (total == 0)
+        {
+            return;
+        }
+
+        int visibleCount = 0;
+        foreach (ProfileSlot slot in m_slotOrderTopToBottom)
+        {
+            if (m_visibleSlots.Contains(slot))
+            {
+                visibleCount++;
+            }
+        }
+
+        int position = total - visibleCount;
+        foreach (ProfileSlot slot in m_slotOrderTopToBottom)
+        {
+            if (!m_visibleSlots.Contains(slot))
+            {
+                continue;
+            }
+
+            Vector2 target = m_slotPositionsTopToBottom[Mathf.Clamp(position, 0, total - 1)];
+            if (slot.profileRoot.anchoredPosition != target)
+            {
+                slot.profileRoot.anchoredPosition = target;
+            }
+
+            position++;
         }
     }
 

@@ -261,7 +261,9 @@ public class ResultUIController : MonoBehaviour
             // 부상 초상화(노이즈판)는 전투 이탈일 때만 씁니다. 치명상이어도 끝까지 남았으면 일반 초상화입니다.
             bool isOut = character.IsCombatOut;
 
-            if (column.NameText != null)
+            // 칸에는 디자인대로 한글 이름(나린·청솔·서하)이 미리 들어 있습니다. 출격 데이터의 표시 이름은 셸터의
+            // 영문 ID(Cheongsol 등)일 수 있어 덮어쓰면 폰트에 없는 글자까지 깨져 보이므로, 칸이 비어 있을 때만 씁니다.
+            if (column.NameText != null && string.IsNullOrWhiteSpace(column.NameText.text))
             {
                 column.NameText.text = character.Name;
             }
