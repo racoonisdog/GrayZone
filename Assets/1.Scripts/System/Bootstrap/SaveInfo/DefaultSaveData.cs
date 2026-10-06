@@ -2,13 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// 새 게임 시작 시 사용할 저장 데이터의 읽기 전용 작성 템플릿입니다.
-/// </summary>
-/// <remarks>
-/// 이 에셋 자체는 런타임 진행 상태를 소유하지 않습니다.
-/// <see cref="CreateSaveData"/>를 호출할 때마다 독립적인 <see cref="SaveData"/>를 생성합니다.
-/// </remarks>
+/// <summary>새 게임 시작 시 사용할 최소 Auto 복구 데이터의 작성 템플릿입니다.</summary>
 [CreateAssetMenu(fileName = "DefaultSaveData", menuName = "GrayZone/Save/Default Save Data")]
 public sealed class DefaultSaveData : ScriptableObject
 {
@@ -22,50 +16,66 @@ public sealed class DefaultSaveData : ScriptableObject
         public int Amount => Mathf.Max(0, amount);
     }
 
-    [Header("Save Identity")]
-    [SerializeField] private string profileId = SaveFilePaths.DefaultProfileId;
-    [SerializeField] private SaveSlotType slotType = SaveSlotType.Manual;
+    [Header("Checkpoint")]
+    [SerializeField] private ShelterCheckpointId shelterCheckpointId = ShelterCheckpointId.BeforeDefense1;
 
-    [Header("Shared Defaults")]
-    [SerializeField] private string startStageId = string.Empty;
-    [SerializeField, Range(0, 100)] private int shelterStability = 100;
+    [Header("Defense Upgrade Defaults")]
+    [SerializeField, Min(0)] private int trapUpgradeLevel;
+    [SerializeField, Min(0)] private int spikeUpgradeLevel;
+    [SerializeField, Min(0)] private int explosiveUpgradeLevel;
+    [SerializeField, Min(0)] private int shooterUpgradeLevel;
+    [SerializeField, Min(0)] private int wireUpgradeLevel;
+
+    [Header("Starting State")]
     [SerializeField] private StartingResourceAmount[] startingResources = Array.Empty<StartingResourceAmount>();
     [SerializeField] private PlayerbleCharacterDefinition[] startingCharacterDefinitions = Array.Empty<PlayerbleCharacterDefinition>();
 
-    [Header("Shelter Defaults")]
-    [SerializeField, Min(1)] private int startDay = 1;
-    [SerializeField] private FacilityDefinition[] startingFacilityDefinitions = Array.Empty<FacilityDefinition>();
-
-    /// <summary>
-    /// 현재 에셋 값을 독립적인 새 게임 저장 데이터로 변환합니다.
-    /// </summary>
     public SaveData CreateSaveData()
     {
         SaveData saveData = new SaveData
         {
             schemaVersion = SaveData.CurrentSchemaVersion,
-            profileId = ResolveProfileId(profileId),
-            slotType = slotType,
-            shared = new SaveData.SharedSaveData
-            {
-                lastStageId = startStageId?.Trim() ?? string.Empty,
-                shelterStability = Mathf.Clamp(shelterStability, 0, 100)
-            },
-            shelter = new SaveData.ShelterSaveData
-            {
-                currentDay = Mathf.Max(1, startDay)
-            }
+            shelterCheckpointId = shelterCheckpointId,
+            trapUpgradeLevel = Mathf.Max(0, trapUpgradeLevel),
+            spikeUpgradeLevel = Mathf.Max(0, spikeUpgradeLevel),
+            explosiveUpgradeLevel = Mathf.Max(0, explosiveUpgradeLevel),
+            shooterUpgradeLevel = Mathf.Max(0, shooterUpgradeLevel),
+            wireUpgradeLevel = Mathf.Max(0, wireUpgradeLevel)
         };
 
-        AddStartingResources(saveData.shared);
-        AddStartingCharacters(saveData.shared);
-        AddStartingFacilities(saveData.shelter);
+        AddStartingResources(saveData);
+        AddStartingCharacterStates(saveData);
         return saveData;
     }
 
-    private void AddStartingResources(SaveData.SharedSaveData sharedSaveData)
+    public List<CharacterSnapshotData> CreateStartingCharacterSnapshots()
     {
-        if (sharedSaveData == null || startingResources == null)
+        List<CharacterSnapshotData> snapshots = new List<CharacterSnapshotData>();
+        if (startingCharacterDefinitions == null)
+        {
+            return snapshots;
+        }
+
+        HashSet<PlayerbleCharacterId> addedCharacterIds = new HashSet<PlayerbleCharacterId>();
+        for (int i = 0; i < startingCharacterDefinitions.Length; i++)
+        {
+            PlayerbleCharacterDefinition definition = startingCharacterDefinitions[i];
+            if (definition == null
+                || definition.CharacterId == PlayerbleCharacterId.Unknown
+                || !addedCharacterIds.Add(definition.CharacterId))
+            {
+                continue;
+            }
+
+            snapshots.Add(definition.CreateSnapshot());
+        }
+
+        return snapshots;
+    }
+
+    private void AddStartingResources(SaveData saveData)
+    {
+        if (startingResources == null)
         {
             return;
         }
@@ -80,7 +90,7 @@ public sealed class DefaultSaveData : ScriptableObject
                 continue;
             }
 
-            sharedSaveData.resources.Add(new SaveData.ResourceAmountData
+            saveData.resources.Add(new SaveData.ResourceAmountData
             {
                 resourceId = resourceId,
                 amount = startingResource.Amount
@@ -88,48 +98,23 @@ public sealed class DefaultSaveData : ScriptableObject
         }
     }
 
-    private void AddStartingCharacters(SaveData.SharedSaveData sharedSaveData)
+    private void AddStartingCharacterStates(SaveData saveData)
     {
-        if (sharedSaveData == null || startingCharacterDefinitions == null)
+        List<CharacterSnapshotData> snapshots = CreateStartingCharacterSnapshots();
+        for (int i = 0; i < snapshots.Count; i++)
         {
-            return;
-        }
-
-        for (int i = 0; i < startingCharacterDefinitions.Length; i++)
-        {
-            PlayerbleCharacterDefinition definition = startingCharacterDefinitions[i];
-            if (definition != null)
+            CharacterSnapshotData snapshot = snapshots[i];
+            saveData.characters.Add(new SaveData.CharacterStateSaveData
             {
-                sharedSaveData.characters.Add(definition.CreateSnapshot());
-            }
+                characterId = snapshot.CharacterId,
+                currentHp = snapshot.CurrentHp,
+                maxHp = snapshot.MaxHp,
+                injurySeverityGauge = snapshot.InjurySeverityGauge,
+                maxInjuryGauge = snapshot.MaxInjuryGauge,
+                injuryState = snapshot.InjuryState,
+                isDown = snapshot.IsDown,
+                isCombatOut = snapshot.IsCombatOut
+            });
         }
-    }
-
-    private void AddStartingFacilities(SaveData.ShelterSaveData shelterSaveData)
-    {
-        if (shelterSaveData == null || startingFacilityDefinitions == null)
-        {
-            return;
-        }
-
-        HashSet<string> addedFacilityIds = new HashSet<string>(StringComparer.Ordinal);
-        for (int i = 0; i < startingFacilityDefinitions.Length; i++)
-        {
-            SaveData.FacilitySaveData facilitySaveData =
-                FacilitySaveDataMapper.FromDefinition(startingFacilityDefinitions[i]);
-            if (facilitySaveData == null || !addedFacilityIds.Add(facilitySaveData.facilityId))
-            {
-                continue;
-            }
-
-            shelterSaveData.facilities.Add(facilitySaveData);
-        }
-    }
-
-    private static string ResolveProfileId(string value)
-    {
-        return string.IsNullOrWhiteSpace(value)
-            ? SaveFilePaths.DefaultProfileId
-            : value.Trim();
     }
 }
