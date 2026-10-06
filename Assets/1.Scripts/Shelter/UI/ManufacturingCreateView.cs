@@ -17,18 +17,25 @@ public sealed class ManufacturingCreateView : MonoBehaviour
 
     [Header("Lists")]
     [SerializeField] private ManufacturingRecipeListView m_recipeListView;
-    [SerializeField] private ManufacturingMaterialListView m_materialListView;
 
     [Header("Result")]
     [SerializeField] private Image m_resultImage;
     [SerializeField] private TMP_Text m_totalResultQuantityText;
+    [SerializeField] private TMP_Text m_selectedNameText;
+
+    [Header("Material Summary")]
+    [SerializeField] private TMP_Text m_ownedAmountText;
+    [SerializeField] private TMP_Text m_unitAmountText;
+    [SerializeField] private TMP_Text m_totalAmountText;
+    [SerializeField] private TMP_Text m_remainingAmountText;
+    [SerializeField] private Color m_sufficientAmountColor = Color.white;
+    [SerializeField] private Color m_insufficientAmountColor =
+        new(1f, 0.25f, 0.25f, 1f);
 
     [Header("Requested Batch Count")]
     [SerializeField] private TMP_Text m_requestedBatchCountText;
-    [SerializeField] private Button m_decreaseTenButton;
     [SerializeField] private Button m_decreaseOneButton;
     [SerializeField] private Button m_increaseOneButton;
-    [SerializeField] private Button m_increaseTenButton;
 
     [Header("Actions")]
     [SerializeField] private Button m_confirmButton;
@@ -47,6 +54,8 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     private bool m_hasStarted;
     private bool m_openRequestedBeforeStart;
     private Sprite m_defaultResultSprite;
+    // 씬에 고정으로 입력해 둔 텍스트입니다. 선택 해제 시 빈 값 대신 이 값으로 복구합니다.
+    private readonly Dictionary<TMP_Text, string> m_defaultTexts = new();
 
     public bool IsOpen => gameObject.activeSelf;
     public int PendingSlotIndex => m_pendingSlotIndex;
@@ -66,6 +75,12 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     {
         if (m_resultImage != null)
             m_defaultResultSprite = m_resultImage.sprite;
+
+        CacheDefaultText(m_selectedNameText);
+        CacheDefaultText(m_ownedAmountText);
+        CacheDefaultText(m_unitAmountText);
+        CacheDefaultText(m_totalAmountText);
+        CacheDefaultText(m_remainingAmountText);
 
         Prewarm();
         ResetTransientState();
@@ -93,14 +108,12 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     }
 
     /// <summary>
-    /// 레시피/재료 행을 한 번 생성해 캐시에 보관합니다.
+    /// 레시피 행을 한 번 생성해 캐시에 보관합니다.
     /// CreateView가 처음 닫힐 때도 이후 열기에서 Instantiate가 반복되지 않습니다.
     /// </summary>
     public bool Prewarm()
     {
-        bool recipeReady = m_recipeListView != null && m_recipeListView.Prewarm();
-        bool materialReady = m_materialListView != null && m_materialListView.Prewarm();
-        return recipeReady && materialReady;
+        return m_recipeListView != null && m_recipeListView.Prewarm();
     }
 
     /// <summary>비어 있는 제조 슬롯을 대상으로 CreateView를 엽니다.</summary>
@@ -114,13 +127,16 @@ public sealed class ManufacturingCreateView : MonoBehaviour
             return false;
         }
 
+        m_openRequestedBeforeStart = !m_hasStarted;
+
+        // 씬에서 비활성으로 저장된 경우 첫 활성화 때 Awake가 상태를 초기화하므로
+        // 먼저 활성화한 뒤 슬롯과 선택 상태를 설정합니다.
+        if (!gameObject.activeSelf)
+            gameObject.SetActive(true);
+
         m_pendingSlotIndex = slotIndex;
         m_selectedRecipeId = string.Empty;
         m_requestedBatchCount = 1;
-        m_openRequestedBeforeStart = !m_hasStarted;
-
-        if (!gameObject.activeSelf)
-            gameObject.SetActive(true);
 
         Subscribe();
         m_recipeListView?.RefreshRecipeStates();
@@ -174,11 +190,6 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         RefreshPresentation();
     }
 
-    private void DecreaseTen()
-    {
-        ChangeRequestedBatchCount(-10);
-    }
-
     private void DecreaseOne()
     {
         ChangeRequestedBatchCount(-1);
@@ -187,11 +198,6 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     private void IncreaseOne()
     {
         ChangeRequestedBatchCount(1);
-    }
-
-    private void IncreaseTen()
-    {
-        ChangeRequestedBatchCount(10);
     }
 
     private void ChangeRequestedBatchCount(int delta)
@@ -232,21 +238,22 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         }
 
         bool resultQuantityResolved = SetResultPresentation(recipe);
+        m_recipeListView?.SetSelectedRecipe(recipe.RecipeId);
 
         bool quoteResolved = m_manager.TryFillMaterialQuote(
             recipe.RecipeId,
             m_requestedBatchCount,
             m_quoteLines,
             out bool canAfford);
-        bool materialsDisplayed = quoteResolved
-            && m_materialListView != null
-            && m_materialListView.Bind(m_quoteLines);
+        if (quoteResolved)
+            SetMaterialSummary(m_quoteLines);
+        else
+            ClearMaterialSummary();
 
         m_canConfirm = m_pendingSlotIndex >= 0
             && m_manager.IsCraftingSlotUnlocked(m_pendingSlotIndex)
             && resultQuantityResolved
             && quoteResolved
-            && materialsDisplayed
             && canAfford;
         UpdateButtonStates(true);
     }
@@ -255,13 +262,20 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     {
         m_selectedRecipeId = string.Empty;
         m_quoteLines.Clear();
-        m_materialListView?.Clear();
+        m_recipeListView?.SetSelectedRecipe(string.Empty);
+        ClearMaterialSummary();
 
         if (m_resultImage != null)
+        {
             m_resultImage.sprite = m_defaultResultSprite;
+            // 아이템을 선택하기 전에는 결과 이미지 영역 자체를 숨깁니다.
+            SetResultImageVisible(false);
+        }
 
         if (m_totalResultQuantityText != null)
             m_totalResultQuantityText.text = string.Empty;
+
+        RestoreDefaultText(m_selectedNameText);
 
         m_canConfirm = false;
         UpdateButtonStates(false);
@@ -270,9 +284,15 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     private bool SetResultPresentation(ManufacturingRecipeDefinition recipe)
     {
         if (m_resultImage != null)
+        {
             m_resultImage.sprite = recipe.Icon != null
                 ? recipe.Icon
                 : m_defaultResultSprite;
+            SetResultImageVisible(true);
+        }
+
+        if (m_selectedNameText != null)
+            m_selectedNameText.text = recipe.DisplayName;
 
         if (m_totalResultQuantityText == null)
             return false;
@@ -287,10 +307,125 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         return isValid;
     }
 
+    private void SetResultImageVisible(bool visible)
+    {
+        GameObject resultObject = m_resultImage.gameObject;
+        if (resultObject.activeSelf != visible)
+            resultObject.SetActive(visible);
+    }
+
     private void UpdateRequestedBatchCountText()
     {
         if (m_requestedBatchCountText != null)
             m_requestedBatchCountText.text = m_requestedBatchCount.ToString();
+    }
+
+    /// <summary>
+    /// 선택된 레시피의 첫 번째 재료 견적으로 1개당/총 필요/제작 후 잔여 수량을 표시합니다.
+    /// 현재 레시피는 재료 1종만 사용하므로 요약 칸도 대표 재료 하나만 다룹니다.
+    /// </summary>
+    private void SetMaterialSummary(IReadOnlyList<ManufacturingMaterialQuoteLine> quoteLines)
+    {
+        if (quoteLines.Count == 0)
+        {
+            ClearMaterialSummary();
+            return;
+        }
+
+        ManufacturingMaterialQuoteLine line = quoteLines[0];
+        int unitAmount = line.RequiredAmount / Mathf.Max(1, m_requestedBatchCount);
+        int remainingAmount = line.OwnedAmount - line.RequiredAmount;
+        Color amountColor = line.IsEnough
+            ? m_sufficientAmountColor
+            : m_insufficientAmountColor;
+
+        SetAmountText(m_ownedAmountText, line.OwnedAmount, m_sufficientAmountColor);
+        SetAmountText(m_unitAmountText, unitAmount, m_sufficientAmountColor);
+        SetAmountText(m_totalAmountText, line.RequiredAmount, amountColor);
+        SetAmountText(m_remainingAmountText, remainingAmount, amountColor);
+    }
+
+    /// <summary>
+    /// 레시피 선택 전에는 보유 재료만 남기고 견적 칸을 비웁니다.
+    /// </summary>
+    private void ClearMaterialSummary()
+    {
+        ClearAmountText(m_unitAmountText);
+        ClearAmountText(m_totalAmountText);
+        ClearAmountText(m_remainingAmountText);
+        RefreshOwnedMaterial();
+    }
+
+    /// <summary>
+    /// 선택과 무관하게 대표 재료(첫 레시피의 첫 재료)의 현재 보유량을 표시합니다.
+    /// </summary>
+    private void RefreshOwnedMaterial()
+    {
+        if (!TryGetDefaultMaterialId(out string resourceId)
+            || m_shelterDataManager == null)
+        {
+            ClearAmountText(m_ownedAmountText);
+            return;
+        }
+
+        SetAmountText(
+            m_ownedAmountText,
+            m_shelterDataManager.Storage.GetResourceAmount(resourceId),
+            m_sufficientAmountColor);
+    }
+
+    private bool TryGetDefaultMaterialId(out string resourceId)
+    {
+        resourceId = string.Empty;
+        if (m_manager == null)
+            return false;
+
+        IReadOnlyList<ManufacturingRecipeDefinition> recipes = m_manager.Recipes;
+        for (int i = 0; i < recipes.Count; i++)
+        {
+            IReadOnlyList<ManufacturingMaterialCost> costs = recipes[i]?.UnitCosts;
+            if (costs == null || costs.Count == 0 || costs[0] == null)
+                continue;
+
+            resourceId = costs[0].ResourceId;
+            return !string.IsNullOrEmpty(resourceId);
+        }
+
+        return false;
+    }
+
+    private static void SetAmountText(TMP_Text text, int amount, Color color)
+    {
+        if (text == null)
+            return;
+
+        text.text = amount.ToString();
+        text.color = color;
+    }
+
+    private void ClearAmountText(TMP_Text text)
+    {
+        if (text == null)
+            return;
+
+        RestoreDefaultText(text);
+        text.color = m_sufficientAmountColor;
+    }
+
+    private void CacheDefaultText(TMP_Text text)
+    {
+        if (text != null && !m_defaultTexts.ContainsKey(text))
+            m_defaultTexts.Add(text, text.text);
+    }
+
+    private void RestoreDefaultText(TMP_Text text)
+    {
+        if (text == null)
+            return;
+
+        text.text = m_defaultTexts.TryGetValue(text, out string defaultText)
+            ? defaultText
+            : string.Empty;
     }
 
     private void UpdateButtonStates(bool hasSelection)
@@ -300,16 +435,10 @@ public sealed class ManufacturingCreateView : MonoBehaviour
             : 1;
 
         SetInteractable(
-            m_decreaseTenButton,
-            hasSelection && m_requestedBatchCount > 1);
-        SetInteractable(
             m_decreaseOneButton,
             hasSelection && m_requestedBatchCount > 1);
         SetInteractable(
             m_increaseOneButton,
-            hasSelection && m_requestedBatchCount < maxOrderQuantity);
-        SetInteractable(
-            m_increaseTenButton,
             hasSelection && m_requestedBatchCount < maxOrderQuantity);
         SetInteractable(m_confirmButton, m_canConfirm);
     }
@@ -384,20 +513,16 @@ public sealed class ManufacturingCreateView : MonoBehaviour
 
     private void AddButtonListeners()
     {
-        m_decreaseTenButton?.onClick.AddListener(DecreaseTen);
         m_decreaseOneButton?.onClick.AddListener(DecreaseOne);
         m_increaseOneButton?.onClick.AddListener(IncreaseOne);
-        m_increaseTenButton?.onClick.AddListener(IncreaseTen);
         m_confirmButton?.onClick.AddListener(HandleConfirmClicked);
         m_cancelButton?.onClick.AddListener(Cancel);
     }
 
     private void RemoveButtonListeners()
     {
-        m_decreaseTenButton?.onClick.RemoveListener(DecreaseTen);
         m_decreaseOneButton?.onClick.RemoveListener(DecreaseOne);
         m_increaseOneButton?.onClick.RemoveListener(IncreaseOne);
-        m_increaseTenButton?.onClick.RemoveListener(IncreaseTen);
         m_confirmButton?.onClick.RemoveListener(HandleConfirmClicked);
         m_cancelButton?.onClick.RemoveListener(Cancel);
     }
