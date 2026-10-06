@@ -58,6 +58,12 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
     /// <summary>골랐지만 생존 정원이 모자라 아직 생성하지 못한 그룹입니다. 없으면 null입니다.</summary>
     private SpawnGroupSO m_pendingGroup;
 
+    /// <summary>이번 웨이브의 고정 그룹 중 다음에 생성할 순번입니다. 모두 생성했으면 목록 길이와 같습니다.</summary>
+    private int m_nextFixedGroupIndex;
+
+    /// <summary>고정 그룹을 내보낼 시각(Time.time)입니다.</summary>
+    private float m_fixedSpawnTime;
+
     /// <summary>생성된 Defense 적이 순서대로 통과할 웨이포인트 목록입니다.</summary>
     public IReadOnlyList<Transform> Waypoints => m_waypoints;
 
@@ -107,6 +113,8 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
         m_currentWave = wave;
         m_pendingGroup = null;
         m_nextSpawnTime = wave != null ? Time.time + wave.SampleFirstSpawnDelay() : 0.0f;
+        m_nextFixedGroupIndex = 0;
+        m_fixedSpawnTime = wave != null ? Time.time + wave.FixedSpawnDelay : 0.0f;
     }
 
     /// <summary>전투를 끝냅니다. 새 그룹을 더 만들지 않고, 기다리던 그룹은 버립니다.</summary>
@@ -157,6 +165,8 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
             return;
         }
 
+        TickFixedGroups();
+
         if (m_pendingGroup == null)
         {
             m_debugTimeToNextSpawn = Mathf.Max(0.0f, m_nextSpawnTime - Time.time);
@@ -182,6 +192,25 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
 
         m_pendingGroup = null;
         m_nextSpawnTime = Time.time + m_currentWave.SampleSpawnInterval();
+    }
+
+    /// <summary>
+    /// 웨이브의 고정 그룹을 정해진 시각에 순서대로 한 번씩 생성합니다.
+    /// </summary>
+    /// <remarks>자리가 모자라 생성하지 못한 그룹은 다음 프레임에 다시 시도합니다. 무작위 그룹 간격에는 영향을 주지 않습니다.</remarks>
+    private void TickFixedGroups()
+    {
+        IReadOnlyList<SpawnGroupSO> fixedGroups = m_currentWave.FixedGroups;
+        while (m_nextFixedGroupIndex < fixedGroups.Count && Time.time >= m_fixedSpawnTime)
+        {
+            SpawnGroupSO group = fixedGroups[m_nextFixedGroupIndex];
+            if (group != null && group.HasSpawnableMember && !TrySpawnGroup(group))
+            {
+                return;
+            }
+
+            m_nextFixedGroupIndex++;
+        }
     }
 
     /// <summary>에디터 확인용: 이 스포너 하나만 확인용 웨이브로 풀을 준비하고 전투를 시작합니다.</summary>

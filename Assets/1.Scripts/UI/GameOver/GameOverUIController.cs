@@ -54,6 +54,13 @@ public class GameOverUIController : MonoBehaviour
     [Tooltip("\"타이틀로\"를 눌렀을 때 갈 씬 이름입니다. 빌드 설정에 있어야 합니다.")]
     [SerializeField] private string m_titleSceneName = "TitleScene";
 
+    [Header("Reset")]
+    [Tooltip("켜면 \"타이틀로\"를 누를 때 게임 데이터·플레이어 설정을 가진 GameManager를 지우고 부트스트랩 씬부터 다시 시작합니다. 게임을 처음 켠 상태가 됩니다. 데모 종료 화면에서 씁니다.")]
+    [SerializeField] private bool m_resetGameOnTitle;
+
+    [Tooltip("초기화할 때 불러올 첫 씬 이름입니다. 이 씬이 새 GameManager를 만듭니다. 빌드 설정에 있어야 합니다.")]
+    [SerializeField] private string m_bootSceneName = "BootstrapScene";
+
     [Header("Behaviour")]
     [Tooltip("켜면 화면이 떠 있는 동안 시간을 멈춥니다.")]
     [SerializeField] private bool m_pauseTimeWhileShown = true;
@@ -255,6 +262,22 @@ public class GameOverUIController : MonoBehaviour
     {
         if (m_isLeaving)
         {
+            return;
+        }
+
+        if (m_resetGameOnTitle && Application.CanStreamedLevelBeLoaded(m_bootSceneName))
+        {
+            // 설정은 파일에 남으므로 먼저 기본값으로 되돌려 저장합니다. 새 GameManager가 이 파일을 읽습니다.
+            GameSettingManager.Instance?.ResetToDefaultsAndSave();
+
+            // 씬을 넘어 유지되던 GameManager(게임 데이터·설정)를 지우고 부트스트랩부터 다시 시작합니다.
+            // Destroy는 이번 프레임 끝에 처리되고 씬 로드는 다음 프레임에 일어나므로, 부트스트랩의 새 GameManager가 남습니다.
+            if (GameManager.Instance != null)
+            {
+                Destroy(GameManager.Instance.gameObject);
+            }
+
+            LeaveTo(m_bootSceneName);
             return;
         }
 

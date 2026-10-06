@@ -104,6 +104,13 @@ public class ResultUIController : MonoBehaviour
     [Tooltip("'셸터로 복귀' 버튼을 누르면 전환할 씬 이름입니다(Build Settings에 등록되어 있어야 합니다).")]
     [SerializeField] private string m_returnSceneName = "TEst";
 
+    [Header("Demo End")]
+    [Tooltip("선택 사항입니다. 데모 마지막 회차의 방어전을 끝냈을 때 셸터 대신 띄울 데모 종료 화면입니다. 비워 두면 항상 셸터로 돌아갑니다.")]
+    [SerializeField] private GameOverUIController m_demoEndOverlay;
+
+    [Tooltip("방어전 클리어 횟수가 이 값에 닿으면 데모를 끝냅니다. 0 이하이면 쓰지 않습니다.")]
+    [SerializeField, Min(0)] private int m_demoFinalDefenseRound = 2;
+
     [Header("Behaviour")]
     [Tooltip("켜면 화면이 떠 있는 동안 시간을 멈춥니다.")]
     [SerializeField] private bool m_pauseTimeWhileShown = true;
@@ -142,6 +149,13 @@ public class ResultUIController : MonoBehaviour
     /// <param name="resources">획득 자원 목록입니다. 칸 순서대로 채웁니다.</param>
     public void ShowResult(int kills, IList<CharacterResult> characters, IList<ResourceResult> resources)
     {
+        // 데모 마지막 회차를 클리어하고 귀환했으면 결과창 대신 데모 종료 화면("타이틀로"만 있음)을 띄웁니다.
+        if (ShouldEndDemo())
+        {
+            m_demoEndOverlay.Show(null);
+            return;
+        }
+
         SetKills(kills);
         SetCharacters(characters);
         SetResources(resources);
@@ -226,6 +240,17 @@ public class ResultUIController : MonoBehaviour
         // 예전에는 반복 테스트용으로 true를 넣어 셸터 시작 때 DefaultSaveData가 다시 덮였고, 부상이 넘어가지 않았습니다.
         GameDataManager.Instance?.SetUseDefaultSaveDataOnShelterStart(false);
         SceneTransitionController.LoadScene(m_returnSceneName);
+    }
+
+    /// <summary>방어전 클리어 횟수가 데모 마지막 회차에 닿았는지 확인합니다.</summary>
+    /// <remarks>클리어 횟수는 귀환 구역에 들어갈 때 정산(FinalizeField)에서 결과창보다 먼저 올라갑니다.</remarks>
+    private bool ShouldEndDemo()
+    {
+        GameDataManager gameData = GameDataManager.Instance;
+        return m_demoEndOverlay != null
+            && m_demoFinalDefenseRound > 0
+            && gameData != null
+            && gameData.DefenseClearCount >= m_demoFinalDefenseRound;
     }
 
     private void SetKills(int kills)

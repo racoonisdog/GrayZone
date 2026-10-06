@@ -36,6 +36,9 @@ public class GameSettingManager : MonoBehaviour
     // 사용자가 저장한 조준선 값입니다. 다른 설정과 같은 파일(SettingData.crosshair)에 들어갑니다.
     private SettingData.CrosshairSettingData m_crosshairSettings = new SettingData.CrosshairSettingData();
 
+    // 저장 파일을 읽기 전, 씬에 지정된 처음 설정값입니다. 설정을 기본값으로 되돌릴 때 씁니다.
+    private SettingSnapshot m_initialSettings;
+
     private const float MuteDb = -80f;
     private const float MaxDb = 0f;
     public const float MinMouseSensitivity = 0.01f;
@@ -79,6 +82,7 @@ public class GameSettingManager : MonoBehaviour
 
         Instance = this;
         NormalizeGameplaySettings(currentSettings);
+        m_initialSettings = CreateSnapshot();
 
         if (!LoadSettings())
         {
@@ -156,6 +160,42 @@ public class GameSettingManager : MonoBehaviour
         SetSfxVolume(currentSettings.sfxVolume);
         SetMouseSensitivity(currentSettings.mouseSensitivity);
         SetCameraKickEnabled(currentSettings.cameraKickEnabled);
+    }
+
+    /// <summary>
+    /// 모든 설정을 처음 값으로 되돌리고 파일에 저장합니다. 설정 화면에서 기본값을 고르고 저장한 것과 같은 결과입니다.
+    /// </summary>
+    /// <remarks>
+    /// 화면·소리·조작 값은 저장 파일을 읽기 전 씬에 지정된 값으로 되돌립니다. 조준선은 모든 캐릭터와 투척물에
+    /// 기본값 템플릿(<see cref="DefaultCrosshairSettings"/>) 값을 채워 저장합니다. 템플릿에 없는 캐릭터는 저장하지 않아
+    /// 다음 실행 때 씬 값을 기본값으로 씁니다. 데모 종료 뒤 처음 상태로 돌아갈 때 부릅니다.
+    /// </remarks>
+    public bool ResetToDefaultsAndSave()
+    {
+        ApplySnapshot(m_initialSettings ?? new SettingSnapshot());
+
+        SettingData.CrosshairSettingData crosshair = new SettingData.CrosshairSettingData();
+        DefaultCrosshairSettings defaults = DefaultCrosshairSettings;
+        if (defaults != null)
+        {
+            foreach (PlayerbleCharacterId characterId in System.Enum.GetValues(typeof(PlayerbleCharacterId)))
+            {
+                if (characterId != PlayerbleCharacterId.Unknown
+                    && defaults.TryGetCharacterStyle(characterId, out CrosshairStyle style))
+                {
+                    crosshair.characters.Add(new SettingData.CharacterCrosshairEntry { characterId = characterId, style = style });
+                }
+            }
+
+            if (defaults.TryGetThrowableStyle(out CrosshairStyle throwable))
+            {
+                crosshair.hasThrowable = true;
+                crosshair.throwable = throwable;
+            }
+        }
+
+        m_crosshairSettings = crosshair;
+        return SaveSettings();
     }
 
     // Saves only SettingData to disk.
