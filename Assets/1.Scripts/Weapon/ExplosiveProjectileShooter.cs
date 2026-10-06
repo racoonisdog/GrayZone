@@ -569,7 +569,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     /// </summary>
     private void InitializeGrenadeEquipmentVisuals()
     {
-        Gun weapon = GetComponentInChildren<Gun>(true);
+        // 활성 총을 먼저 찾습니다. 비활성으로 남은 옛 총을 잡으면 투척 자세에서 실제 들고 있는 총이 숨지 않습니다.
+        Gun activeWeapon = GetComponentInChildren<Gun>(false);
+        Gun weapon = activeWeapon != null ? activeWeapon : GetComponentInChildren<Gun>(true);
         if (weapon != null)
         {
             m_weaponRenderers = weapon.GetComponentsInChildren<Renderer>(true);

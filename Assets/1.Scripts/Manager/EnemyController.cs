@@ -931,11 +931,16 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_spawnAlwaysRun = false;
         m_spawnDefenseDisposition = EnemyDefenseDisposition.Default;
 
+        // 걷기 구속도 함께 비웁니다. 철조망·스파이크 안에서 풀로 돌아가면 OnTriggerExit이 오지 않아, 다시 스폰된 개체가
+        // 이전 생애의 걷기 구속을 안고 나옵니다.
+        m_forceWalkSources.Clear();
+
         if (m_moveSpeedMultipliers.Count > 0)
         {
             m_moveSpeedMultipliers.Clear();
-            RefreshMoveSpeedMultiplier();
         }
+
+        RefreshMoveSpeedMultiplier();
 
         // 버프 배율은 위에서 함께 비워졌으므로 기록만 지웁니다. 남기면 재사용된 개체가 이전 생애의 버프를
         // 가진 것으로 보이고, 같은 종류를 다시 받을 때도 기록이 어긋납니다.

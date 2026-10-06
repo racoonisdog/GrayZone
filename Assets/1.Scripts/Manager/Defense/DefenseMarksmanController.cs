@@ -247,7 +247,8 @@ public class DefenseMarksmanController : MonoBehaviour
     {
         if (m_weapon == null)
         {
-            m_weapon = GetComponentInChildren<Gun>(true);
+            Gun activeWeapon = GetComponentInChildren<Gun>(false);
+            m_weapon = activeWeapon != null ? activeWeapon : GetComponentInChildren<Gun>(true);
         }
 
         if (m_animator == null)
@@ -784,7 +785,12 @@ public class DefenseMarksmanController : MonoBehaviour
             return;
         }
 
-        Gun weapon = m_weapon != null ? m_weapon : GetComponentInChildren<Gun>(true);
+        Gun weapon = m_weapon;
+        if (weapon == null)
+        {
+            Gun activeWeapon = GetComponentInChildren<Gun>(false);
+            weapon = activeWeapon != null ? activeWeapon : GetComponentInChildren<Gun>(true);
+        }
         float range = weapon != null ? Mathf.Min(m_sightRange, weapon.HitscanRange) : m_sightRange;
         Vector3 origin = transform.position;
         Vector3 eye = GetEyePosition();

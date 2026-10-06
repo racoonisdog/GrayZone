@@ -193,6 +193,12 @@ public sealed class FireTrap : Trap
         }
     }
 
+    protected override void Awake()
+    {
+        base.Awake();
+        EnsureTriggerBody();
+    }
+
     /// <summary>트리거 콜라이더가 하나도 없으면 인스펙터에서 경고합니다.</summary>
     private void OnValidate()
     {
@@ -396,10 +402,36 @@ public sealed class FireTrap : Trap
         m_removalBuffer.Clear();
     }
 
-    /// <summary>이 콜라이더가 이 함정이 반응할 레이어인지 여부입니다.</summary>
+    /// <summary>이 콜라이더가 이 함정이 반응할 대상인지 여부입니다.</summary>
+    /// <remarks>
+    /// 트리거 콜라이더(구조 감지 구, 적 접촉 센서 등)는 몸이 아니라 감지 범위라 제외합니다. 점화 순간의
+    /// 범위 검사(<c>QueryTriggerInteraction.Ignore</c>)와 같은 기준입니다. 넣으면 몸보다 넓은 범위에서 불이 붙습니다.
+    /// </remarks>
     private bool IsTarget(Collider other)
     {
-        return other != null && (m_targetLayers.value & (1 << other.gameObject.layer)) != 0;
+        return other != null
+            && !other.isTrigger
+            && (m_targetLayers.value & (1 << other.gameObject.layer)) != 0;
+    }
+
+    /// <summary>
+    /// 트리거 감지에 필요한 키네마틱 Rigidbody를 보장합니다.
+    /// </summary>
+    /// <remarks>
+    /// 트리거 이벤트는 둘 중 한쪽에 Rigidbody나 CharacterController가 있어야 옵니다. AI 팀원은 CharacterController를
+    /// 끄고 일반 콜라이더만 쓰므로, 화염 쪽에 바디가 없으면 조작 중인 캐릭터만 불에 타고 나머지는 지나가도 멀쩡합니다.
+    /// 프리팹마다 붙이는 것을 잊지 않도록 코드에서 보장합니다.
+    /// </remarks>
+    private void EnsureTriggerBody()
+    {
+        Rigidbody body = GetComponent<Rigidbody>();
+        if (body == null)
+        {
+            body = gameObject.AddComponent<Rigidbody>();
+        }
+
+        body.isKinematic = true;
+        body.useGravity = false;
     }
 
     /// <summary>파괴되지 않았고 죽지도 않은 대상인지 여부입니다.</summary>

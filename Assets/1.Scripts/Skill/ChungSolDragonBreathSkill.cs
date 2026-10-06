@@ -96,7 +96,10 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
 
     private void ResolveGun()
     {
-        Gun resolved = GetComponentInChildren<Gun>(true);
+        // 활성 총을 먼저 찾습니다. 모델을 바꾸면 옛 모델 아래에 쓰지 않는 총이 비활성으로 남아, 비활성까지 한 번에 찾으면
+        // 그 총을 구독해 특수탄 발사와 장전 완료를 놓칩니다(PlayerbleUnitData.FindOwnedGun과 같은 규칙).
+        Gun active = GetComponentInChildren<Gun>(false);
+        Gun resolved = active != null ? active : GetComponentInChildren<Gun>(true);
         if (resolved == m_gun)
         {
             return;
