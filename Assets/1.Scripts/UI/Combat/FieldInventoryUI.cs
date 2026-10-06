@@ -384,14 +384,19 @@ public sealed class FieldInventoryUI : MonoBehaviour
         if (owner == null)
             return false;
 
-        if (owner != m_cachedInputOwner)
+        // 조작권이 바뀌면 PlayerInput이 액션 에셋(원본/복제본)을 바꿔 끼우므로, 멤버가 같아도 에셋이 바뀌었으면 다시 찾습니다.
+        PlayerInput playerInput = owner.GetComponent<PlayerInput>();
+        InputActionAsset currentAsset = playerInput != null ? playerInput.actions : null;
+        bool staleAction = m_cachedToggleAction == null
+            || m_cachedToggleAction.actionMap == null
+            || m_cachedToggleAction.actionMap.asset != currentAsset;
+
+        if (owner != m_cachedInputOwner || staleAction)
         {
             m_cachedInputOwner = owner;
-            m_cachedToggleAction = null;
-
-            PlayerInput playerInput = owner.GetComponent<PlayerInput>();
-            if (playerInput != null && playerInput.actions != null)
-                m_cachedToggleAction = playerInput.actions.FindAction("Inventory", false);
+            m_cachedToggleAction = currentAsset != null
+                ? currentAsset.FindAction("Inventory", false)
+                : null;
         }
 
         if (m_cachedToggleAction == null)

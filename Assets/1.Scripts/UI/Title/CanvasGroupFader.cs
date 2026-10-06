@@ -138,6 +138,7 @@ public sealed class CanvasGroupFader : MonoBehaviour
     /// <summary>애니메이션 없이 즉시 표시합니다.</summary>
     public void ShowImmediately()
     {
+        AutoAssignCanvasGroup();
         StopActiveFade();
         ApplyAlpha(1f);
     }
@@ -145,6 +146,7 @@ public sealed class CanvasGroupFader : MonoBehaviour
     /// <summary>애니메이션 없이 즉시 숨깁니다.</summary>
     public void HideImmediately()
     {
+        AutoAssignCanvasGroup();
         StopActiveFade();
         ApplyAlpha(0f);
     }

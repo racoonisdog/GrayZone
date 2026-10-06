@@ -161,6 +161,10 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("조준선 팔 끝이 탄퍼짐 콘의 어느 반경을 가리킬지 정합니다. ConeEdge=콘 경계(하드캡, 가장 넓음), MostShots=대부분 포함(≈2σ), Typical=통상 탄착(RMS), Core=밀집 코어(가장 타이트). 표시 기준만 바꾸며 실제 탄 궤적에는 영향이 없습니다. 무기의 분포·집중도를 읽어 배율로 환산합니다.")]
     [SerializeField] private SpreadDisplayBasis m_spreadDisplayBasis = SpreadDisplayBasis.MostShots;
 
+    [Tooltip("탄퍼짐 기여 간격에 곱할 표시 배율입니다. 1.2면 위 표시 기준보다 20% 넓게 그립니다. 실제 탄 궤적에는 영향이 없습니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_spreadGapScale = 1.2f;
+
     [Tooltip("켜면 Max Gap Pixels를 상한(안전 클램프)으로 써서 조준선이 그 이상 벌어지지 않게 합니다. 끄면 물리 투영값을 그대로 사용합니다.")]
     [SerializeField] private bool m_clampToMaxGap = false;
 
@@ -359,15 +363,11 @@ public class CrosshairController : MonoBehaviour
     [SerializeField] private float m_ammoGaugeDiagonalOffset = 40.0f;
 
     [Header("Ammo Gauge Bullet")]
-    [Tooltip("켜면 탄약 게이지 옆에 재장전 탄약 아이콘(m_reloadBulletImage)을 하나 더 표시합니다. 게이지가 보일 때만 보입니다.")]
+    [Tooltip("켜면 탄약 게이지 옆의 탄약 아이콘을 표시합니다. 게이지가 보일 때만 보입니다.")]
     [SerializeField] private bool m_showAmmoGaugeBullet = true;
 
-    [Tooltip("탄약 게이지 옆 탄약 아이콘의 표시 크기(픽셀)입니다.")]
-    [Min(0.0f)]
-    [SerializeField] private float m_ammoGaugeBulletSizePixels = 24.0f;
-
-    [Tooltip("탄약 게이지 중심에서 아이콘 중심까지의 거리(픽셀)입니다. x는 오른쪽, y는 아래쪽이 양수입니다.")]
-    [SerializeField] private Vector2 m_ammoGaugeBulletOffset = new Vector2(62.0f, -12.0f);
+    [Tooltip("탄약 게이지 옆에 둘 탄약 아이콘 UI(UGUI) 오브젝트입니다. 위치·크기·이미지는 이 오브젝트에서 편집하고, 여기서는 표시 여부만 맞춥니다.")]
+    [SerializeField] private GameObject m_ammoGaugeBulletUI;
 
     [Foldout("Hit Feedback")]
     [Header("Hit Marker")]
@@ -552,7 +552,6 @@ public class CrosshairController : MonoBehaviour
     private VisualElement m_subShapeElement;
     private VisualElement m_subStrokeElement;
     private VisualElement m_reloadBulletElement;
-    private VisualElement m_ammoGaugeBulletElement;
     private VisualElement m_ammoGaugeElement;
     private VisualElement m_hitMarkerElement;
     private VisualElement m_killSkullElement;
@@ -647,6 +646,12 @@ public class CrosshairController : MonoBehaviour
     private void Update()
     {
         if (!Application.isPlaying)
+        {
+            return;
+        }
+
+        // 문서가 아직 패널에 붙지 않았으면(설정 화면 미리보기용 복제본을 막 만든 직후 등) 그릴 요소가 없습니다.
+        if (m_rootElement == null && !CacheVisualElements())
         {
             return;
         }
@@ -2113,7 +2118,6 @@ public class CrosshairController : MonoBehaviour
         }
 
         m_reloadBulletElement = FindOrCreateChild(m_crosshairElement, "ReloadBullet");
-        m_ammoGaugeBulletElement = FindOrCreateChild(m_crosshairElement, "AmmoGaugeBullet");
 
         m_hitMarkerElement = FindOrCreateChild(m_crosshairElement, "HitMarker");
         if (m_hitMarkerElement != null)
@@ -2258,7 +2262,23 @@ public class CrosshairController : MonoBehaviour
             return 0.0f;
         }
 
-        return CalculateProjectedSpreadPixels(spreadDegrees, cameraFovDegrees) * Mathf.Max(0.0f, displayFactor);
+        return CalculateProjectedSpreadPixels(spreadDegrees, cameraFovDegrees, ResolvePanelHeight())
+            * Mathf.Max(0.0f, displayFactor)
+            * Mathf.Max(0.0f, m_spreadGapScale);
+    }
+
+    /// <summary>
+    /// 조준선 패널의 세로 길이(패널 단위)입니다. 간격 픽셀을 이 단위로 계산해야 패널 배율과 관계없이 실제 탄퍼짐과 맞습니다.
+    /// </summary>
+    /// <remarks>
+    /// 패널이 화면 크기에 맞춰 늘고 줄면(Scale With Screen Size) 패널 단위와 화면 픽셀이 다릅니다. 화면 높이(Screen.height)로
+    /// 계산하면 1080보다 작은 창에서 조준선이 실제 탄퍼짐보다 작게 그려집니다. 패널이 아직 없으면 화면 높이를 씁니다.
+    /// </remarks>
+    private float ResolvePanelHeight()
+    {
+        VisualElement root = m_document != null ? m_document.rootVisualElement : null;
+        float height = root?.panel?.visualTree != null ? root.panel.visualTree.layout.height : 0.0f;
+        return height > 1.0f && !float.IsNaN(height) ? height : Screen.height;
     }
 
     /// <summary>
@@ -2268,11 +2288,11 @@ public class CrosshairController : MonoBehaviour
     /// <param name="cameraFovDegrees">투영 기준으로 삼을 카메라 세로 FOV(도)입니다.</param>
     /// <returns>화면상 조준선 반벌어짐에 해당하는 픽셀 값입니다.</returns>
     /// <remarks>반FOV와 방사각의 tan 비율에 화면 세로 절반 픽셀을 곱해, 원근 투영과 일치하는 벌어짐을 만듭니다.</remarks>
-    private static float CalculateProjectedSpreadPixels(float spreadDegrees, float cameraFovDegrees)
+    private static float CalculateProjectedSpreadPixels(float spreadDegrees, float cameraFovDegrees, float viewHeight)
     {
         float halfFovRadians = Mathf.Max(1.0f, cameraFovDegrees) * 0.5f * Mathf.Deg2Rad;
         float spreadRadians = Mathf.Max(0.0f, spreadDegrees) * Mathf.Deg2Rad;
-        return Mathf.Tan(spreadRadians) / Mathf.Tan(halfFovRadians) * Screen.height * 0.5f;
+        return Mathf.Tan(spreadRadians) / Mathf.Tan(halfFovRadians) * viewHeight * 0.5f;
     }
 
     /// <summary>
@@ -2349,7 +2369,7 @@ public class CrosshairController : MonoBehaviour
 
         ApplyReloadBullet(center, reloadSwap);
         ApplyAmmoGauge(center);
-        ApplyAmmoGaugeBullet(center);
+        ApplyAmmoGaugeBullet();
         LayoutHitMarker(center);
         LayoutKillSkull(center);
     }
@@ -2414,37 +2434,28 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 탄약 게이지 옆에 재장전 탄약 아이콘과 같은 이미지를 하나 더 배치합니다. 게이지와 같은 조건에서만 보입니다.
+    /// 탄약 게이지 옆의 탄약 아이콘 UI를 게이지와 같은 조건에서만 켭니다.
     /// </summary>
     /// <remarks>
-    /// 위치는 게이지 중심 기준 오프셋이라, 게이지 크기나 대각 오프셋을 바꿔도 아이콘이 게이지를 따라갑니다.
-    /// 재장전 깜빡임은 중앙 아이콘에만 적용하고 이 아이콘은 항상 불투명하게 둡니다.
+    /// 아이콘은 코드로 만들지 않고 HUD 캔버스의 UGUI 오브젝트(<c>m_ammoGaugeBulletUI</c>)로 둡니다. 위치·크기·이미지는
+    /// 그 오브젝트에서 편집합니다. 그래서 게이지 크기나 대각 오프셋을 바꾸면 아이콘 위치는 직접 맞춰야 합니다.
+    /// 상태가 바뀔 때만 SetActive를 불러, 에디트 모드에서 씬이 매 갱신마다 수정된 것으로 표시되지 않게 합니다.
     /// </remarks>
-    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
-    private void ApplyAmmoGaugeBullet(float center)
+    private void ApplyAmmoGaugeBullet()
     {
-        if (m_ammoGaugeBulletElement == null)
+        if (m_ammoGaugeBulletUI == null)
         {
             return;
         }
 
-        bool gaugeVisible = m_showAmmoGauge
-                         && m_ammoGaugeSizePixels > 0.0f
-                         && (m_ammoGaugeAlwaysVisible || m_isReloading || !Application.isPlaying);
-        if (!gaugeVisible || !m_showAmmoGaugeBullet || m_reloadBulletImage == null || m_ammoGaugeBulletSizePixels <= 0.0f)
+        bool visible = m_showAmmoGaugeBullet
+                    && m_showAmmoGauge
+                    && m_ammoGaugeSizePixels > 0.0f
+                    && (m_ammoGaugeAlwaysVisible || m_isReloading || !Application.isPlaying);
+        if (m_ammoGaugeBulletUI.activeSelf != visible)
         {
-            HideElement(m_ammoGaugeBulletElement);
-            return;
+            m_ammoGaugeBulletUI.SetActive(visible);
         }
-
-        float size = m_ammoGaugeBulletSizePixels;
-        float gaugeCenter = center + m_ammoGaugeDiagonalOffset;
-        ApplyTextureImage(
-            m_ammoGaugeBulletElement,
-            m_reloadBulletImage,
-            gaugeCenter + m_ammoGaugeBulletOffset.x - size * 0.5f,
-            gaugeCenter + m_ammoGaugeBulletOffset.y - size * 0.5f,
-            size);
     }
 
     /// <summary>

@@ -306,7 +306,9 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
             return false;
 
         // 치료 후보 목록은 배치 여부와 관계없이 HP가 감소한 생존자를 계속 표시한다.
-        return !character.IsDead && character.CurrentHp < character.MaxHp;
+        // 전투 이탈(사망 처리)한 대원도 받는다. 치료(CompleteRecovery)가 전투 이탈을 풀어 주므로, 여기서 막으면
+        // 한 번 이탈한 대원은 다시 출격할 방법이 없다(출격 명단은 전투 이탈 대원을 뺀다).
+        return character.IsDead || character.CurrentHp < character.MaxHp;
 
         /* 날짜 기반 치료를 다시 사용할 때 복구할 기존 후보 조건.
         if (patientTreatments.Count >= PatientCapacity)
@@ -422,11 +424,13 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
             return false;
         }
 
+        // 환자 조건은 CanAssignPatient가 이미 판정했습니다. 생존자 필터(AvailableAlive)를 쓰면 전투 이탈 대원이
+        // 배정 단계에서 다시 막히므로 여기서는 필터를 걸지 않습니다. 직원 배정은 계속 생존자만 받습니다.
         if (!manager.TryAssignToFacility(
                 runtimeId,
                 FacilityId,
                 roomId,
-                CharacterAssignmentFilter.AvailableAlive,
+                CharacterAssignmentFilter.Any,
                 FacilityAssignmentKind.Patient,
                 out target,
                 out _))

@@ -653,9 +653,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
+  m_dangerLevel: 1
   m_isDefenseEnemy: 1
   m_defenseDisposition: 1
-  m_balanceSO: {fileID: 11400000, guid: c3e0838f54970f249b330c31fb952521, type: 2}
+  m_balanceSO: {fileID: 11400000, guid: 480344ed84c94f64681511a8c303edea, type: 2}
   m_feedback: {fileID: 11400000, guid: 0b0d847d0605c734885a718ca336bdc5, type: 2}
   wanderRadius: 8
   wanderInterval: 3
@@ -673,12 +674,9 @@ MonoBehaviour:
   noiseSearchRadius: 5
   combatSearchDuration: 6
   combatSearchRadius: 6
-  howlRadius: 25
-  howlBroadcastTime: 1.2
-  howlDuration: 3
   targetReevaluateInterval: 1
   targetSwitchPathDistanceDelta: 2
-  m_knockbackMass: 60
+  m_mass: 60
   m_knockbackDamping: 8
   m_maxKnockbackSpeed: 6
   hitStunDuration: 0.35
@@ -686,7 +684,6 @@ MonoBehaviour:
   attackDirectionLockTime: 0.25
   attackImpactTime: 0.45
   attackRecoveryDuration: 0.75
-  m_debugDrawHowlRadius: 1
   m_debugDrawWanderRadius: 0
   m_debugLogStagger: 1
 --- !u!195 &6567124513096988904
@@ -857,7 +854,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 483f686e9379f904dbf44cf3182dceaa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Melee
-  m_balanceSO: {fileID: 11400000, guid: 315861973b1477348be351444a62a951, type: 2}
+  m_balanceSO: {fileID: 11400000, guid: 2ee1bbc3ef9629342a37af01c5b2a75d, type: 2}
   m_attack: {fileID: 442783041056669385}
 --- !u!1 &5606661558721766919
 GameObject:
@@ -1485,7 +1482,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 483f686e9379f904dbf44cf3182dceaa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Melee
-  m_balanceSO: {fileID: 11400000, guid: 315861973b1477348be351444a62a951, type: 2}
+  m_balanceSO: {fileID: 11400000, guid: 2ee1bbc3ef9629342a37af01c5b2a75d, type: 2}
   m_attack: {fileID: 442783041056669385}
 --- !u!1 &8698061882770314044
 GameObject:

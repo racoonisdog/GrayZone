@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// G 투척 모드에서 현재 선택된 투척물 아이콘을 표시합니다.
+/// 조작 대원이 고른 투척물 아이콘과 보유 수량을 표시합니다. 기본은 항상 표시이고, 설정에 따라 G 투척 모드에서만 표시합니다.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class GrenadeSelectionUI : MonoBehaviour
@@ -37,6 +37,25 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
     [Tooltip("투척물 Prefab과 UI 아이콘 Sprite의 대응 목록입니다.")]
     [SerializeField] private List<IconBinding> m_iconBindings = new List<IconBinding>();
 
+    [Tooltip("켜면 투척 모드가 아니어도 조작 대원이 고른 투척물 아이콘과 보유 수량을 항상 표시합니다(Figma Reviving HUD_Description_Test01). 끄면 G 투척 모드에서만 표시합니다.")]
+    [SerializeField] private bool m_alwaysVisible = true;
+
+    [Tooltip("아이콘 위에 투척 모드 키를 표시할 텍스트입니다. 선택 사항입니다.")]
+    [SerializeField] private TMP_Text m_keyText;
+
+    [Tooltip("투척 모드 키를 읽어 올 입력 액션 이름입니다. 조작 대원의 PlayerInput에서 키보드 바인딩 표시 이름을 가져옵니다.")]
+    [SerializeField] private string m_keyActionName = "ThrowMode";
+
+    [Tooltip("입력 액션에서 키를 찾지 못했을 때 표시할 글자입니다.")]
+    [SerializeField] private string m_fallbackKeyLabel = "G";
+
+    // 대원마다 고른 투척물이 다를 수 있어, 각 대원이 마지막으로 알려 준 선택을 기억합니다.
+    private readonly Dictionary<ExplosiveProjectileShooter, ProjectileBase> m_selectionByOwner =
+        new Dictionary<ExplosiveProjectileShooter, ProjectileBase>();
+    private SquadManager m_squadManager;
+    private SquadInventoryManager m_inventory;
+    private SquadMemberController m_keyLabelMember;
+
     private ExplosiveProjectileShooter m_owner;
     private ProjectileBase m_displayedProjectile;
     private int m_displayedQuantity = -1;
@@ -46,6 +65,58 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
         ResolveReferences();
         EnsureQuantityText();
         SetVisible(false);
+    }
+
+    /// <summary>항상 표시 모드에서 조작 대원의 선택 투척물과 스쿼드 인벤토리 수량을 따라갑니다.</summary>
+    private void LateUpdate()
+    {
+        if (!m_alwaysVisible)
+        {
+            return;
+        }
+
+        if (m_squadManager == null)
+        {
+            m_squadManager = FindFirstObjectByType<SquadManager>(FindObjectsInactive.Include);
+        }
+
+        if (m_inventory == null)
+        {
+            m_inventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
+        }
+
+        SquadMemberController member = m_squadManager != null ? m_squadManager.PlayerSquadMember : null;
+        ExplosiveProjectileShooter shooter = member != null
+            ? member.GetComponentInChildren<ExplosiveProjectileShooter>(true)
+            : null;
+        if (shooter == null || !m_selectionByOwner.TryGetValue(shooter, out ProjectileBase projectile) || projectile == null)
+        {
+            // 대원이 아직 선택을 알려 주지 않았으면 목록의 첫 투척물을 보여 줍니다.
+            projectile = m_iconBindings != null && m_iconBindings.Count > 0 && m_iconBindings[0] != null
+                ? m_iconBindings[0].ProjectilePrefab
+                : null;
+        }
+
+        SetVisible(projectile != null);
+        if (projectile == null)
+        {
+            return;
+        }
+
+        RefreshKeyLabel(member);
+
+        if (m_displayedProjectile != projectile)
+        {
+            m_displayedProjectile = projectile;
+            RefreshIcon(projectile);
+        }
+
+        int quantity = m_inventory != null ? m_inventory.CountOf(projectile.InventoryItemDefinitionId) : 0;
+        if (m_displayedQuantity != quantity)
+        {
+            m_displayedQuantity = quantity;
+            RefreshQuantity(quantity);
+        }
     }
 
     private void OnValidate()
@@ -63,6 +134,17 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
         int quantity)
     {
         if (owner == null)
+        {
+            return;
+        }
+
+        if (selectedProjectile != null)
+        {
+            m_selectionByOwner[owner] = selectedProjectile;
+        }
+
+        // 항상 표시 모드에서는 표시 여부와 수량을 LateUpdate가 정합니다. 여기서는 선택만 기록합니다.
+        if (m_alwaysVisible)
         {
             return;
         }
@@ -152,6 +234,41 @@ public sealed class GrenadeSelectionUI : MonoBehaviour
         if (m_canvas != null && m_canvas.gameObject.activeSelf != visible)
         {
             m_canvas.gameObject.SetActive(visible);
+        }
+    }
+
+    /// <summary>조작 대원의 입력 액션에서 투척 모드 키의 키보드 표시 이름을 읽어 표시합니다.</summary>
+    private void RefreshKeyLabel(SquadMemberController member)
+    {
+        // 바인딩 표시 이름은 문자열을 새로 만들므로 조작 대원이 바뀔 때만 다시 읽습니다.
+        if (m_keyText == null || (member == m_keyLabelMember && !string.IsNullOrEmpty(m_keyText.text)))
+        {
+            return;
+        }
+
+        m_keyLabelMember = member;
+        string label = m_fallbackKeyLabel;
+        UnityEngine.InputSystem.PlayerInput playerInput = member != null
+            ? member.GetComponentInChildren<UnityEngine.InputSystem.PlayerInput>(true)
+            : null;
+        UnityEngine.InputSystem.InputAction action = playerInput != null && playerInput.actions != null
+            ? playerInput.actions.FindAction(m_keyActionName)
+            : null;
+        if (action != null)
+        {
+            for (int i = 0; i < action.bindings.Count; i++)
+            {
+                if (action.bindings[i].effectivePath.StartsWith("<Keyboard>"))
+                {
+                    label = UnityEngine.InputSystem.InputActionRebindingExtensions.GetBindingDisplayString(action, i);
+                    break;
+                }
+            }
+        }
+
+        if (m_keyText.text != label)
+        {
+            m_keyText.text = label;
         }
     }
 

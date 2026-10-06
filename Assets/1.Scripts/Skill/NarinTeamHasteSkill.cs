@@ -6,18 +6,27 @@ public sealed class NarinTeamHasteSkill : CharacterSkill
 {
     private const string HasteResourcePath = "StatusEffects/NarinTeamHaste";
 
+    [Tooltip("이 스킬의 밸런스 수치 SO입니다(쿨타임). 비어 있으면 인스펙터 값을 그대로 씁니다. " +
+             "가속 수치와 지속시간은 아래 상태효과 SO가 소유합니다.")]
+    [SerializeField] private NarinTeamHasteSkillSO m_balanceSO;
+
     [Tooltip("전 스쿼드에 적용할 이동·행동속도 상태효과입니다. 비어 있으면 Resources 기본 에셋을 사용합니다.")]
     [SerializeField] private StatusEffectDefinitionSO m_hasteEffect;
 
     private Coroutine m_effectRoutine;
     private float m_effectEndTime;
 
+    protected override ScriptableObject BalanceSource => m_balanceSO;
+
     public override CharacterSkillType SkillType => CharacterSkillType.NarinTeamHaste;
     public override string DisplayName => "전술 가속";
-    public override string Description => "일정 시간 동안 전 대원의 이동·행동 속도를 높입니다.";
+    public override string Description => "팀원 전체의 이동속도와 행동속도를 증가시킵니다";
     public override bool IsActive => m_effectRoutine != null;
     public override float ActiveDuration => ResolveHasteEffect() != null ? ResolveHasteEffect().Duration : 0.0f;
     public override float ActiveRemaining => IsActive ? Mathf.Max(0.0f, m_effectEndTime - Time.time) : 0.0f;
+    public override string HudDetailText => IsActive
+        ? $"지속 시간 {ActiveRemaining:0.0} / {ActiveDuration:0.0}초"
+        : $"지속 시간 {ActiveDuration:0.0}초";
 
     protected override bool ActivateSkill(SquadManager squadManager)
     {

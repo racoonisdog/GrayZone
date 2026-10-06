@@ -35,6 +35,20 @@ public interface IInteractable
     float HoldDuration { get; }
 }
 
+/// <summary>
+/// 대상으로는 잡히지만 실행에 조건(자원 등)이 따로 있는 상호작용입니다.
+/// </summary>
+/// <remarks>
+/// <see cref="IInteractable.CanInteract"/>가 거짓이면 대상 자체가 잡히지 않아 안내 UI가 뜨지 않습니다.
+/// "자원이 부족합니다"처럼 왜 안 되는지 보여 줘야 하는 경우는 대상으로는 잡고, 이 조건이 거짓이면
+/// 홀드 게이지를 채우지 않고 실행하지 않습니다. 게이지가 다 찼는데 아무 일도 없는 상황을 막습니다.
+/// </remarks>
+public interface IInteractionRequirement
+{
+    /// <summary>지금 실행 조건을 만족하는지 여부입니다.</summary>
+    bool MeetsInteractionRequirement(GameObject interactor);
+}
+
 public interface IHoldInteractable
 {
     void BeginHold(GameObject interactor);

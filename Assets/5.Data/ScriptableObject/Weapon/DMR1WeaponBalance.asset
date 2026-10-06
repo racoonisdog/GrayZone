@@ -12,24 +12,34 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 495c9ece0bf94cb5a87a3b0bf6a94479, type: 3}
   m_Name: DMR1WeaponBalance
   m_EditorClassIdentifier: Assembly-CSharp::GunBalanceSO
+  Gun_m_pelletCount: 1
   Gun_m_maxBullet: 20
+  Gun_m_segmentAmmoGaugeByRound: 0
   Gun_m_shootDelay: 0.15
   Gun_m_fireMode: 1
   Gun_m_reloadTime: 1.3335
-  Gun_m_hitscanDamage: 7
+  Gun_m_reloadMode: 0
+  Gun_m_hitscanDamage: 20
   Gun_m_allowHeadshot: 1
   Gun_m_headshotDamageMultiplier: 2
   Gun_m_hitscanRange: 100
   Gun_m_knockbackImpulse: 0
-  Gun_m_hipfireMinSpread: 1
-  Gun_m_hipfireMaxSpread: 3
-  Gun_m_airborneExtraSpread: 2
+  Gun_m_hipfireStandingMinSpread: 1
+  Gun_m_hipfireStandingMaxSpread: 3
+  Gun_m_hipfireCrouchMinSpread: 1.2
+  Gun_m_hipfireCrouchMaxSpread: 4.2
+  Gun_m_hipfireAirborneMinSpread: 4
+  Gun_m_hipfireAirborneMaxSpread: 9
   Gun_m_hipfireMinSpreadShotCount: 0
   Gun_m_hipfireSpreadIncreasePerShot: 0.25
   Gun_m_hipfireSpreadRecoveryPerSecond: 8
   Gun_m_hipfireSpreadRecoveryDelay: 0.15
-  Gun_m_adsMinSpread: 0
-  Gun_m_adsMaxSpread: 1
+  Gun_m_adsStandingMinSpread: 0
+  Gun_m_adsStandingMaxSpread: 1
+  Gun_m_adsCrouchMinSpread: 0
+  Gun_m_adsCrouchMaxSpread: 1.8
+  Gun_m_adsAirborneMinSpread: 2
+  Gun_m_adsAirborneMaxSpread: 5
   Gun_m_adsMinSpreadShotCount: 0
   Gun_m_adsSpreadIncreasePerShot: 0.125
   Gun_m_adsSpreadRecoveryPerSecond: 8
@@ -52,13 +62,13 @@ MonoBehaviour:
     m_steps:
     - m_maxDistance: 30
       m_damageMultiplier: 1
-      m_flatDamage: 3
+      m_flatDamage: 20
     - m_maxDistance: 60
-      m_damageMultiplier: 0.7
-      m_flatDamage: 2
+      m_damageMultiplier: 0.9
+      m_flatDamage: 18
     - m_maxDistance: 100
-      m_damageMultiplier: 0.4
-      m_flatDamage: 1
+      m_damageMultiplier: 0.8
+      m_flatDamage: 16
   Gun_m_penetration:
     m_unlimited: 0
     m_maxPenetrations: 3

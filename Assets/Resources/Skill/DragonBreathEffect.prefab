@@ -44,13 +44,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74aa9cfedeb34ff29c1a73f0e625c022, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DragonBreathEffect
-  m_damageRadius: 1
-  m_damageRange: 4
+  m_damageStartRadius: 0.3
+  m_damageEndRadius: 1.5
+  m_damageRange: 17.5
+  m_impactDamageRadius: 1.7
   m_damage: 10
+  m_damageFalloff:
+    m_mode: 1
+    m_trackMinDistance: 0
+    m_trackMaxDistance: 17.5
+    m_steps:
+    - m_maxDistance: 6
+      m_damageMultiplier: 1
+      m_flatDamage: 100
+    - m_maxDistance: 12
+      m_damageMultiplier: 0.7
+      m_flatDamage: 70
+    - m_maxDistance: 17.5
+      m_damageMultiplier: 0.4
+      m_flatDamage: 40
   m_lifetime: 0.18
   m_damageLayerMask:
     serializedVersion: 2
     m_Bits: 4294967295
   m_burningEffect: {fileID: 11400000, guid: 429e4488a94e6334793b260aecf3bec0, type: 2}
   m_drawDebugRange: 1
-  m_visualEffectPrefab: {fileID: 1572011884065796, guid: 5d109182cf5ba704c941d2dd68bbc858, type: 3}
+  m_visualEffectPrefab: {fileID: 3584185935344290311, guid: 40475d31f0cd34046a3d4efaacaa06c0, type: 3}
+  m_visualEffectRotation: {x: 0, y: 0, z: 0}
+  m_impactEffectPrefab: {fileID: 5498666834010301817, guid: 9102639f55722954d8ff42a5ccad59e1, type: 3}
+  m_impactTravelSpeed: 85

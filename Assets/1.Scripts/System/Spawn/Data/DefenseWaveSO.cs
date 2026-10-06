@@ -20,6 +20,14 @@ public sealed class DefenseWaveSO : ScriptableObject
     [Tooltip("이 웨이브에 스폰할 때마다 하나를 무작위로 고를 후보 그룹입니다. 비어 있거나 생성할 항목이 없는 그룹은 고르지 않습니다.")]
     [SerializeField] private List<SpawnGroupSO> m_groups = new List<SpawnGroupSO>();
 
+    [Header("Fixed Groups")]
+    [Tooltip("이 웨이브마다 한 번씩 반드시 내보낼 그룹입니다. 위 후보 그룹의 무작위 스폰과 별개로 나옵니다. 비워 두면 쓰지 않습니다.")]
+    [SerializeField] private List<SpawnGroupSO> m_fixedGroups = new List<SpawnGroupSO>();
+
+    [Tooltip("전투 시작 뒤 고정 그룹을 내보내기까지 기다릴 시간(초)입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_fixedSpawnDelay = 3.0f;
+
     [Header("Timing")]
     [Tooltip("전투 시작 뒤 첫 그룹을 내보내기까지 기다릴 최소 시간(초)입니다. 터널처럼 늦게 열리는 공격로는 크게 둡니다.")]
     [Min(0.0f)]
@@ -44,6 +52,12 @@ public sealed class DefenseWaveSO : ScriptableObject
 
     /// <summary>후보 그룹 목록입니다.</summary>
     public IReadOnlyList<SpawnGroupSO> Groups => m_groups;
+
+    /// <summary>웨이브마다 한 번씩 반드시 내보낼 그룹 목록입니다.</summary>
+    public IReadOnlyList<SpawnGroupSO> FixedGroups => m_fixedGroups;
+
+    /// <summary>전투 시작 뒤 고정 그룹을 내보내기까지 기다릴 시간(초)입니다.</summary>
+    public float FixedSpawnDelay => Mathf.Max(0.0f, m_fixedSpawnDelay);
 
     /// <summary>후보 그룹의 평균 그룹 밸류입니다. 고를 수 있는 그룹이 없으면 0입니다.</summary>
     [ShowInInspector]
@@ -156,6 +170,11 @@ public sealed class DefenseWaveSO : ScriptableObject
         {
             m_groups[i]?.CollectEntries(entries);
         }
+
+        for (int i = 0; i < m_fixedGroups.Count; i++)
+        {
+            m_fixedGroups[i]?.CollectEntries(entries);
+        }
     }
 
     /// <summary>
@@ -196,5 +215,6 @@ public sealed class DefenseWaveSO : ScriptableObject
         m_spawnIntervalMin = Mathf.Max(0.1f, m_spawnIntervalMin);
         m_spawnIntervalMax = Mathf.Max(m_spawnIntervalMin, m_spawnIntervalMax);
         m_previewCombatDuration = Mathf.Max(0.0f, m_previewCombatDuration);
+        m_fixedSpawnDelay = Mathf.Max(0.0f, m_fixedSpawnDelay);
     }
 }

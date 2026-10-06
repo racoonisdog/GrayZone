@@ -14,11 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::StatusEffectDefinitionSO
   m_displayName: Burning
   m_category: 1
-  m_duration: 4
+  m_duration: 5
   m_stackPolicy: 0
   m_maxStacks: 1
   m_recipientVisual: {fileID: 11400000, guid: 64d290c8e68357649a765e68e922c70e, type: 2}
   m_movementSpeedPercent: 100
   m_actionSpeedPercent: 100
-  m_periodicDamage: 2
-  m_tickInterval: 1
+  m_periodicDamage: 5
+  m_tickInterval: 0.5
+  m_playerDamageReductionPercent: 0

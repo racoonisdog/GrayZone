@@ -243,6 +243,9 @@ public class SquadManager : MonoBehaviour
     /// <summary>현재 PlayerSquadMember에 대응하는 플레이어 공개 데이터입니다.</summary>
     public PlayerbleUnitData PlayerSquadMemberData => GetPlayerData(m_playerSquadMemberIndex);
 
+    /// <summary>현재 조작 캐릭터의 스킬을 발동하는 키입니다. HUD 표시에 씁니다.</summary>
+    public Key SkillKey => m_skillKey;
+
     /// <summary>현재 조작 중인 캐릭터가 보유한 스킬입니다.</summary>
     public CharacterSkill PlayerSquadMemberSkill => GetSkill(m_playerSquadMemberIndex);
 
@@ -333,10 +336,6 @@ public class SquadManager : MonoBehaviour
 
         s_instance = this;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        SkillStatusDebugHud.EnsureAttached(this);
-#endif
-
         AutoFindReferences();
         NormalizeMemberIndex();
         ApplyInitialMemberRolePresets();
@@ -355,11 +354,16 @@ public class SquadManager : MonoBehaviour
     {
         AutoFindReferences();
         SubscribeMemberDeathEvents();
+        EnemyHealth.OnEnemyEnabled += HandleEnemyEnabled;
     }
 
     private void OnDisable()
     {
         UnsubscribeMemberDeathEvents();
+        EnemyHealth.OnEnemyEnabled -= HandleEnemyEnabled;
+        m_awareEnemies.Clear();
+        m_awareEnemySet.Clear();
+        m_awareEnemiesSeeded = false;
     }
 
     /// <summary>
@@ -761,7 +765,9 @@ public class SquadManager : MonoBehaviour
     /// </remarks>
     private void UpdateEnemyIntel()
     {
-        if (!m_engagement.IsInCombat && m_enemyIntel.TrackedCount == 0)
+        bool anyVisible = EnemyAwareness == SquadEnemyAwareness.AnyVisible;
+
+        if (!anyVisible && !m_engagement.IsInCombat && m_enemyIntel.TrackedCount == 0)
         {
             return;
         }
@@ -773,7 +779,87 @@ public class SquadManager : MonoBehaviour
 
         m_nextEnemyIntelTime = Time.time + Mathf.Max(0.02f, m_enemyIntelInterval);
 
+        if (anyVisible)
+        {
+            PruneAwareEnemies();
+            m_enemyIntel.Refresh(m_awareEnemies, IsAwareEnemyTracked, IsEnemyConfirmedBySquad);
+            return;
+        }
+
         m_enemyIntel.Refresh(m_engagement, IsEnemyConfirmedBySquad);
+    }
+
+    /// <summary>
+    /// AI 팀원이 공격 대상으로 삼을 수 있는 적의 범위입니다. 씬 컨트롤러가 정하며, 없으면 필드 기준입니다.
+    /// </summary>
+    public SquadEnemyAwareness EnemyAwareness =>
+        CombatSceneManager.Instance != null ? CombatSceneManager.Instance.SquadEnemyAwareness : SquadEnemyAwareness.EngagedOnly;
+
+    /// <summary>방어전 기준(<see cref="SquadEnemyAwareness.AnyVisible"/>)에서 후보로 넘길, 지금 살아 있는 적들입니다.</summary>
+    /// <remarks>
+    /// 매 갱신마다 씬을 훑지 않으려고 적이 켜질 때 받는 알림(<see cref="EnemyHealth.OnEnemyEnabled"/>)으로 모읍니다.
+    /// 꺼진 적은 갱신 직전에 걷어냅니다. 풀에서 다시 켜지면 알림이 다시 와서 들어옵니다.
+    /// </remarks>
+    private readonly List<EnemyController> m_awareEnemies = new List<EnemyController>();
+
+    /// <summary><see cref="m_awareEnemies"/>의 중복 확인용입니다.</summary>
+    private readonly HashSet<EnemyController> m_awareEnemySet = new HashSet<EnemyController>();
+
+    /// <summary>이 매니저가 켜지기 전에 이미 켜져 있던 적을 한 번 모았는지 여부입니다.</summary>
+    private bool m_awareEnemiesSeeded;
+
+    private void HandleEnemyEnabled(EnemyHealth health)
+    {
+        if (health == null)
+        {
+            return;
+        }
+
+        AddAwareEnemy(health.GetComponentInParent<EnemyController>());
+    }
+
+    private void AddAwareEnemy(EnemyController enemy)
+    {
+        if (enemy != null && m_awareEnemySet.Add(enemy))
+        {
+            m_awareEnemies.Add(enemy);
+        }
+    }
+
+    /// <summary>꺼졌거나 파괴된 적을 후보에서 걷어냅니다. 처음 한 번은 이미 켜져 있던 적을 모읍니다.</summary>
+    private void PruneAwareEnemies()
+    {
+        if (!m_awareEnemiesSeeded)
+        {
+            m_awareEnemiesSeeded = true;
+            EnemyController[] existing = FindObjectsByType<EnemyController>(FindObjectsSortMode.None);
+            for (int i = 0; i < existing.Length; i++)
+            {
+                AddAwareEnemy(existing[i]);
+            }
+        }
+
+        for (int i = m_awareEnemies.Count - 1; i >= 0; i--)
+        {
+            // 죽은 적은 목록에 남겨 둡니다. 꺼지지 않고 그 자리에서 되살아나는 경우에도 계속 보이게 하기 위해서입니다.
+            // 기록에서 빼는 것은 IsAwareEnemyTracked가 따로 합니다.
+            EnemyController enemy = m_awareEnemies[i];
+            if (enemy != null && enemy.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+            m_awareEnemies.RemoveAt(i);
+            m_awareEnemySet.Remove(enemy);
+        }
+    }
+
+    /// <summary>방어전 기준에서 기록을 둘 적인지 판정합니다. 켜져 있고 살아 있으면 true입니다.</summary>
+    private static bool IsAwareEnemyTracked(EnemyController enemy)
+    {
+        return enemy != null
+               && enemy.gameObject.activeInHierarchy
+               && (enemy.Health == null || !enemy.Health.IsDead);
     }
 
     /// <summary>
@@ -1587,6 +1673,7 @@ public class SquadManager : MonoBehaviour
             if (input != null)
             {
                 input.SetInputGate(gameplayEnabled);
+                input.SyncCursorLockedFlag(gameplayEnabled);
             }
 
             ThirdPersonController controller = member.GetComponent<ThirdPersonController>();
@@ -2039,6 +2126,47 @@ public class SquadManager : MonoBehaviour
         RemoveNullMembers();
         SyncPlayerDataSources();
         NormalizeMemberIndex();
+        SubscribeMemberDeathEvents();
+        UpdateCameraTarget();
+        RefreshCharacterCameraCollisionResponses();
+        RefreshPlayerSquadMemberWeaponUI();
+        OnPlayerSkillChanged?.Invoke(PlayerSquadMemberSkill);
+    }
+
+    /// <summary>
+    /// 지정한 멤버를 스쿼드에서 뺍니다. 조작 중인 멤버는 그대로 유지합니다.
+    /// </summary>
+    /// <param name="excluded">뺄 멤버들입니다.</param>
+    /// <remarks>
+    /// 출격하지 않은 대원을 씬 시작 때 빼는 용도입니다. <see cref="SetSquadMembers"/>는 인덱스만 범위 안으로 자르므로,
+    /// 앞쪽 멤버가 빠지면 조작 인덱스가 다른 멤버를 가리키게 됩니다. 여기서는 조작 멤버 자체를 기준으로 인덱스를 다시 잡고,
+    /// 조작 멤버가 빠지는 경우에는 목록을 바꾸기 전에 남는 첫 멤버로 조작을 넘깁니다.
+    /// </remarks>
+    public void ExcludeMembers(ICollection<SquadMemberController> excluded)
+    {
+        if (excluded == null || excluded.Count == 0 || m_squadMembers == null)
+        {
+            return;
+        }
+
+        int firstRemaining = m_squadMembers.FindIndex(member => member != null && !excluded.Contains(member));
+        if (firstRemaining < 0)
+        {
+            return;
+        }
+
+        if (PlayerSquadMember == null || excluded.Contains(PlayerSquadMember))
+        {
+            SwitchToMember(firstRemaining, false, false);
+        }
+
+        SquadMemberController controlled = PlayerSquadMember;
+        List<SquadMemberController> remaining = m_squadMembers.FindAll(member => member != null && !excluded.Contains(member));
+
+        UnsubscribeMemberDeathEvents();
+        m_squadMembers = remaining;
+        m_playerSquadMemberIndex = Mathf.Max(0, m_squadMembers.IndexOf(controlled));
+        SyncPlayerDataSources();
         SubscribeMemberDeathEvents();
         UpdateCameraTarget();
         RefreshCharacterCameraCollisionResponses();

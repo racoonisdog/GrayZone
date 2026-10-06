@@ -79,6 +79,7 @@ internal static class DebugFieldNames
         { "m_debugDrawDamageFalloff", "거리 감쇠 표시" },
         { "m_debugFalloffRingRadius", "감쇠 링 반지름" },
         { "m_debugDrawShotNoiseRange", "발사 소음 반경 표시" },
+        { "m_debugDrawShotRay", "발사 레이 표시" },
         { "m_debugDrawAudioDistance", "오디오 거리 표시" },
 
         // 스킬
@@ -101,6 +102,13 @@ internal static class DebugFieldNames
         { "m_debugTrainerPrefab", "트레이너 프리팹" },
         { "developMode", "개발 모드" },
         { "m_logResult", "바인딩 결과 로그" },
+        { "m_showDamageNumbers", "피해 숫자 표시" },
+        { "m_showInGameView", "게임 뷰에 표시" },
+        { "m_showInSceneView", "씬 뷰에 표시" },
+        { "m_damageNumberLifetime", "피해 숫자 유지 시간" },
+        { "m_damageNumberRiseSpeed", "피해 숫자 상승 속도" },
+        { "m_damageNumberFontSize", "피해 숫자 글자 크기" },
+        { "m_showAimDamagePreview", "조준 거리별 피해 표시" },
     };
 
     /// <summary>필드 이름에 대응하는 한글 이름을 돌려줍니다. 없으면 영문 이름을 풀어 씁니다.</summary>
@@ -251,6 +259,7 @@ public static class DebugSectionRegistry
         { "GameManager", "시스템" },
         { "FieldSceneDataManager", "시스템" },
         { "EffectManager", "시스템" },
+        { "DamageNumberDebug", "시스템" },
     };
 
     /// <summary>

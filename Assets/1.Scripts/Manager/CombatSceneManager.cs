@@ -147,6 +147,15 @@ public abstract class CombatSceneManager : MonoBehaviour, IInputModeController
     /// <summary>이 씬이 소음 차폐(<see cref="NoiseManager"/>)를 쓰는지 여부입니다. 쓰지 않으면 없어도 경고하지 않습니다.</summary>
     protected virtual bool UsesNoiseManager => true;
 
+    /// <summary>
+    /// AI 팀원이 어떤 적을 공격 대상으로 삼을 수 있는지입니다. 필드는 스쿼드와 교전 중인 적만 노립니다.
+    /// </summary>
+    /// <remarks>
+    /// 필드에서는 아직 스쿼드를 알아채지 못한 적을 먼저 쏘지 않는 것이 잠입 규칙입니다(`스쿼드 AI 시스템` §8.1).
+    /// 방어전처럼 보이는 적을 모두 막아야 하는 씬은 재정의합니다.
+    /// </remarks>
+    public virtual SquadEnemyAwareness SquadEnemyAwareness => SquadEnemyAwareness.EngagedOnly;
+
     /// <summary>빠진 자식 매니저를 한 번에 알립니다.</summary>
     /// <remarks>
     /// 이것들이 없으면 탄흔·사운드·시체 처리가 조용히 멈춥니다. 원인을 찾기 어려운 침묵이라 시작할 때 짚어 둡니다.

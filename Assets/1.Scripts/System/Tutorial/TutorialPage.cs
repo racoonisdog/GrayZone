@@ -39,7 +39,7 @@ public struct TutorialPage
     [Tooltip("페이지 이미지입니다. 비어 있으면 이미지 오브젝트를 끕니다.")]
     [SerializeField] private Sprite m_image;
 
-    [Tooltip("하단 안내 문구입니다. 키 이름은 여기에 직접 적습니다(예: \"[F] 3초 유지\").")]
+    [Tooltip("하단 안내 문구입니다. 키 이름은 여기에 직접 적습니다(예: \"[Z] 3초 유지\").")]
     [SerializeField] private string m_hint;
 
     [Tooltip("본문 사이에 끼워 넣을 키 아이콘입니다(예: H, F). 비어 있으면 아이콘을 끕니다. " +

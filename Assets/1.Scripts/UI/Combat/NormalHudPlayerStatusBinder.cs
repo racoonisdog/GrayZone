@@ -126,6 +126,18 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     [Tooltip("켜면 체력 텍스트를 '현재/최대'로 표시합니다. 끄면 현재 값만 표시합니다.")]
     [SerializeField] private bool m_showMaxHpInText;
 
+    [Header("HP Gauge Fade")]
+    [Tooltip("하단 중앙 체력바(Big life gauge)의 CanvasGroupFader입니다. 비워 두면 체력 구간 페이드를 쓰지 않고 항상 표시합니다.")]
+    [SerializeField] private CanvasGroupFader m_hpGaugeFader;
+
+    [Tooltip("체력이 이 비율(%) 이하로 내려가면 체력바를 페이드 인합니다.")]
+    [Range(0f, 100f)]
+    [SerializeField] private float m_hpGaugeFadeInPercent = 50f;
+
+    [Tooltip("체력이 이 비율(%) 이상으로 올라가면 체력바를 페이드 아웃합니다. 페이드 인 비율보다 작을 수 없습니다. 두 값 사이에서는 직전 상태를 유지합니다.")]
+    [Range(0f, 100f)]
+    [SerializeField] private float m_hpGaugeFadeOutPercent = 70f;
+
     [Header("Ammo")]
     [Tooltip("현재 탄창 탄약 수 텍스트(Mag_Count)입니다.")]
     [SerializeField] private TMP_Text m_magCountText;
@@ -153,9 +165,18 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     private PlayerbleUnitData m_playerSquadMemberData;
     private readonly List<PlayerbleUnitData> m_sortedTeamData = new();
 
+    // 체력바 페이드 상태. 처음 한 번과 다시 켜질 때는 페이드 없이 즉시 맞춥니다.
+    private bool m_hpGaugeVisible;
+    private bool m_hpGaugeVisibilityApplied;
+
     private void Reset()
     {
         AutoFindHudReferences();
+    }
+
+    private void OnValidate()
+    {
+        m_hpGaugeFadeOutPercent = Mathf.Max(m_hpGaugeFadeInPercent, m_hpGaugeFadeOutPercent);
     }
 
     private void Awake()
@@ -204,6 +225,8 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
     private void OnEnable()
     {
+        // 꺼져 있는 동안 페이드가 중간에 멈췄을 수 있으므로 다시 켜질 때 즉시 맞춥니다.
+        m_hpGaugeVisibilityApplied = false;
         RefreshPlayerDataSources();
         SetPlayerSquadMemberData(ResolvePlayerSquadMemberData());
         UpdateHud();
@@ -428,7 +451,69 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
         UpdatePortrait();
         UpdateGauge(normalizedHp);
+        UpdateHpGaugeFade(maxHp > 0, normalizedHp);
         UpdateTeamGauges();
+    }
+
+    /// <summary>
+    /// 체력 비율에 따라 하단 중앙 체력바를 페이드 인·아웃합니다.
+    /// </summary>
+    /// <remarks>
+    /// 페이드 인 비율 이하이면 보이고, 페이드 아웃 비율 이상이면 숨깁니다. 두 값 사이에서는 직전 상태를
+    /// 유지해, 경계 근처에서 체력이 오르내릴 때 깜빡이지 않게 합니다. 조작 대원이 없으면 숨깁니다.
+    /// </remarks>
+    private void UpdateHpGaugeFade(bool hasData, float normalizedHp)
+    {
+        if (m_hpGaugeFader == null)
+        {
+            return;
+        }
+
+        float hpPercent = normalizedHp * 100f;
+        bool visible = m_hpGaugeVisible;
+        if (!hasData)
+        {
+            visible = false;
+        }
+        else if (hpPercent <= m_hpGaugeFadeInPercent)
+        {
+            visible = true;
+        }
+        else if (hpPercent >= m_hpGaugeFadeOutPercent)
+        {
+            visible = false;
+        }
+
+        if (!m_hpGaugeVisibilityApplied)
+        {
+            m_hpGaugeVisibilityApplied = true;
+            m_hpGaugeVisible = visible;
+            if (visible)
+            {
+                m_hpGaugeFader.ShowImmediately();
+            }
+            else
+            {
+                m_hpGaugeFader.HideImmediately();
+            }
+
+            return;
+        }
+
+        if (visible == m_hpGaugeVisible)
+        {
+            return;
+        }
+
+        m_hpGaugeVisible = visible;
+        if (visible)
+        {
+            m_hpGaugeFader.FadeIn();
+        }
+        else
+        {
+            m_hpGaugeFader.FadeOut();
+        }
     }
 
     /// <summary>

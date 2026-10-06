@@ -14,3 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DefenseScheduleSO
   m_stages:
   - {fileID: 11400000, guid: b024ba1a43a430a44b0ce5d63489c548, type: 2}
+  - {fileID: 11400000, guid: 7e78804a87419184c8a64326ec7f713e, type: 2}

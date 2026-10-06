@@ -16,29 +16,30 @@ MonoBehaviour:
   Gun_m_maxBullet: 8
   Gun_m_segmentAmmoGaugeByRound: 1
   Gun_m_shootDelay: 0.5
+  Gun_m_fireMode: 0
   Gun_m_reloadTime: 1.3335
   Gun_m_reloadMode: 1
-  Gun_m_hitscanDamage: 3
+  Gun_m_hitscanDamage: 4
   Gun_m_allowHeadshot: 1
   Gun_m_headshotDamageMultiplier: 2
   Gun_m_hitscanRange: 100
   Gun_m_knockbackImpulse: 0
   Gun_m_hipfireStandingMinSpread: 2
   Gun_m_hipfireStandingMaxSpread: 6
-  Gun_m_hipfireCrouchMinSpread: 1.9
-  Gun_m_hipfireCrouchMaxSpread: 5.7
+  Gun_m_hipfireCrouchMinSpread: 1.7
+  Gun_m_hipfireCrouchMaxSpread: 5.1
   Gun_m_hipfireAirborneMinSpread: 6
   Gun_m_hipfireAirborneMaxSpread: 10
   Gun_m_hipfireMinSpreadShotCount: 0
   Gun_m_hipfireSpreadIncreasePerShot: 0.5
   Gun_m_hipfireSpreadRecoveryPerSecond: 8
   Gun_m_hipfireSpreadRecoveryDelay: 0.15
-  Gun_m_adsStandingMinSpread: 1.6
-  Gun_m_adsStandingMaxSpread: 4.8
-  Gun_m_adsCrouchMinSpread: 1.52
-  Gun_m_adsCrouchMaxSpread: 4.56
-  Gun_m_adsAirborneMinSpread: 4.8
-  Gun_m_adsAirborneMaxSpread: 8
+  Gun_m_adsStandingMinSpread: 1.3
+  Gun_m_adsStandingMaxSpread: 3.9
+  Gun_m_adsCrouchMinSpread: 1.105
+  Gun_m_adsCrouchMaxSpread: 3.315
+  Gun_m_adsAirborneMinSpread: 3.9
+  Gun_m_adsAirborneMaxSpread: 6.5
   Gun_m_adsMinSpreadShotCount: 0
   Gun_m_adsSpreadIncreasePerShot: 0.25
   Gun_m_adsSpreadRecoveryPerSecond: 8
@@ -59,15 +60,24 @@ MonoBehaviour:
     m_trackMinDistance: 5
     m_trackMaxDistance: 80
     m_steps:
-    - m_maxDistance: 30
+    - m_maxDistance: 5
       m_damageMultiplier: 1
+      m_flatDamage: 4
+    - m_maxDistance: 10
+      m_damageMultiplier: 0.875
+      m_flatDamage: 3.5
+    - m_maxDistance: 15
+      m_damageMultiplier: 0.75
       m_flatDamage: 3
-    - m_maxDistance: 60
-      m_damageMultiplier: 0.7
+    - m_maxDistance: 20
+      m_damageMultiplier: 0.5
       m_flatDamage: 2
-    - m_maxDistance: 100
-      m_damageMultiplier: 0.4
+    - m_maxDistance: 25
+      m_damageMultiplier: 0.25
       m_flatDamage: 1
+    - m_maxDistance: 30
+      m_damageMultiplier: 0.125
+      m_flatDamage: 0.5
   Gun_m_penetration:
     m_unlimited: 0
     m_maxPenetrations: 0
