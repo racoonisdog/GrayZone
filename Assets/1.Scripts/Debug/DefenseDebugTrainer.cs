@@ -48,8 +48,6 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
         GUILayout.Space(6);
         DrawSkillSection();
         GUILayout.Space(6);
-        DrawThrowableSection();
-        GUILayout.Space(6);
         DrawEnemySpawnSection();
         GUILayout.Space(6);
         DrawSquadAiControlSection();
@@ -142,17 +140,27 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
         }
 
         GUILayout.BeginHorizontal();
+        // 게임오버 뒤에는 정산 데이터와 오버레이가 남아 있어 다시 시작해도 온전하지 않습니다. 씬을 다시 불러야 합니다.
+        GUI.enabled = !defense.IsGameOver;
         if (GUILayout.Button(defense.IsGameStarted ? "처음부터 다시 시작" : "방어전 시작"))
         {
             defense.StartDefense();
-            m_defenseActionResult = "방어전을 시작했습니다.";
+            m_defenseActionResult = defense.IsGameStarted
+                ? "방어전을 시작했습니다."
+                : "방어전을 시작하지 못했습니다(방어전 단계 데이터 확인).";
         }
 
         if (GUILayout.Button("라운드 스킵"))
         {
+            string before = DescribePhase(defense);
+            int waveBefore = defense.CurrentWave;
             defense.SkipRound();
-            m_defenseActionResult = $"라운드를 넘겼습니다. 지금 단계: {DescribePhase(defense)}";
+            string after = DescribePhase(defense);
+            m_defenseActionResult = before == after && waveBefore == defense.CurrentWave
+                ? $"넘길 라운드가 없습니다(지금 단계: {after})."
+                : $"라운드를 넘겼습니다. 지금 단계: {after}";
         }
+        GUI.enabled = true;
 
         if (GUILayout.Button("강제 승리"))
         {
@@ -167,6 +175,7 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
             EscapeSystem escape = FindFirstObjectByType<EscapeSystem>(FindObjectsInactive.Include);
             if (escape != null)
             {
+                CloseMenu();
                 escape.ForceEscape();
                 m_defenseActionResult = "귀환 정산을 요청했습니다.";
             }
@@ -179,8 +188,20 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
         if (GUILayout.Button("정문 파괴로 패배"))
         {
             CombatSceneDataManager data = CombatSceneDataManager.Instance;
-            data?.RequestGameOver();
-            m_defenseActionResult = data != null ? "게임오버를 요청했습니다." : "전투 데이터 매니저를 찾지 못했습니다.";
+            if (data == null)
+            {
+                m_defenseActionResult = "전투 데이터 매니저를 찾지 못했습니다.";
+            }
+            else if (data.IsFinalized)
+            {
+                m_defenseActionResult = "이미 정산이 끝나 게임오버를 다시 낼 수 없습니다.";
+            }
+            else
+            {
+                CloseMenu();
+                data.RequestGameOver();
+                m_defenseActionResult = "게임오버를 요청했습니다.";
+            }
         }
         GUILayout.EndHorizontal();
 
@@ -226,17 +247,27 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("전부 다시 설치 가능하게"))
         {
-            int count = 0;
+            // 소모 상태를 풀고 설치 횟수도 채웁니다. 횟수가 바닥난 청사진은 Rearm만으로는 계속 숨겨집니다.
+            int buildable = 0;
             for (int i = 0; i < traps.Length; i++)
             {
-                if (traps[i] != null && traps[i].IsDepleted)
+                if (traps[i] == null)
                 {
-                    traps[i].Rearm();
-                    count++;
+                    continue;
+                }
+
+                traps[i].Rearm();
+                traps[i].DebugRefillBuildCharges();
+                if (traps[i].IsBuildable)
+                {
+                    buildable++;
                 }
             }
 
-            m_defenseActionResult = $"소모된 함정 {count}개를 다시 설치할 수 있게 했습니다.";
+            DefenseManager defense = DefenseManager.Instance;
+            bool windowClosed = defense != null && !defense.IsTrapBuildWindowOpen;
+            m_defenseActionResult = $"지금 설치할 수 있는 청사진 {buildable}개."
+                + (windowClosed ? " 전투 중이라 휴식 때만 설치하는 함정(OnRest)은 휴식이 시작되면 보입니다." : string.Empty);
         }
 
         if (GUILayout.Button("설치 횟수 채우기"))
@@ -249,6 +280,43 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
             m_defenseActionResult = "모든 함정의 설치 횟수를 처음 값으로 채웠습니다.";
         }
         GUILayout.EndHorizontal();
+
+        DrawFireBarrelChainRow(traps);
+    }
+
+    /// <summary>
+    /// 화염 드럼통 연쇄 반경을 한꺼번에 조절하고 반경 표시를 켜고 끕니다.
+    /// </summary>
+    /// <remarks>
+    /// 드럼통이 여러 개라 하나씩 고치지 않도록 첫 드럼통의 값을 보여 주고, 슬라이더를 움직이면 전부에 적용합니다.
+    /// 런타임 값만 바뀌고 프리팹이나 씬에는 저장되지 않습니다.
+    /// </remarks>
+    private void DrawFireBarrelChainRow(Trap[] traps)
+    {
+        FireBarrelTrap first = null;
+        for (int i = 0; i < traps.Length && first == null; i++)
+        {
+            first = traps[i] as FireBarrelTrap;
+        }
+
+        if (first == null)
+        {
+            return;
+        }
+
+        float current = first.ChainRadius;
+        float next = SliderRow("드럼통 연쇄 반경(m)", current, 0f, 15f, "0.0");
+        if (!Mathf.Approximately(next, current))
+        {
+            for (int i = 0; i < traps.Length; i++)
+            {
+                (traps[i] as FireBarrelTrap)?.DebugSetChainRadius(next);
+            }
+        }
+
+        FireBarrelTrap.DebugShowChainRadius = GUILayout.Toggle(
+            FireBarrelTrap.DebugShowChainRadius,
+            " 드럼통 연쇄 반경 표시 (Scene 뷰, Gizmos 켠 Game 뷰)");
     }
 
     private void DrawSkillSection()
@@ -265,7 +333,13 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
             }
 
             string owner = skill.Owner != null ? skill.Owner.name : skill.name;
-            GUILayout.Label($"{owner} / {skill.GetType().Name}: {(skill.IsReady ? "사용 가능" : $"쿨다운 {skill.CooldownRemaining:0.0}초")}");
+            // IsReady는 효과가 도는 동안에도 거짓이라, 쿨다운 0초로 보이지 않게 활성 상태를 따로 적습니다.
+            string state = skill.IsReady
+                ? "사용 가능"
+                : skill.IsActive
+                    ? "효과 진행 중 (끝나야 다시 사용 가능)"
+                    : $"쿨다운 {skill.CooldownRemaining:0.0}초";
+            GUILayout.Label($"{owner} / {skill.GetType().Name}: {state}");
         }
 
         if (GUILayout.Button("스킬 쿨다운 모두 초기화"))
@@ -275,7 +349,17 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
                 skills[i]?.DebugResetCooldown();
             }
 
-            m_defenseActionResult = $"스킬 {skills.Length}개의 쿨다운을 없앴습니다.";
+            int active = 0;
+            for (int i = 0; i < skills.Length; i++)
+            {
+                if (skills[i] != null && skills[i].IsActive)
+                {
+                    active++;
+                }
+            }
+
+            m_defenseActionResult = $"스킬 {skills.Length}개의 쿨다운을 없앴습니다."
+                + (active > 0 ? $" 효과가 진행 중인 {active}개는 끝나야 다시 쓸 수 있습니다." : string.Empty);
         }
     }
 

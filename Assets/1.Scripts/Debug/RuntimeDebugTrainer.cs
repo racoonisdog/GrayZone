@@ -478,12 +478,11 @@ public class RuntimeDebugTrainer : MonoBehaviour
     protected virtual string[] TabNames => MainTabNames;
 
     /// <summary>
-    /// 다섯 번째 탭(씬 탭)의 내용을 그립니다. 필드 트레이너는 투척물·좀비 스폰·팀 AI·필드 제어를 그립니다.
+    /// 다섯 번째 탭(씬 탭)의 내용을 그립니다. 필드 트레이너는 좀비 스폰·팀 AI·필드 제어를 그립니다.
+    /// 투척물 보급은 무기 탭에 있습니다.
     /// </summary>
     protected virtual void DrawSceneTab()
     {
-        DrawThrowableSection();
-        GUILayout.Space(6);
         DrawEnemySpawnSection();
         GUILayout.Space(6);
         DrawSquadAiControlSection();
@@ -494,6 +493,13 @@ public class RuntimeDebugTrainer : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
     // 조작 잠금 / 해제
     // ─────────────────────────────────────────────────────────────
+
+    /// <summary>창을 닫고 조작을 돌려줍니다. 결과·게임오버 화면으로 넘어가는 버튼은 먼저 이것을 불러야 합니다.</summary>
+    /// <remarks>닫지 않고 넘어가면 창만 가려지고 열린 상태가 남아, 다음 F9가 결과 화면 위에서 조작 모드를 되돌립니다.</remarks>
+    protected void CloseMenu()
+    {
+        SetMenuOpen(false);
+    }
 
     private void SetMenuOpen(bool open)
     {
@@ -828,6 +834,10 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
                 case 2:
                     DrawWeaponSection(target);
+                    GUILayout.Space(6);
+                    DrawShotRangeDebugSection(target);
+                    GUILayout.Space(6);
+                    DrawThrowableSection();
                     break;
 
                 case 3:
@@ -1198,7 +1208,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         target.SetMaxReserveAmmo(Mathf.RoundToInt(SliderRow("예비탄 최대", target.MaxReserveAmmo, 0f, 999f, "0")));
         weapon.SetAllowFullMagReload(GUILayout.Toggle(weapon.AllowFullMagReload, " 풀 탄창 재장전 허용"));
 
-        weapon.SetHitscanDamage(Mathf.RoundToInt(SliderRow("데미지", weapon.HitscanDamage, 0f, 100f, "0")));
+        DrawDamageRows(weapon);
         weapon.SetHeadshotDamageMultiplier(SliderRow("헤드샷 배율", weapon.HeadshotDamageMultiplier, 1f, 5f));
         weapon.SetShootDelay(SliderRow("사격 딜레이(초)", weapon.ShootDelay, 0.02f, 1f));
         weapon.SetReloadTime(SliderRow("재장전(초)", weapon.ReloadTime, 0f, 5f));
@@ -1243,6 +1253,106 @@ public class RuntimeDebugTrainer : MonoBehaviour
         weapon.SetAdsAirborneSpread(adsAirborneMin, adsAirborneMax);
 
         DrawBurstSpreadSection(weapon);
+    }
+
+    /// <summary>
+    /// 사격 경로·범위를 그리는 디버그 선들을 켜고 끕니다.
+    /// </summary>
+    /// <remarks>
+    /// 기본값은 모두 꺼져 있습니다. 대원을 바꿔도 같은 상태가 유지되도록 선택한 대원의 값을 보여 주고,
+    /// 바꾸면 모든 대원과 무기에 같이 적용합니다. 선은 Scene 뷰와 Gizmos를 켠 Game 뷰에서 보입니다.
+    /// </remarks>
+    private void DrawShotRangeDebugSection(PlayerbleUnitData target)
+    {
+        AimController aim = target.GetComponent<AimController>();
+        Gun weapon = target.Gun;
+        if (aim == null && weapon == null)
+        {
+            return;
+        }
+
+        GUILayout.Label("사격 범위 표시 (Scene 뷰 / Gizmos 켠 Game 뷰)", m_headerStyle);
+
+        if (weapon != null)
+        {
+            bool shotRay = GUILayout.Toggle(weapon.DebugDrawShotRay, " 발사 레이 (총구→탄착점, 1초)");
+            if (shotRay != weapon.DebugDrawShotRay)
+            {
+                foreach (Gun gun in FindObjectsByType<Gun>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                {
+                    gun.DebugDrawShotRay = shotRay;
+                }
+            }
+        }
+
+        if (aim == null)
+        {
+            return;
+        }
+
+        AimController[] aims = FindObjectsByType<AimController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+        bool hitscanRay = GUILayout.Toggle(aim.HitscanDebugRayEnabled, " 조준 히트스캔 레이 (총구→조준 탄착점)");
+        if (hitscanRay != aim.HitscanDebugRayEnabled)
+        {
+            foreach (AimController other in aims)
+            {
+                other.SetDrawHitscanDebugRay(hitscanRay);
+            }
+        }
+
+        bool traceLine = GUILayout.Toggle(aim.DrawAimTraceLine, " 조준 트레이스 선 (카메라→조준점)");
+        if (traceLine != aim.DrawAimTraceLine)
+        {
+            foreach (AimController other in aims)
+            {
+                other.SetDrawAimTraceLine(traceLine);
+            }
+        }
+
+        bool forwardRay = GUILayout.Toggle(aim.DrawCameraForwardRay, " 카메라 전방 레이 (지향점/렌더 방향)");
+        if (forwardRay != aim.DrawCameraForwardRay)
+        {
+            foreach (AimController other in aims)
+            {
+                other.SetDrawCameraForwardRay(forwardRay);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 무기 피해를 조절하는 줄을 그립니다. 거리 감쇠 표가 고정 피해 모드면 구간별 고정 피해를, 아니면 기본 피해를 조절합니다.
+    /// </summary>
+    /// <remarks>
+    /// 고정 피해 모드에서는 기본 피해(<see cref="Gun.HitscanDamage"/>)가 실제 피해에 쓰이지 않습니다. 그 슬라이더를 보여 주면
+    /// 움직여도 아무 일도 없어서 고장으로 보입니다. 기본 피해가 0이면 사격 판정이 꺼지는 점은 같아 그 경우만 안내합니다.
+    /// </remarks>
+    private void DrawDamageRows(Gun weapon)
+    {
+        DamageFalloffTable falloff = weapon.DamageFalloff;
+        if (falloff == null || falloff.IsEmpty || falloff.Mode != DamageFalloffMode.FlatDamage)
+        {
+            weapon.SetHitscanDamage(Mathf.RoundToInt(SliderRow("데미지", weapon.HitscanDamage, 0f, 100f, "0")));
+            return;
+        }
+
+        GUILayout.Label("데미지: 거리 구간별 고정 피해 (기본 피해 값은 쓰이지 않음)");
+        for (int i = 0; i < falloff.Steps.Count; i++)
+        {
+            DamageFalloffStep step = falloff.Steps[i];
+            // 움직였을 때만 0.1 단위로 맞춰 넣습니다. 슬라이더 그대로면 2.4837 같은 값이 들어가 수치를 맞추기 어렵고,
+            // 움직이지 않았는데 반올림하면 원래 값(예: 2.45)이 바뀝니다.
+            float raw = SliderRow($"  ~{step.MaxDistance:0}m", step.FlatDamage, 0f, 50f, "0.0");
+            if (!Mathf.Approximately(raw, step.FlatDamage))
+            {
+                falloff.DebugSetStepFlatDamage(i, Mathf.Round(raw * 10.0f) / 10.0f);
+            }
+        }
+
+        if (weapon.HitscanDamage <= 0)
+        {
+            GUILayout.Label("  기본 피해가 0이라 사격 판정이 꺼져 있습니다.");
+        }
     }
 
     private void DrawBurstSpreadSection(Gun weapon)
@@ -1355,7 +1465,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
 
         DrawAimDebugSection(aimController);
-        DrawCrosshairFeedbackSection(aimController.CrosshairController);
+        DrawCrosshairFeedbackSection(aimController.CrosshairController, aimController);
     }
 
     private void DrawAimHandlingSection(AimController aimController)
@@ -1449,7 +1559,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
     }
 
-    private void DrawCrosshairFeedbackSection(CrosshairController crosshairController)
+    private void DrawCrosshairFeedbackSection(CrosshairController crosshairController, AimController aimController)
     {
         if (crosshairController == null)
         {
@@ -1460,11 +1570,18 @@ public class RuntimeDebugTrainer : MonoBehaviour
         GUILayout.Label("크로스헤어 피드백 (표시 전용)", m_headerStyle);
         crosshairController.SetSpreadAccuracyEnabled(
             GUILayout.Toggle(crosshairController.UseSpreadAccuracy, " 탄퍼짐 간격 표시"));
-        crosshairController.SetSpreadDisplayBasis(
-            (CrosshairController.SpreadDisplayBasis)GUILayout.SelectionGrid(
-                (int)crosshairController.CurrentSpreadDisplayBasis,
-                new[] { "콘 경계", "대부분", "일반", "코어" },
-                2));
+
+        // 표시 기준은 캐릭터(AimController)가 소유하고 HUD는 매 프레임 그 값으로 덮어씁니다. HUD를 직접 바꾸면 다음 프레임에 돌아갑니다.
+        var basis = (CrosshairController.SpreadDisplayBasis)GUILayout.SelectionGrid(
+            (int)crosshairController.CurrentSpreadDisplayBasis,
+            new[] { "콘 경계", "대부분", "일반", "코어" },
+            2);
+        if (aimController != null)
+        {
+            aimController.CrosshairSpreadDisplayBasis = basis;
+        }
+
+        crosshairController.SetSpreadDisplayBasis(basis);
         crosshairController.SetClampToMaxGap(
             GUILayout.Toggle(crosshairController.ClampToMaxGap, " 최대 간격 제한"));
         if (crosshairController.ClampToMaxGap)
@@ -1702,6 +1819,9 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <summary>디버그 항목 서브탭에서 지금 보고 있는 탭입니다.</summary>
     private int m_debugTabIndex;
 
+    /// <summary>디버그 탭 정수 칸에 입력 중인 문자열입니다. 숫자로 확정되면 지웁니다.</summary>
+    private readonly Dictionary<string, string> m_intFieldDrafts = new Dictionary<string, string>();
+
     /// <summary>수집한 디버그 항목입니다. 매 프레임 훑지 않도록 들고 있습니다.</summary>
     private List<DebugFieldEntry> m_debugEntries = new List<DebugFieldEntry>();
 
@@ -1815,11 +1935,28 @@ public class RuntimeDebugTrainer : MonoBehaviour
             using (new GUILayout.HorizontalScope())
             {
                 GUILayout.Label(entry.DisplayName, GUILayout.Width(200));
-                string text = GUILayout.TextField(current.ToString(), GUILayout.Width(70));
 
-                if (int.TryParse(text, out int parsed) && parsed != current)
+                // 입력 중인 문자열을 따로 둡니다. 매 프레임 현재 값으로 다시 그리면 칸을 비우거나 "-"만 친 상태가
+                // 곧바로 이전 값으로 돌아가 새 숫자를 입력할 수 없습니다.
+                string key = $"{entry.Owner.GetHashCode()}:{entry.Field.Name}";
+                string shown = m_intFieldDrafts.TryGetValue(key, out string draft) ? draft : current.ToString();
+                string text = GUILayout.TextField(shown, GUILayout.Width(70));
+                if (text != shown)
                 {
-                    entry.Field.SetValue(entry.Owner, parsed);
+                    m_intFieldDrafts[key] = text;
+                }
+
+                if (int.TryParse(text, out int parsed))
+                {
+                    if (parsed != current)
+                    {
+                        entry.Field.SetValue(entry.Owner, parsed);
+                    }
+
+                    if (text == parsed.ToString())
+                    {
+                        m_intFieldDrafts.Remove(key);
+                    }
                 }
             }
 
@@ -2112,10 +2249,48 @@ public class RuntimeDebugTrainer : MonoBehaviour
             }
         }
 
+        // 아이템 정의가 없는 투척물은 인벤토리로 셀 수 없어 위 목록에서 빠집니다. 빠진 이유를 보이게 남깁니다.
+        List<string> unlinked = CollectUnlinkedThrowableNames();
+        if (unlinked.Count > 0)
+        {
+            GUILayout.Label($"아이템 정의가 없어 보급 불가: {string.Join(", ", unlinked)}");
+        }
+
         if (!string.IsNullOrEmpty(m_throwableGrantResult))
         {
             GUILayout.Label(m_throwableGrantResult);
         }
+    }
+
+    /// <summary>씬의 투척기에 들어 있지만 아이템 정의가 연결되지 않은 투척물 Prefab 이름을 모읍니다.</summary>
+    private static List<string> CollectUnlinkedThrowableNames()
+    {
+        var result = new List<string>();
+        ExplosiveProjectileShooter[] shooters = FindObjectsByType<ExplosiveProjectileShooter>(
+            FindObjectsInactive.Include,
+            FindObjectsSortMode.None);
+
+        for (int i = 0; i < shooters.Length; i++)
+        {
+            IReadOnlyList<ProjectileBase> prefabs = shooters[i].ProjectilePrefabs;
+            if (prefabs == null)
+            {
+                continue;
+            }
+
+            for (int j = 0; j < prefabs.Count; j++)
+            {
+                ProjectileBase projectile = prefabs[j];
+                if (projectile != null
+                    && string.IsNullOrWhiteSpace(projectile.InventoryItemDefinitionId)
+                    && !result.Contains(projectile.name))
+                {
+                    result.Add(projectile.name);
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>투척물을 지정 수량만큼 넣고, 공간이 모자라 남은 수량이 있으면 안내 문구를 돌려줍니다.</summary>
@@ -2447,15 +2622,27 @@ public class RuntimeDebugTrainer : MonoBehaviour
     // 헬퍼
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>라벨·슬라이더·값 한 줄을 그리고, 사용자가 움직였을 때만 새 값을 돌려줍니다.</summary>
+    /// <remarks>
+    /// 호출부는 매 OnGUI마다 돌려받은 값을 setter에 넣습니다. HorizontalSlider는 범위 밖 값을 잘라 돌려주므로,
+    /// 그대로 쓰면 범위를 벗어난 원래 값이 탭을 열기만 해도 바뀝니다. 그래서 움직이지 않았으면 원래 값을 돌려줍니다.
+    /// </remarks>
     protected float SliderRow(string label, float value, float min, float max, string format = "0.##")
     {
         GUILayout.BeginHorizontal();
         float labelWidth = Mathf.Clamp(m_windowRect.width * 0.30f, 130f, 210f);
         GUILayout.Label(label, GUILayout.Width(labelWidth));
+
+        bool changedBefore = GUI.changed;
+        GUI.changed = false;
         float result = GUILayout.HorizontalSlider(value, min, max, GUILayout.MinWidth(140f), GUILayout.ExpandWidth(true));
-        GUILayout.Label(result.ToString(format), GUILayout.Width(60));
+        bool moved = GUI.changed;
+        GUI.changed = changedBefore || moved;
+
+        float shown = moved ? result : value;
+        GUILayout.Label(shown.ToString(format), GUILayout.Width(60));
         GUILayout.EndHorizontal();
-        return result;
+        return shown;
     }
 
     private void EnsureStyles()
