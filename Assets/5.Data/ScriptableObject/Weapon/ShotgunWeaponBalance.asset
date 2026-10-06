@@ -76,8 +76,8 @@ MonoBehaviour:
       m_damageMultiplier: 0.25
       m_flatDamage: 1
     - m_maxDistance: 30
-      m_damageMultiplier: 0.08
-      m_flatDamage: 0.2
+      m_damageMultiplier: 0.125
+      m_flatDamage: 0.5
   Gun_m_penetration:
     m_unlimited: 0
     m_maxPenetrations: 0
