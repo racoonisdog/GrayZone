@@ -447,7 +447,7 @@ MonoBehaviour:
   m_dangerLevel: 1
   m_isDefenseEnemy: 1
   m_defenseDisposition: 0
-  m_balanceSO: {fileID: 11400000, guid: 9199ae7a21bc4dc6a804e2275068cbd5, type: 2}
+  m_balanceSO: {fileID: 11400000, guid: 907fb6798c9a52644a425ddfd5362168, type: 2}
   m_feedback: {fileID: 11400000, guid: 0b0d847d0605c734885a718ca336bdc5, type: 2}
   wanderRadius: 8
   wanderInterval: 3
@@ -981,7 +981,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 483f686e9379f904dbf44cf3182dceaa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Melee
-  m_balanceSO: {fileID: 11400000, guid: 315861973b1477348be351444a62a951, type: 2}
+  m_balanceSO: {fileID: 11400000, guid: b802da39e1eb9894593029de7a71a78c, type: 2}
   m_attack: {fileID: 442783041056669385}
 --- !u!1 &5955136682660819454
 GameObject:
@@ -1398,7 +1398,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 483f686e9379f904dbf44cf3182dceaa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Melee
-  m_balanceSO: {fileID: 11400000, guid: 315861973b1477348be351444a62a951, type: 2}
+  m_balanceSO: {fileID: 11400000, guid: b802da39e1eb9894593029de7a71a78c, type: 2}
   m_attack: {fileID: 442783041056669385}
 --- !u!1 &8327696717175446992
 GameObject:
