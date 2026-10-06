@@ -436,6 +436,8 @@ MonoBehaviour:
   m_buildCostAmount: 0
   m_buildPrompt: "?\u317C\uD282"
   m_buildHoldDuration: 0.3
+  m_displayName: 
+  m_description: 
   m_blueprintMaterial: {fileID: 2100000, guid: cf43b62aa6a65f148a402c99cb003910, type: 2}
   m_disableShadowWhileBlueprint: 1
   m_blueprintVisualRoot: {fileID: 0}
@@ -443,6 +445,8 @@ MonoBehaviour:
   m_maxHealth: 100
   m_currentHealth: 0
   m_rebuildPolicy: 1
+  m_buildChargesPerDefense: 0
+  m_remainingBuildCharges: -1
   m_damage: 60
   m_damageMode: 0
   m_damageTickInterval: 1
@@ -457,6 +461,8 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 2560
   m_showExplosionRangeVisual: 1
+  m_chainDetonationEnabled: 1
+  m_chainFuseTime: 0.15
   m_alwaysShowExplosionRange: 0
   m_range: 8
   m_nearWidth: 2.97

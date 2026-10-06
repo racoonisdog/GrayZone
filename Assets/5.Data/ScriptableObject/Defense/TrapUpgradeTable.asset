@@ -18,5 +18,5 @@ MonoBehaviour:
   - MoveSpeedScale: 0.5714286
     BonusDurability: 50
   m_spikeLevels:
-  - DamageMultiplier: 1.25
+  - DamageMultiplier: 1.875
     BonusDurability: 10

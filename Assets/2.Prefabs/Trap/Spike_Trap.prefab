@@ -83,7 +83,7 @@ MonoBehaviour:
   m_rebuildPolicy: 1
   m_buildChargesPerDefense: 0
   m_remainingBuildCharges: -1
-  m_damage: 30
+  m_damage: 8
   m_damageMode: 0
   m_damageTickInterval: 1
   m_drawRangeGizmo: 1
