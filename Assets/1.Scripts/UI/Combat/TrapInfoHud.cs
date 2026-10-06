@@ -46,9 +46,35 @@ public sealed class TrapInfoHud : MonoBehaviour
     [Tooltip("설치 비용이 0인 함정에 표시할 문구입니다.")]
     [SerializeField] private string m_noCostText = "소모 없음";
 
+    [Header("Focus Outline")]
+    [Tooltip("안내가 뜬 함정에 외곽선을 그립니다.")]
+    [SerializeField] private bool m_showFocusOutline = true;
+
+    [Tooltip("외곽선 색입니다.")]
+    [SerializeField] private Color m_focusOutlineColor = new Color(1.0f, 0.85f, 0.2f, 1.0f);
+
+    [Tooltip("외곽선 굵기(화면 픽셀)입니다. 거리와 관계없이 같은 굵기로 보입니다.")]
+    [Range(0.0f, 10.0f)]
+    [SerializeField] private float m_focusOutlineWidth = 3.0f;
+
+    [Tooltip("외곽선 머티리얼(GrayZone/FocusOutline)입니다. 비워 두면 Resources/Outline/M_FocusOutline을 씁니다.")]
+    [SerializeField] private Material m_focusOutlineMaterial;
+
+    [Tooltip("외곽선 마스크 머티리얼(GrayZone/FocusOutlineMask)입니다. 비워 두면 Resources/Outline/M_FocusOutlineMask를 씁니다.")]
+    [SerializeField] private Material m_focusOutlineMaskMaterial;
+
+    private const string DefaultOutlineMaterialPath = "Outline/M_FocusOutline";
+    private const string DefaultOutlineMaskMaterialPath = "Outline/M_FocusOutlineMask";
+    private static readonly int OutlineColorId = Shader.PropertyToID("_OutlineColor");
+    private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
+
     private InteractionController m_interaction;
     private GameObject m_interactionOwner;
     private Trap m_shownTrap;
+    private FocusOutlineRenderer m_focusOutline;
+
+    // 색·굵기를 바꿔도 프로젝트의 머티리얼 에셋이 바뀌지 않도록 복제본에 씁니다.
+    private Material m_focusOutlineInstance;
 
     private void Awake()
     {
@@ -57,7 +83,48 @@ public sealed class TrapInfoHud : MonoBehaviour
             m_squadManager = FindFirstObjectByType<SquadManager>();
         }
 
+        CreateFocusOutline();
         SetVisible(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (m_focusOutlineInstance != null)
+        {
+            Destroy(m_focusOutlineInstance);
+        }
+    }
+
+    private void CreateFocusOutline()
+    {
+        Material outline = m_focusOutlineMaterial != null
+            ? m_focusOutlineMaterial
+            : Resources.Load<Material>(DefaultOutlineMaterialPath);
+        Material mask = m_focusOutlineMaskMaterial != null
+            ? m_focusOutlineMaskMaterial
+            : Resources.Load<Material>(DefaultOutlineMaskMaterialPath);
+
+        if (outline == null || mask == null)
+        {
+            Debug.LogWarning("[TrapInfoHud] 외곽선 머티리얼을 찾지 못해 함정 외곽선을 그리지 않습니다.", this);
+            return;
+        }
+
+        m_focusOutlineInstance = new Material(outline);
+        m_focusOutline = new FocusOutlineRenderer(mask, m_focusOutlineInstance);
+    }
+
+    /// <summary>안내가 뜬 함정의 외곽선을 이번 프레임에 그립니다.</summary>
+    private void DrawFocusOutline(Trap trap)
+    {
+        if (!m_showFocusOutline || m_focusOutline == null || trap == null)
+        {
+            return;
+        }
+
+        m_focusOutlineInstance.SetColor(OutlineColorId, m_focusOutlineColor);
+        m_focusOutlineInstance.SetFloat(OutlineWidthId, m_focusOutlineWidth);
+        m_focusOutline.Draw(trap.gameObject);
     }
 
     private void LateUpdate()
@@ -78,6 +145,7 @@ public sealed class TrapInfoHud : MonoBehaviour
         }
 
         SetVisible(true);
+        DrawFocusOutline(trap);
 
         if (m_holdGaugeFill != null)
         {
