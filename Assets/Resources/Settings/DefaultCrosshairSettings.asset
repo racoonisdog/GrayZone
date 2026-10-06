@@ -34,9 +34,17 @@ MonoBehaviour:
       subStrokeThicknessPixels: 1
       subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       cornerRadiusPixels: 2
+      subDynamic: 1
       subSpreadMode: 0
-      subRecoilSpreadScale: 1
       separateAdsSub: 0
+      adsMain:
+        mainShape: 1
+        mainSizePixels: 3
+        mainRingSizePixels: 8
+        mainRingThicknessPixels: 1
+        mainColor: {r: 1, g: 1, b: 1, a: 1}
+        mainStrokeThicknessPixels: 1
+        mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       adsSub:
         subShape: 2
         centerSpacePixels: 5
@@ -50,7 +58,6 @@ MonoBehaviour:
         subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
         cornerRadiusPixels: 2
         subSpreadMode: 0
-        subRecoilSpreadScale: 1
   - characterId: 2
     style:
       useSpreadAccuracy: 1
@@ -72,9 +79,17 @@ MonoBehaviour:
       subStrokeThicknessPixels: 1
       subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       cornerRadiusPixels: 2
+      subDynamic: 1
       subSpreadMode: 1
-      subRecoilSpreadScale: 1
       separateAdsSub: 0
+      adsMain:
+        mainShape: 1
+        mainSizePixels: 3
+        mainRingSizePixels: 8
+        mainRingThicknessPixels: 1
+        mainColor: {r: 1, g: 1, b: 1, a: 1}
+        mainStrokeThicknessPixels: 1
+        mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       adsSub:
         subShape: 2
         centerSpacePixels: 5
@@ -88,7 +103,6 @@ MonoBehaviour:
         subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
         cornerRadiusPixels: 2
         subSpreadMode: 0
-        subRecoilSpreadScale: 1
   - characterId: 3
     style:
       useSpreadAccuracy: 1
@@ -110,9 +124,17 @@ MonoBehaviour:
       subStrokeThicknessPixels: 1
       subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       cornerRadiusPixels: 2
+      subDynamic: 1
       subSpreadMode: 0
-      subRecoilSpreadScale: 1
       separateAdsSub: 0
+      adsMain:
+        mainShape: 1
+        mainSizePixels: 3
+        mainRingSizePixels: 8
+        mainRingThicknessPixels: 1
+        mainColor: {r: 1, g: 1, b: 1, a: 1}
+        mainStrokeThicknessPixels: 1
+        mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       adsSub:
         subShape: 2
         centerSpacePixels: 5
@@ -126,7 +148,6 @@ MonoBehaviour:
         subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
         cornerRadiusPixels: 2
         subSpreadMode: 0
-        subRecoilSpreadScale: 1
   m_hasThrowable: 1
   m_throwable:
     useSpreadAccuracy: 0
@@ -148,9 +169,17 @@ MonoBehaviour:
     subStrokeThicknessPixels: 1
     subStrokeColor: {r: 0, g: 0, b: 0, a: 0.27450982}
     cornerRadiusPixels: 2
+    subDynamic: 1
     subSpreadMode: 0
-    subRecoilSpreadScale: 1
     separateAdsSub: 0
+    adsMain:
+      mainShape: 1
+      mainSizePixels: 3
+      mainRingSizePixels: 8
+      mainRingThicknessPixels: 1
+      mainColor: {r: 1, g: 1, b: 1, a: 1}
+      mainStrokeThicknessPixels: 1
+      mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
     adsSub:
       subShape: 2
       centerSpacePixels: 5
@@ -164,4 +193,3 @@ MonoBehaviour:
       subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       cornerRadiusPixels: 2
       subSpreadMode: 0
-      subRecoilSpreadScale: 1

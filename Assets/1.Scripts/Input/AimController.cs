@@ -199,6 +199,10 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Range(0.1f, 1.0f)]
     [SerializeField] private float m_crosshairAdsDisplayScale = 1.0f;
 
+    [Tooltip("ADS 중 조준선 탄퍼짐 표시에 추가로 곱할 배율입니다. 줌 진행도에 따라 1에서 이 값으로 바뀝니다. 1.1이면 조준 간격을 10% 넓게 그립니다. 실제 탄착은 바꾸지 않습니다.")]
+    [Min(0.1f)]
+    [SerializeField] private float m_crosshairAdsGapBoost = 1.1f;
+
     /// <summary>설정에서 받은 비조준 조준선입니다. 없으면 이 컴포넌트의 조준선 필드를 그대로 씁니다.</summary>
     private CrosshairStyle m_hipStyle;
 
@@ -2409,15 +2413,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_weaponController.GetSpreadRange(true, out _, out float adsMaxSpread);
             spreadDegrees = Mathf.Lerp(hipMaxSpread, adsMaxSpread, zoom);
 
-            // 크기 변화는 위에서 줌을 따라 매 프레임 계산하므로 즉시 반영해도 부드럽게 줄어듭니다.
-            // 반동에 따른 벌어짐은 이 방식에서는 발사 펄스가 맡습니다.
-            snap = true;
+            // 자세(앉기·점프)에 따라 최대 탄퍼짐이 바뀌면 한 프레임에 건너뛰므로, 즉시 반영하지 않고
+            // 나린·서하처럼 조준선 보간 속도로 따라가게 합니다. 반동에 따른 벌어짐은 이 방식에서는 발사 펄스가 맡습니다.
         }
 
         // ADS 표시 배율과 줌 무시는 표시만 바꿉니다. 실제 탄착은 무기의 탄퍼짐 그대로입니다. 고정 조준선은 위 계산에 이미 들어 있습니다.
         if (m_crosshairDynamic)
         {
-            spreadDegrees *= Mathf.Lerp(1.0f, Mathf.Clamp(m_crosshairAdsDisplayScale, 0.1f, 1.0f), zoom);
+            spreadDegrees *= Mathf.Lerp(1.0f, Mathf.Clamp(m_crosshairAdsDisplayScale, 0.1f, 1.0f) * Mathf.Max(0.1f, m_crosshairAdsGapBoost), zoom);
 
             if (m_crosshairIgnoreAdsZoom)
             {

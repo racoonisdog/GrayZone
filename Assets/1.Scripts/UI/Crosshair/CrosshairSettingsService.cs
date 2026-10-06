@@ -153,7 +153,11 @@ public sealed class CrosshairSettingsService : MonoBehaviour
             {
                 if (entry != null && entry.style != null && entry.characterId == characterId)
                 {
-                    return entry.style.Clone();
+                    // 벌어짐 방식은 설정 화면에서 고치지 않는 캐릭터 고유값이라 저장값이 아니라 기본값을 따릅니다.
+                    // 예전 저장 파일에 남은 값(예: 청솔 WeaponMaxSpread)이 기본값 변경을 가리지 않게 합니다.
+                    CrosshairStyle style = entry.style.Clone();
+                    style.subSpreadMode = GetDefaultCharacterStyle(characterId).subSpreadMode;
+                    return style;
                 }
             }
         }

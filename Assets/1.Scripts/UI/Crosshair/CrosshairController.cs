@@ -161,6 +161,10 @@ public class CrosshairController : MonoBehaviour
     [Tooltip("조준선 팔 끝이 탄퍼짐 콘의 어느 반경을 가리킬지 정합니다. ConeEdge=콘 경계(하드캡, 가장 넓음), MostShots=대부분 포함(≈2σ), Typical=통상 탄착(RMS), Core=밀집 코어(가장 타이트). 표시 기준만 바꾸며 실제 탄 궤적에는 영향이 없습니다. 무기의 분포·집중도를 읽어 배율로 환산합니다.")]
     [SerializeField] private SpreadDisplayBasis m_spreadDisplayBasis = SpreadDisplayBasis.MostShots;
 
+    [Tooltip("탄퍼짐 기여 간격에 곱할 표시 배율입니다. 1.2면 위 표시 기준보다 20% 넓게 그립니다. 실제 탄 궤적에는 영향이 없습니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_spreadGapScale = 1.2f;
+
     [Tooltip("켜면 Max Gap Pixels를 상한(안전 클램프)으로 써서 조준선이 그 이상 벌어지지 않게 합니다. 끄면 물리 투영값을 그대로 사용합니다.")]
     [SerializeField] private bool m_clampToMaxGap = false;
 
@@ -2258,7 +2262,23 @@ public class CrosshairController : MonoBehaviour
             return 0.0f;
         }
 
-        return CalculateProjectedSpreadPixels(spreadDegrees, cameraFovDegrees) * Mathf.Max(0.0f, displayFactor);
+        return CalculateProjectedSpreadPixels(spreadDegrees, cameraFovDegrees, ResolvePanelHeight())
+            * Mathf.Max(0.0f, displayFactor)
+            * Mathf.Max(0.0f, m_spreadGapScale);
+    }
+
+    /// <summary>
+    /// 조준선 패널의 세로 길이(패널 단위)입니다. 간격 픽셀을 이 단위로 계산해야 패널 배율과 관계없이 실제 탄퍼짐과 맞습니다.
+    /// </summary>
+    /// <remarks>
+    /// 패널이 화면 크기에 맞춰 늘고 줄면(Scale With Screen Size) 패널 단위와 화면 픽셀이 다릅니다. 화면 높이(Screen.height)로
+    /// 계산하면 1080보다 작은 창에서 조준선이 실제 탄퍼짐보다 작게 그려집니다. 패널이 아직 없으면 화면 높이를 씁니다.
+    /// </remarks>
+    private float ResolvePanelHeight()
+    {
+        VisualElement root = m_document != null ? m_document.rootVisualElement : null;
+        float height = root?.panel?.visualTree != null ? root.panel.visualTree.layout.height : 0.0f;
+        return height > 1.0f && !float.IsNaN(height) ? height : Screen.height;
     }
 
     /// <summary>
@@ -2268,11 +2288,11 @@ public class CrosshairController : MonoBehaviour
     /// <param name="cameraFovDegrees">투영 기준으로 삼을 카메라 세로 FOV(도)입니다.</param>
     /// <returns>화면상 조준선 반벌어짐에 해당하는 픽셀 값입니다.</returns>
     /// <remarks>반FOV와 방사각의 tan 비율에 화면 세로 절반 픽셀을 곱해, 원근 투영과 일치하는 벌어짐을 만듭니다.</remarks>
-    private static float CalculateProjectedSpreadPixels(float spreadDegrees, float cameraFovDegrees)
+    private static float CalculateProjectedSpreadPixels(float spreadDegrees, float cameraFovDegrees, float viewHeight)
     {
         float halfFovRadians = Mathf.Max(1.0f, cameraFovDegrees) * 0.5f * Mathf.Deg2Rad;
         float spreadRadians = Mathf.Max(0.0f, spreadDegrees) * Mathf.Deg2Rad;
-        return Mathf.Tan(spreadRadians) / Mathf.Tan(halfFovRadians) * Screen.height * 0.5f;
+        return Mathf.Tan(spreadRadians) / Mathf.Tan(halfFovRadians) * viewHeight * 0.5f;
     }
 
     /// <summary>
