@@ -139,6 +139,29 @@ public struct TutorialPage
         };
     }
 
+    /// <summary>
+    /// 튜토리얼 창에 띄울 표시 전용 페이지를 만듭니다. 넘김 조건은 없습니다.
+    /// </summary>
+    /// <remarks>2회차부터 튜토리얼 없이 시작할 때 시작 안내(Z 3초)를 튜토리얼 창에 띄우는 데 씁니다.</remarks>
+    public static TutorialPage CreateDisplayPage(
+        string title,
+        string body,
+        string hint,
+        Sprite keyIcon,
+        Vector2 keyIconPosition,
+        Vector2 keyIconSize)
+    {
+        return new TutorialPage
+        {
+            m_title = title,
+            m_body = body,
+            m_hint = hint,
+            m_keyIcon = keyIcon,
+            m_keyIconPosition = keyIconPosition,
+            m_keyIconSize = keyIconSize,
+        };
+    }
+
     /// <summary>인스펙터에서 음수로 입력된 유지 시간을 바로잡습니다.</summary>
     public void Sanitize()
     {

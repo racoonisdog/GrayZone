@@ -56,8 +56,23 @@ public class DefenseTutorialOverlay : MonoBehaviour
     [Tooltip("본문 줄 간격(px)입니다. Figma 본문은 39px입니다. 0이면 폰트 기본 줄 간격을 씁니다.")]
     [SerializeField] private float m_bodyLineHeight = 39.0f;
 
+    [Header("Compact")]
+    [Range(0.2f, 1.0f)]
+    [Tooltip("압축 표시(2회차 시작 안내)에서 패널 높이를 원래 높이의 몇 배로 줄일지입니다. 위쪽은 그대로 두고 아래를 잘라냅니다.")]
+    [SerializeField] private float m_compactHeightRatio = 0.5f;
+
     /// <summary>현재 페이지를 대신 그리고 있는 프리팹 인스턴스입니다.</summary>
     private GameObject m_overrideInstance;
+
+    /// <summary>압축 표시 중인지 여부입니다.</summary>
+    private bool m_isCompact;
+
+    /// <summary>원래 레이아웃을 기억했는지 여부입니다. 압축 표시에서 되돌릴 때 씁니다.</summary>
+    private bool m_hasFullLayout;
+    private Vector2 m_fullPanelSize;
+    private Rect m_fullPanelUv;
+    private Vector2 m_fullHintPosition;
+    private Vector2 m_fullGaugePosition;
 
     /// <summary>Awake 전에 Show가 불렸는지입니다. 오브젝트가 꺼진 채 시작해 Awake가 늦게 돌 때 표시를 덮어쓰지 않기 위해 씁니다.</summary>
     private bool m_showRequested;
@@ -90,6 +105,7 @@ public class DefenseTutorialOverlay : MonoBehaviour
         m_showRequested = true;
         AutoFindReferences();
         ClearOverride();
+        ApplyCompactLayout(false);
         SetNoticeVisible(true);
 
         if (page.OverridePrefab != null)
@@ -104,6 +120,27 @@ public class DefenseTutorialOverlay : MonoBehaviour
         SetPanelVisible(true);
     }
 
+    /// <summary>
+    /// 같은 패널을 아래쪽을 잘라낸 압축 크기로 띄웁니다. 2회차부터 튜토리얼 없이 시작할 때 시작 안내(Z 3초)에 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 패널 위쪽 위치는 그대로 두고 높이만 <see cref="m_compactHeightRatio"/>배로 줄입니다. 배경 RawImage는 늘리지 않고
+    /// 위쪽 부분만 보이도록 UV를 잘라, 원래 창의 아래를 잘라낸 모양이 되게 합니다. 하단 안내 문구와 키 게이지는
+    /// 줄어든 만큼 위로 올립니다. 다음 <see cref="Show"/>나 <see cref="Hide"/>에서 원래 크기로 돌아갑니다.
+    /// </remarks>
+    public void ShowCompact(TutorialPage page)
+    {
+        m_showRequested = true;
+        AutoFindReferences();
+        ClearOverride();
+        ApplyCompactLayout(true);
+        ApplyPage(m_titleText, m_bodyText, m_hintText, m_image, m_keyIcon, page);
+        SetPanelVisible(true);
+    }
+
+    /// <summary>압축 표시 중인지 여부입니다.</summary>
+    public bool IsCompact => m_isCompact && IsShown;
+
     /// <summary>안내를 감춥니다. 띄워 둔 프리팹과 좌측 공지도 함께 감춥니다.</summary>
     public void Hide()
     {
@@ -111,6 +148,61 @@ public class DefenseTutorialOverlay : MonoBehaviour
         ClearOverride();
         SetPanelVisible(false);
         SetNoticeVisible(false);
+        ApplyCompactLayout(false);
+    }
+
+    /// <summary>패널 크기·배경 UV·하단 안내 위치를 압축 또는 원래 크기로 맞춥니다.</summary>
+    private void ApplyCompactLayout(bool compact)
+    {
+        if (m_panelRoot == null || !(m_panelRoot.transform is RectTransform panel))
+        {
+            return;
+        }
+
+        RawImage background = m_panelRoot.GetComponent<RawImage>();
+        RectTransform hint = m_hintText != null ? m_hintText.rectTransform : null;
+        RectTransform gauge = m_keyGaugeFill != null ? m_keyGaugeFill.rectTransform.parent as RectTransform : null;
+
+        if (!m_hasFullLayout)
+        {
+            m_hasFullLayout = true;
+            m_fullPanelSize = panel.sizeDelta;
+            m_fullPanelUv = background != null ? background.uvRect : new Rect(0.0f, 0.0f, 1.0f, 1.0f);
+            m_fullHintPosition = hint != null ? hint.anchoredPosition : Vector2.zero;
+            m_fullGaugePosition = gauge != null ? gauge.anchoredPosition : Vector2.zero;
+        }
+
+        if (m_isCompact == compact)
+        {
+            return;
+        }
+
+        m_isCompact = compact;
+        float ratio = compact ? m_compactHeightRatio : 1.0f;
+        float cut = m_fullPanelSize.y * (1.0f - ratio);
+
+        panel.sizeDelta = new Vector2(m_fullPanelSize.x, m_fullPanelSize.y * ratio);
+
+        if (background != null)
+        {
+            // UV의 y는 아래에서 위로 셉니다. 위쪽 ratio만큼만 보이게 아래쪽을 잘라냅니다.
+            background.uvRect = new Rect(
+                m_fullPanelUv.x,
+                m_fullPanelUv.y + m_fullPanelUv.height * (1.0f - ratio),
+                m_fullPanelUv.width,
+                m_fullPanelUv.height * ratio);
+        }
+
+        // 하단 안내와 게이지는 패널 왼쪽 위 기준이라, 잘라낸 높이만큼 위로 올려야 줄어든 창 바닥에 붙습니다.
+        if (hint != null)
+        {
+            hint.anchoredPosition = m_fullHintPosition + new Vector2(0.0f, cut);
+        }
+
+        if (gauge != null)
+        {
+            gauge.anchoredPosition = m_fullGaugePosition + new Vector2(0.0f, cut);
+        }
     }
 
     private void ClearOverride()

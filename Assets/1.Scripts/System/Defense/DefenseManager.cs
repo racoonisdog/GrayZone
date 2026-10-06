@@ -140,12 +140,37 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>방어전 시작 홀드 키입니다. 튜토리얼 마지막 페이지 안내(Z 3초)와 같은 키입니다.</summary>
     private const Key StartHoldKey = Key.Z;
 
-    [Tooltip("튜토리얼 없이 시작하는 판(2회차부터)에서 시작 전 시작 안내를 띄울 텍스트입니다. 보통 좌상단 목표 패널의 제목입니다. " +
-             "시작하면 원래 문구로 돌려놓습니다. 비어 있으면 안내를 띄우지 않습니다.")]
-    [SerializeField] private TMP_Text m_startPromptText;
+    [Foldout("Start Prompt")]
+    [Tooltip("튜토리얼 없이 시작하는 판(2회차부터)에서 시작 안내를 띄울 튜토리얼 창입니다. 아래쪽을 잘라낸 압축 크기로 띄우고, " +
+             "Z를 누르는 동안 키 게이지가 찹니다. 비어 있으면 씬에서 찾습니다.")]
+    [SerializeField] private DefenseTutorialOverlay m_startPromptOverlay;
 
-    [Tooltip("시작 전 안내 문구입니다.")]
-    [SerializeField] private string m_startPromptMessage = "시작하시려면 Z키를 3초 눌러주세요.";
+    [Tooltip("시작 안내 창의 제목입니다. 비우면 튜토리얼 창에 적힌 제목을 그대로 둡니다.")]
+    [SerializeField] private string m_startPromptTitle = string.Empty;
+
+    [TextArea(2, 4)]
+    [Tooltip("시작 안내 본문입니다. 튜토리얼 마지막 페이지의 시작 안내 부분과 같은 문구이며, 키 아이콘 자리만큼 공백을 둡니다.")]
+    [SerializeField] private string m_startPromptBody = "모든 정비를 마치셨으면        를 3초간\n눌러 시작합니다.";
+
+    [Tooltip("시작 안내 하단 문구입니다. 오른쪽에 Z 키 게이지가 붙습니다.")]
+    [SerializeField] private string m_startPromptHint = "시작하려면";
+
+    [Tooltip("본문에 끼워 넣을 Z 키 아이콘입니다. 튜토리얼 마지막 페이지와 같은 이미지를 씁니다.")]
+    [SerializeField] private Sprite m_startPromptKeyIcon;
+
+    [Tooltip("Z 키 아이콘 위치(px)입니다. 패널 왼쪽 위 기준이고 y는 아래쪽이 양수입니다.")]
+    [SerializeField] private Vector2 m_startPromptKeyIconPosition = new Vector2(279.0f, 99.0f);
+
+    [Tooltip("Z 키 아이콘 크기(px)입니다.")]
+    [SerializeField] private Vector2 m_startPromptKeyIconSize = new Vector2(30.0f, 30.0f);
+
+    [Foldout("Mission Text")]
+    [Tooltip("좌상단 목표 패널의 설명 텍스트입니다. 전투 중에는 아래 문구로 바꾸고, 휴식·시작 전에는 원래 문구로 돌려놓습니다. 비어 있으면 바꾸지 않습니다.")]
+    [SerializeField] private TMP_Text m_missionDescriptionText;
+
+    [Tooltip("전투 중 목표 패널 설명 문구입니다.")]
+    [SerializeField] private string m_combatMissionDescription = "몰려드는 적을 저지하십시오.";
+    [EndFoldout]
 
     /// <summary>Defense 게임이 시작될 때 발생합니다. 튜토리얼 안내처럼 시작 시점에 붙는 UI가 구독합니다.</summary>
     /// <remarks>
@@ -209,8 +234,8 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>허공 상호작용키를 연속해서 누른 시간(초)입니다.</summary>
     private float m_emptySpaceHoldStartTimer;
 
-    /// <summary>시작 안내로 바꾸기 전 원래 문구입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
-    private string m_startPromptOriginalText;
+    /// <summary>전투 문구로 바꾸기 전 목표 패널 설명입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
+    private string m_missionDescriptionOriginalText;
 
     /// <summary>현재 실행 중인 웨이브 번호입니다. 첫 웨이브는 1입니다.</summary>
     private int m_currentWave;
@@ -344,6 +369,7 @@ public sealed class DefenseManager : CombatSceneManager
         }
 
         UpdateWaveStartMessage();
+        RefreshMissionDescription();
 
         if (!m_isGameStarted)
         {
@@ -993,40 +1019,76 @@ public sealed class DefenseManager : CombatSceneManager
     }
 
     /// <summary>
-    /// 시작 전이고 튜토리얼이 진행 중이 아니면 목표 패널 제목을 시작 안내로 바꾸고, 그 외에는 원래 문구로 돌려놓습니다.
+    /// 시작 전이고 튜토리얼이 진행 중이 아니면 튜토리얼 창을 압축 크기로 띄워 시작 안내(Z 3초)와 키 게이지를 보여 줍니다.
     /// </summary>
     /// <remarks>
-    /// 2회차부터는 튜토리얼만 빠지고 시작 규칙(Z 3초)은 같으므로, 튜토리얼 마지막 페이지가 하던 안내를 여기서 대신합니다.
-    /// 튜토리얼은 Start에서 시작되므로 첫 Update부터 진행 여부를 바로 알 수 있습니다.
+    /// 2회차부터는 튜토리얼만 빠지고 시작 규칙(Z 3초)은 같으므로, 튜토리얼 마지막 페이지의 시작 안내 부분만 같은 창에 띄웁니다.
+    /// 좌상단 목표 패널은 1회차와 같게 둡니다. 튜토리얼은 Start에서 시작되므로 첫 Update부터 진행 여부를 바로 알 수 있습니다.
     /// </remarks>
     private void RefreshStartPrompt()
     {
-        if (m_startPromptText == null)
+        if (m_startPromptOverlay == null)
         {
-            return;
+            m_startPromptOverlay = FindFirstObjectByType<DefenseTutorialOverlay>(FindObjectsInactive.Include);
+            if (m_startPromptOverlay == null)
+            {
+                return;
+            }
         }
 
         TutorialManager tutorial = TutorialManager.Instance;
-        bool showPrompt = !m_isGameStarted && !m_isGameOver && (tutorial == null || !tutorial.IsRunning);
+        bool tutorialRunning = tutorial != null && tutorial.IsRunning;
+        bool showPrompt = !m_isGameStarted && !m_isGameOver && !tutorialRunning;
         if (showPrompt)
         {
-            if (m_startPromptOriginalText == null)
+            if (!m_startPromptOverlay.IsCompact)
             {
-                m_startPromptOriginalText = m_startPromptText.text;
+                m_startPromptOverlay.ShowCompact(TutorialPage.CreateDisplayPage(
+                    m_startPromptTitle,
+                    m_startPromptBody,
+                    m_startPromptHint,
+                    m_startPromptKeyIcon,
+                    m_startPromptKeyIconPosition,
+                    m_startPromptKeyIconSize));
             }
 
-            if (m_startPromptText.text != m_startPromptMessage)
-            {
-                m_startPromptText.text = m_startPromptMessage;
-            }
-
+            m_startPromptOverlay.SetGaugeProgress(EmptySpaceHoldStartProgress);
             return;
         }
 
-        if (m_startPromptOriginalText != null)
+        // 튜토리얼이 같은 창을 쓰는 중이면 건드리지 않습니다. 압축 안내를 띄운 경우에만 내립니다.
+        if (!tutorialRunning && m_startPromptOverlay.IsCompact)
         {
-            m_startPromptText.text = m_startPromptOriginalText;
-            m_startPromptOriginalText = null;
+            m_startPromptOverlay.Hide();
+        }
+    }
+
+    /// <summary>전투 중이면 목표 패널 설명을 전투 문구로 바꾸고, 그 외에는 원래 문구로 돌려놓습니다.</summary>
+    private void RefreshMissionDescription()
+    {
+        if (m_missionDescriptionText == null)
+        {
+            return;
+        }
+
+        if (m_isPlaying && !m_isGameOver)
+        {
+            if (m_missionDescriptionOriginalText == null)
+            {
+                m_missionDescriptionOriginalText = m_missionDescriptionText.text;
+            }
+
+            if (m_missionDescriptionText.text != m_combatMissionDescription)
+            {
+                m_missionDescriptionText.text = m_combatMissionDescription;
+            }
+            return;
+        }
+
+        if (m_missionDescriptionOriginalText != null)
+        {
+            m_missionDescriptionText.text = m_missionDescriptionOriginalText;
+            m_missionDescriptionOriginalText = null;
         }
     }
 
