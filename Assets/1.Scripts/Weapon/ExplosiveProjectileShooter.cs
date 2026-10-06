@@ -143,6 +143,58 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             crosshair.SubStrokeColor = m_subStrokeColor;
             crosshair.CornerRadiusPixels = m_cornerRadiusPixels;
         }
+
+        public CrosshairStyle ToStyle()
+        {
+            return new CrosshairStyle
+            {
+                useSpreadAccuracy = m_useSpreadAccuracy,
+                mainShape = m_mainShape,
+                mainSizePixels = m_mainSizePixels,
+                mainRingSizePixels = m_mainRingSizePixels,
+                mainRingThicknessPixels = m_mainRingThicknessPixels,
+                mainColor = m_mainColor,
+                mainStrokeThicknessPixels = m_mainStrokeThicknessPixels,
+                mainStrokeColor = m_mainStrokeColor,
+                subShape = m_subShape,
+                centerSpacePixels = m_centerSpacePixels,
+                subSizePixels = m_subSizePixels,
+                subWidthPixels = m_subWidthPixels,
+                subThicknessPixels = m_subThicknessPixels,
+                subRingSizePixels = m_subRingSizePixels,
+                subRingThicknessPixels = m_subRingThicknessPixels,
+                subColor = m_subColor,
+                subStrokeThicknessPixels = m_subStrokeThicknessPixels,
+                subStrokeColor = m_subStrokeColor,
+                cornerRadiusPixels = m_cornerRadiusPixels,
+            };
+        }
+
+        public static CrosshairPreset FromStyle(CrosshairStyle style, bool useSpreadAccuracy)
+        {
+            return new CrosshairPreset
+            {
+                m_useSpreadAccuracy = useSpreadAccuracy,
+                m_mainShape = style.mainShape,
+                m_mainSizePixels = style.mainSizePixels,
+                m_mainRingSizePixels = style.mainRingSizePixels,
+                m_mainRingThicknessPixels = style.mainRingThicknessPixels,
+                m_mainColor = style.mainColor,
+                m_mainStrokeThicknessPixels = style.mainStrokeThicknessPixels,
+                m_mainStrokeColor = style.mainStrokeColor,
+                m_subShape = style.subShape,
+                m_centerSpacePixels = style.centerSpacePixels,
+                m_subSizePixels = style.subSizePixels,
+                m_subWidthPixels = style.subWidthPixels,
+                m_subThicknessPixels = style.subThicknessPixels,
+                m_subRingSizePixels = style.subRingSizePixels,
+                m_subRingThicknessPixels = style.subRingThicknessPixels,
+                m_subColor = style.subColor,
+                m_subStrokeThicknessPixels = style.subStrokeThicknessPixels,
+                m_subStrokeColor = style.subStrokeColor,
+                m_cornerRadiusPixels = style.cornerRadiusPixels,
+            };
+        }
     }
 
     [Tooltip("마우스 휠로 순환 선택할 ProjectileBase Prefab 목록입니다.")]
@@ -752,6 +804,51 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
         m_throwCrosshairActive = false;
         m_crosshairModeInitialized = true;
+    }
+
+    /// <summary>투척 모드에서 쓰는 조준선 모양 값의 복사본입니다.</summary>
+    public CrosshairStyle ThrowCrosshairStyle => m_throwCrosshairPreset != null
+        ? m_throwCrosshairPreset.ToStyle()
+        : null;
+
+    /// <summary>
+    /// 투척 모드 조준선 모양을 바꿉니다. 이 대원이 지금 투척 모드면 공용 HUD에도 바로 적용합니다.
+    /// </summary>
+    /// <remarks>탄퍼짐 연동 여부는 설정 화면에서 다루지 않으므로 이 컴포넌트의 기존 값을 유지합니다.</remarks>
+    public void SetThrowCrosshairStyle(CrosshairStyle style)
+    {
+        if (style == null)
+        {
+            return;
+        }
+
+        bool useSpreadAccuracy = m_throwCrosshairPreset != null && m_throwCrosshairPreset.ToStyle().useSpreadAccuracy;
+        m_throwCrosshairPreset = CrosshairPreset.FromStyle(style, useSpreadAccuracy);
+        if (ReferenceEquals(s_crosshairOverrideOwner, this) && s_crosshairOverrideTarget != null)
+        {
+            m_throwCrosshairPreset.Apply(s_crosshairOverrideTarget);
+        }
+    }
+
+    /// <summary>
+    /// 투척 모드가 공용 HUD를 덮고 있으면, 투척 모드가 끝난 뒤 복원할 값을 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// 투척 모드 중에 캐릭터 조준선 설정이 바뀌면 지금 화면은 그대로 두고, 끝날 때 새 값으로 돌아가게 하려는 것입니다.
+    /// 복원 값의 탄퍼짐 연동 여부는 투척 모드 진입 전 값을 유지합니다.
+    /// </remarks>
+    /// <returns>투척 모드가 <paramref name="target"/>을 덮고 있어 복원 값을 바꿨으면 true입니다.</returns>
+    public static bool TryReplaceCrosshairBaseline(CrosshairController target, CrosshairStyle style)
+    {
+        if (target == null || style == null || ReferenceEquals(s_crosshairOverrideOwner, null)
+            || s_crosshairOverrideTarget != target || s_crosshairOverrideBaseline == null)
+        {
+            return false;
+        }
+
+        bool useSpreadAccuracy = s_crosshairOverrideBaseline.ToStyle().useSpreadAccuracy;
+        s_crosshairOverrideBaseline = CrosshairPreset.FromStyle(style, useSpreadAccuracy);
+        return true;
     }
 
     private static void RestoreAndClearCrosshairOverride()

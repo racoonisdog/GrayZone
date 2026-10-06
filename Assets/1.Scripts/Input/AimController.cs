@@ -168,6 +168,15 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("이 캐릭터의 조준선이 탄퍼짐 콘에서 표시할 반경 기준입니다. ConeEdge면 실제 최대 탄퍼짐 경계를 표시합니다.")]
     [SerializeField] private CrosshairController.SpreadDisplayBasis m_crosshairSpreadDisplayBasis = CrosshairController.SpreadDisplayBasis.MostShots;
 
+    /// <summary>
+    /// 이 캐릭터의 조준선 탄퍼짐 표시 기준입니다. HUD는 매 프레임 이 값으로 맞춰지므로, 바꾸려면 HUD가 아니라 여기를 바꿉니다.
+    /// </summary>
+    public CrosshairController.SpreadDisplayBasis CrosshairSpreadDisplayBasis
+    {
+        get => m_crosshairSpreadDisplayBasis;
+        set => m_crosshairSpreadDisplayBasis = value;
+    }
+
     [Tooltip("0 이상이면 이 캐릭터 조준선의 탄퍼짐 표시 배율을 고정합니다. -1이면 무기 분포에서 계산합니다. 실제 탄착은 바꾸지 않으며, 무기 밸런스를 바꿔도 의도적으로 유지할 UI 기준점에만 사용합니다.")]
     [SerializeField] private float m_crosshairSpreadDisplayFactorOverride = -1.0f;
 
@@ -181,6 +190,27 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Tooltip("이 캐릭터 조준선이 Ring일 때의 기본 지름(픽셀)입니다. 최대 퍼짐 경계 링을 정확히 맞출 때는 0으로 둡니다.")]
     [Clamp(Min = 0)]
     [SerializeField] private float m_crosshairSubRingBaseDiameterPixels = 16.0f;
+
+    /// <summary>이 캐릭터 조준선의 외부(Sub) 형태입니다. HUD는 이 캐릭터를 조작할 때 이 값으로 맞춰집니다.</summary>
+    public CrosshairController.SubShape CrosshairSubShape
+    {
+        get => m_crosshairSubShape;
+        set => m_crosshairSubShape = value;
+    }
+
+    /// <summary>이 캐릭터 조준선의 중심 기본 여백(픽셀)입니다.</summary>
+    public float CrosshairCenterSpacePixels
+    {
+        get => m_crosshairCenterSpacePixels;
+        set => m_crosshairCenterSpacePixels = Mathf.Max(0.0f, value);
+    }
+
+    /// <summary>이 캐릭터 조준선이 Ring일 때의 기본 지름(픽셀)입니다.</summary>
+    public float CrosshairSubRingBaseDiameterPixels
+    {
+        get => m_crosshairSubRingBaseDiameterPixels;
+        set => m_crosshairSubRingBaseDiameterPixels = Mathf.Max(0.0f, value);
+    }
 
     [Tooltip("이 캐릭터가 직접 조작될 때 발사 펄스로 조준선을 추가로 벌릴지 여부입니다. 최대 퍼짐 고정 링은 false여야 실제 경계와 일치합니다.")]
     [SerializeField] private bool m_crosshairEnableShotRecoilPulse = true;
@@ -465,7 +495,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     [Foldout("Debug")]
     [Tooltip("조준 중 총구→탄착점 히트스캔 레이를 그립니다.")]
-    [SerializeField] private bool m_drawHitscanDebugRay = true;
+    [SerializeField] private bool m_drawHitscanDebugRay = false;
 
     [Tooltip("카메라에서 조준점까지의 트레이스 선을 그립니다(캠→조준점). 총구 기준 탄착점 레이와 얼마나 벌어지는지 확인용입니다.")]
     [SerializeField] private bool m_drawAimTraceLine = false;
@@ -524,6 +554,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private bool m_hasRequiredReferences;
     private bool m_inCombatStance;
     private bool m_isAds;
+
+    // 마지막으로 전투 자세(조준/힙파이어) 갱신이 돈 프레임입니다. 디버그 표시가 "지금 조준 중인가"를 읽습니다.
+    private int m_lastCombatFrame = -1;
     private float m_hipfireTimer;
     private CombatStance m_lastCombatStance = CombatStance.Free;
 
@@ -580,6 +613,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>카메라 크로스헤어가 가리키는 현재 월드 조준점입니다.</summary>
     public Vector3 CurrentAimPoint => m_currentAimPoint;
+
+    /// <summary>이 캐릭터가 든 총입니다. 없으면 <c>null</c>입니다.</summary>
+    public Gun EquippedGun => m_weaponController;
+
+    /// <summary>이번 프레임에 전투 자세(조준/힙파이어)로 조준점을 갱신했는지 여부입니다.</summary>
+    public bool IsInCombatStance => m_lastCombatFrame >= Time.frameCount - 1;
 
     /// <summary>사격 시 재생할 효과음입니다. 지정하지 않았으면 <c>null</c>입니다.</summary>
     /// <remarks>무기별 사운드는 <see cref="WeaponFeedbackEmitter"/>가 담당하고, 이 값은 캐릭터 쪽 보조 배선입니다.</remarks>
@@ -1125,7 +1164,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         // 피해량을 함께 넘겨 히트마커 길이가 타격 크기를 반영하게 합니다.
-        m_crosshairController.ShowHitMarker(feedback.Headshot, feedback.Damage);
+        m_crosshairController.ShowHitMarker(feedback.Headshot, Mathf.CeilToInt(feedback.Damage));
 
         if (feedback.Killed)
         {
@@ -1997,6 +2036,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 조준점: 카메라 트레이스가 잡은 실제 사격 목표. 총알이 겨누는 지점입니다.
         Vector3 aimPoint = ResolveAimPoint(lookPoint, out m_currentAimTargetHealth);
         m_currentAimPoint = aimPoint;
+        m_lastCombatFrame = Time.frameCount;
 
         // Update에서는 애니메이션 입력까지만 준비합니다. 실제 탄착 계산과 발사는 IK가 끝난 LateUpdate에서
         // 총구 보정을 적용한 뒤 한 번만 수행해 표시와 사격이 같은 총구 위치를 사용하게 합니다.

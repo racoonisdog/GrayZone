@@ -29,6 +29,13 @@ public class GameSettingManager : MonoBehaviour
     [SerializeField] private string bgmVolumeParam = "BgmVolume";
     [SerializeField] private string sfxVolumeParam = "SfxVolume";
 
+    [Header("Crosshair")]
+    [Tooltip("조준선 기본값 템플릿입니다. 설정 화면의 기본값 버튼과, 저장값이 없는 캐릭터의 첫 값으로 씁니다. 비어 있으면 Resources 기본 에셋을 사용합니다.")]
+    [SerializeField] private DefaultCrosshairSettings m_defaultCrosshairSettings;
+
+    // 사용자가 저장한 조준선 값입니다. 다른 설정과 같은 파일(SettingData.crosshair)에 들어갑니다.
+    private SettingData.CrosshairSettingData m_crosshairSettings = new SettingData.CrosshairSettingData();
+
     private const float MuteDb = -80f;
     private const float MaxDb = 0f;
     public const float MinMouseSensitivity = 0.01f;
@@ -36,6 +43,32 @@ public class GameSettingManager : MonoBehaviour
 
     public float MouseSensitivity => currentSettings.mouseSensitivity;
     public bool CameraKickEnabled => currentSettings.cameraKickEnabled;
+
+    /// <summary>조준선 기본값 템플릿입니다. 씬에 지정하지 않았으면 Resources 기본 에셋을 읽습니다. 둘 다 없으면 null입니다.</summary>
+    public DefaultCrosshairSettings DefaultCrosshairSettings
+    {
+        get
+        {
+            if (m_defaultCrosshairSettings == null)
+            {
+                m_defaultCrosshairSettings = DefaultCrosshairSettings.LoadFromResources();
+            }
+
+            return m_defaultCrosshairSettings;
+        }
+    }
+
+    /// <summary>사용자가 저장한 조준선 값의 사본입니다.</summary>
+    public SettingData.CrosshairSettingData GetCrosshairSettings()
+    {
+        return m_crosshairSettings.Clone();
+    }
+
+    /// <summary>조준선 값을 기록합니다. 파일에는 <see cref="SaveSettings"/>를 호출할 때 함께 저장됩니다.</summary>
+    public void SetCrosshairSettings(SettingData.CrosshairSettingData settings)
+    {
+        m_crosshairSettings = settings != null ? settings.Clone() : new SettingData.CrosshairSettingData();
+    }
 
     private void Awake()
     {
@@ -204,6 +237,7 @@ public class GameSettingManager : MonoBehaviour
         data.audio.sfxVolume = currentSettings.sfxVolume;
         data.gameplay.mouseSensitivity = currentSettings.mouseSensitivity;
         data.gameplay.cameraKickEnabled = currentSettings.cameraKickEnabled;
+        data.crosshair = m_crosshairSettings.Clone();
         data.MarkUpdatedNow();
         return data;
     }
@@ -264,6 +298,7 @@ public class GameSettingManager : MonoBehaviour
         };
 
         ApplySnapshot(snapshot);
+        m_crosshairSettings = data.crosshair != null ? data.crosshair.Clone() : new SettingData.CrosshairSettingData();
     }
 
     private static void NormalizeGameplaySettings(SettingSnapshot snapshot)

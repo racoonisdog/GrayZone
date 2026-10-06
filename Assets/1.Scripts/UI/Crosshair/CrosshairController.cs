@@ -359,15 +359,11 @@ public class CrosshairController : MonoBehaviour
     [SerializeField] private float m_ammoGaugeDiagonalOffset = 40.0f;
 
     [Header("Ammo Gauge Bullet")]
-    [Tooltip("켜면 탄약 게이지 옆에 재장전 탄약 아이콘(m_reloadBulletImage)을 하나 더 표시합니다. 게이지가 보일 때만 보입니다.")]
+    [Tooltip("켜면 탄약 게이지 옆의 탄약 아이콘을 표시합니다. 게이지가 보일 때만 보입니다.")]
     [SerializeField] private bool m_showAmmoGaugeBullet = true;
 
-    [Tooltip("탄약 게이지 옆 탄약 아이콘의 표시 크기(픽셀)입니다.")]
-    [Min(0.0f)]
-    [SerializeField] private float m_ammoGaugeBulletSizePixels = 24.0f;
-
-    [Tooltip("탄약 게이지 중심에서 아이콘 중심까지의 거리(픽셀)입니다. x는 오른쪽, y는 아래쪽이 양수입니다.")]
-    [SerializeField] private Vector2 m_ammoGaugeBulletOffset = new Vector2(62.0f, -12.0f);
+    [Tooltip("탄약 게이지 옆에 둘 탄약 아이콘 UI(UGUI) 오브젝트입니다. 위치·크기·이미지는 이 오브젝트에서 편집하고, 여기서는 표시 여부만 맞춥니다.")]
+    [SerializeField] private GameObject m_ammoGaugeBulletUI;
 
     [Foldout("Hit Feedback")]
     [Header("Hit Marker")]
@@ -552,7 +548,6 @@ public class CrosshairController : MonoBehaviour
     private VisualElement m_subShapeElement;
     private VisualElement m_subStrokeElement;
     private VisualElement m_reloadBulletElement;
-    private VisualElement m_ammoGaugeBulletElement;
     private VisualElement m_ammoGaugeElement;
     private VisualElement m_hitMarkerElement;
     private VisualElement m_killSkullElement;
@@ -2113,7 +2108,6 @@ public class CrosshairController : MonoBehaviour
         }
 
         m_reloadBulletElement = FindOrCreateChild(m_crosshairElement, "ReloadBullet");
-        m_ammoGaugeBulletElement = FindOrCreateChild(m_crosshairElement, "AmmoGaugeBullet");
 
         m_hitMarkerElement = FindOrCreateChild(m_crosshairElement, "HitMarker");
         if (m_hitMarkerElement != null)
@@ -2349,7 +2343,7 @@ public class CrosshairController : MonoBehaviour
 
         ApplyReloadBullet(center, reloadSwap);
         ApplyAmmoGauge(center);
-        ApplyAmmoGaugeBullet(center);
+        ApplyAmmoGaugeBullet();
         LayoutHitMarker(center);
         LayoutKillSkull(center);
     }
@@ -2414,37 +2408,28 @@ public class CrosshairController : MonoBehaviour
     }
 
     /// <summary>
-    /// 탄약 게이지 옆에 재장전 탄약 아이콘과 같은 이미지를 하나 더 배치합니다. 게이지와 같은 조건에서만 보입니다.
+    /// 탄약 게이지 옆의 탄약 아이콘 UI를 게이지와 같은 조건에서만 켭니다.
     /// </summary>
     /// <remarks>
-    /// 위치는 게이지 중심 기준 오프셋이라, 게이지 크기나 대각 오프셋을 바꿔도 아이콘이 게이지를 따라갑니다.
-    /// 재장전 깜빡임은 중앙 아이콘에만 적용하고 이 아이콘은 항상 불투명하게 둡니다.
+    /// 아이콘은 코드로 만들지 않고 HUD 캔버스의 UGUI 오브젝트(<c>m_ammoGaugeBulletUI</c>)로 둡니다. 위치·크기·이미지는
+    /// 그 오브젝트에서 편집합니다. 그래서 게이지 크기나 대각 오프셋을 바꾸면 아이콘 위치는 직접 맞춰야 합니다.
+    /// 상태가 바뀔 때만 SetActive를 불러, 에디트 모드에서 씬이 매 갱신마다 수정된 것으로 표시되지 않게 합니다.
     /// </remarks>
-    /// <param name="center">파츠 배치 기준 앵커(0 = 패널 정중앙)입니다.</param>
-    private void ApplyAmmoGaugeBullet(float center)
+    private void ApplyAmmoGaugeBullet()
     {
-        if (m_ammoGaugeBulletElement == null)
+        if (m_ammoGaugeBulletUI == null)
         {
             return;
         }
 
-        bool gaugeVisible = m_showAmmoGauge
-                         && m_ammoGaugeSizePixels > 0.0f
-                         && (m_ammoGaugeAlwaysVisible || m_isReloading || !Application.isPlaying);
-        if (!gaugeVisible || !m_showAmmoGaugeBullet || m_reloadBulletImage == null || m_ammoGaugeBulletSizePixels <= 0.0f)
+        bool visible = m_showAmmoGaugeBullet
+                    && m_showAmmoGauge
+                    && m_ammoGaugeSizePixels > 0.0f
+                    && (m_ammoGaugeAlwaysVisible || m_isReloading || !Application.isPlaying);
+        if (m_ammoGaugeBulletUI.activeSelf != visible)
         {
-            HideElement(m_ammoGaugeBulletElement);
-            return;
+            m_ammoGaugeBulletUI.SetActive(visible);
         }
-
-        float size = m_ammoGaugeBulletSizePixels;
-        float gaugeCenter = center + m_ammoGaugeDiagonalOffset;
-        ApplyTextureImage(
-            m_ammoGaugeBulletElement,
-            m_reloadBulletImage,
-            gaugeCenter + m_ammoGaugeBulletOffset.x - size * 0.5f,
-            gaugeCenter + m_ammoGaugeBulletOffset.y - size * 0.5f,
-            size);
     }
 
     /// <summary>

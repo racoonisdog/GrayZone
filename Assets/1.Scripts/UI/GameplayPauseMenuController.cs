@@ -65,8 +65,8 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private bool m_restoreCursorInLateUpdate;
     private bool m_keyboardSelectionRequested;
     private int m_selectedCombatSubTab;
-    private CrosshairSettingsMockupPanel m_crosshairSettingsPanel;
-    private CrosshairSettingsMockupPanel m_throwableCrosshairSettingsPanel;
+    private CrosshairSettingsPanel m_crosshairSettingsPanel;
+    private CrosshairSettingsPanel m_throwableCrosshairSettingsPanel;
     private Slider m_mouseSensitivitySlider;
     private TextMeshProUGUI m_mouseSensitivityValue;
     private Toggle m_cameraKickToggle;
@@ -219,6 +219,10 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_settingsBaseline = settingManager != null ? settingManager.CreateSnapshot() : null;
         SyncCombatGeneralSettings(settingManager, true);
 
+        // 메뉴는 Awake에서 만들어져 저장값을 읽기 전일 수 있고, 지난번에 저장하지 않은 편집도 남아 있을 수 있어 열 때마다 확정 값을 다시 읽습니다.
+        m_crosshairSettingsPanel?.RevertToCommittedValues();
+        m_throwableCrosshairSettingsPanel?.RevertToCommittedValues();
+
         m_pausePage.SetActive(false);
         m_settingsPage.SetActive(true);
         SelectSettingsTab(0);
@@ -259,6 +263,10 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         }
 
         settingManager.ApplySettings();
+
+        // 조준선 값은 GameSettingManager의 customData로 들어가므로 파일을 쓰기 전에 넘겨야 합니다.
+        m_crosshairSettingsPanel?.ApplyPendingValues();
+        m_throwableCrosshairSettingsPanel?.ApplyPendingValues();
         if (settingManager.SaveSettings())
         {
             m_settingsBaseline = settingManager.CreateSnapshot();
@@ -669,13 +677,13 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         BuildCombatGeneralSettings(m_combatSubPages[0].transform);
 
-        m_crosshairSettingsPanel = m_combatSubPages[1].AddComponent<CrosshairSettingsMockupPanel>();
+        m_crosshairSettingsPanel = m_combatSubPages[1].AddComponent<CrosshairSettingsPanel>();
         m_crosshairSettingsPanel.Build(
             m_combatSubPages[1].transform as RectTransform,
             m_regularFont,
             m_boldFont);
 
-        m_throwableCrosshairSettingsPanel = m_combatSubPages[2].AddComponent<CrosshairSettingsMockupPanel>();
+        m_throwableCrosshairSettingsPanel = m_combatSubPages[2].AddComponent<CrosshairSettingsPanel>();
         m_throwableCrosshairSettingsPanel.BuildSharedThrowable(
             m_combatSubPages[2].transform as RectTransform,
             m_regularFont,
