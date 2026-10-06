@@ -163,7 +163,7 @@ MonoBehaviour:
   m_buildCostResourceId: trap_material
   m_buildCostAmount: 0
   m_buildPrompt: "?\u317C\uD282"
-  m_buildHoldDuration: 1
+  m_buildHoldDuration: 0.3
   m_blueprintMaterial: {fileID: 2100000, guid: cf43b62aa6a65f148a402c99cb003910, type: 2}
   m_disableShadowWhileBlueprint: 1
   m_blueprintVisualRoot: {fileID: 0}

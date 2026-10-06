@@ -50,7 +50,7 @@ MonoBehaviour:
   m_buildCostResourceId: trap_material
   m_buildCostAmount: 0
   m_buildPrompt: "\uC124\uCE58"
-  m_buildHoldDuration: 1
+  m_buildHoldDuration: 0.3
   m_displayName: 
   m_description: 
   m_blueprintMaterial: {fileID: 0}
