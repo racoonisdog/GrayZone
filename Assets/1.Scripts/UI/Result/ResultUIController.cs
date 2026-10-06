@@ -39,6 +39,8 @@ public class ResultUIController : MonoBehaviour
     [Serializable]
     public struct ResourceResult
     {
+        /// <summary>자원 ID입니다. 아이콘이 비어 있으면 이 ID로 자원 목록(<see cref="ResourceDefinitionCatalog"/>)에서 찾습니다.</summary>
+        public string ResourceId;
         public Texture2D Icon;
         public int Count;
     }
@@ -65,7 +67,7 @@ public class ResultUIController : MonoBehaviour
         [Tooltip("정상·부상일 때의 초상화입니다.")]
         public Texture2D NormalPortrait;
 
-        [Tooltip("전투 이탈·치명상일 때의 초상화입니다(노이즈판). 비어 있으면 일반 초상화를 씁니다.")]
+        [Tooltip("전투 이탈일 때의 초상화입니다(노이즈판). 비어 있으면 일반 초상화를 씁니다. 치명상이어도 전투에 남았으면 일반 초상화를 씁니다.")]
         public Texture2D InjuredPortrait;
     }
 
@@ -87,6 +89,9 @@ public class ResultUIController : MonoBehaviour
 
     [Tooltip("자원 수량 표시 형식입니다. {0}에 수량이 들어갑니다.")]
     [SerializeField] private string m_resourceCountFormat = "x{0}";
+
+    [Tooltip("결과에 아이콘이 실려 오지 않은 자원의 아이콘을 찾을 자원 목록입니다. 셸터 UI와 같은 ResourceDefinitionCatalog를 씁니다.")]
+    [SerializeField] private ResourceDefinitionCatalog m_resourceCatalog;
 
     [Header("Characters")]
     [Tooltip("캐릭터 상태 칸들입니다. 캐릭터 ID로 결과와 짝을 맞춥니다.")]
@@ -183,6 +188,7 @@ public class ResultUIController : MonoBehaviour
             CombatSceneDataManager.ResourceResult resource = result.Resources[i];
             resources.Add(new ResourceResult
             {
+                ResourceId = resource.ResourceId,
                 Icon = resource.Icon,
                 Count = resource.Count
             });
@@ -216,8 +222,9 @@ public class ResultUIController : MonoBehaviour
         OnReturnToShelter?.Invoke();
         RestoreTime();
         TestSceneUiEventSystemBridge.DisableBeforeShelterTransition();
-        // 방어전 귀환 반복 테스트를 위해 다음 Shelter 진입에서 DefaultSaveData를 적용한다.
-        GameDataManager.Instance?.SetUseDefaultSaveDataOnShelterStart(true);
+        // 귀환 정산(FinalizeField)이 GameDataManager에 반영한 부상·HP·자원을 셸터가 그대로 이어받게 합니다.
+        // 예전에는 반복 테스트용으로 true를 넣어 셸터 시작 때 DefaultSaveData가 다시 덮였고, 부상이 넘어가지 않았습니다.
+        GameDataManager.Instance?.SetUseDefaultSaveDataOnShelterStart(false);
         SceneTransitionController.LoadScene(m_returnSceneName);
     }
 
@@ -251,7 +258,8 @@ public class ResultUIController : MonoBehaviour
                 continue;
             }
 
-            bool isOut = character.IsCombatOut || character.InjuryState == CharacterInjuryState.Critical;
+            // 부상 초상화(노이즈판)는 전투 이탈일 때만 씁니다. 치명상이어도 끝까지 남았으면 일반 초상화입니다.
+            bool isOut = character.IsCombatOut;
 
             if (column.NameText != null)
             {
@@ -310,8 +318,7 @@ public class ResultUIController : MonoBehaviour
 
             if (slot.Icon != null)
             {
-                slot.Icon.texture = hasData ? resources[i].Icon : null;
-                slot.Icon.enabled = hasData && resources[i].Icon != null;
+                ApplyResourceIcon(slot.Icon, hasData ? resources[i] : default, hasData);
             }
 
             if (slot.Count != null)
@@ -319,6 +326,45 @@ public class ResultUIController : MonoBehaviour
                 slot.Count.text = hasData ? string.Format(m_resourceCountFormat, resources[i].Count) : string.Empty;
             }
         }
+    }
+
+    /// <summary>
+    /// 자원 칸 아이콘을 채웁니다. 결과에 아이콘이 실려 왔으면 그것을, 없으면 자원 목록의 스프라이트를 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 승리 보상처럼 아이콘 없이 기록된 자원은 예전에 개수만 보였습니다. 셸터 UI가 쓰는 자원 목록에서
+    /// 같은 ID의 아이콘을 찾아, 결과창과 셸터의 자원 그림이 같게 합니다. 칸이 RawImage라 스프라이트가 아틀라스
+    /// 일부일 때도 맞게 보이도록 uvRect를 스프라이트 영역으로 맞춥니다.
+    /// </remarks>
+    private void ApplyResourceIcon(RawImage icon, ResourceResult resource, bool hasData)
+    {
+        Texture texture = null;
+        Rect uv = new Rect(0.0f, 0.0f, 1.0f, 1.0f);
+
+        if (hasData)
+        {
+            if (resource.Icon != null)
+            {
+                texture = resource.Icon;
+            }
+            else if (m_resourceCatalog != null
+                     && m_resourceCatalog.TryGetPresentation(resource.ResourceId, out ResourcePresentation presentation)
+                     && presentation.Icon != null)
+            {
+                Sprite sprite = presentation.Icon;
+                texture = sprite.texture;
+                Rect rect = sprite.textureRect;
+                uv = new Rect(
+                    rect.x / texture.width,
+                    rect.y / texture.height,
+                    rect.width / texture.width,
+                    rect.height / texture.height);
+            }
+        }
+
+        icon.texture = texture;
+        icon.uvRect = uv;
+        icon.enabled = texture != null;
     }
 
     private Color ResolveStateColor(CharacterInjuryState injuryState, bool isCombatOut)
