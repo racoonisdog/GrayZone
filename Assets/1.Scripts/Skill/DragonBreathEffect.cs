@@ -195,7 +195,19 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
         Physics.SyncTransforms();
         TraceBreath(origin, direction, out float reach, out bool hasImpact, out RaycastHit impact);
 
-        ApplyConeDamage(origin, direction, reach);
+        // 레이는 조준선 한 줄이라 원뿔에 걸린 적을 빗나가기 쉽습니다. 원뿔에 맞은 적이 레이 착탄보다 가까우면
+        // 그 적의 맞은 지점을 착탄으로 씁니다. 그래야 벽이 아니라 적에게 쏴도 착탄 폭발이 납니다.
+        if (ApplyConeDamage(origin, direction, reach, out Vector3 nearestHitPoint, out float nearestHitDistance)
+            && (!hasImpact || nearestHitDistance < impact.distance))
+        {
+            impact = new RaycastHit
+            {
+                point = nearestHitPoint,
+                normal = -direction,
+                distance = nearestHitDistance,
+            };
+            hasImpact = true;
+        }
 
         if (hasImpact)
         {
@@ -274,8 +286,15 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
     /// 트리거는 후보에서 뺍니다. 적에게는 몸보다 훨씬 큰 감지용 트리거(HitDetectVolume, 반경 약 1.7m)와 접촉 센서가 있어,
     /// 트리거까지 보면 원뿔 밖의 적이 맞습니다. 실제 몸 콜라이더만 판정합니다(부위 히트박스는 평소 꺼져 있습니다).
     /// </remarks>
-    private void ApplyConeDamage(Vector3 origin, Vector3 direction, float reach)
+    /// <returns>원뿔 안에 맞을 수 있는 대상(적 몸)이 있었으면 true입니다.</returns>
+    /// <param name="nearestHitPoint">그중 총구에서 가장 가까운 대상의, 총구 축에 가장 가까운 표면 지점입니다.</param>
+    /// <param name="nearestHitDistance">그 지점의 총구로부터 축 방향 거리(m)입니다.</param>
+    private bool ApplyConeDamage(Vector3 origin, Vector3 direction, float reach, out Vector3 nearestHitPoint, out float nearestHitDistance)
     {
+        bool hasHit = false;
+        nearestHitPoint = Vector3.zero;
+        nearestHitDistance = float.MaxValue;
+
         float maxRadius = Mathf.Max(DamageStartRadius, GetConeRadius(reach));
         Vector3 center = origin + direction * (reach * 0.5f);
         Vector3 halfExtents = new Vector3(maxRadius, maxRadius, reach * 0.5f);
@@ -296,6 +315,17 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
             }
 
             TryDamage(candidate, axial);
+
+            // 착탄 지점 후보는 피해를 받을 수 있는 몸(적 등)만 봅니다. 쏜 사람과 아군은 일반 총탄처럼 통과합니다.
+            if (axial < nearestHitDistance
+                && candidate.GetComponentInParent<IDamageable>() != null
+                && (m_attacker == null || !candidate.transform.IsChildOf(m_attacker.transform))
+                && CombatDamage.BlocksShot(candidate, m_ownerFaction, true))
+            {
+                hasHit = true;
+                nearestHitDistance = axial;
+                nearestHitPoint = candidate.ClosestPoint(origin + direction * axial);
+            }
         }
 
         // 화염 범위 안의 폭발물 함정도 불이 붙어 터집니다. 피해 레이어와 상관없이 따로 찾습니다.
@@ -305,6 +335,8 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
             rotation,
             candidate => IntersectsCone(candidate, origin, direction, reach, out _),
             m_attacker);
+
+        return hasHit;
     }
 
     /// <summary>착탄 지점 반경 안의 대상에게 피해와 화상을 주고, 폭발물 함정에도 불을 붙입니다.</summary>
