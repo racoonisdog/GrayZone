@@ -157,6 +157,9 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// </remarks>
     private readonly List<PlayerInput> m_passthroughActivatedInputs = new List<PlayerInput>();
 
+    /// <summary>배경 조작 중 시점 입력을 막아 둔 조작 멤버의 PlayerInput입니다. 멤버가 바뀌면 새 멤버에 다시 겁니다.</summary>
+    private PlayerInput m_passthroughBlockedInput;
+
     /// <summary>
     /// 배경 조작을 넘겨 준 동안에도 막아 둘 액션 이름입니다.
     /// </summary>
@@ -343,6 +346,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         // 창을 눌러 두었으면 키보드는 트레이너 것이고, 배경을 눌렀으면 게임이 받습니다.
         // 마우스는 어느 쪽이든 커서로 남습니다(슬라이더를 만져야 하므로).
         SetKeyboardPassthrough(!m_windowFocused);
+        EnforcePassthroughBlocks();
 
         // 씬이 입력 모드 계약을 제공하면 그 구현이 커서·플레이어 입력을 소유합니다.
         // 계약이 없는 레거시/독립 테스트 씬만 아래 범용 안전장치를 사용합니다.
@@ -391,6 +395,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         if (allow)
         {
             m_passthroughActivatedInputs.Clear();
+            m_passthroughBlockedInput = ResolveControlledPlayerInput();
 
             foreach (PlayerInput playerInput in FindObjectsByType<PlayerInput>(FindObjectsSortMode.None))
             {
@@ -415,17 +420,49 @@ public class RuntimeDebugTrainer : MonoBehaviour
             playerInput.GetComponent<PlayerInputController>()?.SetGameplayInputWithFreeCursor(false);
         }
 
-        // 이쪽이 켠 것만 되돌립니다.
+        // 이쪽이 켠 것만 되돌립니다. 다만 켜 둔 사이 조작 멤버가 된 입력은 끄지 않습니다. 켤 때는 AI 멤버였어도
+        // 지금 조작 중이면 끄는 순간 그 멤버가 움직이지 않습니다.
+        PlayerInput controlledInput = ResolveControlledPlayerInput();
         for (int i = 0; i < m_passthroughActivatedInputs.Count; i++)
         {
             PlayerInput playerInput = m_passthroughActivatedInputs[i];
-            if (playerInput != null && playerInput.inputIsActive)
+            if (playerInput != null && playerInput.inputIsActive && playerInput != controlledInput)
             {
                 playerInput.DeactivateInput();
             }
         }
 
         m_passthroughActivatedInputs.Clear();
+    }
+
+    /// <summary>지금 조작 중인 스쿼드 멤버의 PlayerInput입니다. 스쿼드가 없는 씬이면 <c>null</c>입니다.</summary>
+    private static PlayerInput ResolveControlledPlayerInput()
+    {
+        SquadMemberController member = SquadManager.Instance != null ? SquadManager.Instance.PlayerSquadMember : null;
+        return member != null ? member.GetComponent<PlayerInput>() : null;
+    }
+
+    /// <summary>
+    /// 배경 조작 중에 조작 멤버가 바뀌면 새 멤버의 시점 입력도 막습니다.
+    /// </summary>
+    /// <remarks>
+    /// 켤 때 막은 것은 그 순간의 액션들입니다. 멤버를 바꾸면 새 조작 멤버는 액션맵을 통째로 다시 켜서 막아 둔 시점 회전이
+    /// 되살아납니다. 그대로 두면 창을 만지는 동안 마우스로 카메라가 돕니다.
+    /// </remarks>
+    private void EnforcePassthroughBlocks()
+    {
+        if (!m_keyboardPassthrough)
+        {
+            return;
+        }
+
+        PlayerInput controlled = ResolveControlledPlayerInput();
+        if (controlled != null && controlled != m_passthroughBlockedInput)
+        {
+            SetBlockedActionsEnabled(controlled, false);
+            controlled.GetComponent<PlayerInputController>()?.SetGameplayInputWithFreeCursor(true);
+            m_passthroughBlockedInput = controlled;
+        }
     }
 
     /// <summary>배경 조작 중 막아 둘 액션만 켜거나 끕니다.</summary>

@@ -1586,6 +1586,7 @@ public class SquadManager : MonoBehaviour
             if (input != null)
             {
                 input.SetInputGate(gameplayEnabled);
+                input.SyncCursorLockedFlag(gameplayEnabled);
             }
 
             ThirdPersonController controller = member.GetComponent<ThirdPersonController>();

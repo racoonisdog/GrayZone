@@ -722,41 +722,49 @@ public class PlayerInputController : MonoBehaviour
         }
     }
 
+    /// <remarks>
+    /// 캐시는 지금 PlayerInput이 쓰는 액션 에셋의 것일 때만 씁니다. 스쿼드는 PlayerInput 여럿이 같은 에셋을 쓰므로,
+    /// 조작권이 바뀔 때마다 PlayerInput이 원본과 복제본을 바꿔 끼웁니다. 처음 잡은 액션을 계속 쓰면 전환된 멤버는
+    /// 꺼진 옛 액션을 읽어 F가 영원히 안 눌린 것으로 보입니다(처음 조작한 나린만 설치되던 원인).
+    /// </remarks>
     private InputAction ResolveInteractionAction()
     {
-        if (m_interactionAction != null)
-        {
-            return m_interactionAction;
-        }
-
         CachePlayerInput();
         if (m_playerInput == null || m_playerInput.actions == null)
         {
             return null;
         }
 
-        m_interactionAction = m_playerInput.actions.FindAction("Interaction", false)
-            ?? m_playerInput.actions.FindAction("Interact", false);
+        if (!IsActionOf(m_interactionAction, m_playerInput.actions))
+        {
+            m_interactionAction = m_playerInput.actions.FindAction("Interaction", false)
+                ?? m_playerInput.actions.FindAction("Interact", false);
+        }
 
         return m_interactionAction;
     }
 
+    /// <remarks>상호작용 액션과 같은 이유로 지금 에셋의 것인지 확인하고 다시 찾습니다.</remarks>
     private InputAction ResolveInventoryAction()
     {
-        if (m_inventoryAction != null)
-        {
-            return m_inventoryAction;
-        }
-
         CachePlayerInput();
         if (m_playerInput == null || m_playerInput.actions == null)
         {
             return null;
         }
 
-        m_inventoryAction = m_playerInput.actions.FindAction("Inventory", false);
+        if (!IsActionOf(m_inventoryAction, m_playerInput.actions))
+        {
+            m_inventoryAction = m_playerInput.actions.FindAction("Inventory", false);
+        }
 
         return m_inventoryAction;
+    }
+
+    /// <summary>캐시한 액션이 지정한 액션 에셋에 속하는지 여부입니다.</summary>
+    private static bool IsActionOf(InputAction action, InputActionAsset asset)
+    {
+        return action != null && action.actionMap != null && action.actionMap.asset == asset;
     }
 #endif
 
@@ -768,6 +776,18 @@ public class PlayerInputController : MonoBehaviour
     {
         m_cursorLocked = value;
         SetCursorState(m_cursorLocked);
+    }
+
+    /// <summary>
+    /// 커서 잠금 기억값만 맞춥니다. 실제 커서는 건드리지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 커서 모드는 조작 멤버 한 명에게만 걸리므로, UI를 연 사이 조작권이 바뀌면 다른 멤버에 옛 값이 남습니다.
+    /// 그 멤버로 다시 바꾼 뒤 창 포커스가 돌아오면 그 옛 값으로 커서가 풀립니다. 스쿼드 입력 모드를 바꿀 때 전원에 맞춥니다.
+    /// </remarks>
+    public void SyncCursorLockedFlag(bool value)
+    {
+        m_cursorLocked = value;
     }
 
     /// <summary>
@@ -919,6 +939,12 @@ public class PlayerInputController : MonoBehaviour
     /// <param name="hasFocus">애플리케이션이 포커스를 얻었으면 true입니다.</param>
     private void OnApplicationFocus(bool hasFocus)
     {
+        // 커서는 화면에 하나뿐이라 조작 멤버(켜진 컴포넌트)만 다룹니다. 꺼진 멤버까지 각자 값을 적용하면 순서에 따라 결과가 달라집니다.
+        if (!isActiveAndEnabled)
+        {
+            return;
+        }
+
         SetCursorState(m_cursorLocked);
     }
 

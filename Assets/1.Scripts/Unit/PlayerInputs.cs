@@ -416,21 +416,26 @@ public class PlayerInputs : MonoBehaviour
         }
     }
 
+    /// <remarks>
+    /// 캐시는 지금 PlayerInput 에셋의 액션일 때만 씁니다. PlayerInput 여럿이 같은 에셋을 쓰면 조작권이 바뀔 때
+    /// 원본/복제본이 바뀌어, 처음 잡은 액션이 꺼진 채 남습니다(<see cref="PlayerInputController"/>와 같은 이유).
+    /// </remarks>
     private InputAction ResolveInteractionAction()
     {
-        if (m_interactionAction != null)
-        {
-            return m_interactionAction;
-        }
-
         CachePlayerInput();
         if (m_playerInput == null || m_playerInput.actions == null)
         {
             return null;
         }
 
-        m_interactionAction = m_playerInput.actions.FindAction("Interaction", false)
-            ?? m_playerInput.actions.FindAction("Interact", false);
+        bool cachedIsCurrent = m_interactionAction != null
+            && m_interactionAction.actionMap != null
+            && m_interactionAction.actionMap.asset == m_playerInput.actions;
+        if (!cachedIsCurrent)
+        {
+            m_interactionAction = m_playerInput.actions.FindAction("Interaction", false)
+                ?? m_playerInput.actions.FindAction("Interact", false);
+        }
 
         return m_interactionAction;
     }
