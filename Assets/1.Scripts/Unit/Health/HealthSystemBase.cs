@@ -50,9 +50,6 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
 
     protected virtual bool DebugLogHealthEnabled => false;
 
-    /// <summary>디버그 피해 숫자의 색을 정하는 대상 종류입니다. 플레이어와 방어 목표물이 바꿔 씁니다.</summary>
-    protected virtual DamageNumberDebug.TargetKind DamageNumberKind => DamageNumberDebug.TargetKind.Enemy;
-
     [Foldout("Debug")]
     [Button("Take 9999 Damage")]
     private void DebugTake9999Damage()
@@ -60,6 +57,10 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
         TakeDamage(DebugDownDamage);
     }
 #endif
+
+    /// <summary>디버그 피해 숫자의 색을 정하는 대상 종류입니다. 플레이어와 방어 목표물이 바꿔 씁니다.</summary>
+    /// <remarks>자식 클래스가 재정의하므로 에디터 전용 블록 밖에 둡니다. 안에 두면 플레이어 빌드에서 재정의할 대상이 없어 컴파일이 깨집니다.</remarks>
+    protected virtual DamageNumberDebug.TargetKind DamageNumberKind => DamageNumberDebug.TargetKind.Enemy;
 
     protected bool m_isDead;
 

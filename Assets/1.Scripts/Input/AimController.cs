@@ -1310,8 +1310,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             }
 
             m_loggedMissingHitConfirmEvent = true;
+            // EventReference.Path는 에디터에서만 있습니다. 빌드에서는 Guid로 남겨야 플레이어 빌드가 컴파일됩니다.
+#if UNITY_EDITOR
+            string eventName = m_hitConfirmEvent.Path;
+#else
+            string eventName = m_hitConfirmEvent.Guid.ToString();
+#endif
             Debug.LogWarning(
-                $"[AimController] FMOD 히트 확인음 이벤트를 찾지 못했습니다: {m_hitConfirmEvent.Path}",
+                $"[AimController] FMOD 히트 확인음 이벤트를 찾지 못했습니다: {eventName}",
                 this);
         }
     }
