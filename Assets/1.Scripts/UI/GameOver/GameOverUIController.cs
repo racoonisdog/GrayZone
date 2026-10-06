@@ -227,7 +227,7 @@ public class GameOverUIController : MonoBehaviour
         }
 
         GameSaveManager saveManager = FindFirstObjectByType<GameSaveManager>(FindObjectsInactive.Include);
-        if (saveManager == null || !saveManager.LoadGame())
+        if (saveManager == null || !saveManager.LoadAutoGame())
         {
             Debug.LogWarning("[GameOverUIController] 마지막 저장을 불러오지 못했습니다. 현재 진행 상태로 셸터에 들어갑니다.", this);
         }
