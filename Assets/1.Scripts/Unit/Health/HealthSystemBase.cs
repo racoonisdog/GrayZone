@@ -20,9 +20,9 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     [FormerlySerializedAs("m_maxHP")]
     [SerializeField] protected int m_maxHp = 10;
 
-    [Tooltip("현재 HP입니다. Start에서 최대 HP로 초기화됩니다.")]
+    [Tooltip("현재 HP입니다. Start에서 최대 HP로 초기화됩니다. 소수 피해를 정확히 쌓으려고 실수로 저장하고, 표시는 정수(올림)로 합니다.")]
     [FormerlySerializedAs("m_currentHP")]
-    [SerializeField] protected int m_currentHp;
+    [SerializeField] protected float m_currentHp;
 
     [Foldout("UI Options")]
     [Tooltip("선택 사항인 HP 슬라이더입니다. 이 참조가 없어도 체력 로직은 동작합니다.")]
@@ -50,6 +50,9 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
 
     protected virtual bool DebugLogHealthEnabled => false;
 
+    /// <summary>디버그 피해 숫자의 색을 정하는 대상 종류입니다. 플레이어와 방어 목표물이 바꿔 씁니다.</summary>
+    protected virtual DamageNumberDebug.TargetKind DamageNumberKind => DamageNumberDebug.TargetKind.Enemy;
+
     [Foldout("Debug")]
     [Button("Take 9999 Damage")]
     private void DebugTake9999Damage()
@@ -60,8 +63,15 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
 
     protected bool m_isDead;
 
-    /// <summary>현재 HP입니다.</summary>
-    public int CurrentHP => m_currentHp;
+    /// <summary>표시용 현재 HP입니다. 실제 값을 올림한 정수라, 0.3이 남아도 1로 보이고 0 이하일 때만 0입니다.</summary>
+    /// <remarks>부동소수 오차로 10.0000001이 11로 올라가지 않게 아주 작은 값을 빼고 올림합니다.</remarks>
+    public int CurrentHP => Mathf.Max(0, Mathf.CeilToInt(m_currentHp - HpDisplayEpsilon));
+
+    /// <summary>소수까지 포함한 실제 현재 HP입니다.</summary>
+    public float CurrentHPExact => m_currentHp;
+
+    /// <summary>표시용 올림에서 부동소수 오차를 무시할 크기입니다.</summary>
+    private const float HpDisplayEpsilon = 0.0001f;
 
     /// <summary>최대 HP입니다.</summary>
     public int MaxHP => m_maxHp;
@@ -116,7 +126,7 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     /// 공격자를 이벤트에 함께 싣는 이유는, 그 정보가 피해 발생 순간에만 존재하기 때문입니다.
     /// 별도 필드에 보관해 두고 나중에 조회하는 방식은 같은 프레임에 두 발을 맞으면 덮어써집니다.
     /// </remarks>
-    public event Action<int, GameObject> OnDamaged;
+    public event Action<float, GameObject> OnDamaged;
 
     private void Start()
     {
@@ -233,36 +243,48 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     /// </summary>
     /// <param name="damage">적용할 피해량입니다.</param>
     /// <param name="attacker">피해를 입힌 대상입니다. 디버그처럼 공격자가 없는 경로는 null입니다.</param>
-    public virtual bool TakeDamage(int damage, GameObject attacker = null)
+    /// <remarks>정수 피해는 실수 경로로 그대로 넘깁니다. 피해 처리는 <see cref="TakeDamage(float, GameObject)"/> 한 곳에만 둡니다.</remarks>
+    public bool TakeDamage(int damage, GameObject attacker = null)
+    {
+        return TakeDamage((float)damage, attacker);
+    }
+
+    /// <summary>
+    /// 소수 피해를 적용합니다. HP가 실제로 변경된 경우에만 true를 반환합니다.
+    /// </summary>
+    /// <param name="damage">적용할 피해량입니다.</param>
+    /// <param name="attacker">피해를 입힌 대상입니다. 디버그처럼 공격자가 없는 경로는 null입니다.</param>
+    public virtual bool TakeDamage(float damage, GameObject attacker = null)
     {
         if (m_isDead)
         {
             return false;
         }
 
-        damage = Mathf.Max(0, damage);
-        if (damage <= 0)
+        // int.MaxValue 같은 큰 값이 float로 넘어와도 그대로 HP를 0으로 만듭니다. NaN은 피해로 보지 않습니다.
+        if (float.IsNaN(damage) || damage <= 0.0f)
         {
             return false;
         }
 
-        int previousHp = m_currentHp;
-        m_currentHp = Mathf.Max(m_currentHp - damage, 0);
-        int actualDamage = previousHp - m_currentHp;
+        float previousHp = m_currentHp;
+        m_currentHp = Mathf.Max(m_currentHp - damage, 0.0f);
+        float actualDamage = previousHp - m_currentHp;
 
-        if (actualDamage <= 0)
+        if (actualDamage <= 0.0f)
         {
             return false;
         }
 
         OnDamageApplied(actualDamage, previousHp);
+        DamageNumberDebug.Report(this, actualDamage, DamageNumberKind);
 
         LogHealthDebug($"[HealthSystem] Hit. Current HP : {m_currentHp}");
 
         NotifyHPChanged();
         OnDamaged?.Invoke(actualDamage, attacker);
 
-        if (m_currentHp <= 0)
+        if (m_currentHp <= 0.0f)
         {
             OnHpDepleted();
         }
@@ -286,10 +308,10 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
             return false;
         }
 
-        int previousHp = m_currentHp;
+        float previousHp = m_currentHp;
         m_currentHp = Mathf.Min(m_currentHp + amount, m_maxHp);
 
-        if (m_currentHp == previousHp)
+        if (Mathf.Approximately(m_currentHp, previousHp))
         {
             return false;
         }
@@ -352,28 +374,28 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
         if (m_hpSlider != null)
         {
             m_hpSlider.value = m_maxHp > 0
-                ? (float)m_currentHp / m_maxHp
+                ? m_currentHp / m_maxHp
                 : 0.0f;
         }
 
         if (m_hpText != null)
         {
-            m_hpText.text = $"HP {m_currentHp} / {m_maxHp}";
+            m_hpText.text = $"HP {CurrentHP} / {m_maxHp}";
         }
     }
 
     /// <summary>
-    /// UI를 갱신하고 HP 변경 이벤트를 발생시킵니다.
+    /// UI를 갱신하고 HP 변경 이벤트를 발생시킵니다. 이벤트의 현재 HP는 표시용 정수입니다.
     /// </summary>
     protected void NotifyHPChanged()
     {
         UpdateUI();
-        OnHPChanged?.Invoke(m_currentHp, m_maxHp);
+        OnHPChanged?.Invoke(CurrentHP, m_maxHp);
     }
 
     private void RefreshDeathState()
     {
-        if (m_currentHp <= 0)
+        if (m_currentHp <= 0.0f)
         {
             if (!m_isDead)
             {
@@ -401,9 +423,9 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
     /// <summary>
     /// 실제 피해가 HP에 반영된 직후 호출되는 확장 지점입니다.
     /// </summary>
-    /// <param name="actualDamage">이번 피격으로 실제 감소한 HP입니다.</param>
+    /// <param name="actualDamage">이번 피격으로 실제 감소한 HP입니다. 소수일 수 있습니다.</param>
     /// <param name="previousHp">피격 전 HP입니다.</param>
-    protected virtual void OnDamageApplied(int actualDamage, int previousHp)
+    protected virtual void OnDamageApplied(float actualDamage, float previousHp)
     {
     }
 

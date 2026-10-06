@@ -353,7 +353,7 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
         }
     }
 
-    protected override void OnDamageApplied(int actualDamage, int previousHp)
+    protected override void OnDamageApplied(float actualDamage, float previousHp)
     {
         AddInjuryGaugeFromDamage(actualDamage);
     }
@@ -363,7 +363,9 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
     /// <param name="attacker">피해를 준 주체입니다. 없으면 <c>null</c>입니다.</param>
     /// <returns>피해가 실제로 들어갔으면 <c>true</c>입니다.</returns>
     /// <remarks>HP가 0이 되어도 사망이 아니라 다운으로 갑니다. 사망은 별도 조건에서만 처리합니다.</remarks>
-    public override bool TakeDamage(int damage, GameObject attacker = null)
+    protected override DamageNumberDebug.TargetKind DamageNumberKind => DamageNumberDebug.TargetKind.Player;
+
+    public override bool TakeDamage(float damage, GameObject attacker = null)
     {
         // 무한 체력 디버그는 런타임 트레이너가 활성화된 Editor/Development Build에서만 효과가 있습니다.
         if (m_debugInfiniteHealth && GameDevMode.DebugFeaturesEnabled)
@@ -556,7 +558,7 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
         SetCurrentInjuryGauge(0.0f);
     }
 
-    private void AddInjuryGaugeFromDamage(int actualDamage)
+    private void AddInjuryGaugeFromDamage(float actualDamage)
     {
         actualDamage = Mathf.Max(0, actualDamage);
         if (actualDamage <= 0 || m_maxHp <= 0)
@@ -620,7 +622,7 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
 
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
     private void LogInjuryStateChangeFromDamage(
-        int actualDamage,
+        float actualDamage,
         float deltaGauge,
         float previousGauge,
         CharacterInjuryState previousState)

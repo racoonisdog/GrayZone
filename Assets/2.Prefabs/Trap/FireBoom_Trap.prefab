@@ -51,6 +51,8 @@ MonoBehaviour:
   m_buildCostAmount: 0
   m_buildPrompt: "\uC124\uCE58"
   m_buildHoldDuration: 1
+  m_displayName: 
+  m_description: 
   m_blueprintMaterial: {fileID: 0}
   m_disableShadowWhileBlueprint: 1
   m_blueprintVisualRoot: {fileID: 0}
@@ -58,6 +60,8 @@ MonoBehaviour:
   m_maxHealth: 100
   m_currentHealth: 0
   m_rebuildPolicy: 0
+  m_buildChargesPerDefense: 0
+  m_remainingBuildCharges: -1
   m_damage: 1
   m_damageMode: 1
   m_damageTickInterval: 1
@@ -66,11 +70,13 @@ MonoBehaviour:
   m_activeGizmoColor: {r: 1, g: 0.15, b: 0.1, a: 0.8}
   m_targetLayers:
     serializedVersion: 2
-    m_Bits: 512
+    m_Bits: 768
   m_duration: 5
   m_damagePerSecond: 10
   m_fireTickInterval: 0.5
+  m_allyDamageMultiplier: 0.5
   m_damageOnEnter: 1
+  m_igniteExplosives: 1
 --- !u!135 &6390060396924803934
 SphereCollider:
   m_ObjectHideFlags: 0

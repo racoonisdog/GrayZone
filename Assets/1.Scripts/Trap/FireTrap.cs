@@ -43,7 +43,7 @@ public sealed class FireTrap : Trap
     }
 
     [Header("Fire Trap")]
-    [Tooltip("화염 지대를 지나간 것으로 볼 레이어입니다. 이 레이어의 콜라이더가 범위 안에 있으면 피해를 받습니다. 기본은 Enemy만 봅니다.")]
+    [Tooltip("화염 지대를 지나간 것으로 볼 레이어입니다. 이 레이어의 콜라이더가 범위 안에 있으면 피해를 받습니다. 기본은 Enemy만 봅니다. Player를 넣으면 팀원도 줄어든 피해를 받습니다.")]
     [SerializeField] private LayerMask m_targetLayers = 1 << 9;
 
     [Tooltip("화염 지대가 지속될 시간(초)입니다. 설치가 끝난 순간부터 세며, 다 되면 화염 지대가 사라집니다.")]
@@ -57,6 +57,10 @@ public sealed class FireTrap : Trap
     [Tooltip("피해를 주는 간격(초)입니다. 0.5면 0.5초마다 (초당 피해 × 0.5)만큼 들어갑니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_fireTickInterval = 0.5f;
+
+    [Tooltip("플레이어 진영(팀원)이 받는 피해 배율입니다. 0.5면 적이 받는 피해의 절반입니다. 팀원이 피해를 받으려면 대상 레이어에 Player가 들어 있어야 합니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_allyDamageMultiplier = 0.5f;
 
     [Tooltip("켜면 범위에 들어온 순간 1틱 분량의 피해를 바로 줍니다. 끄면 첫 틱 간격이 지난 뒤부터 피해가 들어갑니다.")]
     [SerializeField] private bool m_damageOnEnter = true;
@@ -340,9 +344,11 @@ public sealed class FireTrap : Trap
     }
 
     /// <summary>1틱 분량의 피해를 넣습니다. 정수로 떨어지지 않는 나머지는 다음 틱으로 넘깁니다.</summary>
+    /// <remarks>팀원(플레이어 진영)은 <c>m_allyDamageMultiplier</c>만큼 줄여서 받습니다.</remarks>
     private void ApplyTickDamage(IDamageable damageable, Occupant occupant)
     {
-        occupant.PendingDamage += m_damagePerSecond * FireTickInterval;
+        float multiplier = damageable.Faction == Faction.Player ? m_allyDamageMultiplier : 1.0f;
+        occupant.PendingDamage += m_damagePerSecond * FireTickInterval * multiplier;
 
         int amount = Mathf.FloorToInt(occupant.PendingDamage);
         if (amount <= 0)

@@ -12,9 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 495c9ece0bf94cb5a87a3b0bf6a94479, type: 3}
   m_Name: Rifle1WeaponBalance
   m_EditorClassIdentifier: Assembly-CSharp::GunBalanceSO
+  Gun_m_pelletCount: 1
   Gun_m_maxBullet: 45
   Gun_m_segmentAmmoGaugeByRound: 0
   Gun_m_shootDelay: 0.08
+  Gun_m_fireMode: 0
   Gun_m_reloadTime: 1.3335
   Gun_m_reloadMode: 0
   Gun_m_hitscanDamage: 3

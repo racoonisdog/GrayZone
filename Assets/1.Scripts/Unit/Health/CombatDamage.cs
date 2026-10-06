@@ -25,14 +25,14 @@ public static class CombatDamage
         /// <remarks>
         /// 피해가 성립하지 않았으면 0입니다. 크로스헤어 히트마커가 타격 크기를 표현하는 데 씁니다.
         /// </remarks>
-        public readonly int Damage;
+        public readonly float Damage;
 
         /// <summary>한 번의 명중 결과를 묶습니다.</summary>
         /// <param name="applied">피해가 실제로 들어갔는지 여부입니다.</param>
         /// <param name="headshot">약점 히트박스에 맞았는지 여부입니다.</param>
         /// <param name="killed">이 명중으로 대상이 죽었는지 여부입니다.</param>
         /// <param name="damage">실제로 들어간 최종 피해량입니다. 피해가 없으면 0입니다.</param>
-        public HitFeedback(bool applied, bool headshot, bool killed, int damage = 0)
+        public HitFeedback(bool applied, bool headshot, bool killed, float damage = 0.0f)
         {
             Applied = applied;
             Headshot = headshot;
@@ -206,7 +206,7 @@ public static class CombatDamage
     public static HitFeedback ResolveHit(
         Collider collider,
         Faction attacker,
-        int baseDamage,
+        float baseDamage,
         float headshotDamageMultiplier = 1.0f,
         bool allowHeadshot = true,
         GameObject attackerObject = null,
@@ -231,9 +231,12 @@ public static class CombatDamage
 
         bool headshot = allowHeadshot && hitbox.IsHeadshot;
         float multiplier = headshot ? Mathf.Max(0.0f, headshotDamageMultiplier) : 1.0f;
-        int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * multiplier));
+        float damage = baseDamage * multiplier;
 
-        if (!target.TakeDamage(damage, attackerObject))
+        DamageNumberDebug.SetPendingHeadshot(headshot);
+        bool applied = target.TakeDamage(damage, attackerObject);
+        DamageNumberDebug.ClearPending();
+        if (!applied)
         {
             return HitFeedback.None;
         }
@@ -262,7 +265,7 @@ public static class CombatDamage
     /// <c>Conditional</c>이라 비-Editor 빌드에서는 호출 자체가 사라져 문자열 조립 비용도 남지 않습니다.
     /// </remarks>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    private static void LogHitPart(Hitbox hitbox, IDamageable target, int damage, bool headshot)
+    private static void LogHitPart(Hitbox hitbox, IDamageable target, float damage, bool headshot)
     {
         if (hitbox == null || !hitbox.LogHit)
         {

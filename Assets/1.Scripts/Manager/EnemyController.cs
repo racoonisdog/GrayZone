@@ -2679,7 +2679,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 경직은 여기서 다루지 않습니다. 피해와 경직은 서로 다른 값으로 판정되며(피해 0인 경직도, 경직 0인 피해도 성립),
     /// 경직력 누적은 <see cref="EnemyHealth.ApplyStagger"/>가 따로 받습니다. 발동하면 <see cref="HandleStaggered"/>로 옵니다.
     /// </remarks>
-    private void HandleDamaged(int damage, GameObject attacker)
+    private void HandleDamaged(float damage, GameObject attacker)
     {
         if (m_current == Dead)
         {

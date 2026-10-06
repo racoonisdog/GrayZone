@@ -538,6 +538,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
             return false;
         }
 
+        DamageNumberDebug.Report(this, Mathf.Min(amount, m_currentHealth), DamageNumberDebug.TargetKind.Trap);
         m_currentHealth -= amount;
         if (m_currentHealth > 0)
         {

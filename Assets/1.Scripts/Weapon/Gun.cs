@@ -433,6 +433,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0.01f)]
     [SerializeField] private float m_debugFalloffRingRadius = 0.35f;
 
+    [Tooltip("사격할 때마다 총구에서 탄착점까지의 레이를 1초간 그립니다. 명중은 빨강, 빗나감은 노랑입니다. Scene 뷰와 Gizmos를 켠 Game 뷰에서 보입니다.")]
+    [SerializeField] private bool m_debugDrawShotRay = false;
+
     [Tooltip("이 무기를 선택했을 때 사격 소음의 도달 반경을 Scene 뷰에 원으로 표시합니다. 이 원 안의 변이체가 총성을 듣습니다.")]
     [SerializeField] private bool m_debugDrawShotNoiseRange = false;
 
@@ -2419,10 +2422,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
                     if (reactive != null)
                     {
                         // 유닛 피해와 같은 감쇠를 거칩니다. 앞서 꿰뚫은 유닛 수가 관통 순번입니다.
-                        int damage = m_penetration.ResolveDamage(
+                        // 소품은 정수 피해를 받으므로 올림합니다. 0.5 피해 탄도 소품에는 1로 들어갑니다.
+                        float damage = m_penetration.ResolveDamage(
                             m_shotPath.Count,
                             ResolveDistanceAdjustedDamage(m_surfaceImpact.distance));
-                        reactive.OnShotHit(m_surfaceImpact.point, damage, m_ownerObject);
+                        reactive.OnShotHit(m_surfaceImpact.point, Mathf.CeilToInt(damage), m_ownerObject);
                     }
                 }
             }
@@ -2439,8 +2443,13 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <param name="shotInfo">그릴 사격 정보입니다.</param>
     /// <param name="color">레이 색상입니다.</param>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    private static void DrawShotDebugRay(HitscanShotInfo shotInfo, Color color)
+    private void DrawShotDebugRay(HitscanShotInfo shotInfo, Color color)
     {
+        if (!m_debugDrawShotRay)
+        {
+            return;
+        }
+
         Debug.DrawLine(shotInfo.Origin, shotInfo.EndPoint, color, 1.0f, false);
     }
 
@@ -2496,7 +2505,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
 
             // 거리 감쇠는 무기가 소유합니다. 총이 쏜 거리는 총이 아는 정보이고,
             // 공용 피해 경로(CombatDamage)에 거리 개념을 넣으면 근접 공격이 쓰지 않는 인자가 생깁니다.
-            int damage = ResolveDistanceAdjustedDamage(target.Distance);
+            float damage = ResolveDistanceAdjustedDamage(target.Distance);
 
             // 관통 감쇠는 거리 감쇠 위에 얹습니다. 두 감쇠는 서로 다른 이유로 걸리므로 함께 적용됩니다.
             damage = m_penetration.ResolveDamage(i, damage);
@@ -2505,6 +2514,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             {
                 continue;
             }
+
+            // 디버그 피해 숫자를 탄이 박힌 지점에 띄웁니다.
+            DamageNumberDebug.SetPendingHitPoint(target.Point);
 
             // 저지력은 거리·관통 감쇠를 받지 않습니다. 감쇠는 "얼마나 아픈가"의 규칙이고
             // 경직은 "얼마나 휘청이는가"라서, 관통한 두 번째 대상도 같은 충격을 받는 편이 맞습니다.
@@ -2516,6 +2528,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
                 m_allowHeadshot,
                 m_ownerObject,
                 m_stoppingPower);
+            DamageNumberDebug.ClearPending();
 
             if (feedback.Applied)
             {
@@ -2595,7 +2608,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 최소 1을 보장하는 것은 <see cref="CombatDamage.ResolveHit"/>와 같은 규약입니다.
     /// 맞았는데 0이 들어가면 피격 표시만 뜨고 아무 일도 일어나지 않아 버그로 보입니다.
     /// </remarks>
-    private int ResolveDistanceAdjustedDamage(float distance)
+    private float ResolveDistanceAdjustedDamage(float distance)
     {
         if (m_damageFalloff == null)
         {
@@ -3104,6 +3117,13 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>히트스캔 한 발의 기본 피해량을 설정합니다. Shotgun이면 펠릿 하나마다 이 값이 각각 적용됩니다. 음수는 0으로 보정합니다.</summary>
     /// <param name="value">새 기본 피해량(Shotgun은 펠릿당)입니다.</param>
     public void SetHitscanDamage(int value) => m_hitscanDamage = value;
+
+    /// <summary>사격마다 총구→탄착점 레이를 그릴지 여부입니다.</summary>
+    public bool DebugDrawShotRay
+    {
+        get => m_debugDrawShotRay;
+        set => m_debugDrawShotRay = value;
+    }
 
     /// <summary>이 무기의 약점 판정 사용 여부를 설정합니다.</summary>
     /// <param name="value">약점 판정을 쓰면 true입니다.</param>
