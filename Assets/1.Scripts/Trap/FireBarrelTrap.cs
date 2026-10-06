@@ -117,6 +117,37 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     /// <summary>터지기까지 남은 시간(초)입니다.</summary>
     private float m_fuseTimer;
 
+    /// <summary>Trap 업그레이드로 정해진 화염 범위 배율입니다. 업그레이드가 없으면 1입니다.</summary>
+    private float m_upgradeFireRangeMultiplier = 1.0f;
+
+    /// <summary>Trap 업그레이드로 화염 지속 시간에 더할 초입니다.</summary>
+    private float m_upgradeFireBonusDuration;
+
+    /// <summary>Trap 업그레이드로 적에게만 틱마다 더할 화염 피해입니다.</summary>
+    private float m_upgradeEnemyBonusDamagePerTick;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Trap 업그레이드 레벨을 읽어, 남길 화염의 범위·지속 시간과 적 대상 틱당 추가 피해를 정합니다.
+    /// 드럼통 자체(체력, 연쇄 반경)는 바꾸지 않습니다. 레벨 0이면 기본값으로 돌아갑니다.
+    /// </remarks>
+    protected override void OnApplyUpgrade(TrapUpgradeTableSO table, DefenseSceneDataManager data)
+    {
+        m_upgradeFireRangeMultiplier = 1.0f;
+        m_upgradeFireBonusDuration = 0.0f;
+        m_upgradeEnemyBonusDamagePerTick = 0.0f;
+        if (table == null
+            || data == null
+            || !table.TryGetFireBarrel(data.GetUpgradeLevel(ScrambleUpgradeType.Trap), out TrapUpgradeTableSO.FireBarrelLevel level))
+        {
+            return;
+        }
+
+        m_upgradeFireRangeMultiplier = Mathf.Max(0.01f, level.RangeMultiplier);
+        m_upgradeFireBonusDuration = Mathf.Max(0.0f, level.BonusDuration);
+        m_upgradeEnemyBonusDamagePerTick = Mathf.Max(0.0f, level.EnemyBonusDamagePerTick);
+    }
+
     /// <inheritdoc />
     /// <remarks>기즈모 색이 바뀌는 시점을 "휘말려 곧 터질 때"로 둡니다.</remarks>
     protected override bool HasTargetInRange => m_isFuseBurning;
@@ -332,7 +363,9 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
         }
 
         FireTrap fire = Instantiate(m_firePrefab, ResolveGroundPoint(), Quaternion.identity);
-        fire.SetDuration(m_fireDuration);
+        fire.SetDuration(m_fireDuration + m_upgradeFireBonusDuration);
+        fire.SetRangeMultiplier(m_upgradeFireRangeMultiplier);
+        fire.SetEnemyBonusDamagePerTick(m_upgradeEnemyBonusDamagePerTick);
         fire.Build();
     }
 

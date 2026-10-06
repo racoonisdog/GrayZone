@@ -57,6 +57,9 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
     [Tooltip("용숨결 직격 피해가 성립한 대상에게 적용할 화상 상태이상입니다. 비어 있으면 Resources 기본 에셋을 사용합니다.")]
     [SerializeField] private StatusEffectDefinitionSO m_burningEffect;
 
+    [Tooltip("켜면 용숨결에 맞은 대상에게 화상(불에서 벗어나도 남는 지속 피해)을 겁니다. 화상 수치는 화상 상태이상 에셋이 정합니다.")]
+    [SerializeField] private bool m_applyBurning = true;
+
     [Tooltip("켜면 발사 여부와 오브젝트 선택 여부에 관계없이 Scene 뷰에 원뿔 판정 범위를 계속 표시하고, 발사할 때 실제로 쓴 판정(벽에 잘린 원뿔·착탄 범위)을 잠깐 그립니다.")]
     [SerializeField] private bool m_drawDebugRange = true;
 
@@ -387,6 +390,11 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
 
         int damage = ResolveDamage(distance);
         if (!CombatDamage.TryApplyDamage(target, m_ownerFaction, damage, m_attacker) || target.IsDead)
+        {
+            return;
+        }
+
+        if (!m_applyBurning)
         {
             return;
         }

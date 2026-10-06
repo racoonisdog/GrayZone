@@ -17,8 +17,9 @@ using UnityEngine;
 /// <item><see cref="ScrambleUpgradeType.Explosive"/>: 클레이모어·지뢰의 폭발 범위</item>
 /// <item><see cref="ScrambleUpgradeType.Wire"/>: 윤형 철조망의 감속과 내구도</item>
 /// <item><see cref="ScrambleUpgradeType.Spike"/>: 스파이크의 피해량과 내구도</item>
+/// <item><see cref="ScrambleUpgradeType.Trap"/>: 화염 드럼통 화염의 범위·지속 시간과 적 대상 추가 피해</item>
 /// </list>
-/// <see cref="ScrambleUpgradeType.Trap"/>과 <see cref="ScrambleUpgradeType.Shooter"/>는 이 표를 쓰지 않습니다.
+/// <see cref="ScrambleUpgradeType.Shooter"/>는 이 표를 쓰지 않습니다.
 /// 지정사수는 <see cref="DefenseManager"/>가 배치로 처리합니다.
 /// </remarks>
 [CreateAssetMenu(fileName = "TrapUpgradeTable", menuName = "GrayZone/Defense/Trap Upgrade Table")]
@@ -37,7 +38,7 @@ public sealed class TrapUpgradeTableSO : ScriptableObject
     [Serializable]
     public struct WireLevel
     {
-        [Tooltip("철조망의 이동 속도 배율에 곱할 값입니다. 0.5면 남는 속도가 절반이 되어 더 느려집니다(기본 0.1 → 0.05). 1이면 그대로입니다.")]
+        [Tooltip("철조망의 이동 속도 배율에 곱할 값입니다. 0.5면 남는 속도가 절반이 되어 더 느려집니다(예: 0.65 → 0.325). 1이면 그대로입니다.")]
         [Range(0.0f, 1.0f)]
         public float MoveSpeedScale;
 
@@ -57,6 +58,23 @@ public sealed class TrapUpgradeTableSO : ScriptableObject
         [Tooltip("최대 내구도에 더할 값입니다. 스파이크는 적 한 마리가 밟을 때마다 내구도가 깎입니다.")]
         [Min(0)]
         public int BonusDurability;
+    }
+
+    /// <summary>화염 드럼통 한 레벨의 강화값입니다. 드럼통이 남기는 화염 지대에만 적용합니다(화염병 화염은 그대로).</summary>
+    [Serializable]
+    public struct FireBarrelLevel
+    {
+        [Tooltip("화염 지대 범위에 곱할 배율입니다. 판정과 불 이펙트가 함께 커집니다. 1.15면 15% 넓어집니다.")]
+        [Min(0.0f)]
+        public float RangeMultiplier;
+
+        [Tooltip("화염 지대 지속 시간에 더할 초입니다.")]
+        [Min(0.0f)]
+        public float BonusDuration;
+
+        [Tooltip("적에게만 틱마다 더하는 피해입니다. 팀원이 받는 피해는 바뀌지 않습니다.")]
+        [Min(0.0f)]
+        public float EnemyBonusDamagePerTick;
     }
 
     [Header("Explosive (클레이모어·지뢰)")]
@@ -80,6 +98,13 @@ public sealed class TrapUpgradeTableSO : ScriptableObject
         new SpikeLevel { DamageMultiplier = 1.25f, BonusDurability = 10 },
     };
 
+    [Header("Trap (화염 드럼통)")]
+    [Tooltip("Trap 업그레이드 레벨 1, 2, ... 순서입니다.")]
+    [SerializeField] private FireBarrelLevel[] m_fireBarrelLevels =
+    {
+        new FireBarrelLevel { RangeMultiplier = 1.15f, BonusDuration = 2.0f, EnemyBonusDamagePerTick = 3.0f },
+    };
+
     /// <summary>Explosive 레벨의 강화값을 찾습니다. 레벨 0이거나 표가 비었으면 false입니다.</summary>
     public bool TryGetExplosive(int level, out ExplosiveLevel value) => TryGet(m_explosiveLevels, level, out value);
 
@@ -88,6 +113,9 @@ public sealed class TrapUpgradeTableSO : ScriptableObject
 
     /// <summary>Spike 레벨의 강화값을 찾습니다. 레벨 0이거나 표가 비었으면 false입니다.</summary>
     public bool TryGetSpike(int level, out SpikeLevel value) => TryGet(m_spikeLevels, level, out value);
+
+    /// <summary>Trap(화염 드럼통) 레벨의 강화값을 찾습니다. 레벨 0이거나 표가 비었으면 false입니다.</summary>
+    public bool TryGetFireBarrel(int level, out FireBarrelLevel value) => TryGet(m_fireBarrelLevels, level, out value);
 
     private static bool TryGet<T>(T[] levels, int level, out T value)
     {

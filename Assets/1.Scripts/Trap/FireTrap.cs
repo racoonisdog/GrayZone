@@ -68,6 +68,16 @@ public sealed class FireTrap : Trap
     [Tooltip("켜면 범위 안의 폭발물 함정(지뢰·클레이모어 등)에 불이 붙어 연쇄로 터집니다. 점화 순간과 이후 피해 간격마다 확인합니다.")]
     [SerializeField] private bool m_igniteExplosives = true;
 
+    [Header("Burning On Exit")]
+    [Tooltip("화염 지대에서 벗어난 적에게 걸 화상입니다. 불이 꺼질 때 안에 있던 대상도 벗어난 것으로 봅니다. 비어 있으면 Resources 기본 화상을 씁니다.")]
+    [SerializeField] private StatusEffectDefinitionSO m_exitBurningEffect;
+
+    [Tooltip("화염 지대에서 벗어난 팀원(플레이어 진영)에게 걸 화상입니다. 적보다 약한 값입니다. 비어 있으면 Resources 기본 팀원 화상을 씁니다.")]
+    [SerializeField] private StatusEffectDefinitionSO m_allyExitBurningEffect;
+
+    private const string ExitBurningResourcePath = "StatusEffects/Burning";
+    private const string AllyExitBurningResourcePath = "StatusEffects/Burning_Ally";
+
     /// <summary>다음 연쇄 점화 확인까지 남은 시간(초)입니다.</summary>
     private float m_chainTimer;
 
@@ -86,6 +96,9 @@ public sealed class FireTrap : Trap
 
     /// <summary>점화되어 지속 시간이 흐르고 있는지 여부입니다.</summary>
     private bool m_isIgnited;
+
+    /// <summary>적에게만 틱마다 더하는 피해입니다. 생성한 쪽(화염 드럼통 업그레이드)이 정합니다. 팀원 피해에는 더하지 않습니다.</summary>
+    private float m_enemyBonusDamagePerTick;
 
     /// <summary>화염 지대가 사라지기까지 남은 시간(초)입니다.</summary>
     public float RemainingTime => m_remainingTime;
@@ -117,6 +130,23 @@ public sealed class FireTrap : Trap
         {
             m_remainingTime = m_duration;
         }
+    }
+
+    /// <summary>
+    /// 화염 지대 범위를 배율만큼 넓힙니다. 판정 콜라이더와 불 이펙트가 함께 커지도록 오브젝트 크기를 바꿉니다.
+    /// </summary>
+    /// <param name="multiplier">범위 배율입니다. 1이면 프리팹 크기 그대로입니다.</param>
+    /// <remarks>불 이펙트는 부모 크기를 따르는 설정(Hierarchy)이라 함께 커집니다. 생성 직후, 설치 전에 부릅니다.</remarks>
+    public void SetRangeMultiplier(float multiplier)
+    {
+        transform.localScale *= Mathf.Max(0.01f, multiplier);
+    }
+
+    /// <summary>적에게만 틱마다 더할 피해를 정합니다. 팀원이 받는 피해는 바뀌지 않습니다.</summary>
+    /// <param name="damagePerTick">틱마다 더할 피해입니다. 0이면 추가 피해가 없습니다.</param>
+    public void SetEnemyBonusDamagePerTick(float damagePerTick)
+    {
+        m_enemyBonusDamagePerTick = Mathf.Max(0.0f, damagePerTick);
     }
 
     /// <inheritdoc />
@@ -261,7 +291,54 @@ public sealed class FireTrap : Trap
         if (occupant.Colliders.Count == 0)
         {
             m_occupants.Remove(damageable);
+            ApplyExitBurning(damageable);
         }
+    }
+
+    /// <summary>
+    /// 화염 지대에서 벗어난 대상에게 화상을 겁니다. 적은 기본 화상, 팀원은 약한 팀원 화상을 받습니다.
+    /// </summary>
+    /// <remarks>
+    /// 화상 피해는 진영 규칙을 거쳐 들어가므로, 피해를 준 쪽 진영을 받는 쪽의 반대로 넘깁니다.
+    /// 같은 진영으로 넘기면 팀원 화상이 아군 피해로 걸러져 들어가지 않습니다.
+    /// 죽은 대상과 피해를 받지 않는 대상(함정 등)에는 걸지 않습니다.
+    /// </remarks>
+    private void ApplyExitBurning(IDamageable damageable)
+    {
+        if (!IsAliveTarget(damageable))
+        {
+            return;
+        }
+
+        bool isAlly = damageable.Faction == Faction.Player;
+        StatusEffectDefinitionSO burning = isAlly ? ResolveAllyExitBurningEffect() : ResolveExitBurningEffect();
+        if (burning == null)
+        {
+            return;
+        }
+
+        Faction sourceFaction = isAlly ? Faction.Enemy : Faction.Player;
+        StatusEffectContainer.GetOrAdd(damageable)?.Apply(burning, sourceFaction, gameObject);
+    }
+
+    private StatusEffectDefinitionSO ResolveExitBurningEffect()
+    {
+        if (m_exitBurningEffect == null)
+        {
+            m_exitBurningEffect = Resources.Load<StatusEffectDefinitionSO>(ExitBurningResourcePath);
+        }
+
+        return m_exitBurningEffect;
+    }
+
+    private StatusEffectDefinitionSO ResolveAllyExitBurningEffect()
+    {
+        if (m_allyExitBurningEffect == null)
+        {
+            m_allyExitBurningEffect = Resources.Load<StatusEffectDefinitionSO>(AllyExitBurningResourcePath);
+        }
+
+        return m_allyExitBurningEffect;
     }
 
     /// <summary>
@@ -350,11 +427,19 @@ public sealed class FireTrap : Trap
     }
 
     /// <summary>1틱 분량의 피해를 넣습니다. 정수로 떨어지지 않는 나머지는 다음 틱으로 넘깁니다.</summary>
-    /// <remarks>팀원(플레이어 진영)은 <c>m_allyDamageMultiplier</c>만큼 줄여서 받습니다.</remarks>
+    /// <remarks>
+    /// 팀원(플레이어 진영)은 <c>m_allyDamageMultiplier</c>만큼 줄여서 받습니다.
+    /// 적은 업그레이드로 정해진 틱당 추가 피해(<see cref="SetEnemyBonusDamagePerTick"/>)를 더 받습니다.
+    /// </remarks>
     private void ApplyTickDamage(IDamageable damageable, Occupant occupant)
     {
-        float multiplier = damageable.Faction == Faction.Player ? m_allyDamageMultiplier : 1.0f;
+        bool isAlly = damageable.Faction == Faction.Player;
+        float multiplier = isAlly ? m_allyDamageMultiplier : 1.0f;
         occupant.PendingDamage += m_damagePerSecond * FireTickInterval * multiplier;
+        if (!isAlly)
+        {
+            occupant.PendingDamage += m_enemyBonusDamagePerTick;
+        }
 
         int amount = Mathf.FloorToInt(occupant.PendingDamage);
         if (amount <= 0)
@@ -388,8 +473,14 @@ public sealed class FireTrap : Trap
     }
 
     /// <summary>지속 시간이 끝난 화염 지대를 정리하고 제거합니다.</summary>
+    /// <remarks>불이 꺼질 때 안에 있던 대상도 불에서 벗어난 것이므로 화상을 겁니다.</remarks>
     private void Expire()
     {
+        foreach (IDamageable damageable in m_occupants.Keys)
+        {
+            ApplyExitBurning(damageable);
+        }
+
         ClearOccupants();
         enabled = false;
         Destroy(gameObject);

@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a2ebad803c6ea354a91805023c6c35ad, type: 3}
-  m_Name: Burning
+  m_Name: Burning_Ally
   m_EditorClassIdentifier: Assembly-CSharp::StatusEffectDefinitionSO
-  m_displayName: Burning
+  m_displayName: Burning (Ally)
   m_category: 1
   m_duration: 5
   m_stackPolicy: 0
@@ -20,6 +20,6 @@ MonoBehaviour:
   m_recipientVisual: {fileID: 11400000, guid: 64d290c8e68357649a765e68e922c70e, type: 2}
   m_movementSpeedPercent: 100
   m_actionSpeedPercent: 100
-  m_periodicDamage: 5
-  m_tickInterval: 0.5
+  m_periodicDamage: 1
+  m_tickInterval: 1
   m_playerDamageReductionPercent: 0
