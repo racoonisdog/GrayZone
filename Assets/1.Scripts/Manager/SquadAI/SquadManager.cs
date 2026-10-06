@@ -2097,3 +2097,44 @@ public class SquadManager : MonoBehaviour
         m_member3Key = value;
     }
 }
+    /// <summary>
+    /// 지정한 멤버를 스쿼드에서 뺍니다. 조작 중인 멤버는 그대로 유지합니다.
+    /// </summary>
+    /// <param name="excluded">뺄 멤버들입니다.</param>
+    /// <remarks>
+    /// 출격하지 않은 대원을 씬 시작 때 빼는 용도입니다. <see cref="SetSquadMembers"/>는 인덱스만 범위 안으로 자르므로,
+    /// 앞쪽 멤버가 빠지면 조작 인덱스가 다른 멤버를 가리키게 됩니다. 여기서는 조작 멤버 자체를 기준으로 인덱스를 다시 잡고,
+    /// 조작 멤버가 빠지는 경우에는 목록을 바꾸기 전에 남는 첫 멤버로 조작을 넘깁니다.
+    /// </remarks>
+    public void ExcludeMembers(ICollection<SquadMemberController> excluded)
+    {
+        if (excluded == null || excluded.Count == 0 || m_squadMembers == null)
+        {
+            return;
+        }
+
+        int firstRemaining = m_squadMembers.FindIndex(member => member != null && !excluded.Contains(member));
+        if (firstRemaining < 0)
+        {
+            return;
+        }
+
+        if (PlayerSquadMember == null || excluded.Contains(PlayerSquadMember))
+        {
+            SwitchToMember(firstRemaining, false, false);
+        }
+
+        SquadMemberController controlled = PlayerSquadMember;
+        List<SquadMemberController> remaining = m_squadMembers.FindAll(member => member != null && !excluded.Contains(member));
+
+        UnsubscribeMemberDeathEvents();
+        m_squadMembers = remaining;
+        m_playerSquadMemberIndex = Mathf.Max(0, m_squadMembers.IndexOf(controlled));
+        SyncPlayerDataSources();
+        SubscribeMemberDeathEvents();
+        UpdateCameraTarget();
+        RefreshCharacterCameraCollisionResponses();
+        RefreshPlayerSquadMemberWeaponUI();
+        OnPlayerSkillChanged?.Invoke(PlayerSquadMemberSkill);
+    }
+

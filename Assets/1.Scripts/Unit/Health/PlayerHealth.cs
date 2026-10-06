@@ -538,6 +538,8 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
         m_downTimeRemaining = 0.0f;
         m_reviveCount = 0;
         m_maxInjuryGauge = Mathf.Max(1.0f, maxInjuryGauge);
+        m_isDead = false;
+        m_stateAppliedBeforeStart = true;
         SetMaxHP(maxHp);
         SetCurrentHP(currentHp);
         m_currentInjuryGauge = Mathf.Clamp(injurySeverityGauge, 0.0f, MaxInjuryGauge);

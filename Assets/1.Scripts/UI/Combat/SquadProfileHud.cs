@@ -131,6 +131,20 @@ public sealed class SquadProfileHud : MonoBehaviour
             }
 
             PlayerbleUnitData member = FindMember(sources, slot);
+
+            // 출격하지 않은 캐릭터(전투 이탈 후 셸터에서 살리지 않음 등)의 칸은 숨깁니다. 칸이 캐릭터마다 고정이라
+            // 그대로 두면 빠진 대원의 초상화가 남습니다. 분대 정보가 아직 없을 때는 건드리지 않습니다.
+            bool hasSquad = sources != null && sources.Count > 0;
+            if (slot.profileRoot != null && hasSquad)
+            {
+                SetActive(slot.profileRoot.gameObject, member != null);
+            }
+
+            if (member == null && hasSquad)
+            {
+                continue;
+            }
+
             bool isSelected = member != null && member == controlled;
             UpdateSelection(slot, isSelected ? 1.0f : 0.0f, deltaTime);
             ApplyHealth(slot, member);

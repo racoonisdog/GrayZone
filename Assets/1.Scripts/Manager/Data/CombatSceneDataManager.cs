@@ -694,6 +694,7 @@ public abstract class CombatSceneDataManager : MonoBehaviour
 
         entryData.ClearMembers();
         HashSet<int> usedPersistedIndices = new();
+        List<PlayerbleUnitData> excludedPlayers = new();
         bool canUseIndexFallback = persistedMembers.Count == players.Count;
         bool indexFallbackLogged = false;
 
@@ -705,7 +706,7 @@ public abstract class CombatSceneDataManager : MonoBehaviour
                 continue;
             }
 
-            int persistedIndex = FindPersistedMemberIndex(player.DefinitionId, persistedMembers, usedPersistedIndices);
+            int persistedIndex = FindPersistedMemberIndex(player.DefinitionId, player.CharacterId, persistedMembers, usedPersistedIndices);
             if (persistedIndex < 0
                 && string.IsNullOrWhiteSpace(player.DefinitionId)
                 && canUseIndexFallback
@@ -727,6 +728,13 @@ public abstract class CombatSceneDataManager : MonoBehaviour
             if (persistedIndex >= 0)
             {
                 usedPersistedIndices.Add(persistedIndex);
+            }
+            else if (persistedMembers.Count > 0)
+            {
+                // 출전 명단이 있는데 이 대원이 없으면 출격하지 않은 대원입니다(전투 이탈 후 셸터에서 살리지 않음 등).
+                // 씬에 미리 배치된 대원이라도 이번 판에서는 뺍니다. 명단이 비었으면(씬 단독 실행) 그대로 둡니다.
+                excludedPlayers.Add(player);
+                continue;
             }
 
             CharacterSnapshotData persistedSnapshot = persistedMember?.Snapshot;
@@ -765,6 +773,7 @@ public abstract class CombatSceneDataManager : MonoBehaviour
             entryData.AddMember(resolvedMember);
         }
 
+        ExcludeUnsortiedPlayers(excludedPlayers);
 
         if (!canUseIndexFallback && persistedMembers.Count > 0 && usedPersistedIndices.Count < persistedMembers.Count)
         {
@@ -775,23 +784,79 @@ public abstract class CombatSceneDataManager : MonoBehaviour
         }
     }
 
-    /// <summary>아직 사용하지 않은 입장 멤버 중 영속 정의 ID가 일치하는 목록 인덱스를 찾습니다.</summary>
+    /// <summary>
+    /// 출전 명단에 없는 씬 대원을 스쿼드에서 빼고 비활성화합니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 씬에는 고정 대원 셋이 미리 배치돼 있어, 출격하지 않은 대원도 그대로 남아 있습니다.
+    /// 스쿼드 목록에서 먼저 뺀 뒤 끄므로 전환·HUD·전멸 판정이 남은 대원만 봅니다.
+    /// 조작 대원이 빠졌으면 남은 첫 대원으로 조작을 넘깁니다.
+    /// </remarks>
+    private void ExcludeUnsortiedPlayers(List<PlayerbleUnitData> excludedPlayers)
+    {
+        if (excludedPlayers.Count == 0 || m_squadManager == null)
+        {
+            return;
+        }
+
+        List<SquadMemberController> excludedMembers = new();
+        IReadOnlyList<SquadMemberController> members = m_squadManager.SquadMembers;
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController member = members[i];
+            PlayerbleUnitData data = member != null ? member.GetComponent<PlayerbleUnitData>() : null;
+            if (data != null && excludedPlayers.Contains(data))
+            {
+                excludedMembers.Add(member);
+            }
+        }
+
+        if (excludedMembers.Count >= members.Count)
+        {
+            Debug.LogWarning($"[{GetType().Name}] 출전 대원이 없어 씬 대원을 빼지 않습니다.", this);
+            return;
+        }
+
+        m_squadManager.ExcludeMembers(excludedMembers);
+
+        for (int i = 0; i < excludedPlayers.Count; i++)
+        {
+            excludedPlayers[i].gameObject.SetActive(false);
+        }
+    }
+
+    /// <summary>아직 사용하지 않은 입장 멤버 중 영속 정의 ID, 없으면 캐릭터 ID가 일치하는 목록 인덱스를 찾습니다.</summary>
+    /// <remarks>
+    /// 방어전 씬에 미리 배치된 대원은 정의 ID가 비어 있습니다. 예전에는 그때 씬 순서로만 짝을 맞췄는데, 그 방법은
+    /// 명단 인원과 씬 인원이 같을 때만 쓸 수 있어 전투 이탈 대원이 빠진 출격(2명)에서는 아무도 짝을 찾지 못했습니다.
+    /// 캐릭터 ID는 씬 대원과 영속 데이터가 모두 갖고 있는 고정 값이라 두 번째 기준으로 씁니다.
+    /// </remarks>
     private static int FindPersistedMemberIndex(
         string definitionId,
+        PlayerbleCharacterId characterId,
         IReadOnlyList<FieldMemberEntryData> persistedMembers,
         ISet<int> usedIndices)
     {
-        if (string.IsNullOrWhiteSpace(definitionId))
+        if (!string.IsNullOrWhiteSpace(definitionId))
         {
-            return -1;
+            string normalizedDefinitionId = definitionId.Trim();
+            for (int i = 0; i < persistedMembers.Count; i++)
+            {
+                if (!usedIndices.Contains(i) && persistedMembers[i].DefinitionId == normalizedDefinitionId)
+                {
+                    return i;
+                }
+            }
         }
 
-        string normalizedDefinitionId = definitionId.Trim();
-        for (int i = 0; i < persistedMembers.Count; i++)
+        if (characterId != PlayerbleCharacterId.Unknown)
         {
-            if (!usedIndices.Contains(i) && persistedMembers[i].DefinitionId == normalizedDefinitionId)
+            for (int i = 0; i < persistedMembers.Count; i++)
             {
-                return i;
+                if (!usedIndices.Contains(i) && persistedMembers[i].CharacterId == characterId)
+                {
+                    return i;
+                }
             }
         }
 

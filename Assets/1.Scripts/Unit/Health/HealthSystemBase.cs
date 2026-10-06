@@ -131,9 +131,18 @@ public class HealthSystemBase : MonoBehaviour, IDamageable
 
     private void Start()
     {
-        InitializeHealth();
+        // 출격 데이터가 이미 체력을 정했으면 다시 가득 채우지 않습니다. 방어전 데이터 매니저는 실행 순서가 앞서
+        // (-100) 이 Start보다 먼저 셸터의 HP·부상을 적용하는데, 여기서 무조건 초기화하면 그 값이 매번 지워졌습니다.
+        if (!m_stateAppliedBeforeStart)
+        {
+            InitializeHealth();
+        }
+
         SetupHpBarBillboard();
     }
+
+    /// <summary>Start 전에 외부(출격 스냅샷)가 체력 상태를 정했는지 여부입니다. 정했으면 Start에서 초기화하지 않습니다.</summary>
+    protected bool m_stateAppliedBeforeStart;
 
     /// <summary>
     /// HP 바가 항상 카메라를 보도록 <see cref="BillboardUI"/>를 붙여 둡니다.
