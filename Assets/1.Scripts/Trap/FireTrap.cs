@@ -98,6 +98,23 @@ public sealed class FireTrap : Trap
     /// <inheritdoc />
     protected override bool HasTargetInRange => m_occupants.Count > 0;
 
+    /// <summary>
+    /// 화염 지대의 지속 시간을 바꿉니다. 생성한 쪽이 프리팹 값과 다른 시간을 쓰고 싶을 때 부릅니다.
+    /// </summary>
+    /// <param name="duration">지속 시간(초)입니다.</param>
+    /// <remarks>
+    /// 점화 전에 부르면 점화 순간부터 이 시간을 셉니다. 이미 점화됐으면 남은 시간을 이 값으로 다시 맞춥니다.
+    /// 화염 드럼통(<see cref="FireBarrelTrap"/>)이 같은 화염 프리팹을 쓰면서 자기 시간을 넣는 데 씁니다.
+    /// </remarks>
+    public void SetDuration(float duration)
+    {
+        m_duration = Mathf.Max(0.01f, duration);
+        if (m_isIgnited)
+        {
+            m_remainingTime = m_duration;
+        }
+    }
+
     /// <inheritdoc />
     protected override void OnBuilt()
     {

@@ -2411,6 +2411,20 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             {
                 ResolveFeedbackEmitter()?.PlayImpact(m_surfaceImpact);
                 CombatSceneManager.Instance?.EffectManager?.PlaySurfaceResponse(m_surfaceImpact);
+
+                // 맞으면 터지는 소품(드럼통 등)은 탄이 멈춘 지형 콜라이더에서 찾습니다. 플레이어 쪽 사격만 반응시킵니다.
+                if (m_ownerFaction == Faction.Player && m_surfaceImpact.collider != null)
+                {
+                    IShotReactive reactive = m_surfaceImpact.collider.GetComponentInParent<IShotReactive>();
+                    if (reactive != null)
+                    {
+                        // 유닛 피해와 같은 감쇠를 거칩니다. 앞서 꿰뚫은 유닛 수가 관통 순번입니다.
+                        int damage = m_penetration.ResolveDamage(
+                            m_shotPath.Count,
+                            ResolveDistanceAdjustedDamage(m_surfaceImpact.distance));
+                        reactive.OnShotHit(m_surfaceImpact.point, damage, m_ownerObject);
+                    }
+                }
             }
 
             return;

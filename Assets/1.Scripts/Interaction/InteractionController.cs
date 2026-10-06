@@ -209,8 +209,11 @@ public class InteractionController : MonoBehaviour
             return false;
         }
 
-        float sqrDistance = (component.transform.position - Origin).sqrMagnitude;
-        return sqrDistance <= m_radius * m_radius;
+        // 후보를 고를 때(IsUsableCandidate)와 같은 기준인 콜라이더 표면까지의 거리를 씁니다.
+        // 피벗으로 재면 메시가 피벗에서 떨어진 대상(MetalBarrel 등)은 잡혔다가 홀드 도중 풀립니다.
+        Collider col = component.GetComponentInChildren<Collider>();
+        Vector3 point = col != null ? col.ClosestPoint(Origin) : component.transform.position;
+        return (point - Origin).sqrMagnitude <= m_radius * m_radius;
     }
 
     /// <summary>
