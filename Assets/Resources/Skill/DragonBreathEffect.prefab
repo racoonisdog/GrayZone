@@ -53,3 +53,4 @@ MonoBehaviour:
     m_Bits: 4294967295
   m_burningEffect: {fileID: 11400000, guid: 429e4488a94e6334793b260aecf3bec0, type: 2}
   m_drawDebugRange: 1
+  m_visualEffectPrefab: {fileID: 1572011884065796, guid: 5d109182cf5ba704c941d2dd68bbc858, type: 3}

@@ -4,6 +4,8 @@ using VInspector;
 /// <summary>Shotgun 탄창 전체를 일반 히트스캔 대신 용숨결 판정을 쓰는 특수탄으로 장전하는 청솔의 스킬입니다.</summary>
 public sealed class ChungSolDragonBreathSkill : CharacterSkill
 {
+    private const string DragonBreathEffectResourcePath = "Skill/DragonBreathEffect";
+
     [Tooltip("용숨결탄 전용 재장전 속도 배율입니다. 2이면 일반 재장전보다 2배 빠르게 모션과 장전이 완료됩니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_reloadSpeedMultiplier = 1.0f;
@@ -175,13 +177,22 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             return null;
         }
 
-        // Shotgun/FirePos 아래에 미리 넣어 둔 비활성 프리팹 인스턴스 하나를 풀처럼 계속 재사용합니다.
-        // 런타임 Instantiate를 하지 않아 프리팹 모드에서 범위·피해·화상 설정을 바로 찾고 조정할 수 있습니다.
+        // 기존 무기 프리팹에 효과가 포함되어 있으면 그 인스턴스를 우선 재사용합니다.
         m_effectInstance = m_gun.GetComponentInChildren<DragonBreathEffect>(true);
         if (m_effectInstance == null)
         {
-            Debug.LogError("[ChungSolDragonBreathSkill] Shotgun 자식에서 DragonBreathEffect를 찾지 못했습니다.", this);
-            return null;
+            DragonBreathEffect effectPrefab = Resources.Load<DragonBreathEffect>(DragonBreathEffectResourcePath);
+            if (effectPrefab == null)
+            {
+                Debug.LogError(
+                    $"[ChungSolDragonBreathSkill] Resources/{DragonBreathEffectResourcePath} 프리팹을 찾지 못했습니다.",
+                    this);
+                return null;
+            }
+
+            // 장착 무기가 바뀌어도 같은 효과 인스턴스를 계속 쓸 수 있도록 캐릭터 아래에 생성합니다.
+            m_effectInstance = Instantiate(effectPrefab, transform);
+            m_effectInstance.name = effectPrefab.name;
         }
 
         m_effectInstance.gameObject.SetActive(false);
