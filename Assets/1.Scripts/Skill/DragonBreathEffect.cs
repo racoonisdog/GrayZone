@@ -32,8 +32,12 @@ public sealed class DragonBreathEffect : MonoBehaviour
     [Tooltip("켜면 발사 여부와 오브젝트 선택 여부에 관계없이 Scene 뷰에 원통형 판정 범위를 계속 표시합니다.")]
     [SerializeField] private bool m_drawDebugRange = true;
 
+    [Tooltip("용숨결탄 발사 시 재생할 시각 효과 프리팹입니다. 비어 있으면 임시 파티클을 생성합니다.")]
+    [SerializeField] private GameObject m_visualEffectPrefab;
+
     private readonly HashSet<IDamageable> m_damagedTargets = new HashSet<IDamageable>();
     private ParticleSystem m_particles;
+    private GameObject m_visualEffectInstance;
     private Material m_runtimeParticleMaterial;
     private Faction m_ownerFaction;
     private GameObject m_attacker;
@@ -215,6 +219,22 @@ public sealed class DragonBreathEffect : MonoBehaviour
         if (m_particles != null)
         {
             return;
+        }
+
+        if (m_visualEffectPrefab != null)
+        {
+            m_visualEffectInstance = Instantiate(m_visualEffectPrefab, transform);
+            m_visualEffectInstance.name = m_visualEffectPrefab.name;
+            m_visualEffectInstance.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+            m_particles = m_visualEffectInstance.GetComponentInChildren<ParticleSystem>(true);
+            if (m_particles != null)
+            {
+                m_particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                return;
+            }
+
+            Destroy(m_visualEffectInstance);
+            m_visualEffectInstance = null;
         }
 
         Transform existing = transform.Find("TemporaryFlameParticles");

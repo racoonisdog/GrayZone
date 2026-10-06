@@ -109,7 +109,7 @@ Packages/unity-cli/
 # 코드/에셋과 무관한 사람별 산출물이다. 참조하는 에셋도 빌드 대상도 아니다.
 /Screenshots
 
-# FMOD (로컬 설치 플러그인 및 FMOD Studio 프로젝트)
+# FMOD Studio project and Unity integration are maintained in SVN r291.
 /FMODProject/
-/[Aa]ssets/Plugins/
-/[Aa]ssets/Plugins.meta
+/Assets/Plugins/
+/Assets/Plugins.meta

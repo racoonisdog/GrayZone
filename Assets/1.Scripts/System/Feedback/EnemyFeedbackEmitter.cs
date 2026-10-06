@@ -33,6 +33,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
     private int m_lastAttackIndex = -1;
     private int m_lastHitIndex = -1;
     private int m_lastDeathIndex = -1;
+    private bool m_loggedMissingFmodEvent;
 
     private void Awake()
     {
@@ -61,7 +62,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
 
         // 직접 Instantiate하지 않고 EffectManager를 거칩니다. 혈흔이 지형 탄흔과 같은 예산을 나눠 써야
         // 씬 전체의 데칼 총량이 잡힙니다. 각자 만들면 총량을 아무도 모릅니다.
-        EffectManager effects = FieldManager.Instance != null ? FieldManager.Instance.EffectManager : null;
+        EffectManager effects = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.EffectManager : null;
 
         if (effects != null)
         {
@@ -69,7 +70,10 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
             effects.SpawnDecal(feedback.BloodDecalPrefab, point, normal, feedback.BloodDecalLifetime, hitTransform);
         }
 
-        PlayWorld(feedback.HitSounds, ref m_lastHitIndex, point, AudioPriorityClass.EnemyCritical);
+        if (!TryPlayFmodAt(feedback.HitEvent, point))
+        {
+            PlayWorld(feedback.HitSounds, ref m_lastHitIndex, point, AudioPriorityClass.EnemyCritical);
+        }
     }
 
     /// <summary>사망 위치에서 사망 사운드를 독립 one-shot으로 출력합니다.</summary>
@@ -123,7 +127,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
         }
 
         float pitch = 1.0f + Random.Range(-m_pitchVariation, m_pitchVariation);
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null && fieldAudio.PlayOneShotAt(clip, position, priorityClass, m_volume, pitch))
         {
             return;
@@ -138,6 +142,41 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
         }
     }
 
+    /// <summary>피격 위치에 FMOD 3D one-shot을 재생합니다.</summary>
+    /// <returns>FMOD 이벤트를 시작했으면 <c>true</c>, AudioClip 폴백이 필요하면 <c>false</c>입니다.</returns>
+    private bool TryPlayFmodAt(FMODUnity.EventReference eventReference, Vector3 position)
+    {
+        if (eventReference.IsNull || !FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return false;
+        }
+
+        try
+        {
+            FMOD.Studio.EventInstance instance = FMODUnity.RuntimeManager.CreateInstance(eventReference);
+            if (!instance.isValid())
+            {
+                return false;
+            }
+
+            instance.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(position));
+            instance.setVolume(m_volume);
+            instance.start();
+            instance.release();
+            return true;
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            if (!m_loggedMissingFmodEvent)
+            {
+                Debug.LogWarning($"[EnemyFeedbackEmitter] FMOD 이벤트를 찾지 못해 AudioClip으로 대체합니다: {exception.Message}", this);
+                m_loggedMissingFmodEvent = true;
+            }
+
+            return false;
+        }
+    }
+
     private AudioSource EnsureActionAudioSource()
     {
         if (m_actionAudioSource == null)
@@ -149,7 +188,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
 
         m_actionAudioSource.loop = false;
 
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null)
         {
             // 이 소스는 풀 밖에서 소리를 내므로, 개인 사운드로 등록해 씬 전체 동시 발음 총량에 포함시킵니다.
@@ -176,7 +215,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
     /// <summary>개체가 사라질 때 개인 사운드 등록을 해제합니다.</summary>
     private void OnDestroy()
     {
-        AudioManager fieldAudio = FieldManager.Instance != null ? FieldManager.Instance.AudioManager : null;
+        AudioManager fieldAudio = CombatSceneManager.Instance != null ? CombatSceneManager.Instance.AudioManager : null;
         if (fieldAudio != null)
         {
             fieldAudio.UnregisterPersonalSource(m_actionAudioSource);

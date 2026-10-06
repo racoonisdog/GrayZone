@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -101,15 +100,12 @@ public class CrosshairDebugInspector : MonoBehaviour
     private bool m_showShape = true;
     private bool m_showSub = true;
     private bool m_showSpread = true;
+    private bool m_showShotRecoil;
     private bool m_showReload;
     private bool m_showAmmoGauge;
     private bool m_showHitMarker;
     private bool m_showKillSkull;
-    private bool m_showThrowable = true;
-
-    // 투척물 구역의 버튼이 한 번에 넣는 수량입니다.
-    private const int DebugThrowableGrantAmount = 999;
-    private string m_throwableGrantResult = string.Empty;
+    private bool m_showBlockMarker;
 
     // 색은 슬라이더 네 줄을 차지하므로 따로 접어 둡니다.
     private bool m_showMainColor;
@@ -118,9 +114,13 @@ public class CrosshairDebugInspector : MonoBehaviour
     private bool m_showSubStrokeColor;
     private bool m_showAmmoGaugeColor;
     private bool m_showLowAmmoGaugeColor;
+    private bool m_showReloadAmmoGaugeColor;
+    private bool m_showSpecialAmmoGaugeColor;
+    private bool m_showAmmoGaugeBackgroundColor;
     private bool m_showHitMarkerColorBody;
     private bool m_showHitMarkerColorHead;
     private bool m_showKillSkullTint;
+    private bool m_showBlockMarkerColor;
 
     // IMGUI 런타임 창은 기본 리사이즈 핸들이 없으므로 테두리를 잡아 크기를 바꿉니다.
     private Rect m_windowRect = new Rect(520f, 10f, 460f, 640f);
@@ -235,7 +235,7 @@ public class CrosshairDebugInspector : MonoBehaviour
     /// </remarks>
     private void AcquireInputTakeover()
     {
-        FieldManager fieldManager = FieldManager.Instance;
+        CombatSceneManager fieldManager = CombatSceneManager.Instance;
         if (fieldManager != null)
         {
             fieldManager.SetInputMode(InputMode.UI);
@@ -271,7 +271,7 @@ public class CrosshairDebugInspector : MonoBehaviour
             return;
         }
 
-        FieldManager fieldManager = FieldManager.Instance;
+        CombatSceneManager fieldManager = CombatSceneManager.Instance;
         if (fieldManager != null)
         {
             fieldManager.SetInputMode(InputMode.Gameplay);
@@ -314,7 +314,7 @@ public class CrosshairDebugInspector : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!m_open || !m_inspectorEnabled || !GameDevMode.DebugFeaturesEnabled)
+        if (!m_open || !m_inspectorEnabled || !GameDevMode.DebugFeaturesEnabled || MissionOverlayVisibility.IsShown)
         {
             return;
         }
@@ -355,13 +355,13 @@ public class CrosshairDebugInspector : MonoBehaviour
 
         m_scroll = GUILayout.BeginScrollView(m_scroll);
 
-        DrawThrowableSection();
-        GUILayout.Space(6);
         DrawShapeSection(crosshair);
         GUILayout.Space(6);
         DrawSubShapeSection(crosshair);
         GUILayout.Space(6);
         DrawSpreadSection(crosshair);
+        GUILayout.Space(6);
+        DrawShotRecoilSection(crosshair);
         GUILayout.Space(6);
         DrawReloadSection(crosshair);
         GUILayout.Space(6);
@@ -370,6 +370,8 @@ public class CrosshairDebugInspector : MonoBehaviour
         DrawHitMarkerSection(crosshair);
         GUILayout.Space(6);
         DrawKillSkullSection(crosshair);
+        GUILayout.Space(6);
+        DrawBlockMarkerSection(crosshair);
 
         GUILayout.EndScrollView();
 
@@ -380,109 +382,6 @@ public class CrosshairDebugInspector : MonoBehaviour
         }
 
         DrawWindowChrome(windowId);
-    }
-
-    /// <summary>
-    /// 스쿼드 공용 인벤토리의 투척물(수류탄·화염병) 수량을 목록으로 보여 주고 늘리는 버튼을 그립니다.
-    /// </summary>
-    /// <remarks>
-    /// 투척물 종류는 씬의 <see cref="ExplosiveProjectileShooter"/>가 들고 있는 Prefab 목록에서 모읍니다.
-    /// 슬롯 수와 스택 한도를 넘는 수량은 들어가지 않으므로 넣지 못한 수량을 함께 표시합니다.
-    /// </remarks>
-    private void DrawThrowableSection()
-    {
-        if (!SectionHeader("■ 투척물", ref m_showThrowable))
-        {
-            return;
-        }
-
-        SquadInventoryManager inventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
-        if (inventory == null)
-        {
-            GUILayout.Label("SquadInventoryManager를 찾을 수 없습니다.");
-            return;
-        }
-
-        List<ProjectileBase> projectiles = CollectSceneThrowables();
-        if (projectiles.Count == 0)
-        {
-            GUILayout.Label("씬에 등록된 투척물 Prefab이 없습니다.");
-            return;
-        }
-
-        for (int i = 0; i < projectiles.Count; i++)
-        {
-            ProjectileBase projectile = projectiles[i];
-            GUILayout.BeginHorizontal();
-            GUILayout.Label($"{ResolveThrowableName(projectile)}: {inventory.CountOf(projectile.InventoryItemDefinitionId)}");
-            if (GUILayout.Button($"+{DebugThrowableGrantAmount}", GUILayout.Width(80)))
-            {
-                m_throwableGrantResult = GrantThrowable(inventory, projectile);
-            }
-            GUILayout.EndHorizontal();
-        }
-
-        if (GUILayout.Button($"투척물 전부 +{DebugThrowableGrantAmount}", GUILayout.Height(26)))
-        {
-            m_throwableGrantResult = string.Empty;
-            for (int i = 0; i < projectiles.Count; i++)
-            {
-                m_throwableGrantResult += GrantThrowable(inventory, projectiles[i]);
-            }
-        }
-
-        if (!string.IsNullOrEmpty(m_throwableGrantResult))
-        {
-            GUILayout.Label(m_throwableGrantResult);
-        }
-    }
-
-    /// <summary>투척물을 지정 수량만큼 넣고, 공간이 모자라 남은 수량이 있으면 안내 문구를 돌려줍니다.</summary>
-    private static string GrantThrowable(SquadInventoryManager inventory, ProjectileBase projectile)
-    {
-        inventory.TryAcquire(projectile.InventoryItemDefinitionId, DebugThrowableGrantAmount, out int leftover);
-        return leftover > 0
-            ? $"{ResolveThrowableName(projectile)} {leftover}개 공간 부족  "
-            : string.Empty;
-    }
-
-    /// <summary>씬의 투척기들이 쓰는 투척물 Prefab을 아이템 ID 기준으로 중복 없이 모읍니다.</summary>
-    private static List<ProjectileBase> CollectSceneThrowables()
-    {
-        var result = new List<ProjectileBase>();
-        var itemIds = new HashSet<string>();
-        ExplosiveProjectileShooter[] shooters = FindObjectsByType<ExplosiveProjectileShooter>(
-            FindObjectsInactive.Include,
-            FindObjectsSortMode.None);
-
-        for (int i = 0; i < shooters.Length; i++)
-        {
-            IReadOnlyList<ProjectileBase> prefabs = shooters[i].ProjectilePrefabs;
-            if (prefabs == null)
-            {
-                continue;
-            }
-
-            for (int j = 0; j < prefabs.Count; j++)
-            {
-                ProjectileBase projectile = prefabs[j];
-                if (projectile != null
-                    && !string.IsNullOrWhiteSpace(projectile.InventoryItemDefinitionId)
-                    && itemIds.Add(projectile.InventoryItemDefinitionId))
-                {
-                    result.Add(projectile);
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private static string ResolveThrowableName(ProjectileBase projectile)
-    {
-        return projectile.InventoryItemDefinition != null
-            ? projectile.InventoryItemDefinition.DisplayName
-            : projectile.name;
     }
 
     private void DrawShapeSection(CrosshairController crosshair)
@@ -556,6 +455,22 @@ public class CrosshairDebugInspector : MonoBehaviour
                 4));
     }
 
+    private void DrawShotRecoilSection(CrosshairController crosshair)
+    {
+        if (!SectionHeader("■ 사격 반동 펄스", ref m_showShotRecoil))
+        {
+            return;
+        }
+
+        // 펄스 곡선(AnimationCurve)은 IMGUI로 다루기 어려워 인스펙터에서만 고칩니다.
+        crosshair.SetShotRecoilPulseEnabled(
+            GUILayout.Toggle(crosshair.ShotRecoilPulseEnabled, " 발사마다 조준선 벌어짐"));
+        crosshair.SetShotRecoilPulseAmplitudePixels(
+            SliderRow("최대 벌어짐", crosshair.ShotRecoilPulseAmplitudePixels, 0f, 60f, "0"));
+        crosshair.SetShotRecoilPulseDuration(
+            SliderRow("길이(초)", crosshair.ShotRecoilPulseDuration, 0f, 1f));
+    }
+
     private void DrawReloadSection(CrosshairController crosshair)
     {
         if (!SectionHeader("■ 재장전", ref m_showReload))
@@ -596,9 +511,13 @@ public class CrosshairDebugInspector : MonoBehaviour
         crosshair.ShowAmmoGaugeBackground =
             GUILayout.Toggle(crosshair.ShowAmmoGaugeBackground, " 배경 표시");
         crosshair.AmmoGaugeBackgroundAlpha = SliderRow("배경 투명도", crosshair.AmmoGaugeBackgroundAlpha, 0f, 1f);
+        crosshair.AmmoGaugeSegmentGapDegrees = SliderRow("칸 간격(도)", crosshair.AmmoGaugeSegmentGapDegrees, 0f, 20f);
 
         crosshair.AmmoGaugeColor = ColorRow("게이지 색", crosshair.AmmoGaugeColor, ref m_showAmmoGaugeColor);
         crosshair.LowAmmoGaugeColor = ColorRow("잔탄 부족 색", crosshair.LowAmmoGaugeColor, ref m_showLowAmmoGaugeColor);
+        crosshair.ReloadAmmoGaugeColor = ColorRow("재장전 진행 색", crosshair.ReloadAmmoGaugeColor, ref m_showReloadAmmoGaugeColor);
+        crosshair.SpecialAmmoGaugeColor = ColorRow("특수탄 색", crosshair.SpecialAmmoGaugeColor, ref m_showSpecialAmmoGaugeColor);
+        crosshair.AmmoGaugeBackgroundColor = ColorRow("배경 색", crosshair.AmmoGaugeBackgroundColor, ref m_showAmmoGaugeBackgroundColor);
     }
 
     private void DrawHitMarkerSection(CrosshairController crosshair)
@@ -614,23 +533,79 @@ public class CrosshairDebugInspector : MonoBehaviour
         crosshair.HitMarkerCenterGapPixels = SliderRow("중앙 간격", crosshair.HitMarkerCenterGapPixels, 0f, 60f, "0");
         crosshair.HitMarkerFadeDuration = SliderRow("사라짐(초)", crosshair.HitMarkerFadeDuration, 0f, 2f);
 
+        crosshair.HitMarkerDamageScaleEnabled =
+            GUILayout.Toggle(crosshair.HitMarkerDamageScaleEnabled, " 피해량에 비례한 길이");
+        if (crosshair.HitMarkerDamageScaleEnabled)
+        {
+            crosshair.HitMarkerMinDamage = SliderRow("최소 피해", crosshair.HitMarkerMinDamage, 0f, 200f, "0");
+            crosshair.HitMarkerMaxDamage = SliderRow("최대 피해", crosshair.HitMarkerMaxDamage, 0f, 500f, "0");
+            crosshair.HitMarkerLengthAtMinDamagePixels =
+                SliderRow("최소 피해 길이", crosshair.HitMarkerLengthAtMinDamagePixels, 0f, 100f, "0");
+            crosshair.HitMarkerLengthAtMaxDamagePixels =
+                SliderRow("최대 피해 길이", crosshair.HitMarkerLengthAtMaxDamagePixels, 0f, 100f, "0");
+        }
+
+        crosshair.HitMarkerRollBaseDegrees = SliderRow("기울기(도)", crosshair.HitMarkerRollBaseDegrees, -90f, 90f, "0");
+        crosshair.HitMarkerRandomRollEnabled =
+            GUILayout.Toggle(crosshair.HitMarkerRandomRollEnabled, " 발마다 무작위로 기울이기");
+        if (crosshair.HitMarkerRandomRollEnabled)
+        {
+            crosshair.HitMarkerRollRandomRangeDegrees =
+                SliderRow("무작위 범위(도)", crosshair.HitMarkerRollRandomRangeDegrees, 0f, 45f, "0");
+        }
+
         crosshair.HitMarkerColorBody = ColorRow("몸통 적중 색", crosshair.HitMarkerColorBody, ref m_showHitMarkerColorBody);
         crosshair.HitMarkerColorHead = ColorRow("약점 적중 색", crosshair.HitMarkerColorHead, ref m_showHitMarkerColorHead);
     }
 
     private void DrawKillSkullSection(CrosshairController crosshair)
     {
-        if (!SectionHeader("■ 처치 해골", ref m_showKillSkull))
+        if (!SectionHeader("■ 처치 표시", ref m_showKillSkull))
         {
             return;
         }
 
+        if (GUILayout.Button("처치 효과 미리보기", GUILayout.Height(24)))
+        {
+            crosshair.ShowKill();
+        }
+
+        crosshair.KillPulseEnabled = GUILayout.Toggle(crosshair.KillPulseEnabled, " 조준선 펄스");
+        crosshair.CurrentKillPulseDirection = (CrosshairController.KillPulseDirection)GUILayout.SelectionGrid(
+            (int)crosshair.CurrentKillPulseDirection,
+            new[] { "튀어나감", "모임" },
+            2);
+        crosshair.KillPulseAmplitudePixels = SliderRow("펄스 크기", crosshair.KillPulseAmplitudePixels, 0f, 60f, "0");
+        crosshair.KillPulseDuration = SliderRow("펄스 길이(초)", crosshair.KillPulseDuration, 0f, 1f);
+
+        GUILayout.Space(4);
         crosshair.ShowKillSkull = GUILayout.Toggle(crosshair.ShowKillSkull, " 해골 표시");
         crosshair.KillSkullSizePixels = SliderRow("크기", crosshair.KillSkullSizePixels, 0f, 200f, "0");
         crosshair.KillSkullHoldDuration = SliderRow("유지(초)", crosshair.KillSkullHoldDuration, 0f, 3f);
         crosshair.KillSkullFadeDuration = SliderRow("사라짐(초)", crosshair.KillSkullFadeDuration, 0f, 3f);
 
         crosshair.KillSkullTint = ColorRow("색조", crosshair.KillSkullTint, ref m_showKillSkullTint);
+    }
+
+    private void DrawBlockMarkerSection(CrosshairController crosshair)
+    {
+        if (!SectionHeader("■ 차단 마커", ref m_showBlockMarker))
+        {
+            return;
+        }
+
+        crosshair.BlockMarkerEnabled = GUILayout.Toggle(crosshair.BlockMarkerEnabled, " 막혔을 때 실제 탄착점 표시");
+        crosshair.BlockMarkerRingSizePixels = SliderRow("링 지름", crosshair.BlockMarkerRingSizePixels, 0f, 100f, "0");
+        crosshair.BlockMarkerRingThicknessPixels = SliderRow("링 두께", crosshair.BlockMarkerRingThicknessPixels, 0f, 20f);
+        crosshair.BlockMarkerDotSizePixels = SliderRow("가운데 점", crosshair.BlockMarkerDotSizePixels, 0f, 40f);
+
+        crosshair.DimCrosshairWhileBlockMarker =
+            GUILayout.Toggle(crosshair.DimCrosshairWhileBlockMarker, " 표시 중 조준선 흐리게");
+        crosshair.BlockMarkerCrosshairAlpha = SliderRow("흐릴 때 투명도", crosshair.BlockMarkerCrosshairAlpha, 0f, 1f);
+        crosshair.BlockMarkerCrosshairFadeDuration =
+            SliderRow("전환 시간(초)", crosshair.BlockMarkerCrosshairFadeDuration, 0f, 1f);
+
+        crosshair.BlockMarkerColor = ColorRow("마커 색", crosshair.BlockMarkerColor, ref m_showBlockMarkerColor);
     }
 
     // ─────────────────────────────────────────────────────────────

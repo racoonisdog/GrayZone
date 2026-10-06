@@ -34,7 +34,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
     [Header("Navigation")]
     [Tooltip("타이틀로 돌아가기 버튼이 불러올 Build Settings 씬 이름입니다.")]
-    [SerializeField] private string m_titleSceneName = "MainMenu";
+    [SerializeField] private string m_titleSceneName = "TitleScene";
 
     [Header("Pause")]
     [Tooltip("메뉴가 열려 있는 동안 Time.timeScale을 0으로 만들어 게임플레이를 멈춥니다.")]

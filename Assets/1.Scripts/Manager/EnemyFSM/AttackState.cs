@@ -130,11 +130,25 @@ public class AttackState : EnemyStateBase
             return;
         }
 
-        if (Time.time - m_impactTime >= Controller.AttackRecoveryDuration)
+        if (Time.time - m_impactTime < Controller.AttackRecoveryDuration)
         {
-            FinishSwing();
+            return;
         }
+
+        // 판정 시점 타이머가 클립의 켜기 이벤트보다 먼저 와서, 후딜레이가 끝나도 클립의 판정 구간이 남아 있을 수
+        // 있습니다. 그때 다음 공격을 시작하면 판정 구간이 잘려 손이 대상에 닿기 전에 꺼집니다.
+        // 클립의 끄기 이벤트를 기다리되, 이벤트가 오지 않는 클립에서 멈추지 않도록 상한을 둡니다.
+        bool hitboxStillOpen = Controller.Attack != null && Controller.Attack.IsHitboxActive;
+        if (hitboxStillOpen && Time.time - m_startTime < MaxHitboxWaitDuration)
+        {
+            return;
+        }
+
+        FinishSwing();
     }
+
+    /// <summary>공격 시작부터 판정 콜라이더가 꺼지기를 기다리는 최대 시간(초)입니다.</summary>
+    private const float MaxHitboxWaitDuration = 3.0f;
 
     /// <summary>공격 구간 상태와 판정 소모 표시를 초기화합니다.</summary>
     public override void Exit()

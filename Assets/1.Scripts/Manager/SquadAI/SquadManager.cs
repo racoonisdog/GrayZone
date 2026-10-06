@@ -472,8 +472,8 @@ public class SquadManager : MonoBehaviour
     /// 이상 누르고 있으면 그 순간 명령을 취소해 평소 동행으로 돌아갑니다. 판정을 뗄 때 하는 이유는,
     /// 누른 순간에는 길게 누를지 알 수 없어 이동 명령을 먼저 내면 취소할 때 한 번 헛걸음을 하기 때문입니다.
     /// <para>
-    /// 조작 멤버의 입력이 막혀 있거나(UI 커서 모드) 투척 모드이면 받지 않습니다. 투척 모드에서는
-    /// 같은 Q/E가 투척물 선택입니다.
+    /// 조작 멤버의 입력이 막혀 있으면(UI 커서 모드) 받지 않습니다. 투척 모드에서도 받습니다. 투척물 선택은
+    /// 마우스 휠만 쓰므로 Q/E와 겹치지 않습니다.
     /// </para>
     /// </remarks>
     private void HandleOrderInput()
@@ -484,7 +484,7 @@ public class SquadManager : MonoBehaviour
             return;
         }
 
-        bool inputAllowed = IsOrderInputAllowed();
+        bool inputAllowed = IsOrderInputAllowed(allowInThrowMode: true);
         UpdateOrderKey(keyboard, m_orderMember1Key, 0, inputAllowed, ref m_orderMember1State);
         UpdateOrderKey(keyboard, m_orderMember2Key, 1, inputAllowed, ref m_orderMember2State);
     }
@@ -628,8 +628,9 @@ public class SquadManager : MonoBehaviour
     }
 
     /// <summary>지금 팀원 명령 입력을 받을 수 있는지 확인합니다.</summary>
-    /// <returns>조작 멤버의 입력이 열려 있고 투척 모드가 아니면 true입니다.</returns>
-    private bool IsOrderInputAllowed()
+    /// <param name="allowInThrowMode">true면 투척 모드에서도 허용합니다. 팀원 명령(Q/E)은 true, 스킬 키는 false로 부릅니다.</param>
+    /// <returns>조작 멤버의 입력이 열려 있고, 투척 모드가 아니거나 투척 모드를 허용하면 true입니다.</returns>
+    private bool IsOrderInputAllowed(bool allowInThrowMode = false)
     {
         SquadMemberController player = PlayerSquadMember;
         if (player == null)
@@ -638,7 +639,7 @@ public class SquadManager : MonoBehaviour
         }
 
         PlayerInputController input = player.GetComponent<PlayerInputController>();
-        return input != null && input.IsInputEnabled && !input.ThrowMode;
+        return input != null && input.IsInputEnabled && (allowInThrowMode || !input.ThrowMode);
     }
 
     /// <summary>조작 중이 아닌 멤버 중 목록 순서상 지정한 순번의 멤버를 찾습니다.</summary>

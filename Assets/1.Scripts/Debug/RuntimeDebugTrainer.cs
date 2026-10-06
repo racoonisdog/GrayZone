@@ -122,6 +122,12 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// 조절하는 대상이 가까운 것끼리 묶고, 자주 만지는 것을 앞에 둡니다.
     /// 캐릭터·애니메이션·무기·조준은 지금 조작 중인 유닛을 만지는 탭이고, 필드·디버그는 그 바깥입니다.
     /// </remarks>
+    /// <summary>투척물 구역의 버튼이 한 번에 넣는 수량입니다.</summary>
+    private const int DebugThrowableGrantAmount = 999;
+
+    /// <summary>마지막 투척물 지급 결과 문구입니다. 공간이 모자라 못 넣은 수량을 알려 줍니다.</summary>
+    private string m_throwableGrantResult = string.Empty;
+
     private static readonly string[] MainTabNames =
     {
         "캐릭터",
@@ -210,7 +216,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     private int m_enemyTemplateIndex = -1;
 
     private GUIStyle m_titleStyle;
-    private GUIStyle m_headerStyle;
+    protected GUIStyle m_headerStyle;
 
     private void Awake()
     {
@@ -313,7 +319,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private void Update()
     {
-        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled || !IsFieldScene())
+        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled || !IsSupportedScene())
         {
             if (m_open)
             {
@@ -451,15 +457,38 @@ public class RuntimeDebugTrainer : MonoBehaviour
         }
     }
 
-    /// <summary>지금 씬이 이 트레이너가 동작해도 되는 필드 씬인지 확인합니다.</summary>
+    /// <summary>지금 씬이 이 트레이너가 동작해도 되는 씬인지 확인합니다. 필드 트레이너는 필드 씬에서만 동작합니다.</summary>
     /// <remarks>
-    /// 판정 기준은 <see cref="FieldManager"/>의 존재입니다. 씬 이름으로 판정하면 테스트 씬이 늘어날 때마다
-    /// 목록을 고쳐야 하지만, 필드 씬이라면 반드시 이 컨트롤러를 두므로 존재 여부가 더 안정적인 기준입니다.
-    /// 디버그 모드를 켠 빌드에서 필드 씬에 있다면 토글 키로 언제든 열 수 있고, 필드가 아니면 키를 받지 않습니다.
+    /// 판정 기준은 씬 컨트롤러(<see cref="CombatSceneManager"/>)의 종류입니다. 씬 이름으로 판정하면 테스트 씬이 늘어날 때마다
+    /// 목록을 고쳐야 하지만, 전투 씬이라면 반드시 이 컨트롤러를 두므로 존재 여부와 종류가 더 안정적인 기준입니다.
+    /// 방어전 씬은 <see cref="DefenseDebugTrainer"/>가 맡습니다.
     /// </remarks>
-    private bool IsFieldScene()
+    protected virtual bool IsSupportedScene()
+    {
+        return TryResolveSceneInputModeController() && CombatSceneManager.Instance is FieldManager;
+    }
+
+    /// <summary>씬 컨트롤러를 찾았는지 확인합니다. 파생 트레이너가 자기 씬 판정에 씁니다.</summary>
+    protected bool HasSceneInputModeController()
     {
         return TryResolveSceneInputModeController();
+    }
+
+    /// <summary>창 상단 탭 이름입니다. 앞의 네 탭(캐릭터·애니메이션·무기·조준)은 모든 트레이너가 같습니다.</summary>
+    protected virtual string[] TabNames => MainTabNames;
+
+    /// <summary>
+    /// 다섯 번째 탭(씬 탭)의 내용을 그립니다. 필드 트레이너는 투척물·좀비 스폰·팀 AI·필드 제어를 그립니다.
+    /// </summary>
+    protected virtual void DrawSceneTab()
+    {
+        DrawThrowableSection();
+        GUILayout.Space(6);
+        DrawEnemySpawnSection();
+        GUILayout.Space(6);
+        DrawSquadAiControlSection();
+        GUILayout.Space(6);
+        DrawFieldControlSection();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -551,7 +580,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         m_usesSceneInputModeController = false;
 
         // 필드 씬이 이미 사라진 뒤라면 복구할 대상도 없습니다. 커서만 풀어 두고 끝냅니다.
-        if (!IsFieldScene())
+        if (!IsSupportedScene())
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -658,7 +687,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         m_sceneInputModeController = null;
 
-        FieldManager fieldManager = FieldManager.Instance;
+        CombatSceneManager fieldManager = CombatSceneManager.Instance;
         if (fieldManager == null)
         {
             return false;
@@ -709,7 +738,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled)
+        // 작전 실패·귀환 오버레이가 떠 있으면 그리지 않습니다. 전역 스킨을 바꾸기 전에 빠져나가므로 되돌릴 것도 없습니다.
+        if (!m_trainerEnabled || !GameDevMode.DebugFeaturesEnabled || MissionOverlayVisibility.IsShown)
         {
             return;
         }
@@ -718,8 +748,6 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         if (!m_open)
         {
-            GUI.Label(new Rect(10, 10, 600, 24), $"{m_toggleKey}: 런타임 디버그 트레이너 열기 / 닫기", m_headerStyle);
-
             // 창을 그리지 않고 빠져나갈 때도 전역 스킨은 되돌립니다. 남겨 두면 다른 IMGUI 창이 이 배율을 물려받습니다.
             RestoreSkin();
             return;
@@ -767,7 +795,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
 
         int previousTab = m_mainTabIndex;
         m_mainTabIndex = GUILayout.Toolbar(
-            Mathf.Clamp(m_mainTabIndex, 0, MainTabNames.Length - 1), MainTabNames);
+            Mathf.Clamp(m_mainTabIndex, 0, TabNames.Length - 1), TabNames);
 
         // 탭을 옮기면 스크롤을 처음으로 되돌립니다. 그대로 두면 짧은 탭에서 빈 화면이 나옵니다.
         if (m_mainTabIndex != previousTab)
@@ -807,11 +835,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
                     break;
 
                 case 4:
-                    DrawEnemySpawnSection();
-                    GUILayout.Space(6);
-                    DrawSquadAiControlSection();
-                    GUILayout.Space(6);
-                    DrawFieldControlSection();
+                    DrawSceneTab();
                     break;
 
                 default:
@@ -1846,7 +1870,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// <see cref="SquadAIController"/>만 읽고 그 컴포넌트는 조작 멤버에서 꺼져 있기 때문입니다.
     /// </para>
     /// </remarks>
-    private void DrawSquadAiControlSection()
+    protected void DrawSquadAiControlSection()
     {
         GUILayout.Label("■ 팀 AI 제어 (스쿼드 전체 · 전환과 무관)", m_headerStyle);
 
@@ -1918,7 +1942,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         GUILayout.Label("■ 필드 제어", m_headerStyle);
 
         EscapeSystem escapeSystem = FindFirstObjectByType<EscapeSystem>(FindObjectsInactive.Include);
-        FieldSceneDataManager fieldData = FieldSceneDataManager.Instance;
+        CombatSceneDataManager fieldData = CombatSceneDataManager.Instance;
 
         if (fieldData != null && fieldData.IsFinalized)
         {
@@ -1954,7 +1978,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     /// 정산을 건너뛰는지(<c>FinalizeField</c> 미호출)까지 함께 확인할 수 있습니다.
     /// 되돌릴 수 없는 조작이라 확인 단계를 한 번 둡니다.
     /// </remarks>
-    private void DrawForceGameOverButton()
+    protected void DrawForceGameOverButton()
     {
         SquadManager squadManager = SquadManager.Instance != null
             ? SquadManager.Instance
@@ -2041,7 +2065,108 @@ public class RuntimeDebugTrainer : MonoBehaviour
         Debug.Log($"[RuntimeDebugTrainer] 전멸 게임오버 요청: {killed}명 전투 이탈 처리.", squadManager);
     }
 
-    private void DrawEnemySpawnSection()
+    /// <summary>
+    /// 스쿼드 공용 인벤토리의 투척물(수류탄·화염병) 수량을 보여 주고 늘리는 버튼을 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 투척물 종류는 씬의 <see cref="ExplosiveProjectileShooter"/>가 들고 있는 Prefab 목록에서 모읍니다.
+    /// 슬롯 수와 스택 한도를 넘는 수량은 들어가지 않으므로 넣지 못한 수량을 함께 표시합니다.
+    /// 조준선 창(F10)에 있던 것을 옮겨 왔습니다. 조준선 창은 조준선만 다룹니다.
+    /// </remarks>
+    protected void DrawThrowableSection()
+    {
+        GUILayout.Label("■ 투척물", m_headerStyle);
+
+        SquadInventoryManager inventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
+        if (inventory == null)
+        {
+            GUILayout.Label("SquadInventoryManager를 찾을 수 없습니다.");
+            return;
+        }
+
+        List<ProjectileBase> projectiles = CollectSceneThrowables();
+        if (projectiles.Count == 0)
+        {
+            GUILayout.Label("씬에 등록된 투척물 Prefab이 없습니다. 투척기 목록과 아이템 정의 연결을 확인하세요.");
+            return;
+        }
+
+        for (int i = 0; i < projectiles.Count; i++)
+        {
+            ProjectileBase projectile = projectiles[i];
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"{ResolveThrowableName(projectile)}: {inventory.CountOf(projectile.InventoryItemDefinitionId)}");
+            if (GUILayout.Button($"+{DebugThrowableGrantAmount}", GUILayout.Width(80)))
+            {
+                m_throwableGrantResult = GrantThrowable(inventory, projectile);
+            }
+            GUILayout.EndHorizontal();
+        }
+
+        if (GUILayout.Button($"투척물 전부 +{DebugThrowableGrantAmount}", GUILayout.Height(26)))
+        {
+            m_throwableGrantResult = string.Empty;
+            for (int i = 0; i < projectiles.Count; i++)
+            {
+                m_throwableGrantResult += GrantThrowable(inventory, projectiles[i]);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(m_throwableGrantResult))
+        {
+            GUILayout.Label(m_throwableGrantResult);
+        }
+    }
+
+    /// <summary>투척물을 지정 수량만큼 넣고, 공간이 모자라 남은 수량이 있으면 안내 문구를 돌려줍니다.</summary>
+    private static string GrantThrowable(SquadInventoryManager inventory, ProjectileBase projectile)
+    {
+        inventory.TryAcquire(projectile.InventoryItemDefinitionId, DebugThrowableGrantAmount, out int leftover);
+        return leftover > 0
+            ? $"{ResolveThrowableName(projectile)} {leftover}개 공간 부족  "
+            : string.Empty;
+    }
+
+    /// <summary>씬의 투척기들이 쓰는 투척물 Prefab을 아이템 ID 기준으로 중복 없이 모읍니다.</summary>
+    private static List<ProjectileBase> CollectSceneThrowables()
+    {
+        var result = new List<ProjectileBase>();
+        var itemIds = new HashSet<string>();
+        ExplosiveProjectileShooter[] shooters = FindObjectsByType<ExplosiveProjectileShooter>(
+            FindObjectsInactive.Include,
+            FindObjectsSortMode.None);
+
+        for (int i = 0; i < shooters.Length; i++)
+        {
+            IReadOnlyList<ProjectileBase> prefabs = shooters[i].ProjectilePrefabs;
+            if (prefabs == null)
+            {
+                continue;
+            }
+
+            for (int j = 0; j < prefabs.Count; j++)
+            {
+                ProjectileBase projectile = prefabs[j];
+                if (projectile != null
+                    && !string.IsNullOrWhiteSpace(projectile.InventoryItemDefinitionId)
+                    && itemIds.Add(projectile.InventoryItemDefinitionId))
+                {
+                    result.Add(projectile);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static string ResolveThrowableName(ProjectileBase projectile)
+    {
+        return projectile.InventoryItemDefinition != null
+            ? projectile.InventoryItemDefinition.DisplayName
+            : projectile.name;
+    }
+
+    protected void DrawEnemySpawnSection()
     {
         int enemyCount = FindObjectsByType<EnemyController>(FindObjectsSortMode.None).Length;
         GUILayout.Label($"■ 좀비 스폰 (현재 적 {enemyCount}마리)", m_headerStyle);
@@ -2310,7 +2435,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
         return $"{m_enemyTemplateIndex + 1}/{m_enemyTemplateChoices.Count}  {selected.gameObject.name}";
     }
 
-    private void KillAllEnemies()
+    protected void KillAllEnemies()
     {
         foreach (EnemyHealth enemyHealth in FindObjectsByType<EnemyHealth>(FindObjectsSortMode.None))
         {
@@ -2322,7 +2447,7 @@ public class RuntimeDebugTrainer : MonoBehaviour
     // 헬퍼
     // ─────────────────────────────────────────────────────────────
 
-    private float SliderRow(string label, float value, float min, float max, string format = "0.##")
+    protected float SliderRow(string label, float value, float min, float max, string format = "0.##")
     {
         GUILayout.BeginHorizontal();
         float labelWidth = Mathf.Clamp(m_windowRect.width * 0.30f, 130f, 210f);

@@ -243,7 +243,8 @@ public class PlayerInputController : MonoBehaviour
     {
         get
         {
-            if (!m_isInputEnabled || m_throwMode || IsLocked(PlayerInputLock.Interact))
+            // 투척 모드에서도 상호작용은 받습니다. 투척은 좌클릭, 상호작용은 별도 키라 겹치지 않습니다.
+            if (!m_isInputEnabled || IsLocked(PlayerInputLock.Interact))
             {
                 return false;
             }
@@ -512,7 +513,7 @@ public class PlayerInputController : MonoBehaviour
     }
 
     /// <summary>
-    /// G 투척 모드에서 Q/E 또는 마우스 휠로 투척물을 선택하는 입력 액션 콜백입니다.
+    /// G 투척 모드에서 마우스 휠로 투척물을 선택하는 입력 액션 콜백입니다.
     /// </summary>
     /// <param name="value">음수이면 이전, 양수이면 다음 투척물을 선택합니다.</param>
     public void OnThrowSelection(InputValue value)
@@ -577,13 +578,8 @@ public class PlayerInputController : MonoBehaviour
     /// <remarks>버튼 액션이라 누름/뗌 모두 호출되며, <c>isPressed</c>로 홀드 상태를 그대로 보관합니다.</remarks>
     public void OnInteraction(InputValue value)
     {
-        if (!m_isInputEnabled || m_throwMode)
+        if (!m_isInputEnabled)
         {
-            if (m_throwMode)
-            {
-                InteractInput(false);
-            }
-
             return;
         }
 

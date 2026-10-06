@@ -17,6 +17,12 @@ using VInspector;
 /// </remarks>
 public sealed class ClaymoreTrap : ExplosiveTrap
 {
+    /// <inheritdoc />
+    protected override string DefaultDisplayName => "클레이모어";
+
+    /// <inheritdoc />
+    protected override string DefaultDescription => "밟히면 정면으로 폭발해 앞쪽 적에게 피해를 줍니다";
+
     [Header("Claymore")]
     [Tooltip("정면으로 뻗는 거리(m)입니다.")]
     [Min(0.0f)]
@@ -56,17 +62,26 @@ public sealed class ClaymoreTrap : ExplosiveTrap
     /// <summary>폭발이 향하는 방향입니다.</summary>
     public Vector3 ExplosionDirection => transform.forward;
 
+    /// <summary>정면 사거리(m)입니다. Explosive 업그레이드 배율이 곱해져 있습니다.</summary>
+    public float Range => m_range * RangeMultiplier;
+
+    /// <summary>가까운 쪽 폭(m)입니다. 사거리와 같은 배율로 늘려 사다리꼴 모양을 유지합니다.</summary>
+    private float NearWidth => m_nearWidth * RangeMultiplier;
+
+    /// <summary>먼 쪽 폭(m)입니다. 사거리와 같은 배율로 늘려 사다리꼴 모양을 유지합니다.</summary>
+    private float FarWidth => m_farWidth * RangeMultiplier;
+
     /// <inheritdoc />
     protected override int ApplyExplosionDamage()
     {
         return ExplosionDamage.DetonateTrapezoid(
             ExplosionOrigin,
             transform.rotation,
-            m_range,
-            m_nearWidth,
-            m_farWidth,
+            Range,
+            NearWidth,
+            FarWidth,
             m_explosionHeight,
-            m_damage,
+            Damage,
             m_damageTargetLayers,
             gameObject,
             m_showExplosionRangeVisual);
@@ -78,22 +93,22 @@ public sealed class ClaymoreTrap : ExplosiveTrap
         return ExplosionDamage.CreateTrapezoidRangeVisual(
             ExplosionOrigin,
             transform.rotation,
-            m_range,
-            m_nearWidth,
-            m_farWidth,
+            Range,
+            NearWidth,
+            FarWidth,
             m_explosionHeight);
     }
 
     /// <inheritdoc />
     protected override void OnDrawTrapGizmos()
     {
-        if (!m_drawExplosionGizmo || m_range <= 0.0f || m_explosionHeight <= 0.0f)
+        if (!m_drawExplosionGizmo || Range <= 0.0f || m_explosionHeight <= 0.0f)
         {
             return;
         }
 
-        float halfNearWidth = m_nearWidth * 0.5f;
-        float halfFarWidth = m_farWidth * 0.5f;
+        float halfNearWidth = NearWidth * 0.5f;
+        float halfFarWidth = FarWidth * 0.5f;
         float halfHeight = m_explosionHeight * 0.5f;
 
         Matrix4x4 previous = Gizmos.matrix;
@@ -106,10 +121,10 @@ public sealed class ClaymoreTrap : ExplosiveTrap
         Vector3 nearBottomRight = new Vector3(halfNearWidth, -halfHeight, 0.0f);
         Vector3 nearTopLeft = new Vector3(-halfNearWidth, halfHeight, 0.0f);
         Vector3 nearTopRight = new Vector3(halfNearWidth, halfHeight, 0.0f);
-        Vector3 farBottomLeft = new Vector3(-halfFarWidth, -halfHeight, m_range);
-        Vector3 farBottomRight = new Vector3(halfFarWidth, -halfHeight, m_range);
-        Vector3 farTopLeft = new Vector3(-halfFarWidth, halfHeight, m_range);
-        Vector3 farTopRight = new Vector3(halfFarWidth, halfHeight, m_range);
+        Vector3 farBottomLeft = new Vector3(-halfFarWidth, -halfHeight, Range);
+        Vector3 farBottomRight = new Vector3(halfFarWidth, -halfHeight, Range);
+        Vector3 farTopLeft = new Vector3(-halfFarWidth, halfHeight, Range);
+        Vector3 farTopRight = new Vector3(halfFarWidth, halfHeight, Range);
 
         // 가까운 면
         Gizmos.DrawLine(nearBottomLeft, nearBottomRight);

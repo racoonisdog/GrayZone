@@ -18,10 +18,20 @@ using VInspector;
 /// 공격로 이름별 웨이브 SO를 넘겨 실행시키고, 총 웨이브 수도 방어전 SO를 따릅니다. 방어전 SO가 없으면 시작하지 않습니다.
 /// 전투·휴식 시간은 이 매니저 값을 모든 웨이브, 모든 공격로에 적용합니다.
 /// 설계 근거: privateDoc `DEFENSE_WAVE_SPAWN_SPEC_KR.md` §4.4, §5.
+///
+/// 방어전 씬의 씬 컨트롤러이기도 합니다. 하위 매니저(이펙트·오디오·적·인벤토리) 연결, 입력 모드 전환,
+/// 게임오버 화면 표시는 부모 <see cref="CombatSceneManager"/>가 맡습니다. 필드 씬의 FieldManager와 같은 자리입니다.
 /// </remarks>
 [DisallowMultipleComponent]
-public sealed class DefenseManager : MonoBehaviour
+public sealed class DefenseManager : CombatSceneManager
 {
+    /// <summary>현재 방어전 씬의 인스턴스입니다. 방어전 씬이 아니면 <c>null</c>입니다.</summary>
+    public static new DefenseManager Instance => CombatSceneManager.Instance as DefenseManager;
+
+    /// <inheritdoc />
+    /// <remarks>방어전 맵에는 소음 차폐를 쓰지 않으므로 NoiseManager가 없어도 경고하지 않습니다.</remarks>
+    protected override bool UsesNoiseManager => false;
+
     /// <summary>Shooter 업그레이드 한 레벨에서 함께 배치되는 좌우 지정사수 한 쌍입니다.</summary>
     /// <remarks>
     /// 기획 기준(2026-09-29): 레벨마다 좌우 한 명씩, 2명이 추가됩니다. 1레벨은 좌우 2명(A_01, B_01),
@@ -142,6 +152,9 @@ public sealed class DefenseManager : MonoBehaviour
     /// <summary>게임이 시작되어 라운드 매니저가 타이머를 갱신 중인지 여부입니다.</summary>
     private bool m_isGameStarted;
 
+    /// <summary>거점 파괴나 스쿼드 전멸로 게임오버가 되어 진행을 멈춘 상태인지 여부입니다.</summary>
+    private bool m_isGameOver;
+
     /// <summary>현재 라운드 플레이 구간인지 여부입니다. false이면 정리 또는 휴식 구간입니다.</summary>
     private bool m_isPlaying;
 
@@ -220,7 +233,10 @@ public sealed class DefenseManager : MonoBehaviour
     /// 방어전 시작 전(시작 홀드를 기다리는 시간)도 휴식으로 취급합니다(사용자 확정 2026-10-01). 그 시간에도 함정을 설치할 수 있어야
     /// 하기 때문입니다. 시작 전에는 휴식 타이머가 돌지 않으므로 <see cref="RestTimer"/>는 0입니다.
     /// </remarks>
-    public bool IsResting => !m_isPlaying && !m_isClearing && !m_isVictoryReady;
+    public bool IsResting => !m_isGameOver && !m_isPlaying && !m_isClearing && !m_isVictoryReady;
+
+    /// <summary>거점 파괴나 스쿼드 전멸로 게임오버가 되어 진행을 멈췄는지 여부입니다.</summary>
+    public bool IsGameOver => m_isGameOver;
 
     /// <summary>
     /// 지금 함정을 설치할 수 있는 구간인지 여부입니다. 휴식 구간(방어전 시작 전 포함)입니다.
@@ -245,9 +261,18 @@ public sealed class DefenseManager : MonoBehaviour
         ? 0.0f
         : Mathf.Clamp01(m_emptySpaceHoldStartTimer / m_emptySpaceHoldStartDuration);
 
-    private void Awake()
+    protected override void Awake()
     {
+        base.Awake();
+
+        // 부모가 중복으로 판단해 이 컴포넌트를 지웠으면 더 진행하지 않습니다.
+        if (CombatSceneManager.Instance != this)
+        {
+            return;
+        }
+
         // 시작 전 상태는 조작을 막지 않되, 이 매니저가 소유한 적 생산만 확실히 차단합니다.
+        m_isGameOver = false;
         m_isGameStarted = false;
         m_isPlaying = false;
         m_isClearing = false;
@@ -260,8 +285,11 @@ public sealed class DefenseManager : MonoBehaviour
         HideWaveStartMessage();
     }
 
-    private void Start()
+    protected override void Start()
     {
+        // 부모가 게임오버 요청(거점 파괴·스쿼드 전멸) 구독을 붙입니다.
+        base.Start();
+
         // DefenseSceneDataManager는 실행 순서상 먼저 Start까지 마쳐 입장 데이터를 갖고 있습니다.
         if (ResolveActiveStage() != null)
         {
@@ -291,6 +319,12 @@ public sealed class DefenseManager : MonoBehaviour
 
     private void Update()
     {
+        // 게임오버 뒤에는 휴식·시작 홀드·다음 웨이브로 넘어가지 않습니다.
+        if (m_isGameOver)
+        {
+            return;
+        }
+
         UpdateWaveStartMessage();
 
         if (!m_isGameStarted)
@@ -348,6 +382,7 @@ public sealed class DefenseManager : MonoBehaviour
             return;
         }
 
+        m_isGameOver = false;
         m_isGameStarted = true;
         m_isClearing = false;
         m_isVictoryReady = false;
@@ -385,6 +420,32 @@ public sealed class DefenseManager : MonoBehaviour
         RefreshTimerText();
         HideWaveStartMessage();
         RefreshTrapBuildWindow();
+    }
+
+    /// <summary>
+    /// 거점 파괴나 스쿼드 전멸로 게임오버가 되면 게임오버 화면을 띄우고 방어전 진행을 그 자리에서 멈춥니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="StopDefenseGame"/>을 쓰지 않는 이유: 그 함수는 시작 전 상태로 되돌려, 함정 설치 구간이 다시 열리고
+    /// 빈 곳 홀드로 방어전이 다시 시작될 수 있습니다. 여기서는 새 스폰만 멈추고 이후 진행을 막습니다.
+    /// </remarks>
+    protected override void HandleGameOverRequested()
+    {
+        if (!m_isGameOver)
+        {
+            m_isGameOver = true;
+            m_isPlaying = false;
+            m_isClearing = false;
+            m_roundTimer = 0.0f;
+            m_restTimer = 0.0f;
+            m_emptySpaceHoldStartTimer = 0.0f;
+            EndStageCombat();
+            HideWaveStartMessage();
+            RefreshTimerText();
+            RefreshTrapBuildWindow();
+        }
+
+        base.HandleGameOverRequested();
     }
 
     /// <summary>
@@ -704,6 +765,29 @@ public sealed class DefenseManager : MonoBehaviour
         RefreshTrapBuildWindow();
     }
 
+    /// <summary>
+    /// 남은 웨이브를 건너뛰고 곧바로 승리 상태(귀환 구역 열림)로 만듭니다. 디버그 트레이너 전용입니다.
+    /// </summary>
+    /// <remarks>정상 승리와 같은 경로라 임무 완료와 승리 보상도 그대로 기록됩니다. 시작 전이거나 게임오버면 하지 않습니다.</remarks>
+    public void DebugForceVictory()
+    {
+        if (!m_isGameStarted || m_isGameOver || m_isVictoryReady)
+        {
+            Debug.LogWarning("[DefenseManager] 방어전이 진행 중일 때만 강제 승리할 수 있습니다.", this);
+            return;
+        }
+
+        DespawnManagedEnemies();
+        BeginVictory();
+    }
+
+    /// <summary>이 매니저의 스포너가 내보낸 적을 처치로 세지 않고 모두 회수합니다. 디버그 트레이너 전용입니다.</summary>
+    /// <returns>회수한 적의 수입니다.</returns>
+    public int DebugDespawnManagedEnemies()
+    {
+        return DespawnManagedEnemies();
+    }
+
     /// <summary>마지막 웨이브를 완료하고, 정산 전 귀환 구역 진입 대기 상태로 전환합니다.</summary>
     private void BeginVictory()
     {
@@ -910,6 +994,44 @@ public sealed class DefenseManager : MonoBehaviour
         }
     }
 
+    /// <summary>지금 지정사수 배치에 쓰는 레벨입니다. 디버그 지정 값이 있으면 그 값입니다.</summary>
+    /// <remarks>디버그 창이 매 프레임 읽으므로, 데이터 매니저가 없을 때도 경고를 내지 않습니다.</remarks>
+    public int MarksmanLevel
+    {
+        get
+        {
+            if (m_debugMarksmanLevelOverride >= 0)
+            {
+                return m_debugMarksmanLevelOverride;
+            }
+
+            DefenseSceneDataManager defenseData = ResolveDefenseSceneDataManager();
+            if (defenseData != null)
+            {
+                return defenseData.GetUpgradeLevel(ScrambleUpgradeType.Shooter);
+            }
+
+            return GameDataManager.Instance != null ? GameDataManager.Instance.ShooterUpgradeLevel : 0;
+        }
+    }
+
+    /// <summary>지정사수 칸 수입니다. 이 값이 배치할 수 있는 최대 레벨입니다.</summary>
+    public int MarksmanTierCount => m_marksmanTiers != null ? m_marksmanTiers.Length : 0;
+
+    /// <summary>지정사수 레벨을 디버그 값으로 지정했는지 여부입니다. 아니면 입장 데이터 값을 씁니다.</summary>
+    public bool HasMarksmanLevelOverride => m_debugMarksmanLevelOverride >= 0;
+
+    /// <summary>
+    /// 디버그용: 지정사수 레벨을 지정하고 바로 다시 배치합니다.
+    /// </summary>
+    /// <param name="level">배치할 레벨입니다. -1이면 지정을 풀고 입장 데이터 값으로 돌아갑니다.</param>
+    /// <remarks>Play 중에만 바뀌는 런타임 값입니다. 씬의 Inspector 값은 바꾸지 않습니다.</remarks>
+    public void DebugSetMarksmanLevel(int level)
+    {
+        m_debugMarksmanLevelOverride = Mathf.Max(-1, level);
+        ApplyMarksmanPlacement();
+    }
+
     private int ResolveMarksmanLevel()
     {
         if (m_debugMarksmanLevelOverride >= 0)
@@ -950,24 +1072,18 @@ public sealed class DefenseManager : MonoBehaviour
 
     /// <summary>방어전 승리를 데이터 매니저에 기록합니다.</summary>
     /// <remarks>
-    /// 임무 완료 표시는 <see cref="DefenseSceneDataManager.CompleteVictory"/>가 필드 데이터 매니저로 넘깁니다.
-    /// 방어전 데이터 매니저가 아직 씬에 배치되지 않은 동안에는 예전처럼 필드 데이터 매니저에 직접 표시해,
-    /// 귀환 정산이 Success로 나오는 기존 동작을 유지합니다.
+    /// 임무 완료 표시와 승리 보상 기록은 <see cref="DefenseSceneDataManager.CompleteVictory"/>가 함께 합니다.
     /// </remarks>
     private void RecordVictory()
     {
         DefenseSceneDataManager defenseData = ResolveDefenseSceneDataManager();
-        if (defenseData != null)
+        if (defenseData == null)
         {
-            defenseData.CompleteVictory();
+            Debug.LogError("[DefenseManager] DefenseSceneDataManager가 없어 승리를 기록하지 못했습니다. 귀환 정산이 실패로 나옵니다.", this);
             return;
         }
 
-        Debug.LogWarning("[DefenseManager] DefenseSceneDataManager가 없어 필드 데이터 매니저에 임무 완료만 표시합니다.", this);
-        FieldSceneDataManager fieldData = FieldSceneDataManager.Instance != null
-            ? FieldSceneDataManager.Instance
-            : FindFirstObjectByType<FieldSceneDataManager>();
-        fieldData?.SetMissionCompleted(true);
+        defenseData.CompleteVictory();
     }
 
     /// <summary>미리 배치해 둔 귀환 구역을 켭니다.</summary>
@@ -1179,8 +1295,11 @@ public sealed class DefenseManager : MonoBehaviour
         }
     }
 
-    private void OnValidate()
+#if UNITY_EDITOR
+    protected override void OnValidate()
     {
+        base.OnValidate();
+
         m_roundDuration = Mathf.Max(0.01f, m_roundDuration);
         m_restDuration = Mathf.Max(0.01f, m_restDuration);
         m_clearingPullDelay = Mathf.Max(0.0f, m_clearingPullDelay);
@@ -1190,4 +1309,5 @@ public sealed class DefenseManager : MonoBehaviour
         m_waveStartMessageFadeDuration = Mathf.Max(0.0f, m_waveStartMessageFadeDuration);
         m_emptySpaceHoldStartDuration = Mathf.Max(0.01f, m_emptySpaceHoldStartDuration);
     }
+#endif
 }

@@ -25620,7 +25620,7 @@ MonoBehaviour:
   m_hitMarkerRollBaseDegrees: 0
   m_enableHitMarkerRandomRoll: 1
   m_hitMarkerRollRandomRangeDegrees: 10
-  m_showKillSkull: 1
+  m_showKillSkull: 0
   m_killSkullTexture: {fileID: 2800000, guid: 7a6209cfe005b9346ad8ff7738e9f147, type: 3}
   m_killSkullTint: {r: 1, g: 1, b: 1, a: 1}
   m_killSkullSizePixels: 48
