@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using VInspector;
 
 /// <summary>
@@ -131,10 +132,20 @@ public sealed class DefenseManager : CombatSceneManager
     [SerializeField] private float m_clearingForceEndDelay = 60.0f;
 
     [Header("Defense Start Input")]
-    [Tooltip("방어전 시작 전, 현재 스쿼드 조작 멤버가 상호작용 대상이 없는 곳에서 상호작용키를 이 시간(초)만큼 홀드하면 방어전을 시작합니다. " +
-             "튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다.")]
+    [Tooltip("방어전 시작 전, 현재 스쿼드 조작 멤버가 Z키를 이 시간(초)만큼 누르고 있으면 방어전을 시작합니다. 실제 시간으로 셉니다. " +
+             "튜토리얼 여부와 관계없이 매 방어전 같은 규칙이고, 튜토리얼 중에는 마지막 페이지가 같은 규칙으로 시작을 맡습니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_emptySpaceHoldStartDuration = 3.0f;
+
+    /// <summary>방어전 시작 홀드 키입니다. 튜토리얼 마지막 페이지 안내(Z 3초)와 같은 키입니다.</summary>
+    private const Key StartHoldKey = Key.Z;
+
+    [Tooltip("튜토리얼 없이 시작하는 판(2회차부터)에서 시작 전 시작 안내를 띄울 텍스트입니다. 보통 좌상단 목표 패널의 제목입니다. " +
+             "시작하면 원래 문구로 돌려놓습니다. 비어 있으면 안내를 띄우지 않습니다.")]
+    [SerializeField] private TMP_Text m_startPromptText;
+
+    [Tooltip("시작 전 안내 문구입니다.")]
+    [SerializeField] private string m_startPromptMessage = "시작하시려면 Z키를 3초 눌러주세요.";
 
     /// <summary>Defense 게임이 시작될 때 발생합니다. 튜토리얼 안내처럼 시작 시점에 붙는 UI가 구독합니다.</summary>
     /// <remarks>
@@ -198,6 +209,9 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>허공 상호작용키를 연속해서 누른 시간(초)입니다.</summary>
     private float m_emptySpaceHoldStartTimer;
 
+    /// <summary>시작 안내로 바꾸기 전 원래 문구입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
+    private string m_startPromptOriginalText;
+
     /// <summary>현재 실행 중인 웨이브 번호입니다. 첫 웨이브는 1입니다.</summary>
     private int m_currentWave;
 
@@ -260,7 +274,7 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>이 매니저가 제어하는 스폰 포인트 목록입니다.</summary>
     public IReadOnlyList<EnemyDefenseSpawnPoint> SpawnPoints => m_spawnPoints;
 
-    /// <summary>방어전 시작 전 허공 상호작용 홀드 진행도입니다.</summary>
+    /// <summary>방어전 시작 전 Z키 홀드 진행도입니다.</summary>
     public float EmptySpaceHoldStartProgress => m_isGameStarted
         ? 0.0f
         : Mathf.Clamp01(m_emptySpaceHoldStartTimer / m_emptySpaceHoldStartDuration);
@@ -334,6 +348,7 @@ public sealed class DefenseManager : CombatSceneManager
         if (!m_isGameStarted)
         {
             UpdateEmptySpaceHoldStart();
+            RefreshStartPrompt();
             return;
         }
 
@@ -397,6 +412,7 @@ public sealed class DefenseManager : CombatSceneManager
         ResolveDefenseSceneDataManager()?.ConfigureWaves(TotalWaveCount);
         PrepareStageSpawners();
         BeginRound();
+        RefreshStartPrompt();
         OnDefenseStarted?.Invoke();
     }
 
@@ -924,27 +940,33 @@ public sealed class DefenseManager : CombatSceneManager
     }
 
     /// <summary>
-    /// 방어전 시작 규칙입니다. 플레이어가 상호작용 대상으로 조준하지 않은 상태에서만
-    /// 상호작용키를 일정 시간 유지하면 <see cref="StartDefense"/>를 호출합니다.
+    /// 방어전 시작 규칙입니다. 현재 조작 중인 스쿼드원이 있을 때 <see cref="StartHoldKey"/>(Z)를
+    /// 일정 시간 누르고 있으면 <see cref="StartDefense"/>를 호출합니다.
     /// </summary>
     /// <remarks>
-    /// 튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다(사용자 확정 2026-10-01). 끄는 옵션은 두지 않습니다.
+    /// 튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다. 끄는 옵션은 두지 않습니다.
     /// 다른 시작 경로가 없어서, 끄면 방어전을 시작할 방법이 없어지기 때문입니다.
+    /// 튜토리얼이 진행 중이면 세지 않습니다. 튜토리얼 앞 페이지도 Z로 넘기므로, 여기서도 세면 페이지를 넘기는 동안
+    /// 시작될 수 있습니다. 그동안은 튜토리얼 마지막 페이지가 같은 규칙(Z 3초)으로 시작을 맡습니다.
+    /// 튜토리얼과 같게 실제 시간으로 셉니다. 게임 시간은 프레임이 느릴 때 잘려 3초를 눌러도 덜 찹니다.
+    /// 시간이 멈춘 동안(일시정지 메뉴 등)은 세지 않습니다.
     /// 시작 전 시간은 휴식으로 취급하므로 이 동안 함정을 설치할 수 있습니다(<see cref="IsResting"/>).
     /// </remarks>
     private void UpdateEmptySpaceHoldStart()
     {
-
-        if (!TryGetActiveSquadStartInput(out PlayerInputController startInput,
-                out InteractionController startInteraction)
-            || (startInteraction != null && startInteraction.Current != null)
-            || !startInput.Interact)
+        TutorialManager tutorial = TutorialManager.Instance;
+        Keyboard keyboard = Keyboard.current;
+        if ((tutorial != null && tutorial.IsRunning)
+            || Time.timeScale <= 0.0f
+            || keyboard == null
+            || !HasActiveSquadStartInput()
+            || !keyboard[StartHoldKey].isPressed)
         {
             m_emptySpaceHoldStartTimer = 0.0f;
             return;
         }
 
-        m_emptySpaceHoldStartTimer += Time.deltaTime;
+        m_emptySpaceHoldStartTimer += Time.unscaledDeltaTime;
         if (m_emptySpaceHoldStartTimer >= m_emptySpaceHoldStartDuration)
         {
             StartDefense();
@@ -952,28 +974,60 @@ public sealed class DefenseManager : CombatSceneManager
     }
 
     /// <summary>
-    /// 현재 스쿼드가 직접 조작 중인 멤버에게서 방어전 시작 입력과 상호작용 상태를 가져옵니다.
+    /// 현재 스쿼드가 직접 조작 중이고 입력을 받는 멤버가 있는지 확인합니다.
     /// </summary>
     /// <remarks>
     /// 시작 입력을 Inspector에 고정하면 스쿼드 전환 뒤 비활성 멤버의 입력을 계속 읽게 됩니다.
     /// 따라서 매 프레임 <see cref="SquadManager.PlayerSquadMember"/>를 정본으로 사용합니다.
     /// </remarks>
-    private static bool TryGetActiveSquadStartInput(
-        out PlayerInputController startInput,
-        out InteractionController startInteraction)
+    private static bool HasActiveSquadStartInput()
     {
-        startInput = null;
-        startInteraction = null;
-
         SquadMemberController activeMember = SquadManager.Instance?.PlayerSquadMember;
         if (activeMember == null || !activeMember.IsPlayerSquadMember)
         {
             return false;
         }
 
-        startInput = activeMember.GetComponent<PlayerInputController>();
-        startInteraction = activeMember.GetComponent<InteractionController>();
+        PlayerInputController startInput = activeMember.GetComponent<PlayerInputController>();
         return startInput != null && startInput.isActiveAndEnabled;
+    }
+
+    /// <summary>
+    /// 시작 전이고 튜토리얼이 진행 중이 아니면 목표 패널 제목을 시작 안내로 바꾸고, 그 외에는 원래 문구로 돌려놓습니다.
+    /// </summary>
+    /// <remarks>
+    /// 2회차부터는 튜토리얼만 빠지고 시작 규칙(Z 3초)은 같으므로, 튜토리얼 마지막 페이지가 하던 안내를 여기서 대신합니다.
+    /// 튜토리얼은 Start에서 시작되므로 첫 Update부터 진행 여부를 바로 알 수 있습니다.
+    /// </remarks>
+    private void RefreshStartPrompt()
+    {
+        if (m_startPromptText == null)
+        {
+            return;
+        }
+
+        TutorialManager tutorial = TutorialManager.Instance;
+        bool showPrompt = !m_isGameStarted && !m_isGameOver && (tutorial == null || !tutorial.IsRunning);
+        if (showPrompt)
+        {
+            if (m_startPromptOriginalText == null)
+            {
+                m_startPromptOriginalText = m_startPromptText.text;
+            }
+
+            if (m_startPromptText.text != m_startPromptMessage)
+            {
+                m_startPromptText.text = m_startPromptMessage;
+            }
+
+            return;
+        }
+
+        if (m_startPromptOriginalText != null)
+        {
+            m_startPromptText.text = m_startPromptOriginalText;
+            m_startPromptOriginalText = null;
+        }
     }
 
     /// <summary>
