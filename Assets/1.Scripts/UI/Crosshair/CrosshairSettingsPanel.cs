@@ -20,9 +20,6 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private const float ControlsLeft = 430f;
     private const float ControlsWidth = 650f;
     private const float RowHeight = 50f;
-    private const int PreviewTextureWidth = 300;
-    private const int PreviewTextureHeight = 280;
-    private const float MaxPreviewZoom = 6f;
 
     private enum Layer { Main, Sub }
 
@@ -51,6 +48,7 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private readonly Dictionary<PlayerbleCharacterId, CrosshairStyle> m_workingStyles = new();
     private readonly List<Image> m_characterButtonImages = new();
     private readonly Image[] m_layerButtonImages = new Image[2];
+    private readonly Image[] m_sideButtonImages = new Image[2];
     private readonly List<Row> m_mainRows = new();
     private readonly List<Row> m_subRows = new();
     private readonly List<Image> m_mainShapeButtons = new();
@@ -63,6 +61,14 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private bool m_isRefreshing;
     private int m_selectedCharacterIndex;
     private Layer m_selectedLayer;
+
+    /// <summary>조준(ADS) 쪽을 편집하고 있는지 여부입니다. 거짓이면 비조준 쪽입니다. 동적 크로스헤어를 끈 경우에만 씁니다.</summary>
+    private bool m_adsTab;
+    private float m_layerTop;
+    private Image m_dynamicCheck;
+    private RectTransform m_sideRow;
+    private RectTransform m_layerRow;
+    private RectTransform m_controlsPanel;
     private CrosshairStyle m_workingThrowable;
     private RectTransform m_characterRow;
     private RectTransform m_mainRowsRoot;
@@ -71,8 +77,7 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private TextMeshProUGUI m_previewProfileLabel;
     private TextMeshProUGUI m_previewZoomLabel;
     private RawImage m_previewImage;
-    private Texture2D m_previewTexture;
-    private Color32[] m_previewPixels;
+    private CrosshairHudPreview m_hudPreview;
 
     /// <summary>캐릭터별 조준선 편집 화면을 만듭니다.</summary>
     public void Build(RectTransform parent, TMP_FontAsset regularFont, TMP_FontAsset boldFont)
@@ -144,11 +149,18 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         RefreshAll();
     }
 
-    private void OnDestroy()
+    // 미리보기용 HUD 복제본은 이 화면이 보이는 동안만 둡니다. 다시 열리면 DrawPreview가 새로 만듭니다.
+    private void OnDisable()
     {
-        if (m_previewTexture != null)
+        m_hudPreview?.Dispose();
+        m_hudPreview = null;
+    }
+
+    private void OnEnable()
+    {
+        if (m_isBuilt)
         {
-            Destroy(m_previewTexture);
+            RefreshAll();
         }
     }
 
@@ -182,11 +194,48 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
 
         CreateText("Layer Label", parent, new Vector2(ControlsLeft, layerTop), new Vector2(300f, 32f),
             "편집할 조준선", 20f, TextAlignmentOptions.Left, m_boldFont);
+        m_layerTop = layerTop;
+
+        if (!throwableMode)
+        {
+            // 동적 크로스헤어: 켜면 탄퍼짐·반동·조준에 따라 벌어지고 줄어들며(양은 고정값) 비조준·조준을 나누지 않습니다.
+            // 끄면 미리보기 크기 그대로 고정되고, 아래 비조준/조준 버튼으로 두 쪽을 따로 정합니다.
+            GameObject dynamicRow = CreateTopLeftObject("Dynamic Row", parent, new Vector2(ControlsLeft, layerTop - 38f),
+                new Vector2(ControlsWidth, 36f));
+            Button box = CreateButton("Dynamic Checkbox", dynamicRow.transform, Vector2.zero, new Vector2(34f, 34f), string.Empty, 15f, IdleColor);
+            box.onClick.AddListener(ToggleDynamic);
+            m_dynamicCheck = CreateImage("Check", box.transform, new Vector2(7f, -7f), new Vector2(20f, 20f), SelectedColor);
+            m_dynamicCheck.raycastTarget = false;
+            CreateText("Dynamic Label", dynamicRow.transform, new Vector2(46f, -1f), new Vector2(180f, 32f),
+                "동적 크로스헤어", 18f, TextAlignmentOptions.Left, m_boldFont);
+            CreateText("Dynamic Description", dynamicRow.transform, new Vector2(220f, -2f), new Vector2(430f, 32f),
+                "반동·조준에 따라 벌어지고 줄어듭니다", 15f, TextAlignmentOptions.Left, m_regularFont, new Color(1f, 1f, 1f, 0.6f));
+
+            m_sideRow = CreateTopLeftObject("Side Buttons", parent, new Vector2(ControlsLeft, layerTop - 84f),
+                new Vector2(ControlsWidth, 42f)).GetComponent<RectTransform>();
+            string[] sideLabels = { "비조준", "조준 (ADS)" };
+            for (int i = 0; i < sideLabels.Length; i++)
+            {
+                int index = i;
+                Button button = CreateButton($"Side {i}", m_sideRow, new Vector2(180f * i, 0f),
+                    new Vector2(164f, 42f), sideLabels[i], 18f, IdleColor);
+                button.onClick.AddListener(() =>
+                {
+                    m_adsTab = index == 1;
+                    RefreshAll();
+                });
+                m_sideButtonImages[i] = button.GetComponent<Image>();
+            }
+        }
+
+        // 내부/외부 버튼은 비조준/조준 아래 단계입니다. 줄 위치는 RefreshAll이 동적 여부에 맞춰 옮깁니다.
+        m_layerRow = CreateTopLeftObject("Layer Buttons", parent, new Vector2(ControlsLeft, layerTop - 38f),
+            new Vector2(ControlsWidth, 42f)).GetComponent<RectTransform>();
         string[] layerLabels = { "내부 (중앙)", "외부 (주변)" };
         for (int i = 0; i < layerLabels.Length; i++)
         {
             int index = i;
-            Button button = CreateButton($"Layer {i}", parent, new Vector2(ControlsLeft + 180f * i, layerTop - 38f),
+            Button button = CreateButton($"Layer {i}", m_layerRow, new Vector2(180f * i, 0f),
                 new Vector2(164f, 42f), layerLabels[i], 18f, IdleColor);
             button.onClick.AddListener(() => SelectLayer((Layer)index));
             m_layerButtonImages[i] = button.GetComponent<Image>();
@@ -202,9 +251,11 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
 
     private void BuildControls(Transform parent, float top)
     {
-        float height = m_isThrowableMode ? 700f : 610f;
+        // 캐릭터 조준선은 위에 동적 크로스헤어·비조준/조준 줄이 더 있어 편집 칸이 그만큼 아래에서 시작하므로 짧게 둡니다.
+        float height = m_isThrowableMode ? 700f : 600f;
         Image panel = CreateImage("Controls Panel", parent, new Vector2(ControlsLeft, top), new Vector2(ControlsWidth, height),
             new Color(0.035f, 0.035f, 0.035f, 0.92f));
+        m_controlsPanel = panel.rectTransform;
         Outline outline = panel.gameObject.AddComponent<Outline>();
         outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
         outline.effectDistance = new Vector2(1f, -1f);
@@ -270,6 +321,39 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             s => s.subStrokeColor, (s, c) => s.subStrokeColor = c, s => HasSub(s) && s.subStrokeThicknessPixels > 0f);
     }
 
+    /// <summary>라벨과 버튼 여러 개로 하나를 고르는 줄을 추가합니다.</summary>
+    private void AddChoiceRow(RectTransform root, List<Row> rows, string label, string[] labels,
+        Action<int> onSelect, Func<CrosshairStyle, int> getIndex, Func<CrosshairStyle, bool> isVisible = null)
+    {
+        GameObject rowObject = CreateTopLeftObject($"{label} Row", root, Vector2.zero, new Vector2(ControlsWidth, RowHeight));
+        CreateText("Label", rowObject.transform, new Vector2(32f, -8f), new Vector2(150f, 32f),
+            label, 18f, TextAlignmentOptions.Left, m_boldFont);
+        var buttonImages = new List<Image>();
+        float buttonWidth = labels.Length > 2 ? 108f : 200f;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            int index = i;
+            Button button = CreateButton($"Choice {i}", rowObject.transform, new Vector2(182f + (buttonWidth + 6f) * i, -6f),
+                new Vector2(buttonWidth, 36f), labels[i], 15f, IdleColor);
+            button.onClick.AddListener(() => onSelect(index));
+            buttonImages.Add(button.GetComponent<Image>());
+        }
+
+        rows.Add(new Row
+        {
+            Root = rowObject,
+            IsVisible = isVisible ?? (_ => true),
+            Refresh = style =>
+            {
+                int selected = getIndex(style);
+                for (int i = 0; i < buttonImages.Count; i++)
+                {
+                    buttonImages[i].color = i == selected ? SelectedColor : IdleColor;
+                }
+            },
+        });
+    }
+
     private static bool HasMain(CrosshairStyle s) => s.mainShape != CrosshairController.MainShape.None;
     private static bool HasSub(CrosshairStyle s) => s.subShape != CrosshairController.SubShape.None;
 
@@ -308,7 +392,8 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     }
 
     private void AddSliderRow(RectTransform root, List<Row> rows, string label, float min, float max, float step, string format,
-        Func<CrosshairStyle, float> getter, Action<CrosshairStyle, float> setter, Func<CrosshairStyle, bool> isVisible)
+        Func<CrosshairStyle, float> getter, Action<CrosshairStyle, float> setter, Func<CrosshairStyle, bool> isVisible,
+        Func<float, string> valueText = null)
     {
         GameObject rowObject = CreateTopLeftObject($"{label} Row", root, Vector2.zero, new Vector2(ControlsWidth, RowHeight));
         CreateText("Label", rowObject.transform, new Vector2(32f, -8f), new Vector2(150f, 32f),
@@ -331,7 +416,7 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             {
                 float v = getter(style);
                 slider.SetValueWithoutNotify(v);
-                value.text = $"{v.ToString(format)} px";
+                value.text = valueText != null ? valueText(v) : $"{v.ToString(format)} px";
             },
         });
     }
@@ -408,6 +493,10 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         });
     }
 
+    /// <summary>
+    /// 편집 줄의 변경을 적용합니다. 외곽의 조준 탭이면 조준 외곽을 담은 보기용 사본을 고친 뒤 조준 외곽에 되돌려 씁니다.
+    /// </summary>
+    /// <remarks>편집 줄은 모두 비조준 외곽 필드를 읽고 쓰므로, 같은 줄로 조준 외곽을 고치려면 이 우회가 필요합니다.</remarks>
     private void Edit(Action<CrosshairStyle> change)
     {
         CrosshairStyle style = CurrentStyle;
@@ -416,8 +505,32 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             return;
         }
 
-        change(style);
+        if (IsEditingAds)
+        {
+            CrosshairStyle view = style.CreateAdsView();
+            change(view);
+            style.StoreAdsView(view);
+        }
+        else
+        {
+            change(style);
+        }
+
         RefreshAll();
+    }
+
+    /// <summary>지금 조준(ADS) 쪽 조준선(내부·외부)을 편집하고 있는지 여부입니다. 동적 크로스헤어를 켜면 항상 거짓입니다.</summary>
+    private bool IsEditingAds => !m_isThrowableMode && m_adsTab
+        && CurrentStyle != null && !CurrentStyle.subDynamic;
+
+    /// <summary>편집 줄과 미리보기에 보여 줄 스타일입니다. 조준 쪽 편집 중이면 조준 내부·외부를 담은 보기용 사본입니다.</summary>
+    private CrosshairStyle DisplayStyle
+    {
+        get
+        {
+            CrosshairStyle style = CurrentStyle;
+            return style != null && IsEditingAds ? style.CreateAdsView() : style;
+        }
     }
 
     private void SelectLayer(Layer layer)
@@ -505,6 +618,44 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         m_selectedCharacterIndex = Mathf.Clamp(m_selectedCharacterIndex, 0, Mathf.Max(0, m_characters.Count - 1));
     }
 
+    /// <summary>동적 크로스헤어를 켜고 끕니다. 켜면 비조준/조준 구분이 없어지므로 비조준 쪽으로 돌아갑니다.</summary>
+    private void ToggleDynamic()
+    {
+        CrosshairStyle style = CurrentStyle;
+        if (style == null)
+        {
+            return;
+        }
+
+        style.subDynamic = !style.subDynamic;
+        m_adsTab = false;
+        RefreshAll();
+    }
+
+    /// <summary>
+    /// 동적 크로스헤어 체크와 비조준/조준 버튼을 맞추고, 그 아래 내부/외부 버튼과 편집 칸을 위아래로 옮깁니다.
+    /// 동적을 켜면 비조준/조준 줄이 사라지고 그 자리만큼 위로 붙습니다.
+    /// </summary>
+    private void LayoutHeader(CrosshairStyle style)
+    {
+        if (m_isThrowableMode)
+        {
+            return;
+        }
+
+        bool dynamic = style == null || style.subDynamic;
+        m_dynamicCheck.enabled = dynamic;
+        m_sideRow.gameObject.SetActive(!dynamic);
+        for (int i = 0; i < m_sideButtonImages.Length; i++)
+        {
+            m_sideButtonImages[i].color = i == (m_adsTab ? 1 : 0) ? SelectedColor : IdleColor;
+        }
+
+        float layerY = m_layerTop - (dynamic ? 84f : 134f);
+        m_layerRow.anchoredPosition = new Vector2(m_layerRow.anchoredPosition.x, layerY);
+        m_controlsPanel.anchoredPosition = new Vector2(m_controlsPanel.anchoredPosition.x, layerY - 62f);
+    }
+
     private void RefreshAll()
     {
         CrosshairStyle style = CurrentStyle;
@@ -521,6 +672,8 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             m_layerButtonImages[i].color = i == (int)m_selectedLayer ? SelectedColor : IdleColor;
         }
 
+        LayoutHeader(style);
+
         m_mainRowsRoot.gameObject.SetActive(available && m_selectedLayer == Layer.Main);
         m_subRowsRoot.gameObject.SetActive(available && m_selectedLayer == Layer.Sub);
         if (!available)
@@ -529,10 +682,11 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             return;
         }
 
+        CrosshairStyle display = DisplayStyle;
         m_isRefreshing = true;
-        LayoutRows(m_selectedLayer == Layer.Main ? m_mainRows : m_subRows, style);
+        LayoutRows(m_selectedLayer == Layer.Main ? m_mainRows : m_subRows, display);
         m_isRefreshing = false;
-        DrawPreview(style);
+        DrawPreview(display);
     }
 
     /// <summary>현재 모양에 쓰이는 줄만 위에서부터 차례로 보이게 배치합니다.</summary>
@@ -566,25 +720,22 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
 
         Image field = CreateImage("Preview Field", previewRect, new Vector2(25f, -78f), new Vector2(600f, 560f),
             new Color(0.32f, 0.34f, 0.33f, 1f));
-        m_previewTexture = new Texture2D(PreviewTextureWidth, PreviewTextureHeight, TextureFormat.RGBA32, false)
-        {
-            filterMode = FilterMode.Bilinear,
-            wrapMode = TextureWrapMode.Clamp,
-            name = "CrosshairPreview",
-        };
-        m_previewPixels = new Color32[PreviewTextureWidth * PreviewTextureHeight];
         GameObject imageObject = CreateStretchObject("Preview Image", field.transform);
         m_previewImage = imageObject.AddComponent<RawImage>();
-        m_previewImage.texture = m_previewTexture;
         m_previewImage.raycastTarget = false;
+        m_previewImage.enabled = false;
 
         m_previewZoomLabel = CreateText("Preview Zoom", previewRect, new Vector2(25f, -646f), new Vector2(600f, 24f),
             string.Empty, 16f, TextAlignmentOptions.Center, m_regularFont, new Color(1f, 1f, 1f, 0.5f));
     }
 
+    /// <summary>
+    /// 미리보기를 그립니다. 실제 조준선 HUD를 복제해 게임 화면과 같은 크기·간격으로 그립니다.
+    /// 캐릭터 조준선은 그 캐릭터가 쏘지 않고 있을 때의 간격이고, 조준(ADS) 외곽을 고치는 중이면 조준을 마친 상태입니다.
+    /// </summary>
     private void DrawPreview(CrosshairStyle style)
     {
-        if (m_previewTexture == null)
+        if (m_previewImage == null)
         {
             return;
         }
@@ -593,21 +744,45 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             ? "모든 캐릭터 공용"
             : m_selectedCharacterIndex < m_characters.Count ? m_characters[m_selectedCharacterIndex].Value : string.Empty;
 
-        Array.Clear(m_previewPixels, 0, m_previewPixels.Length);
-        if (style != null)
+        // 저장·되돌리기는 화면이 꺼져 있을 때도 값을 새로 그립니다. 그때 복제본을 만들면 OnDisable이 다시 오지 않아 남으므로 만들지 않습니다.
+        CrosshairSettingsService service = CrosshairSettingsService.Instance;
+        if (!isActiveAndEnabled || style == null || service == null || service.Crosshair == null)
         {
-            float zoom = Mathf.Min(MaxPreviewZoom, (PreviewTextureHeight * 0.5f - 6f) / Mathf.Max(1f, CrosshairPreviewRenderer.Extent(style)));
-            CrosshairPreviewRenderer.Render(style, m_previewPixels, PreviewTextureWidth, PreviewTextureHeight, zoom);
-            // 미리보기 텍스처는 화면에 2배로 늘어나 보이므로 실제 확대율은 zoom * 2입니다.
-            m_previewZoomLabel.text = $"실제 크기의 {zoom * 2f:0.#}배로 확대한 모습입니다. 탄퍼짐에 따른 간격 변화는 반영하지 않습니다.";
-        }
-        else
-        {
+            m_hudPreview?.Clear();
             m_previewZoomLabel.text = string.Empty;
+            return;
         }
 
-        m_previewTexture.SetPixels32(m_previewPixels);
-        m_previewTexture.Apply(false);
+        m_hudPreview ??= new CrosshairHudPreview(service.Crosshair, m_previewImage);
+        CrosshairStyle stored = CurrentStyle;
+        bool ads = IsEditingAds;
+        AimController aim = !m_isThrowableMode && m_selectedCharacterIndex < m_characters.Count
+            ? service.FindAimController(m_characters[m_selectedCharacterIndex].Key)
+            : null;
+
+        bool drawn = m_hudPreview.Render(clone =>
+        {
+            if (aim != null)
+            {
+                aim.ApplyCrosshairPreview(clone, stored, ads);
+                return;
+            }
+
+            stored.ApplyTo(clone, true);
+            clone.SetShotRecoilPulseEnabled(false);
+            clone.ClearShotRecoilPulse();
+            clone.SetSpread(0f, SpreadDistribution.Gaussian, 3f, 60f, true);
+        });
+
+        m_previewZoomLabel.text = !drawn
+            ? string.Empty
+            : m_isThrowableMode
+                ? "게임 화면과 같은 크기입니다."
+                : stored.subDynamic
+                    ? "게임 화면과 같은 크기입니다. 쏘지 않을 때 모습이며 반동·조준에 따라 움직입니다."
+                    : ads
+                        ? "게임 화면과 같은 크기입니다. 조준 중에는 항상 이 모습입니다."
+                        : "게임 화면과 같은 크기입니다. 비조준 중에는 항상 이 모습입니다.";
     }
 
     private Slider CreateSlider(Transform parent, Vector2 position, Vector2 size, float min, float max)

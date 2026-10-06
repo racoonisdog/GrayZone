@@ -191,6 +191,114 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_crosshairSubRingBaseDiameterPixels = 16.0f;
 
+    [Tooltip("켜면 조준선 크기를 줌 전(힙파이어) FOV 기준으로 계산합니다. ADS로 화면이 확대돼도 조준선은 탄퍼짐 각도만큼만 보여, " +
+             "탄퍼짐이 줄어드는 ADS에서 힙파이어보다 항상 작게 보입니다. 끄면 확대된 화면 기준이라 ADS 원이 오히려 커질 수 있습니다.")]
+    [SerializeField] private bool m_crosshairIgnoreAdsZoom = false;
+
+    [Tooltip("ADS 중 조준선 탄퍼짐 표시에 곱할 배율입니다. 1이면 그대로, 0.75면 ADS 원을 25% 더 줄여 보입니다. 실제 탄착은 바꾸지 않습니다.")]
+    [Range(0.1f, 1.0f)]
+    [SerializeField] private float m_crosshairAdsDisplayScale = 1.0f;
+
+    /// <summary>설정에서 받은 비조준 조준선입니다. 없으면 이 컴포넌트의 조준선 필드를 그대로 씁니다.</summary>
+    private CrosshairStyle m_hipStyle;
+
+    /// <summary>설정에서 받은 조준(ADS) 중 조준선입니다. 조준 내부·외부를 비조준 칸에 담은 보기용 사본입니다.</summary>
+    private CrosshairStyle m_adsStyle;
+
+    /// <summary>지금 HUD에 적용한 조준선 쪽입니다. -1은 아직 적용 전, 0은 비조준, 1은 조준입니다.</summary>
+    private int m_appliedSubSide = -1;
+
+    /// <summary>
+    /// 외곽이 탄퍼짐·반동·조준에 따라 움직이는지 여부입니다. 설정의 동적 크로스헤어입니다. 끄면 설정 화면 미리보기 모습에 고정됩니다.
+    /// 켜져 있을 때 벌어지는 양은 무기·HUD 값 그대로이며 플레이어가 바꾸지 않습니다.
+    /// </summary>
+    private bool m_crosshairDynamic = true;
+
+    /// <summary>
+    /// 쏘지 않고 비조준일 때 조준선 간격 계산에 쓰는 FOV입니다. 자유 시점 카메라 FOV를 그대로 받아 둡니다.
+    /// 아직 자유 시점을 거치지 않았으면 음수이고, 그때는 힙파이어 FOV를 씁니다. 자유 시점 카메라는 모든 캐릭터가 같이 쓰므로 공유합니다.
+    /// </summary>
+    private static float s_crosshairRestFov = -1.0f;
+
+    /// <summary>직전 프레임 자유 시점 카메라 FOV입니다. FOV가 멈췄는지 볼 때 씁니다.</summary>
+    private static float s_lastRestCameraFov = -1.0f;
+
+    /// <summary>외곽 스타일을 마지막으로 HUD에 적용한 대상입니다. 조작 캐릭터가 바뀌면 새 캐릭터가 다시 적용합니다.</summary>
+    private static AimController s_subStyleOwner;
+
+    /// <summary>
+    /// 설정(조준선 설정 화면)에서 정한 이 캐릭터의 조준선을 받습니다. 조준 진행도에 따라 비조준/조준 쪽을 HUD에 적용합니다.
+    /// </summary>
+    /// <remarks>동적 크로스헤어를 끄면 반동·자세·조준과 관계없이 설정 화면 미리보기 크기로 고정합니다.</remarks>
+    public void SetCrosshairStyle(CrosshairStyle style)
+    {
+        m_crosshairDynamic = style == null || style.subDynamic;
+        m_hipStyle = style?.Clone();
+        m_adsStyle = style?.CreateAdsView();
+        m_appliedSubSide = -1;
+    }
+
+    /// <summary>
+    /// 설정 화면 미리보기용입니다. 이 캐릭터를 조작하며 쏘지 않고 서 있을 때의 조준선을 <paramref name="target"/>에 그대로 적용합니다.
+    /// </summary>
+    /// <param name="target">미리보기용으로 복제한 조준선 HUD입니다. 실제 HUD가 아닙니다.</param>
+    /// <param name="style">보여 줄 조준선 값입니다.</param>
+    /// <param name="ads">true면 조준(ADS) 내부·외부 모양으로 그립니다. 크기는 비조준과 같습니다.</param>
+    /// <remarks>
+    /// 간격은 <see cref="ResolveFixedCrosshairSpread"/>로 구합니다. 동적 크로스헤어를 끈 캐릭터는 게임 중에도 같은 계산을 쓰므로
+    /// 미리보기와 화면이 항상 같습니다.
+    /// </remarks>
+    public void ApplyCrosshairPreview(CrosshairController target, CrosshairStyle style, bool ads)
+    {
+        if (target == null || style == null)
+        {
+            return;
+        }
+
+        CrosshairStyle sideStyle = ads ? style.CreateAdsView() : style;
+        CrosshairSubStyle sub = sideStyle.GetHipSub();
+        sideStyle.ApplyTo(target, true);
+        target.SetSpreadDisplayBasis(m_crosshairSpreadDisplayBasis);
+        target.SetSpreadDisplayFactorOverride(m_crosshairSpreadDisplayFactorOverride);
+        target.SetShotRecoilPulseEnabled(false);
+        target.ClearShotRecoilPulse();
+
+        ResolveFixedCrosshairSpread(sub.subSpreadMode, out float spreadDegrees, out float fovDegrees);
+        SpreadDistribution distribution = m_weaponController != null
+            ? m_weaponController.Distribution
+            : SpreadDistribution.Gaussian;
+        float concentration = m_weaponController != null ? m_weaponController.SpreadConcentration : 3.0f;
+        target.SetSpread(spreadDegrees, distribution, concentration, fovDegrees, true);
+    }
+
+    /// <summary>
+    /// 쏘지 않고 서 있는 비조준 상태의 조준선 방사각과 FOV입니다.
+    /// </summary>
+    /// <remarks>
+    /// 자유 시점 카메라 FOV(줌 무시면 힙파이어 FOV)로 투영하고, 자세(앉기·공중)와 조준 여부는 보지 않습니다.
+    /// 동적 크로스헤어를 끈 캐릭터는 조준(ADS) 중에도 이 간격을 그대로 써서 크기가 변하지 않습니다(모양만 조준 외곽으로 바뀝니다).
+    /// 설정 화면 미리보기도 이 값을 같이 씁니다.
+    /// </remarks>
+    private void ResolveFixedCrosshairSpread(CrosshairSpreadMode mode, out float spreadDegrees, out float fovDegrees)
+    {
+        spreadDegrees = 0.0f;
+        if (m_weaponController != null)
+        {
+            spreadDegrees = mode == CrosshairSpreadMode.WeaponMaxSpread
+                ? m_weaponController.HipfireMaxSpread
+                : m_weaponController.HipfireMinSpread;
+        }
+
+        // 줌 무시면 게임 중에도 힙파이어 FOV로 투영하므로 같게 맞춥니다.
+        fovDegrees = m_crosshairIgnoreAdsZoom || s_crosshairRestFov <= 0.0f ? m_hipfireFov : s_crosshairRestFov;
+    }
+
+    /// <summary>이 캐릭터 조준선의 벌어짐 방식입니다. 설정 화면이 기본값을 잡을 때 읽습니다.</summary>
+    public CrosshairSpreadMode CrosshairSpreadModeSetting => m_crosshairSpreadMode;
+
+    /// <summary>이 캐릭터 조준선이 발사 반동 펄스를 쓰는지 여부입니다.</summary>
+    public bool CrosshairShotRecoilPulseEnabled => m_crosshairEnableShotRecoilPulse;
+
     /// <summary>이 캐릭터 조준선의 외부(Sub) 형태입니다. HUD는 이 캐릭터를 조작할 때 이 값으로 맞춰집니다.</summary>
     public CrosshairController.SubShape CrosshairSubShape
     {
@@ -1421,7 +1529,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_weaponController.SetSpreadRecoveryBlockedByHeldFireInput(IsContinuousFireHeld);
         }
 
-        if (m_crosshairController != null && !UsesWeaponMaxSpreadCrosshair)
+        if (m_crosshairController != null)
         {
             m_crosshairController.SetShotRecoilPulseHoldByFireInput(IsContinuousFireHeld);
         }
@@ -2236,6 +2344,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         float fovDegrees = m_mainCamera != null ? m_mainCamera.fieldOfView : 60.0f;
+
+        // 자유 시점 FOV는 멈춰 있을 때만 받아 둡니다. 조준을 풀고 돌아오는 중간 값을 쓰면 고정 조준선이 흔들립니다.
+        if (Mathf.Abs(fovDegrees - s_lastRestCameraFov) < 0.01f)
+        {
+            s_crosshairRestFov = fovDegrees;
+        }
+
+        s_lastRestCameraFov = fovDegrees;
         PushCrosshairSpread(ResolveRestingSpreadDegrees(), fovDegrees, false, false);
     }
 
@@ -2267,13 +2383,41 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private void PushCrosshairSpread(float spreadDegrees, float fovDegrees, bool isAds, bool snap)
     {
+        // 줌 진행도(0 = 힙파이어, 1 = ADS)입니다. ADS 전환은 카메라 줌 곡선을 따라 진행되므로, 조준선도 같은 비율로
+        // 줄어들어야 나린·서하처럼 조준할 때 서서히 좁아집니다. isAds 하나로 나누면 그 프레임에 한 번에 건너뜁니다.
+        float zoom = ResolveAdsZoomProgress(isAds);
+
+        // 외곽 모양은 줌이 절반을 넘는 순간 조준 쪽으로 바꿉니다. 크기는 아래에서 줌을 따라 연속으로 변합니다.
+        ApplyActiveSubStyle(zoom >= 0.5f);
         ApplyCrosshairPresentationIfNeeded();
 
-        if (UsesWeaponMaxSpreadCrosshair && m_weaponController != null)
+        if (!m_crosshairDynamic)
         {
-            m_weaponController.GetSpreadRange(isAds, out _, out spreadDegrees);
-            // 최대 경계 링은 발사 직후의 UI 펄스까지 얹으면 실제 산탄 콘보다 커집니다.
+            // 동적 크로스헤어를 껐으면 반동·자세·조준과 관계없이 설정 화면 미리보기 크기 그대로 둡니다. 조준 중에는 모양만 조준 외곽으로 바뀝니다.
+            ResolveFixedCrosshairSpread(m_crosshairSpreadMode, out spreadDegrees, out fovDegrees);
             snap = true;
+        }
+        else if (UsesWeaponMaxSpreadCrosshair && m_weaponController != null)
+        {
+            m_weaponController.GetSpreadRange(false, out _, out float hipMaxSpread);
+            m_weaponController.GetSpreadRange(true, out _, out float adsMaxSpread);
+            spreadDegrees = Mathf.Lerp(hipMaxSpread, adsMaxSpread, zoom);
+
+            // 크기 변화는 위에서 줌을 따라 매 프레임 계산하므로 즉시 반영해도 부드럽게 줄어듭니다.
+            // 반동에 따른 벌어짐은 이 방식에서는 발사 펄스가 맡습니다.
+            snap = true;
+        }
+
+        // ADS 표시 배율과 줌 무시는 표시만 바꿉니다. 실제 탄착은 무기의 탄퍼짐 그대로입니다. 고정 조준선은 위 계산에 이미 들어 있습니다.
+        if (m_crosshairDynamic)
+        {
+            spreadDegrees *= Mathf.Lerp(1.0f, Mathf.Clamp(m_crosshairAdsDisplayScale, 0.1f, 1.0f), zoom);
+
+            if (m_crosshairIgnoreAdsZoom)
+            {
+                // 확대된 FOV로 투영하면 같은 각도도 픽셀이 커져, 탄퍼짐이 덜 줄어드는 무기는 ADS 원이 더 커 보입니다.
+                fovDegrees = m_hipfireFov;
+            }
         }
 
         SpreadDistribution distribution = m_weaponController != null
@@ -2285,8 +2429,66 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         // 탄퍼짐이 상한에 가까워질수록 발당 펄스 기여를 같은 비율로 줄입니다. 상한 gap의 들썩임을 막는
         // 목적은 예전 상한 판정과 같지만, 한 프레임에 펄스를 버리지 않으므로 총 gap이 도중에 줄어들지 않습니다.
+        // 최대 탄퍼짐 방식은 반동 벌어짐을 펄스로만 보여 주므로 감쇠 없이 그대로 둡니다.
         m_crosshairController.SetShotRecoilPulseSpreadScale(
-            UsesWeaponMaxSpreadCrosshair ? 0.0f : 1.0f - GetCurrentSpreadProgress01());
+            UsesWeaponMaxSpreadCrosshair ? 1.0f : 1.0f - GetCurrentSpreadProgress01());
+    }
+
+    /// <summary>
+    /// 조준 여부에 맞는 조준선(내부·외부 모양·간격·크기·색, 벌어짐 방식)을 HUD와 이 컴포넌트에 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// 설정에서 받은 조준선이 없으면 아무것도 하지 않아, 이 컴포넌트의 조준선 필드가 그대로 쓰입니다.
+    /// 쪽이 바뀌었거나 다른 캐릭터가 HUD를 썼을 때만 다시 적용합니다. 투척 모드 중에는 투척 조준선이 HUD를 소유하므로
+    /// 건드리지 않고, 끝난 뒤 다시 적용하도록 표시만 지웁니다.
+    /// </remarks>
+    private void ApplyActiveSubStyle(bool ads)
+    {
+        if (m_hipStyle == null || m_crosshairController == null)
+        {
+            return;
+        }
+
+        if (m_input != null && m_input.ThrowMode)
+        {
+            m_appliedSubSide = -1;
+            return;
+        }
+
+        int side = ads ? 1 : 0;
+        if (side == m_appliedSubSide && s_subStyleOwner == this)
+        {
+            return;
+        }
+
+        CrosshairStyle sideStyle = ads && m_adsStyle != null ? m_adsStyle : m_hipStyle;
+        sideStyle.GetHipMain().ApplyTo(m_crosshairController);
+        CrosshairSubStyle style = sideStyle.GetHipSub();
+        style.ApplyTo(m_crosshairController);
+
+        // 아래 필드는 ApplyCrosshairPresentationIfNeeded가 HUD와 맞는지 비교하는 기준이라 함께 바꿉니다.
+        m_crosshairSubShape = style.subShape;
+        m_crosshairCenterSpacePixels = style.centerSpacePixels;
+        m_crosshairSubRingBaseDiameterPixels = style.subRingSizePixels;
+        m_crosshairSpreadMode = style.subSpreadMode;
+        m_crosshairEnableShotRecoilPulse = m_crosshairDynamic;
+
+        m_appliedSubSide = side;
+        s_subStyleOwner = this;
+    }
+
+    /// <summary>
+    /// 지금 FOV가 힙파이어에서 ADS로 얼마나 옮겨 갔는지(0~1)를 돌려줍니다.
+    /// </summary>
+    /// <param name="isAds">두 FOV가 같아 비율을 낼 수 없을 때 쓸 ADS 여부입니다.</param>
+    private float ResolveAdsZoomProgress(bool isAds)
+    {
+        if (Mathf.Approximately(m_hipfireFov, m_adsFov))
+        {
+            return isAds ? 1.0f : 0.0f;
+        }
+
+        return Mathf.Clamp01(Mathf.InverseLerp(m_hipfireFov, m_adsFov, m_baseFov));
     }
 
     /// <summary>이 캐릭터가 직접 조작될 때만, 자신이 소유한 조준선 표시값을 공용 HUD에 적용합니다.</summary>
@@ -3029,7 +3231,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 실제 탄퍼짐은 초반 정밀탄에서 0일 수 있으므로, 발사 성공 자체를 기준으로 UI 반동 펄스를 별도로 준다.
         // 상한 근처에서의 들썩임 억제는 펄스를 버리는 대신 UpdateCrosshair가 매 프레임 통지하는
         // 비례 감쇠(SetShotRecoilPulseSpreadScale)가 담당한다. 그래서 여기서는 분기 없이 항상 펄스를 준다.
-        if (m_crosshairController != null && !UsesWeaponMaxSpreadCrosshair)
+        if (m_crosshairController != null && m_crosshairEnableShotRecoilPulse)
         {
             m_crosshairController.TriggerShotRecoilPulse();
         }

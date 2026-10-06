@@ -646,6 +646,12 @@ public class CrosshairController : MonoBehaviour
             return;
         }
 
+        // 문서가 아직 패널에 붙지 않았으면(설정 화면 미리보기용 복제본을 막 만든 직후 등) 그릴 요소가 없습니다.
+        if (m_rootElement == null && !CacheVisualElements())
+        {
+            return;
+        }
+
         UpdateReloadBlink();
         UpdateHitMarkerFade();
         UpdateKillFade();

@@ -243,6 +243,9 @@ public sealed class CrosshairSettingsService : MonoBehaviour
             aim.CrosshairSubShape = style.subShape;
             aim.CrosshairCenterSpacePixels = style.centerSpacePixels;
             aim.CrosshairSubRingBaseDiameterPixels = style.subRingSizePixels;
+
+            // 비조준/조준 조준선(내부·외부)과 동적 여부는 AimController가 조준 진행도에 따라 골라 HUD에 적용합니다.
+            aim.SetCrosshairStyle(style);
         }
     }
 
@@ -275,13 +278,18 @@ public sealed class CrosshairSettingsService : MonoBehaviour
                 style.subShape = aim.CrosshairSubShape;
                 style.centerSpacePixels = aim.CrosshairCenterSpacePixels;
                 style.subRingSizePixels = aim.CrosshairSubRingBaseDiameterPixels;
+                style.subSpreadMode = aim.CrosshairSpreadModeSetting;
             }
 
             m_sceneCharacterStyles[pair.Key] = style;
         }
     }
 
-    private AimController FindAimController(PlayerbleCharacterId characterId)
+    /// <summary>캐릭터들이 같이 쓰는 실제 조준선 HUD입니다. 설정 화면 미리보기가 이것을 복제합니다.</summary>
+    public CrosshairController Crosshair => m_crosshair;
+
+    /// <summary>캐릭터의 AimController입니다. 설정 화면 미리보기가 그 캐릭터의 간격 계산을 빌려 씁니다.</summary>
+    public AimController FindAimController(PlayerbleCharacterId characterId)
     {
         if (m_squadManager == null || m_squadManager.PlayerDataSources == null)
         {
