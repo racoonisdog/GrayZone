@@ -19,7 +19,7 @@ MonoBehaviour:
   Gun_m_fireMode: 1
   Gun_m_reloadTime: 1.3335
   Gun_m_reloadMode: 0
-  Gun_m_hitscanDamage: 7
+  Gun_m_hitscanDamage: 20
   Gun_m_allowHeadshot: 1
   Gun_m_headshotDamageMultiplier: 2
   Gun_m_hitscanRange: 100
@@ -62,13 +62,13 @@ MonoBehaviour:
     m_steps:
     - m_maxDistance: 30
       m_damageMultiplier: 1
-      m_flatDamage: 7
+      m_flatDamage: 20
     - m_maxDistance: 60
-      m_damageMultiplier: 0.86
-      m_flatDamage: 6
+      m_damageMultiplier: 0.9
+      m_flatDamage: 18
     - m_maxDistance: 100
-      m_damageMultiplier: 0.71
-      m_flatDamage: 5
+      m_damageMultiplier: 0.8
+      m_flatDamage: 16
   Gun_m_penetration:
     m_unlimited: 0
     m_maxPenetrations: 3
