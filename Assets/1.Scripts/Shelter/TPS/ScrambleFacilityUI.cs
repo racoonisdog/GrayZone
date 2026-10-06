@@ -37,6 +37,22 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     [SerializeField] private ScrambleFacility m_facility;
     [SerializeField] private ResourceDefinitionCatalog m_resourceCatalog;
 
+    [Header("Menu")]
+    [Tooltip("Scramble UI를 열면 먼저 보이는 업그레이드/출격 선택 화면입니다.")]
+    [SerializeField] private GameObject m_menuRoot;
+    [SerializeField] private Button m_upgradeMenuButton;
+    [SerializeField] private Button m_sortieMenuButton;
+
+    [Header("Upgrade View")]
+    [Tooltip("Menu의 업그레이드 버튼을 누르면 나타나는 기존 업그레이드 화면입니다.")]
+    [SerializeField] private GameObject m_upgradeRoot;
+
+    [Header("Sortie Confirm")]
+    [Tooltip("Menu의 출격 버튼을 누르면 나타나는 출격 확인 화면입니다.")]
+    [SerializeField] private GameObject m_sortieConfirmRoot;
+    [SerializeField] private Button m_sortieConfirmButton;
+    [SerializeField] private Button m_sortieCancelButton;
+
     [Header("Buttons")]
     [SerializeField] private Button m_battleSceneButton;
     [FormerlySerializedAs("m_shooter01UpgradeButton")]
@@ -59,8 +75,12 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     public bool IsOpen => gameObject.activeSelf;
     public event Action Closed;
 
+    private Transform UpgradeContentRoot =>
+        m_upgradeRoot != null ? m_upgradeRoot.transform : transform;
+
     private void Awake()
     {
+        CacheViews();
         CacheFacility();
         CacheResourceCatalog();
         CacheUpgradeButtons();
@@ -69,6 +89,7 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
 
     private void OnEnable()
     {
+        CacheViews();
         CacheFacility();
         CacheResourceCatalog();
         CacheUpgradeButtons();
@@ -93,11 +114,13 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         Unbind();
         m_facility = facility;
         gameObject.SetActive(true);
+        CacheViews();
         CacheResourceCatalog();
         CacheUpgradeButtons();
         CacheUpgradeRows();
         Bind();
         ClearNotice();
+        ShowMenu();
         Refresh();
     }
 
@@ -105,16 +128,27 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     {
         bool wasOpen = gameObject.activeSelf;
         ClearNotice();
+        ShowMenu();
         gameObject.SetActive(false);
 
         if (wasOpen)
             Closed?.Invoke();
     }
 
+    /// <summary>
+    /// 업그레이드 화면이나 출격 확인 화면이 열려 있으면 Menu로 돌아가고, 아니면 Scramble UI를 닫습니다.
+    /// </summary>
     public bool TryHandleEscape()
     {
         if (!IsOpen)
             return false;
+
+        if (m_menuRoot != null && !m_menuRoot.activeSelf)
+        {
+            ClearNotice();
+            ShowMenu();
+            return true;
+        }
 
         Close();
         return true;
@@ -166,9 +200,64 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
 
     private void HandleBattleSceneClicked()
     {
+        TryEnterBattleScene();
+    }
+
+    /// <summary>
+    /// BattleButton과 출격 확인의 "한다"가 공유하는 전투 씬 진입 판정입니다.
+    /// </summary>
+    private bool TryEnterBattleScene()
+    {
         ClearNotice();
-        if (m_facility == null || !m_facility.TryLoadBattleScene())
-            SetNotice("전투 씬으로 이동하지 못했습니다.");
+        if (m_facility != null && m_facility.TryLoadBattleScene())
+            return true;
+
+        SetNotice("전투 씬으로 이동하지 못했습니다.");
+        return false;
+    }
+
+    private void HandleUpgradeMenuClicked()
+    {
+        ClearNotice();
+        SetViewState(menu: false, upgrade: true, sortieConfirm: false);
+        Refresh();
+    }
+
+    private void HandleSortieMenuClicked()
+    {
+        ClearNotice();
+        SetViewState(menu: false, upgrade: false, sortieConfirm: true);
+    }
+
+    private void HandleSortieConfirmClicked()
+    {
+        if (!TryEnterBattleScene())
+            ShowMenu();
+    }
+
+    private void HandleSortieCancelClicked()
+    {
+        ClearNotice();
+        ShowMenu();
+    }
+
+    private void ShowMenu()
+    {
+        // Menu가 없는 기존 구성에서는 업그레이드 화면을 그대로 보여줍니다.
+        if (m_menuRoot == null)
+        {
+            SetViewState(menu: false, upgrade: true, sortieConfirm: false);
+            return;
+        }
+
+        SetViewState(menu: true, upgrade: false, sortieConfirm: false);
+    }
+
+    private void SetViewState(bool menu, bool upgrade, bool sortieConfirm)
+    {
+        SetActive(m_menuRoot, menu);
+        SetActive(m_upgradeRoot, upgrade);
+        SetActive(m_sortieConfirmRoot, sortieConfirm);
     }
 
     private void HandleTrapUpgradeClicked()
@@ -216,6 +305,14 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     {
         Unbind();
 
+        if (m_upgradeMenuButton != null)
+            m_upgradeMenuButton.onClick.AddListener(HandleUpgradeMenuClicked);
+        if (m_sortieMenuButton != null)
+            m_sortieMenuButton.onClick.AddListener(HandleSortieMenuClicked);
+        if (m_sortieConfirmButton != null)
+            m_sortieConfirmButton.onClick.AddListener(HandleSortieConfirmClicked);
+        if (m_sortieCancelButton != null)
+            m_sortieCancelButton.onClick.AddListener(HandleSortieCancelClicked);
         if (m_battleSceneButton != null)
             m_battleSceneButton.onClick.AddListener(HandleBattleSceneClicked);
         if (m_trapUpgradeButton != null)
@@ -234,6 +331,14 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
 
     private void Unbind()
     {
+        if (m_upgradeMenuButton != null)
+            m_upgradeMenuButton.onClick.RemoveListener(HandleUpgradeMenuClicked);
+        if (m_sortieMenuButton != null)
+            m_sortieMenuButton.onClick.RemoveListener(HandleSortieMenuClicked);
+        if (m_sortieConfirmButton != null)
+            m_sortieConfirmButton.onClick.RemoveListener(HandleSortieConfirmClicked);
+        if (m_sortieCancelButton != null)
+            m_sortieCancelButton.onClick.RemoveListener(HandleSortieCancelClicked);
         if (m_battleSceneButton != null)
             m_battleSceneButton.onClick.RemoveListener(HandleBattleSceneClicked);
         if (m_trapUpgradeButton != null)
@@ -248,6 +353,30 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             m_wireUpgradeButton.onClick.RemoveListener(HandleWireUpgradeClicked);
         if (m_facility != null)
             m_facility.StateChanged -= HandleFacilityStateChanged;
+    }
+
+    private void CacheViews()
+    {
+        if (m_menuRoot == null)
+            m_menuRoot = transform.Find("Menu")?.gameObject;
+
+        if (m_menuRoot != null)
+        {
+            m_upgradeMenuButton ??= m_menuRoot.transform.Find("UpgradeButton")?.GetComponent<Button>();
+            m_sortieMenuButton ??= m_menuRoot.transform.Find("SortieButton")?.GetComponent<Button>();
+        }
+
+        if (m_upgradeRoot == null)
+            m_upgradeRoot = transform.Find("Upgrade")?.gameObject;
+
+        if (m_sortieConfirmRoot == null)
+            m_sortieConfirmRoot = transform.Find("SortieConfirm")?.gameObject;
+
+        if (m_sortieConfirmRoot != null)
+        {
+            m_sortieConfirmButton ??= m_sortieConfirmRoot.transform.Find("YesButton")?.GetComponent<Button>();
+            m_sortieCancelButton ??= m_sortieConfirmRoot.transform.Find("NoButton")?.GetComponent<Button>();
+        }
     }
 
     private void CacheFacility()
@@ -284,16 +413,17 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         m_shooterRow ??= new UpgradeRowView();
         m_wireRow ??= new UpgradeRowView();
 
-        m_trapRow.Cache(transform, "TrapUpgrade");
-        m_spikeRow.Cache(transform, "SpikeUpgrade");
-        m_explosiveRow.Cache(transform, "ExplosiveUpgrade");
-        m_shooterRow.Cache(transform, "ShooterUpgrade");
-        m_wireRow.Cache(transform, "WireUpgrade");
+        Transform contentRoot = UpgradeContentRoot;
+        m_trapRow.Cache(contentRoot, "TrapUpgrade");
+        m_spikeRow.Cache(contentRoot, "SpikeUpgrade");
+        m_explosiveRow.Cache(contentRoot, "ExplosiveUpgrade");
+        m_shooterRow.Cache(contentRoot, "ShooterUpgrade");
+        m_wireRow.Cache(contentRoot, "WireUpgrade");
     }
 
     private Button FindUpgradeButton(string relativePath)
     {
-        Transform buttonTransform = transform.Find(relativePath);
+        Transform buttonTransform = UpgradeContentRoot.Find(relativePath);
         return buttonTransform != null
             ? buttonTransform.GetComponent<Button>()
             : null;
@@ -349,5 +479,11 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     {
         if (target != null)
             target.text = value;
+    }
+
+    private static void SetActive(GameObject target, bool active)
+    {
+        if (target != null && target.activeSelf != active)
+            target.SetActive(active);
     }
 }
