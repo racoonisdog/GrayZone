@@ -112,7 +112,7 @@ MonoBehaviour:
   m_rebuildPolicy: 1
   m_buildChargesPerDefense: 0
   m_remainingBuildCharges: -1
-  m_damage: 1
+  m_damage: 3
   m_damageMode: 1
   m_damageTickInterval: 1
   m_drawRangeGizmo: 1
@@ -121,7 +121,7 @@ MonoBehaviour:
   m_targetLayers:
     serializedVersion: 2
     m_Bits: 512
-  m_moveSpeedMultiplier: 0.7
+  m_moveSpeedMultiplier: 0.65
   m_forceWalk: 0
   m_durabilityCostPerTarget: 1
   m_entrySlowMultiplier: 1

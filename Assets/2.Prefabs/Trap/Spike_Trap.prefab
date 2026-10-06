@@ -83,7 +83,7 @@ MonoBehaviour:
   m_rebuildPolicy: 1
   m_buildChargesPerDefense: 0
   m_remainingBuildCharges: -1
-  m_damage: 8
+  m_damage: 10
   m_damageMode: 0
   m_damageTickInterval: 1
   m_drawRangeGizmo: 1
@@ -96,7 +96,7 @@ MonoBehaviour:
   m_forceWalk: 1
   m_durabilityCostPerTarget: 1
   m_entrySlowMultiplier: 0.2
-  m_entrySlowDuration: 0.2
+  m_entrySlowDuration: 0.15
 --- !u!1001 &4294642404381294462
 PrefabInstance:
   m_ObjectHideFlags: 0

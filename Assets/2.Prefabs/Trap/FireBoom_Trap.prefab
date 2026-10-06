@@ -72,7 +72,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 768
   m_duration: 5
-  m_damagePerSecond: 10
+  m_damagePerSecond: 14
   m_fireTickInterval: 0.5
   m_allyDamageMultiplier: 0.5
   m_damageOnEnter: 1
