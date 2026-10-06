@@ -2312,6 +2312,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1589198060}
   - component: {fileID: 1589198059}
+  - component: {fileID: 1589198061}
   m_Layer: 0
   m_Name: Title Screen
   m_TagString: Untagged
@@ -2360,6 +2361,19 @@ Transform:
   - {fileID: 82810537}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1589198061
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1589198058}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c01b2c9bfdf4a5084909b65bfe3910e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MainSceneSaveManager
+  defaultSaveData: {fileID: 11400000, guid: a708ff338e2c93645aeed315c2b1b0aa, type: 2}
 --- !u!1 &1686505231
 GameObject:
   m_ObjectHideFlags: 0
@@ -2839,7 +2853,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1952490561}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1589198061}
+        m_TargetAssemblyTypeName: MainSceneSaveManager, Assembly-CSharp
+        m_MethodName: OnStartNewGameButtonClicked
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: 
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1952490561
 MonoBehaviour:
   m_ObjectHideFlags: 0

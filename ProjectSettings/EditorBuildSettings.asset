@@ -6,6 +6,12 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/0.Scenes/JungHyeon/Scenes/BootstrapScene.unity
+    guid: 62cf6d0f21487ca4e895f4ad570ee9b0
+  - enabled: 1
+    path: Assets/0.Scenes/JangHu/TitleScene.unity
+    guid: e123d7df24397e34fbe67a0cfb1acedd
+  - enabled: 1
     path: Assets/0.Scenes/JungHyeon/Scenes/ShelterScene_Jung.unity
     guid: 7fa2cd76fc4c8a346b9d819af951fbc8
   - enabled: 1
