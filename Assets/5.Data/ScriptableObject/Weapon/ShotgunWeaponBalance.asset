@@ -26,20 +26,20 @@ MonoBehaviour:
   Gun_m_knockbackImpulse: 0
   Gun_m_hipfireStandingMinSpread: 2
   Gun_m_hipfireStandingMaxSpread: 6
-  Gun_m_hipfireCrouchMinSpread: 1.9
-  Gun_m_hipfireCrouchMaxSpread: 5.7
+  Gun_m_hipfireCrouchMinSpread: 1.7
+  Gun_m_hipfireCrouchMaxSpread: 5.1
   Gun_m_hipfireAirborneMinSpread: 6
   Gun_m_hipfireAirborneMaxSpread: 10
   Gun_m_hipfireMinSpreadShotCount: 0
   Gun_m_hipfireSpreadIncreasePerShot: 0.5
   Gun_m_hipfireSpreadRecoveryPerSecond: 8
   Gun_m_hipfireSpreadRecoveryDelay: 0.15
-  Gun_m_adsStandingMinSpread: 1.6
-  Gun_m_adsStandingMaxSpread: 4.8
-  Gun_m_adsCrouchMinSpread: 1.52
-  Gun_m_adsCrouchMaxSpread: 4.56
-  Gun_m_adsAirborneMinSpread: 4.8
-  Gun_m_adsAirborneMaxSpread: 8
+  Gun_m_adsStandingMinSpread: 1.3
+  Gun_m_adsStandingMaxSpread: 3.9
+  Gun_m_adsCrouchMinSpread: 1.105
+  Gun_m_adsCrouchMaxSpread: 3.315
+  Gun_m_adsAirborneMinSpread: 3.9
+  Gun_m_adsAirborneMaxSpread: 6.5
   Gun_m_adsMinSpreadShotCount: 0
   Gun_m_adsSpreadIncreasePerShot: 0.25
   Gun_m_adsSpreadRecoveryPerSecond: 8
