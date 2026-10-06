@@ -45,7 +45,7 @@ public class WireTrap : Trap
 
     [Tooltip("범위 안에 있는 동안 적용할 이동 속도 배율입니다. 0.5면 절반 속도이고 1이면 감속이 없습니다. 이동 속도와 애니메이션 재생 속도가 함께 줄어듭니다.")]
     [Range(0.0f, 1.0f)]
-    [SerializeField] private float m_moveSpeedMultiplier = 0.5f;
+    [SerializeField] private float m_moveSpeedMultiplier = 0.7f;
 
     [Tooltip("켜면 위 배율에 더해 달리기 자체를 막고 걷기 동작으로만 이동하게 합니다.")]
     [SerializeField] private bool m_forceWalk = false;

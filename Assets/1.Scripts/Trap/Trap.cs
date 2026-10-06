@@ -80,7 +80,7 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     [Tooltip("설치에 필요한 홀드 시간(초)입니다. 0이면 누르는 즉시 설치됩니다. " +
              "기본 1초인 이유: 튜토리얼 넘김이 상호작용 단일 탭이라, 설치를 홀드로 두어 두 입력을 구분합니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_buildHoldDuration = 1.0f;
+    [SerializeField] private float m_buildHoldDuration = 0.5f;
 
     [Header("Display")]
     [Tooltip("함정 안내 HUD에 표시할 이름입니다. 비워 두면 함정 종류의 기본 이름을 씁니다.")]

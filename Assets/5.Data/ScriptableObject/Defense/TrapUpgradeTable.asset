@@ -15,7 +15,7 @@ MonoBehaviour:
   m_explosiveLevels:
   - RangeMultiplier: 1.25
   m_wireLevels:
-  - MoveSpeedScale: 0.5
+  - MoveSpeedScale: 0.5714286
     BonusDurability: 50
   m_spikeLevels:
   - DamageMultiplier: 1.25
