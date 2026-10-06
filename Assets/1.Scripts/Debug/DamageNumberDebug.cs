@@ -41,8 +41,8 @@ public sealed class DamageNumberDebug : MonoBehaviour
     private const int MaxEntries = 128;
 
     [Header("Debug")]
-    [Tooltip("피해 숫자 표시 전체를 켜고 끕니다.")]
-    [SerializeField] private bool m_showDamageNumbers = true;
+    [Tooltip("피해 숫자 표시 전체를 켜고 끕니다. 기본은 꺼짐이고 F9 트레이너 디버그 탭에서 켭니다.")]
+    [SerializeField] private bool m_showDamageNumbers = false;
 
     [Tooltip("Game 뷰에 피해 숫자를 표시합니다.")]
     [SerializeField] private bool m_showInGameView = true;
@@ -61,8 +61,8 @@ public sealed class DamageNumberDebug : MonoBehaviour
     [Min(8)]
     [SerializeField] private int m_damageNumberFontSize = 28;
 
-    [Tooltip("조준 중 조준선 아래에 조준점까지의 거리와 그 거리에서 들어갈 피해를 표시합니다.")]
-    [SerializeField] private bool m_showAimDamagePreview = true;
+    [Tooltip("조준 중 조준선 아래에 조준점까지의 거리와 그 거리에서 들어갈 피해를 표시합니다. 기본은 꺼짐이고 F9 트레이너 디버그 탭에서 켭니다.")]
+    [SerializeField] private bool m_showAimDamagePreview = false;
 
     private static DamageNumberDebug s_instance;
 
