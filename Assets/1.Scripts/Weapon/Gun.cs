@@ -1477,10 +1477,20 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// 트랩은 적 감지를 위해 트리거 콜라이더를 유지해야 하므로 콜라이더 자체를 끄지 않습니다.
     /// 대신 플레이어의 카메라 조준선과 총구 히트스캔에서 Trap 레이어를 공통으로 제외해,
     /// 개별 무기 프리팹의 마스크가 잘못 설정돼도 트랩이 탄을 막지 않게 합니다.
+    ///
+    /// Ignore Raycast 레이어는 진영과 관계없이 항상 뺍니다. 정문 앞 OnlyTargetZone 같은 감지 구역이 이 레이어의
+    /// 트리거인데, 사격 레이가 트리거까지 맞히도록 쏘기 때문에 마스크에 들어 있으면 보이지 않는 벽처럼 탄을 멈춰
+    /// 그 너머의 적에게 피해와 히트마커가 들어가지 않았습니다.
     /// </remarks>
     private LayerMask GetEffectiveHitscanLayerMask()
     {
         int mask = m_hitscanLayerMask.value;
+        int ignoreRaycastLayer = LayerMask.NameToLayer("Ignore Raycast");
+        if (ignoreRaycastLayer >= 0)
+        {
+            mask &= ~(1 << ignoreRaycastLayer);
+        }
+
         if (m_ownerFaction != Faction.Player)
         {
             return mask;
