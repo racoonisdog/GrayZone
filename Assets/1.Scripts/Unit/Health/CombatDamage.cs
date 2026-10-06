@@ -5,6 +5,9 @@ using UnityEngine;
 /// </summary>
 public static class CombatDamage
 {
+    /// <summary>Unity 내장 Ignore Raycast 레이어 번호입니다. 사격 판정에서 통과시킵니다.</summary>
+    private const int IgnoreRaycastLayer = 2;
+
     /// <summary>
     /// 한 번의 명중 판정이 끝난 뒤 돌려주는 결과입니다. 크로스헤어와 처치 피드백이 이 값을 씁니다.
     /// </summary>
@@ -84,6 +87,14 @@ public static class CombatDamage
     public static bool BlocksShot(Collider collider, Faction attacker, bool allyPassThrough)
     {
         if (collider == null)
+        {
+            return false;
+        }
+
+        // Ignore Raycast 레이어는 사격 판정에서 없는 것으로 봅니다. 사격 레이는 레이어 마스크를 직접 넘기므로
+        // Unity가 기본으로 해 주는 Ignore Raycast 제외가 적용되지 않아, 방어 구역 판정 박스(OnlyTargetZone) 같은
+        // 판정용 볼륨에 탄과 조준점이 걸렸습니다. Ignore Raycast는 Unity 내장 레이어라 번호가 항상 2입니다.
+        if (collider.gameObject.layer == IgnoreRaycastLayer)
         {
             return false;
         }
