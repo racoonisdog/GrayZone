@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -233,6 +234,35 @@ public abstract class CombatSceneManager : MonoBehaviour, IInputModeController
     protected virtual void Start()
     {
         SubscribeGameOverRequest();
+        StartCoroutine(ApplyInitialInputModeWhenReady());
+    }
+
+    /// <summary>전투 씬에 들어온 직후 입력 모드를 처음 적용할 때 조작 멤버를 기다리는 최대 프레임 수입니다.</summary>
+    private const int InitialInputModeMaxWaitFrames = 120;
+
+    /// <summary>
+    /// 조작 멤버가 준비되면 현재 입력 모드(기본 게임플레이)를 한 번 적용합니다. 게임플레이면 커서를 잠그고 숨깁니다.
+    /// </summary>
+    /// <remarks>
+    /// 셸터는 UI를 쓰느라 커서를 풀고 보이게 둔 채 씬을 넘깁니다. 전투 씬에서는 입력 모드를 바꾸거나 창 포커스가
+    /// 돌아올 때만 커서를 다시 잠가서, 들어온 직후에는 커서가 남아 있고 Alt+Tab을 해야 사라졌습니다.
+    /// 조작 멤버는 <see cref="SquadManager"/>의 Start 코루틴이 정하므로, 잡힐 때까지 몇 프레임 기다립니다.
+    /// 그 사이 튜토리얼 등이 UI 모드로 바꿨다면 그 모드를 그대로 다시 적용합니다.
+    /// </remarks>
+    private IEnumerator ApplyInitialInputModeWhenReady()
+    {
+        for (int frame = 0; frame < InitialInputModeMaxWaitFrames; frame++)
+        {
+            yield return null;
+
+            if (TryResolveCurrentPlayerControls())
+            {
+                SetInputMode(m_currentInputMode);
+                yield break;
+            }
+        }
+
+        Debug.LogWarning($"[{GetType().Name}] 조작 멤버를 찾지 못해 시작 입력 모드(커서 잠금)를 적용하지 못했습니다.", this);
     }
 
     protected virtual void OnDestroy()
