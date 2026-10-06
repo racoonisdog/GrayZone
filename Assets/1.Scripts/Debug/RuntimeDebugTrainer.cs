@@ -875,6 +875,8 @@ public class RuntimeDebugTrainer : MonoBehaviour
                     DrawShotRangeDebugSection(target);
                     GUILayout.Space(6);
                     DrawThrowableSection();
+                    GUILayout.Space(6);
+                    DrawPotionSection();
                     break;
 
                 case 3:
@@ -2297,6 +2299,21 @@ public class RuntimeDebugTrainer : MonoBehaviour
         {
             GUILayout.Label(m_throwableGrantResult);
         }
+    }
+
+    /// <summary>회복약 보유 수량과 무제한 토글을 그립니다. 씬에 <see cref="PotionManager"/>가 없으면 안내만 표시합니다.</summary>
+    private void DrawPotionSection()
+    {
+        GUILayout.Label("■ 회복약", m_headerStyle);
+        PotionManager potion = FindFirstObjectByType<PotionManager>();
+        if (potion == null)
+        {
+            GUILayout.Label("씬에 PotionManager가 없습니다.");
+            return;
+        }
+
+        GUILayout.Label($"보유 {potion.Count}개 · 사용 키 {potion.UseKey}");
+        potion.DebugInfinitePotions = GUILayout.Toggle(potion.DebugInfinitePotions, " 회복약 무제한");
     }
 
     /// <summary>씬의 투척기에 들어 있지만 아이템 정의가 연결되지 않은 투척물 Prefab 이름을 모읍니다.</summary>
