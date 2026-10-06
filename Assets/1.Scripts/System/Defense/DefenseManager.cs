@@ -32,6 +32,10 @@ public sealed class DefenseManager : CombatSceneManager
     /// <remarks>방어전 맵에는 소음 차폐를 쓰지 않으므로 NoiseManager가 없어도 경고하지 않습니다.</remarks>
     protected override bool UsesNoiseManager => false;
 
+    /// <inheritdoc />
+    /// <remarks>방어전에서는 정문으로 가는 적도 막아야 하므로, 스쿼드와 교전하지 않은 적이라도 보이면 바로 노립니다.</remarks>
+    public override SquadEnemyAwareness SquadEnemyAwareness => SquadEnemyAwareness.AnyVisible;
+
     /// <summary>Shooter 업그레이드 한 레벨에서 함께 배치되는 좌우 지정사수 한 쌍입니다.</summary>
     /// <remarks>
     /// 기획 기준(2026-09-29): 레벨마다 좌우 한 명씩, 2명이 추가됩니다. 1레벨은 좌우 2명(A_01, B_01),
