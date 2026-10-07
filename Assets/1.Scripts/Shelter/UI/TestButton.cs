@@ -12,6 +12,8 @@ public class TestButton : MonoBehaviour, ICharacterListItemView
     [FormerlySerializedAs("npcCatalog")]
     [SerializeField] private CharacterPortraitCatalog characterCatalog;
     [SerializeField] private CharacterInjuryIconCatalog injuryIconCatalog;
+    [Tooltip("선택: 캐릭터별 부상 이미지. 현재 부상 상태의 이미지가 있으면 기본 초상화 대신 표시합니다.")]
+    [SerializeField] private CharacterInjuryPortraitCatalog characterInjuryCatalog;
 
     [Header("Images")]
     [SerializeField] private Image portraitImage;
@@ -60,7 +62,11 @@ public class TestButton : MonoBehaviour, ICharacterListItemView
         injuryState = character.InjuryState;
         clicked = onClicked;
 
-        Sprite portrait = characterCatalog != null ? characterCatalog.GetPortrait(character.DefinitionId) : null;
+        Sprite portrait = characterInjuryCatalog != null
+            ? characterInjuryCatalog.GetIcon(character.DefinitionId, injuryState)
+            : null;
+        if (portrait == null && characterCatalog != null)
+            portrait = characterCatalog.GetPortrait(character.DefinitionId);
         Sprite injuryIcon = injuryIconCatalog != null ? injuryIconCatalog.GetIcon(injuryState) : null;
 
         if (portraitImage != null)
