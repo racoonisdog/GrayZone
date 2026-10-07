@@ -22,7 +22,7 @@ MonoBehaviour:
   m_fixedSpawnDelay: 3
   m_firstSpawnDelayMin: 3
   m_firstSpawnDelayMax: 3
-  m_spawnIntervalMin: 5
-  m_spawnIntervalMax: 6
+  m_spawnIntervalMin: 7
+  m_spawnIntervalMax: 8
   m_previewCombatDuration: 50
 
