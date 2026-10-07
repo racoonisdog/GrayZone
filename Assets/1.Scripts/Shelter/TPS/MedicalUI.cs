@@ -13,6 +13,15 @@ public class MedicalUI : MonoBehaviour
     [SerializeField] private GameObject m_root;
     [SerializeField] private bool m_hideOnAwake = true;
 
+    [Header("Menu (Optional)")]
+    [Tooltip("의료실 UI를 열면 먼저 보이는 진료/업그레이드 선택 화면입니다. 비워 두면 진료 화면을 바로 엽니다.")]
+    [SerializeField] private GameObject m_menuRoot;
+    [SerializeField] private Button m_treatmentMenuButton;
+    [Tooltip("Menu의 진료 버튼을 누르면 나타나는 진료 화면입니다.")]
+    [SerializeField] private GameObject m_treatmentRoot;
+    [Tooltip("진료 화면에서는 Menu로, Menu에서는 의료실 UI를 닫습니다.")]
+    [SerializeField] private Button m_backButton;
+
     [Header("Treatment Candidates")]
     [SerializeField] private TestButton[] m_treatmentCandidateViews;
     [SerializeField] private TextMeshProUGUI m_noTreatmentTargetText;
@@ -42,6 +51,7 @@ public class MedicalUI : MonoBehaviour
 
         CacheChildViews();
         BindHealButton();
+        BindNavigationButtons();
         m_isOpen = m_root != null && m_root.activeSelf;
 
         if (m_hideOnAwake && !m_isOpening)
@@ -67,12 +77,25 @@ public class MedicalUI : MonoBehaviour
     {
         if (m_healButton != null)
             m_healButton.onClick.RemoveListener(HandleHealClicked);
+        if (m_treatmentMenuButton != null)
+            m_treatmentMenuButton.onClick.RemoveListener(HandleTreatmentMenuClicked);
+        if (m_backButton != null)
+            m_backButton.onClick.RemoveListener(HandleBackClicked);
     }
 
+    /// <summary>
+    /// 진료 화면이 열려 있으면 Menu로 돌아가고, 아니면 의료실 UI를 닫습니다.
+    /// </summary>
     public bool TryHandleEscape()
     {
         if (!m_isOpen)
             return false;
+
+        if (m_menuRoot != null && !m_menuRoot.activeSelf)
+        {
+            ShowMenu();
+            return true;
+        }
 
         Close();
         return true;
@@ -95,8 +118,25 @@ public class MedicalUI : MonoBehaviour
 
         CacheChildViews();
         BindHealButton();
+        BindNavigationButtons();
         m_currentManager?.RestoreRuntimeState();
+        ShowMenu();
         Refresh();
+    }
+
+    /// <summary>
+    /// 공용 시설 업그레이드 UI가 열리고 닫힐 때 호출됩니다.
+    /// 업그레이드 UI가 열려 있는 동안 Menu를 숨기고, 닫히면 Menu로 돌아갑니다.
+    /// </summary>
+    public void SetMenuVisible(bool visible)
+    {
+        if (!m_isOpen)
+            return;
+
+        if (visible)
+            ShowMenu();
+        else
+            SetViewState(menu: false, treatment: false);
     }
 
     public void Close()
@@ -137,6 +177,46 @@ public class MedicalUI : MonoBehaviour
 
         m_healButton.onClick.RemoveListener(HandleHealClicked);
         m_healButton.onClick.AddListener(HandleHealClicked);
+    }
+
+    private void BindNavigationButtons()
+    {
+        if (m_treatmentMenuButton != null)
+        {
+            m_treatmentMenuButton.onClick.RemoveListener(HandleTreatmentMenuClicked);
+            m_treatmentMenuButton.onClick.AddListener(HandleTreatmentMenuClicked);
+        }
+
+        if (m_backButton != null)
+        {
+            m_backButton.onClick.RemoveListener(HandleBackClicked);
+            m_backButton.onClick.AddListener(HandleBackClicked);
+        }
+    }
+
+    private void HandleTreatmentMenuClicked()
+    {
+        SetViewState(menu: false, treatment: true);
+        Refresh();
+    }
+
+    private void HandleBackClicked()
+    {
+        TryHandleEscape();
+    }
+
+    private void ShowMenu()
+    {
+        // Menu가 없는 기존 구성에서는 진료 화면을 그대로 보여줍니다.
+        SetViewState(menu: m_menuRoot != null, treatment: m_menuRoot == null);
+    }
+
+    private void SetViewState(bool menu, bool treatment)
+    {
+        if (m_menuRoot != null && m_menuRoot.activeSelf != menu)
+            m_menuRoot.SetActive(menu);
+        if (m_treatmentRoot != null && m_treatmentRoot.activeSelf != treatment)
+            m_treatmentRoot.SetActive(treatment);
     }
 
     private void RefreshPatientSlots()
