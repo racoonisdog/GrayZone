@@ -6,8 +6,9 @@ using VInspector;
 /// 공격로 하나가 웨이브 한 번 동안 무엇을 어떤 간격으로 내보낼지 정합니다.
 /// </summary>
 /// <remarks>
-/// 방어전 스포너는 전투가 시작되면 첫 스폰 대기를 한 번 뽑고, 이후 스폰할 때마다 후보 그룹 중 하나를
-/// 무작위(균등)로 골라 생성한 뒤 다음 간격을 다시 뽑습니다. 정문은 최소=최대로 두면 일정한 간격이 되고,
+/// 방어전 스포너는 전투가 시작되면 후보 그룹을 균등하게 섞은 주머니를 만들고 하나씩 꺼냅니다.
+/// 주머니를 모두 쓰면 다시 섞으므로 모든 후보가 한 번씩 나오기 전에는 같은 그룹이 반복되지 않습니다.
+/// 정문은 최소=최대로 두면 일정한 간격이 되고,
 /// 터널은 범위를 넓게 두면 비정기적으로 나옵니다.
 ///
 /// 전투·휴식 시간은 여기에 두지 않습니다. 모든 공격로에 일괄 적용되도록 DefenseManager가 가집니다.
@@ -17,8 +18,12 @@ using VInspector;
 public sealed class DefenseWaveSO : ScriptableObject
 {
     [Header("Groups")]
-    [Tooltip("이 웨이브에 스폰할 때마다 하나를 무작위로 고를 후보 그룹입니다. 비어 있거나 생성할 항목이 없는 그룹은 고르지 않습니다.")]
+    [Tooltip("이 웨이브의 셔플 주머니에 넣을 후보 그룹입니다. 모든 후보를 한 번씩 꺼낸 뒤 다시 섞습니다. 비어 있거나 생성할 항목이 없는 그룹은 넣지 않습니다.")]
     [SerializeField] private List<SpawnGroupSO> m_groups = new List<SpawnGroupSO>();
+
+    [Tooltip("후보 그룹 하나가 도달할 목표 밸류입니다. 그룹 자체 밸류가 부족하면 그 그룹에서 위협도가 가장 낮은 적을 추가합니다. 0이면 원래 그룹 구성을 그대로 사용합니다.")]
+    [Min(0)]
+    [SerializeField] private int m_targetGroupValue;
 
     [Header("Fixed Groups")]
     [Tooltip("이 웨이브마다 한 번씩 반드시 내보낼 그룹입니다. 위 후보 그룹의 무작위 스폰과 별개로 나옵니다. 비워 두면 쓰지 않습니다.")]
@@ -53,6 +58,9 @@ public sealed class DefenseWaveSO : ScriptableObject
     /// <summary>후보 그룹 목록입니다.</summary>
     public IReadOnlyList<SpawnGroupSO> Groups => m_groups;
 
+    /// <summary>후보 그룹의 목표 밸류입니다. 0이면 원래 그룹 구성을 사용합니다.</summary>
+    public int TargetGroupValue => Mathf.Max(0, m_targetGroupValue);
+
     /// <summary>웨이브마다 한 번씩 반드시 내보낼 그룹 목록입니다.</summary>
     public IReadOnlyList<SpawnGroupSO> FixedGroups => m_fixedGroups;
 
@@ -72,7 +80,7 @@ public sealed class DefenseWaveSO : ScriptableObject
                 SpawnGroupSO group = m_groups[i];
                 if (IsPickable(group))
                 {
-                    sum += group.TotalValue;
+                    sum += TargetGroupValue > 0 ? Mathf.Max(TargetGroupValue, group.TotalValue) : group.TotalValue;
                     count++;
                 }
             }
@@ -122,44 +130,18 @@ public sealed class DefenseWaveSO : ScriptableObject
         return Random.Range(min, max);
     }
 
-    /// <summary>
-    /// 후보 중 하나를 균등한 확률로 고릅니다.
-    /// </summary>
-    /// <returns>고른 그룹입니다. 고를 수 있는 그룹이 없으면 null입니다.</returns>
-    /// <remarks>비어 있거나 생성할 항목이 없는 그룹은 후보에서 빼고 고릅니다. 같은 그룹이 연달아 나올 수 있습니다.</remarks>
-    public SpawnGroupSO PickGroup()
+    /// <summary>생성 가능한 후보 그룹을 셔플 주머니에 복사합니다.</summary>
+    /// <param name="destination">기존 내용을 비운 뒤 후보 그룹을 채울 목록입니다.</param>
+    public void CollectPickableGroups(List<SpawnGroupSO> destination)
     {
-        int pickable = 0;
+        destination.Clear();
         for (int i = 0; i < m_groups.Count; i++)
         {
             if (IsPickable(m_groups[i]))
             {
-                pickable++;
+                destination.Add(m_groups[i]);
             }
         }
-
-        if (pickable == 0)
-        {
-            return null;
-        }
-
-        int target = Random.Range(0, pickable);
-        for (int i = 0; i < m_groups.Count; i++)
-        {
-            if (!IsPickable(m_groups[i]))
-            {
-                continue;
-            }
-
-            if (target == 0)
-            {
-                return m_groups[i];
-            }
-
-            target--;
-        }
-
-        return null;
     }
 
     /// <summary>이 웨이브의 후보 그룹에 쓰이는 항목 SO를 집합에 더합니다. 풀을 미리 만들 때 씁니다.</summary>
@@ -216,5 +198,6 @@ public sealed class DefenseWaveSO : ScriptableObject
         m_spawnIntervalMax = Mathf.Max(m_spawnIntervalMin, m_spawnIntervalMax);
         m_previewCombatDuration = Mathf.Max(0.0f, m_previewCombatDuration);
         m_fixedSpawnDelay = Mathf.Max(0.0f, m_fixedSpawnDelay);
+        m_targetGroupValue = Mathf.Max(0, m_targetGroupValue);
     }
 }

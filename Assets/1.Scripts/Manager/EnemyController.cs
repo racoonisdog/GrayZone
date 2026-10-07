@@ -205,6 +205,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>행동·피격·사망 피드백의 출력 컴포넌트입니다.</summary>
     private EnemyFeedbackEmitter feedbackEmitter;
 
+    /// <summary>이동 애니메이션 주기에 맞춰 표면별 맨발 소리를 출력하는 모듈입니다.</summary>
+    private EnemyFootstepEmitter m_footstepEmitter;
+
+    /// <summary>전역 감염체 보컬 관리자에 이 개체의 상태를 제공하는 모듈입니다.</summary>
+    private EnemyVocalEmitter m_vocalEmitter;
+
     // =========================
     // 최상위 상태 인스턴스 (상태 간 전이에 사용)
     // =========================
@@ -2556,6 +2562,16 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         if (ragdollController == null)
         {
             ragdollController = GetComponent<RagdollController>();
+        }
+
+        if (m_footstepEmitter == null && !TryGetComponent(out m_footstepEmitter))
+        {
+            m_footstepEmitter = gameObject.AddComponent<EnemyFootstepEmitter>();
+        }
+
+        if (m_vocalEmitter == null && !TryGetComponent(out m_vocalEmitter))
+        {
+            m_vocalEmitter = gameObject.AddComponent<EnemyVocalEmitter>();
         }
 
         enemyAttack?.SetAnimator(animator);

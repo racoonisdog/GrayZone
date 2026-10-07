@@ -51,6 +51,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private const float KickPatternResetGap = 0.25f;
 
     private static readonly int AnimIDShoot = Animator.StringToHash("IsShoot");
+    private static readonly int AnimIDShootSpeed = Animator.StringToHash("ShootSpeed");
+    private static readonly int RecoilFiringState = Animator.StringToHash("Recoil Layer.Firing Rifle");
     private static readonly int AnimIDReload = Animator.StringToHash("DoReload");
 
     /// <summary>
@@ -583,6 +585,8 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private bool m_fireRequested;
     private readonly System.Collections.Generic.List<Gun.HitscanShotInfo> m_firedPelletBuffer = new(8);
     private bool m_wasShootPressed;
+    private float m_shotgunPumpAnimationEndTime = float.NegativeInfinity;
+    private float m_shotgunPumpClipDurationAtUnitSpeed = -1.0f;
 
     /// <summary>
     [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
@@ -1076,6 +1080,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     public void SetActionSpeedMultiplier(float value)
     {
         m_actionSpeedMultiplier = Mathf.Max(0.01f, value);
+        ApplyShotgunAnimationSpeed();
 
         if (m_controller != null && m_controller.IsReload)
         {
@@ -1200,12 +1205,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         CacheOptionalCrosshairController();
         m_hasRequiredReferences = true;
         BindConfiguredBalance();
+        ApplyShotgunAnimationSpeed();
         ApplyCombatStanceState(false, false, 0.0f);
         SnapStanceWeights();
 
         if (m_weaponController != null)
         {
             m_weaponController.OnHitFeedback += OnWeaponHitFeedback;
+            m_weaponController.OnShotFired += OnWeaponShotFired;
             m_weaponController.OnReloadCompleted += OnWeaponReloadCompleted;
         }
     }
@@ -1218,6 +1225,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         if (m_weaponController != null)
         {
             m_weaponController.OnHitFeedback -= OnWeaponHitFeedback;
+            m_weaponController.OnShotFired -= OnWeaponShotFired;
             m_weaponController.OnReloadCompleted -= OnWeaponReloadCompleted;
         }
 
@@ -1249,6 +1257,95 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         ReconcileReloadState();
+    }
+
+    /// <summary>
+    /// 펌프액션 샷건의 사격 모션을 실제 발사 성공 시점부터 한 주기 재생합니다.
+    /// </summary>
+    /// <param name="shotInfo">이번 발사의 대표 히트스캔 정보입니다.</param>
+    /// <remarks>
+    /// 입력 Bool만으로 사격 상태를 유지하면 버튼을 누르고 있는 동안 스테이트가 한 번만 재생되고,
+    /// Gun의 발사 쿨다운마다 나가는 다음 탄에는 펌프 동작이 다시 시작되지 않습니다. 실제로 탄약을
+    /// 소비한 <see cref="Gun.OnShotFired"/>를 기준으로 스테이트를 0부터 재생해 발사와 펌프를 묶습니다.
+    /// </remarks>
+    private void OnWeaponShotFired(Gun.HitscanShotInfo shotInfo)
+    {
+        if (m_weaponController == null
+            || m_weaponController.WeaponType != WeaponType.Shotgun
+            || m_animator == null)
+        {
+            return;
+        }
+
+        m_shotgunPumpAnimationEndTime = Time.time + Mathf.Max(0.01f, m_weaponController.ShootDelay);
+        ApplyShotgunAnimationSpeed();
+        m_animator.SetBool(AnimIDShoot, true);
+
+        if (m_animator.layerCount > RecoilLayerIndex)
+        {
+            m_animator.Play(RecoilFiringState, RecoilLayerIndex, 0.0f);
+        }
+
+        m_recoilLayerTarget = m_recoilAnimationWeight;
+    }
+
+    /// <summary>현재 샷건 발사 간격에 맞춰 펌프 모션의 재생 속도를 설정합니다.</summary>
+    /// <remarks>
+    /// Shotgun의 ShootDelay는 행동속도 배율까지 반영한 실제 발사 주기입니다. 클립 원본 길이를 이
+    /// 주기로 나눈 값을 스테이트 배속으로 사용하면 기본 연사력과 행동속도 버프가 바뀌어도 다음 발사
+    /// 가능 시점에 펌프 모션이 함께 끝납니다. 전역 Animator.speed는 이동·피격까지 바꾸므로 쓰지 않습니다.
+    /// </remarks>
+    private void ApplyShotgunAnimationSpeed()
+    {
+        if (m_animator == null)
+        {
+            return;
+        }
+
+        float speed = 1.0f;
+        if (m_weaponController != null && m_weaponController.WeaponType == WeaponType.Shotgun)
+        {
+            float clipDuration = ResolveShotgunPumpClipDurationAtUnitSpeed();
+            float cycleDuration = m_weaponController.ShootDelay;
+            if (clipDuration > 0.0f && cycleDuration > 0.0f)
+            {
+                speed = clipDuration / cycleDuration;
+            }
+        }
+
+        m_animator.SetFloat(AnimIDShootSpeed, Mathf.Max(0.01f, speed));
+    }
+
+    /// <summary>현재 RuntimeAnimatorController에서 샷건 펌프 클립의 1배속 길이를 찾습니다.</summary>
+    private float ResolveShotgunPumpClipDurationAtUnitSpeed()
+    {
+        if (m_shotgunPumpClipDurationAtUnitSpeed >= 0.0f)
+        {
+            return m_shotgunPumpClipDurationAtUnitSpeed;
+        }
+
+        m_shotgunPumpClipDurationAtUnitSpeed = 0.0f;
+        RuntimeAnimatorController controller = m_animator != null
+            ? m_animator.runtimeAnimatorController
+            : null;
+        if (controller == null)
+        {
+            return 0.0f;
+        }
+
+        AnimationClip[] clips = controller.animationClips;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            AnimationClip clip = clips[i];
+            if (clip != null
+                && clip.name.IndexOf("ShotGunShoot", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                m_shotgunPumpClipDurationAtUnitSpeed = clip.length;
+                break;
+            }
+        }
+
+        return m_shotgunPumpClipDurationAtUnitSpeed;
     }
 
     /// <summary>
@@ -1509,6 +1606,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         m_combatShotPending = false;
         m_fireRequested = false;
         m_wasShootPressed = false;
+        m_shotgunPumpAnimationEndTime = float.NegativeInfinity;
     }
 
     /// <summary>
@@ -3086,10 +3184,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 총을 다 들기 전에는 발사도, 사격 포즈도 내보내지 않습니다. 포즈만 먼저 나가면 총을 드는 도중에
         // 사격 자세로 튀어 "다 들고 나서 쏜다"가 무너집니다.
         bool shootPressed = m_input.Shoot;
+        bool usesShotgunPumpCycle = m_weaponController != null
+            && m_weaponController.WeaponType == WeaponType.Shotgun;
+        bool shotgunPumpActive = usesShotgunPumpCycle
+            && Time.time < m_shotgunPumpAnimationEndTime;
 
         if (shootPressed && IsRaisingWeapon)
         {
-            m_animator.SetBool(AnimIDShoot, false);
+            m_animator.SetBool(AnimIDShoot, shotgunPumpActive);
             return;
         }
 
@@ -3102,14 +3204,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
 
         if (shouldRequestShot)
         {
-            m_animator.SetBool(AnimIDShoot, true);
+            // 일반 총기는 입력 상태로 기존 사격 모션을 유지합니다. 펌프액션 샷건은 실제 발사가
+            // 성공한 프레임의 OnWeaponShotFired에서 모션을 시작해야 쿨다운 거절·빈 탄창 입력이
+            // 손 동작을 잘못 재생하지 않습니다.
+            m_animator.SetBool(AnimIDShoot, usesShotgunPumpCycle ? shotgunPumpActive : true);
 
             m_fireRequested = true;
 
             return;
         }
 
-        m_animator.SetBool(AnimIDShoot, false);
+        m_animator.SetBool(AnimIDShoot, shotgunPumpActive);
     }
 
     /// <summary>
@@ -3680,7 +3785,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private void RefreshWeaponLayerWeight()
     {
-        bool shooting = m_inCombatStance && m_input != null && m_input.Shoot;
+        bool usesShotgunPumpCycle = m_weaponController != null
+            && m_weaponController.WeaponType == WeaponType.Shotgun;
+        bool shooting = m_inCombatStance
+            && (usesShotgunPumpCycle
+                ? Time.time < m_shotgunPumpAnimationEndTime
+                : m_input != null && m_input.Shoot);
         bool reloading = m_weaponController != null && m_weaponController.IsReloading;
 
         // Override 레이어: 상체를 통째로 교체해야 하는 재장전에만 씁니다.

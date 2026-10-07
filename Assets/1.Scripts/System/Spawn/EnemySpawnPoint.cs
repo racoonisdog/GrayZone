@@ -95,6 +95,21 @@ public class EnemySpawnPoint : MonoBehaviour
         public bool MissingPrefabWarningLogged;
     }
 
+    /// <summary>부분 그룹 생성 시 위험도 순서로 정렬할 적 한 마리의 요청입니다.</summary>
+    private readonly struct GroupSpawnRequest
+    {
+        public GroupSpawnRequest(SpawnRuntime runtime, int dangerLevel, int sourceOrder)
+        {
+            Runtime = runtime;
+            DangerLevel = dangerLevel;
+            SourceOrder = sourceOrder;
+        }
+
+        public SpawnRuntime Runtime { get; }
+        public int DangerLevel { get; }
+        public int SourceOrder { get; }
+    }
+
     private const int SpawnPositionSearchAttempts = 16;
 
     [HideIf(nameof(HidesInspectorEntries))]
@@ -214,6 +229,9 @@ public class EnemySpawnPoint : MonoBehaviour
 
     /// <summary>그룹 생성 시 항목별 필요 수를 합산하는 재사용 버퍼입니다.</summary>
     private readonly Dictionary<SpawnRuntime, int> m_groupRequirementBuffer = new Dictionary<SpawnRuntime, int>();
+
+    /// <summary>부분 생성 시 적 한 마리 단위로 위험도를 정렬하는 재사용 버퍼입니다.</summary>
+    private readonly List<GroupSpawnRequest> m_groupSpawnRequestBuffer = new List<GroupSpawnRequest>();
 
     /// <summary>그룹 관련 경고를 대상마다 한 번만 남기기 위한 기록입니다.</summary>
     private readonly HashSet<UnityEngine.Object> m_groupWarningLogged = new HashSet<UnityEngine.Object>();
@@ -716,29 +734,38 @@ public class EnemySpawnPoint : MonoBehaviour
         m_runtimeSynchronizationPending = true;
     }
 
-    /// <summary>
-    /// 스폰 그룹 하나를 통째로 생성합니다. 자리가 모자라면 아무것도 만들지 않고 false를 돌려줍니다.
-    /// </summary>
+    /// <summary>스폰 그룹을 생성합니다. 필요하면 상한 안에서 위험도가 낮은 적부터 일부만 생성합니다.</summary>
     /// <param name="group">생성할 그룹입니다.</param>
-    /// <returns>그룹을 생성했으면 true입니다. 어느 항목이든 생존 정원이 모자라면 false이며, 그때는 한 마리도 만들지 않습니다.</returns>
+    /// <param name="maximumCount">이번 호출에서 추가할 수 있는 전체 적 수입니다.</param>
+    /// <param name="allowPartial">그룹 전체가 들어가지 않을 때 낮은 위험도부터 일부만 생성할지 여부입니다.</param>
+    /// <param name="targetGroupValue">0보다 크면 그룹에서 위험도가 가장 낮은 적을 추가해 도달시킬 목표 밸류입니다.</param>
+    /// <returns>그룹을 처리했으면 true입니다. 자리가 전혀 없어 한 마리도 생성하지 못했으면 false입니다.</returns>
     /// <remarks>
-    /// 그룹 구성을 온전히 유지해야 그룹 밸류로 위협 수준을 비교하는 의미가 있어서, 일부만 내보내지 않습니다.
-    /// 호출하는 쪽은 false를 받으면 같은 그룹을 들고 기다렸다가 다시 시도합니다.
-    ///
-    /// 항목의 마릿수가 그 항목의 최대 수용량보다 크면 영원히 들어갈 수 없으므로, 최대 수용량까지만 필요하다고 보고
-    /// 경고를 한 번 남깁니다. 풀에 없는 항목은 건너뛰고 경고를 한 번 남깁니다.
+    /// 일반 생산은 기존처럼 그룹 전체가 들어갈 때만 생성합니다. 방어전은 전역 활성 적 상한을 지키기 위해
+    /// <paramref name="allowPartial"/>을 켜고, 위험도가 같은 적은 그룹에 적힌 순서를 유지합니다.
+    /// 항목의 마릿수가 해당 항목 최대 수용량보다 크면 경고를 한 번 남깁니다. 풀에 없는 항목은 건너뜁니다.
     /// 최소 위치 간격을 만족하는 자리를 찾지 못하면 간격 없이 범위 안 무작위 위치에 생성합니다. 그룹이 한 번에
     /// 여러 마리를 내보내므로, 간격 때문에 일부가 빠지는 것보다 조금 겹치는 편이 낫기 때문입니다.
     /// </remarks>
-    protected bool TrySpawnGroup(SpawnGroupSO group)
+    protected bool TrySpawnGroup(SpawnGroupSO group, int maximumCount = int.MaxValue, bool allowPartial = false, int targetGroupValue = 0)
     {
         if (group == null)
         {
             return true;
         }
 
+        if (maximumCount <= 0)
+        {
+            return false;
+        }
+
         m_groupRequirementBuffer.Clear();
+        m_groupSpawnRequestBuffer.Clear();
         IReadOnlyList<SpawnGroupSO.Member> members = group.Members;
+        int sourceOrder = 0;
+        int currentGroupValue = 0;
+        int paddingDangerLevel = int.MaxValue;
+        SpawnRuntime paddingRuntime = null;
         for (int i = 0; i < members.Count; i++)
         {
             EnemySpawnEntrySO entry = members[i].Entry;
@@ -756,6 +783,28 @@ public class EnemySpawnPoint : MonoBehaviour
 
             m_groupRequirementBuffer.TryGetValue(runtime, out int required);
             m_groupRequirementBuffer[runtime] = required + members[i].Count;
+
+            int dangerLevel = Mathf.Max(0, runtime.Prefab.DangerLevel);
+            if (dangerLevel > 0 && dangerLevel < paddingDangerLevel)
+            {
+                paddingDangerLevel = dangerLevel;
+                paddingRuntime = runtime;
+            }
+
+            for (int count = 0; count < members[i].Count; count++)
+            {
+                m_groupSpawnRequestBuffer.Add(new GroupSpawnRequest(runtime, dangerLevel, sourceOrder++));
+                currentGroupValue += dangerLevel;
+            }
+        }
+
+        int resolvedTargetValue = Mathf.Max(0, targetGroupValue);
+        while (paddingRuntime != null && currentGroupValue < resolvedTargetValue)
+        {
+            m_groupSpawnRequestBuffer.Add(new GroupSpawnRequest(paddingRuntime, paddingDangerLevel, sourceOrder++));
+            m_groupRequirementBuffer.TryGetValue(paddingRuntime, out int required);
+            m_groupRequirementBuffer[paddingRuntime] = required + 1;
+            currentGroupValue += paddingDangerLevel;
         }
 
         foreach (KeyValuePair<SpawnRuntime, int> pair in m_groupRequirementBuffer)
@@ -767,10 +816,39 @@ public class EnemySpawnPoint : MonoBehaviour
                 WarnGroupOnce(group, $"[EnemySpawnPoint] '{name}': 그룹 '{group.name}'이 항목 '{runtime.Entry.name}'을 {pair.Value}마리 요구하지만 최대 수용량은 {capacity}입니다. {capacity}마리만 생성합니다.");
             }
 
-            if (capacity - runtime.LiveEnemyCount < Mathf.Min(pair.Value, capacity))
+            if (!allowPartial && capacity - runtime.LiveEnemyCount < Mathf.Min(pair.Value, capacity))
             {
                 return false;
             }
+        }
+
+        if (m_groupSpawnRequestBuffer.Count == 0)
+        {
+            return true;
+        }
+
+        if (allowPartial)
+        {
+            m_groupSpawnRequestBuffer.Sort(CompareGroupSpawnRequests);
+
+            int spawned = 0;
+            int limit = Mathf.Min(maximumCount, m_groupSpawnRequestBuffer.Count);
+            for (int i = 0; i < m_groupSpawnRequestBuffer.Count && spawned < limit; i++)
+            {
+                SpawnRuntime runtime = m_groupSpawnRequestBuffer[i].Runtime;
+                if (runtime.LiveEnemyCount >= Mathf.Max(0, runtime.Entry.MaxCapacity))
+                {
+                    continue;
+                }
+
+                Vector3 spawnPosition = TryGetValidSpawnPosition(out Vector3 spaced) ? spaced : SampleSpawnCandidate();
+                if (ActivateOne(runtime, spawnPosition))
+                {
+                    spawned++;
+                }
+            }
+
+            return spawned > 0;
         }
 
         foreach (KeyValuePair<SpawnRuntime, int> pair in m_groupRequirementBuffer)
@@ -785,6 +863,13 @@ public class EnemySpawnPoint : MonoBehaviour
         }
 
         return true;
+    }
+
+    /// <summary>위험도가 낮은 적을 먼저, 같으면 그룹에 적힌 순서대로 둡니다.</summary>
+    private static int CompareGroupSpawnRequests(GroupSpawnRequest left, GroupSpawnRequest right)
+    {
+        int dangerComparison = left.DangerLevel.CompareTo(right.DangerLevel);
+        return dangerComparison != 0 ? dangerComparison : left.SourceOrder.CompareTo(right.SourceOrder);
     }
 
     /// <summary>지정 항목의 현재 사용 중인(퇴역하지 않은) 풀을 찾습니다.</summary>

@@ -17,6 +17,9 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class WireTrap : Trap
 {
+    private const string ActiveSoundEventPath = "event:/World/Trap/Active/Wire";
+    private static bool s_loggedMissingActiveSound;
+
     /// <inheritdoc />
     protected override string DefaultDisplayName => "윤형 철조망";
 
@@ -82,6 +85,9 @@ public class WireTrap : Trap
     /// <summary>지금 범위 안에 있는 적들입니다.</summary>
     private readonly Dictionary<EnemyController, Occupant> m_occupants =
         new Dictionary<EnemyController, Occupant>();
+
+    /// <summary>한 명 이상 철조망에 걸려 있는 동안만 재생하는 금속 흔들림 루프입니다.</summary>
+    private FMOD.Studio.EventInstance m_activeSoundInstance;
 
     /// <summary>이번 프레임에 처리할 키 목록입니다. 순회 도중 사전을 고치면 예외가 나므로 먼저 복사합니다.</summary>
     private readonly List<EnemyController> m_keyBuffer = new List<EnemyController>();
@@ -180,6 +186,8 @@ public class WireTrap : Trap
             TickTimer = DamageInterval,
             SpawnGeneration = enemy.SpawnGeneration,
         });
+
+        UpdateActiveSound();
 
         // 진입 순간 감속이 있으면 먼저 그 값으로 걸고, 시간이 지나면 Update가 지속 배율로 되돌립니다.
         // 같은 키(this)로 다시 걸면 값만 바뀌므로, 해제 경로는 지속 감속과 같습니다.
@@ -407,6 +415,7 @@ public class WireTrap : Trap
         m_removalBuffer.Clear();
         m_entrySlowEndTimes.Clear();
         m_entrySlowEndedBuffer.Clear();
+        StopActiveSound();
     }
 
     /// <summary>이 콜라이더가 이 함정이 반응할 대상인지 여부입니다.</summary>
@@ -426,6 +435,7 @@ public class WireTrap : Trap
                 m_occupants.Remove(enemy);
                 m_entrySlowEndTimes.Remove(enemy);
             }
+            UpdateActiveSound();
             return;
         }
 
@@ -435,5 +445,52 @@ public class WireTrap : Trap
             enemy.RemoveMoveSpeedMultiplier(this);
             enemy.RemoveForceWalk(this);
         }
+
+        UpdateActiveSound();
+    }
+
+    /// <summary>윤형 철조망에 적이 걸려 있을 때만 접촉 루프를 유지합니다. 스파이크는 제외합니다.</summary>
+    private void UpdateActiveSound()
+    {
+        if (CostKind != TrapKind.Wire || m_occupants.Count == 0 || IsBlueprint)
+        {
+            StopActiveSound();
+            return;
+        }
+
+        if (m_activeSoundInstance.isValid() || !FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            m_activeSoundInstance = FMODUnity.RuntimeManager.CreateInstance(ActiveSoundEventPath);
+            FMODUnity.RuntimeManager.AttachInstanceToGameObject(m_activeSoundInstance, gameObject);
+            m_activeSoundInstance.start();
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            m_activeSoundInstance.clearHandle();
+            if (!s_loggedMissingActiveSound)
+            {
+                s_loggedMissingActiveSound = true;
+                Debug.LogWarning($"[WireTrap] FMOD 이벤트를 찾지 못했습니다: {ActiveSoundEventPath}\n{exception.Message}", this);
+            }
+        }
+    }
+
+    /// <summary>접촉이 끝나거나 함정이 비활성화되면 루프를 페이드아웃하고 해제합니다.</summary>
+    private void StopActiveSound()
+    {
+        if (!m_activeSoundInstance.isValid())
+        {
+            m_activeSoundInstance.clearHandle();
+            return;
+        }
+
+        m_activeSoundInstance.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+        m_activeSoundInstance.release();
+        m_activeSoundInstance.clearHandle();
     }
 }

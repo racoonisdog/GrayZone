@@ -97,6 +97,11 @@ public sealed class FireTrap : Trap
     /// <summary>점화되어 지속 시간이 흐르고 있는지 여부입니다.</summary>
     private bool m_isIgnited;
 
+    /// <summary>이 화염 지대를 생성한 쪽이 요청한 선택적 3D 지속음입니다.</summary>
+    private FMOD.Studio.EventInstance m_loopingSoundInstance;
+
+    private static bool s_loggedMissingLoopingSound;
+
     /// <summary>적에게만 틱마다 더하는 피해입니다. 생성한 쪽(화염 드럼통 업그레이드)이 정합니다. 팀원 피해에는 더하지 않습니다.</summary>
     private float m_enemyBonusDamagePerTick;
 
@@ -147,6 +152,36 @@ public sealed class FireTrap : Trap
     public void SetEnemyBonusDamagePerTick(float damagePerTick)
     {
         m_enemyBonusDamagePerTick = Mathf.Max(0.0f, damagePerTick);
+    }
+
+    /// <summary>
+    /// 이 화염 지대가 살아 있는 동안 지정한 3D 루프를 재생합니다.
+    /// </summary>
+    /// <remarks>화염 드럼통처럼 별도 지속음이 필요한 생성 경로만 호출합니다. 화염병에는 자동 적용되지 않습니다.</remarks>
+    public void StartLoopingSound(string eventPath)
+    {
+        StopLoopingSound(FMOD.Studio.STOP_MODE.IMMEDIATE);
+
+        if (string.IsNullOrWhiteSpace(eventPath) || !FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            m_loopingSoundInstance = FMODUnity.RuntimeManager.CreateInstance(eventPath);
+            FMODUnity.RuntimeManager.AttachInstanceToGameObject(m_loopingSoundInstance, gameObject);
+            m_loopingSoundInstance.start();
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            m_loopingSoundInstance.clearHandle();
+            if (!s_loggedMissingLoopingSound)
+            {
+                s_loggedMissingLoopingSound = true;
+                Debug.LogWarning($"[FireTrap] FMOD 이벤트를 찾지 못했습니다: {eventPath}\n{exception.Message}", this);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -418,12 +453,14 @@ public sealed class FireTrap : Trap
     {
         base.OnDisable();
         ClearOccupants();
+        StopLoopingSound(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
     }
 
     /// <inheritdoc />
     protected override void OnDepleted()
     {
         ClearOccupants();
+        StopLoopingSound(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
     }
 
     /// <summary>1틱 분량의 피해를 넣습니다. 정수로 떨어지지 않는 나머지는 다음 틱으로 넘깁니다.</summary>
@@ -491,6 +528,20 @@ public sealed class FireTrap : Trap
         m_occupants.Clear();
         m_keyBuffer.Clear();
         m_removalBuffer.Clear();
+    }
+
+    /// <summary>현재 화염 지속음을 정지하고 FMOD 인스턴스를 해제합니다.</summary>
+    private void StopLoopingSound(FMOD.Studio.STOP_MODE stopMode)
+    {
+        if (!m_loopingSoundInstance.isValid())
+        {
+            m_loopingSoundInstance.clearHandle();
+            return;
+        }
+
+        m_loopingSoundInstance.stop(stopMode);
+        m_loopingSoundInstance.release();
+        m_loopingSoundInstance.clearHandle();
     }
 
     /// <summary>이 콜라이더가 이 함정이 반응할 대상인지 여부입니다.</summary>

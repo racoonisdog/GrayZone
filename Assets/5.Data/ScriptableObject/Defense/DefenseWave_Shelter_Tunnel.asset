@@ -18,4 +18,4 @@ MonoBehaviour:
   m_firstSpawnDelayMax: 10
   m_spawnIntervalMin: 20
   m_spawnIntervalMax: 30
-  m_previewCombatDuration: 60
+  m_previewCombatDuration: 50

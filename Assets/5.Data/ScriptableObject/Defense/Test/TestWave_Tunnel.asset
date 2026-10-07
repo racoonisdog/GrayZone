@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: TestWave_Tunnel
   m_EditorClassIdentifier: Assembly-CSharp::DefenseWaveSO
   m_groups:
-  - {fileID: 11400000, guid: acfea46ecafed6b4b9a3016766da82d6, type: 2}
-  m_firstSpawnDelayMin: 3
-  m_firstSpawnDelayMax: 3
-  m_spawnIntervalMin: 13
-  m_spawnIntervalMax: 15
-  m_previewCombatDuration: 60
+  - {fileID: 11400000, guid: 989c5d8ac64246f4a65d4744202a5a93, type: 2}
+  - {fileID: 11400000, guid: ed2d5f3f41e2446883b8c4284dbf47e8, type: 2}
+  - {fileID: 11400000, guid: 5247c005f61b4af5bb01b870089292a8, type: 2}
+  - {fileID: 11400000, guid: f27425701eef4458b4fbe0c1d9a9388a, type: 2}
+  m_firstSpawnDelayMin: 8
+  m_firstSpawnDelayMax: 12
+  m_spawnIntervalMin: 8
+  m_spawnIntervalMax: 10
+  m_previewCombatDuration: 50

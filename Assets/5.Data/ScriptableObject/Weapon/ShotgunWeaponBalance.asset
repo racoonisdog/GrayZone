@@ -16,8 +16,8 @@ MonoBehaviour:
   Gun_m_maxBullet: 8
   Gun_m_segmentAmmoGaugeByRound: 1
   Gun_m_shootDelay: 0.5
-  Gun_m_fireMode: 0
-  Gun_m_reloadTime: 1.3335
+  Gun_m_fireMode: 1
+  Gun_m_reloadTime: 2.2333333
   Gun_m_reloadMode: 1
   Gun_m_hitscanDamage: 4
   Gun_m_allowHeadshot: 1

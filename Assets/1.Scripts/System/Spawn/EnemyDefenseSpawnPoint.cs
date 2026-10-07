@@ -16,9 +16,9 @@ using UnityEditor.SceneManagement;
 ///
 /// <b>웨이브 실행</b>: DefenseManager가 <see cref="PrepareForStage"/>로 방어전 SO를 넘기면, 이 스포너의
 /// 공격로 이름에 해당하는 웨이브 전체의 항목으로 풀을 준비하고 자동 생산을 멈춥니다. 이후
-/// <see cref="BeginCombat"/>으로 받은 웨이브 SO를 실행합니다. 첫 스폰 대기 뒤 후보 그룹 하나를 골라 통째로 생성하고,
-/// 다음 간격을 다시 뽑아 기다리기를 <see cref="EndCombat"/>까지 반복합니다. 그룹이 생존 정원에 들어가지 않으면
-/// 같은 그룹을 들고 자리가 날 때까지 기다리며, 간격은 실제로 생성한 시점부터 다시 셉니다.
+/// <see cref="BeginCombat"/>으로 받은 웨이브 SO를 실행합니다. 첫 스폰 대기 뒤 섞인 후보 그룹을 하나씩 꺼내고,
+/// 다음 간격을 다시 뽑아 기다리기를 <see cref="EndCombat"/>까지 반복합니다. 전역 활성 적 상한보다 그룹이 크면
+/// 위험도가 낮은 적부터 남은 자리만큼 생성하며, 자리가 전혀 없으면 같은 그룹을 들고 기다립니다.
 /// 인스펙터 항목 목록(Spawn Entries)으로 계속 생산하는 기존 경로는 방어전 스포너에서 쓰지 않습니다.
 /// 설계 근거: privateDoc `DEFENSE_WAVE_SPAWN_SPEC_KR.md` §4.5, §5.
 /// </remarks>
@@ -57,6 +57,15 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
 
     /// <summary>골랐지만 생존 정원이 모자라 아직 생성하지 못한 그룹입니다. 없으면 null입니다.</summary>
     private SpawnGroupSO m_pendingGroup;
+
+    /// <summary>후보 그룹을 중복 없이 한 차례씩 꺼내기 위한 셔플 주머니입니다.</summary>
+    private readonly List<SpawnGroupSO> m_shuffleBag = new List<SpawnGroupSO>();
+
+    /// <summary>셔플 주머니에서 다음에 꺼낼 위치입니다.</summary>
+    private int m_shuffleIndex;
+
+    /// <summary>주머니를 다시 섞을 때 경계에서 같은 그룹이 연속되는 것을 막기 위한 직전 그룹입니다.</summary>
+    private SpawnGroupSO m_lastDrawnGroup;
 
     /// <summary>이번 웨이브의 고정 그룹 중 다음에 생성할 순번입니다. 모두 생성했으면 목록 길이와 같습니다.</summary>
     private int m_nextFixedGroupIndex;
@@ -112,6 +121,9 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
         m_combatActive = true;
         m_currentWave = wave;
         m_pendingGroup = null;
+        m_shuffleBag.Clear();
+        m_shuffleIndex = 0;
+        m_lastDrawnGroup = null;
         m_nextSpawnTime = wave != null ? Time.time + wave.SampleFirstSpawnDelay() : 0.0f;
         m_nextFixedGroupIndex = 0;
         m_fixedSpawnTime = wave != null ? Time.time + wave.FixedSpawnDelay : 0.0f;
@@ -124,6 +136,9 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
         m_combatActive = false;
         m_currentWave = null;
         m_pendingGroup = null;
+        m_shuffleBag.Clear();
+        m_shuffleIndex = 0;
+        m_lastDrawnGroup = null;
         m_debugTimeToNextSpawn = 0.0f;
     }
 
@@ -152,7 +167,7 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
     }
 
     /// <summary>
-    /// 전투 중이면 간격에 맞춰 그룹을 고르고, 자리가 있으면 통째로 생성합니다.
+    /// 전투 중이면 간격에 맞춰 셔플 주머니에서 그룹을 꺼내고, 전역 상한 안에서 생성합니다.
     /// </summary>
     /// <remarks>
     /// 간격은 그룹을 실제로 생성한 시점부터 다시 셉니다. 고른 시점부터 세면, 자리를 오래 기다린 뒤 생성하자마자
@@ -175,7 +190,7 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
                 return;
             }
 
-            m_pendingGroup = m_currentWave.PickGroup();
+            m_pendingGroup = DrawNextGroup();
             if (m_pendingGroup == null)
             {
                 // 고를 수 있는 그룹이 없으면 간격만 다시 뽑아 기다립니다. 매 프레임 다시 고르지 않게 하기 위해서입니다.
@@ -185,7 +200,8 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
         }
 
         m_debugTimeToNextSpawn = 0.0f;
-        if (!TrySpawnGroup(m_pendingGroup))
+        int availableSlots = GetAvailableEnemySlots();
+        if (!TrySpawnGroup(m_pendingGroup, availableSlots, true, m_currentWave.TargetGroupValue))
         {
             return;
         }
@@ -197,20 +213,59 @@ public sealed class EnemyDefenseSpawnPoint : EnemySpawnPoint
     /// <summary>
     /// 웨이브의 고정 그룹을 정해진 시각에 순서대로 한 번씩 생성합니다.
     /// </summary>
-    /// <remarks>자리가 모자라 생성하지 못한 그룹은 다음 프레임에 다시 시도합니다. 무작위 그룹 간격에는 영향을 주지 않습니다.</remarks>
+    /// <remarks>전역 상한의 남은 자리만큼 위험도가 낮은 적부터 생성합니다. 자리가 전혀 없으면 다음 프레임에 다시 시도합니다.</remarks>
     private void TickFixedGroups()
     {
         IReadOnlyList<SpawnGroupSO> fixedGroups = m_currentWave.FixedGroups;
         while (m_nextFixedGroupIndex < fixedGroups.Count && Time.time >= m_fixedSpawnTime)
         {
             SpawnGroupSO group = fixedGroups[m_nextFixedGroupIndex];
-            if (group != null && group.HasSpawnableMember && !TrySpawnGroup(group))
+            if (group != null && group.HasSpawnableMember && !TrySpawnGroup(group, GetAvailableEnemySlots(), true))
             {
                 return;
             }
 
             m_nextFixedGroupIndex++;
         }
+    }
+
+    /// <summary>후보 그룹을 모두 한 번씩 쓰도록 섞은 주머니에서 다음 그룹을 꺼냅니다.</summary>
+    private SpawnGroupSO DrawNextGroup()
+    {
+        if (m_shuffleIndex >= m_shuffleBag.Count)
+        {
+            m_currentWave.CollectPickableGroups(m_shuffleBag);
+            for (int i = m_shuffleBag.Count - 1; i > 0; i--)
+            {
+                int swapIndex = Random.Range(0, i + 1);
+                (m_shuffleBag[i], m_shuffleBag[swapIndex]) = (m_shuffleBag[swapIndex], m_shuffleBag[i]);
+            }
+
+            if (m_shuffleBag.Count > 1 && m_shuffleBag[0] == m_lastDrawnGroup)
+            {
+                int swapIndex = Random.Range(1, m_shuffleBag.Count);
+                (m_shuffleBag[0], m_shuffleBag[swapIndex]) = (m_shuffleBag[swapIndex], m_shuffleBag[0]);
+            }
+
+            m_shuffleIndex = 0;
+        }
+
+        if (m_shuffleBag.Count == 0)
+        {
+            return null;
+        }
+
+        SpawnGroupSO group = m_shuffleBag[m_shuffleIndex++];
+        m_lastDrawnGroup = group;
+        return group;
+    }
+
+    /// <summary>DefenseManager가 있으면 전역 상한의 남은 자리, 단독 디버그면 제한 없음을 반환합니다.</summary>
+    private static int GetAvailableEnemySlots()
+    {
+        return DefenseManager.Instance != null
+            ? DefenseManager.Instance.AvailableEnemySpawnSlots
+            : int.MaxValue;
     }
 
     /// <summary>에디터 확인용: 이 스포너 하나만 확인용 웨이브로 풀을 준비하고 전투를 시작합니다.</summary>

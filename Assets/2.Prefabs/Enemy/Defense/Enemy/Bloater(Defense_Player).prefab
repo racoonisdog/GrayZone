@@ -726,7 +726,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   m_enemyType: 1
-  m_dangerLevel: 1
+  m_dangerLevel: 4
   m_isDefenseEnemy: 1
   m_defenseDisposition: 1
   m_balanceSO: {fileID: 11400000, guid: 29468994b235c7b4caac8196a4722267, type: 2}

@@ -7,7 +7,7 @@ using UnityEngine;
 /// <remarks>
 /// 웨이브 진행은 <see cref="DefenseManager"/>가 계속 소유합니다. 이 컴포넌트는 공개 상태를 읽기만 하며,
 /// Synth는 항상 유지하고 Percussion, Strings, Guitar 파라미터를 한 마디 동안 함께 보간합니다.
-/// 정리 구간은 직전 전투의 구성을 유지합니다.
+/// 최초 및 중간 정비 구간은 Synth만 유지합니다.
 /// </remarks>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(DefenseManager))]
@@ -254,7 +254,7 @@ public sealed class DefenseMusicController : MonoBehaviour
                 break;
 
             case MusicPhase.MidMaintenance:
-                percussion = 1.0f;
+                percussion = 0.0f;
                 strings = 0.0f;
                 guitar = 0.0f;
                 break;

@@ -539,7 +539,70 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
             return;
         }
 
+        // 상호작용 판정과 같은 콜라이더 표면을 설치음 위치로 씁니다. 긴 함정의 루트 중앙에서
+        // 재생하면 플레이어가 끝부분을 설치할 때 실제 거리보다 멀게 계산되어 소리가 작아집니다.
+        Vector3 installSoundPosition = ResolveInstallSoundPosition(interactor);
+
         Build();
+        PlayInstallSound(installSoundPosition);
+    }
+
+    /// <summary>플레이어와 가장 가까운 설치 콜라이더 표면의 월드 위치를 구합니다.</summary>
+    /// <remarks>
+    /// <see cref="InteractionController"/>가 상호작용 거리를 재는 규칙과 같아야 화면에서 보이는 거리와
+    /// 사운드 감쇠 거리가 어긋나지 않습니다. 콜라이더나 상호작용자가 없으면 함정 루트를 사용합니다.
+    /// </remarks>
+    private Vector3 ResolveInstallSoundPosition(GameObject interactor)
+    {
+        if (interactor == null)
+        {
+            return transform.position;
+        }
+
+        Collider interactionCollider = GetComponentInChildren<Collider>();
+        return interactionCollider != null
+            ? interactionCollider.ClosestPoint(interactor.transform.position)
+            : transform.position;
+    }
+
+    /// <summary>플레이어가 청사진 설치를 완료했을 때 함정 종류에 맞는 3D 설치음을 재생합니다.</summary>
+    /// <remarks>
+    /// <see cref="Build"/> 안에서 재생하지 않는 이유는 투척형 임시 함정과 화염 지대도 같은 메서드를
+    /// 사용하기 때문입니다. 상호작용으로 비용을 지불하고 설치한 경우에만 소리가 나야 합니다.
+    /// 클레이모어는 전용 음원이 정해질 때까지 의도적으로 재생하지 않습니다.
+    /// </remarks>
+    private void PlayInstallSound(Vector3 position)
+    {
+        string eventPath;
+
+        switch (CostKind)
+        {
+            case TrapKind.Wire:
+                eventPath = "event:/World/Trap/Install/Wire";
+                break;
+            case TrapKind.Spike:
+                eventPath = "event:/World/Trap/Install/Spike";
+                break;
+            case TrapKind.Mine:
+                eventPath = "event:/World/Trap/Install/Mine";
+                break;
+            case TrapKind.FireBarrel:
+                eventPath = "event:/World/Trap/Install/FireBarrel";
+                break;
+            default:
+                return;
+        }
+
+        try
+        {
+            FMODUnity.RuntimeManager.PlayOneShot(eventPath, position);
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogWarning(
+                $"[Trap] '{name}': 설치 사운드를 재생하지 못했습니다 ({eventPath}). {exception.Message}",
+                this);
+        }
     }
 
     /// <summary>

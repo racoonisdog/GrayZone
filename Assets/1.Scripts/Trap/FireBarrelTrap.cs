@@ -23,6 +23,10 @@ using VInspector;
 /// </remarks>
 public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
 {
+    private const string BurstSoundEventPath = "event:/World/Trap/Activate/FireBarrel";
+    private const string FireLoopEventPath = "event:/World/Trap/Active/FireBarrel";
+    private static bool s_loggedMissingBurstSound;
+
     /// <inheritdoc />
     protected override string DefaultDisplayName => "화염 드럼통";
 
@@ -249,9 +253,34 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     {
         m_isFuseBurning = false;
         ApplyShotColliderState();
+        PlayBurstSound();
         SpawnExplosionEffect();
         SpawnFire();
         TriggerNearbyChain();
+    }
+
+    /// <summary>드럼통이 터지는 지점에서 폭발음을 한 번 재생합니다.</summary>
+    private void PlayBurstSound()
+    {
+        if (!FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            FMODUnity.RuntimeManager.PlayOneShot(
+                BurstSoundEventPath,
+                ResolveBarrelBase() + Vector3.up * 0.5f);
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            if (!s_loggedMissingBurstSound)
+            {
+                s_loggedMissingBurstSound = true;
+                Debug.LogWarning($"[FireBarrelTrap] FMOD 이벤트를 찾지 못했습니다: {BurstSoundEventPath}\n{exception.Message}", this);
+            }
+        }
     }
 
     /// <summary>설치된 드럼통의 연쇄 반경을 바닥 높이의 원으로 한 프레임 그립니다.</summary>
@@ -367,6 +396,7 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
         fire.SetRangeMultiplier(m_upgradeFireRangeMultiplier);
         fire.SetEnemyBonusDamagePerTick(m_upgradeEnemyBonusDamagePerTick);
         fire.Build();
+        fire.StartLoopingSound(FireLoopEventPath);
     }
 
     /// <summary>드럼통 아래의 바닥 지점을 찾습니다. 못 찾으면 드럼통 밑면 중심을 씁니다.</summary>
