@@ -1,3 +1,4 @@
+using System;
 using FMODUnity;
 using UnityEngine;
 
@@ -14,6 +15,13 @@ using UnityEngine;
 [RequireComponent(typeof(DefenseEventHealth))]
 public sealed class DefenseObjectiveAudioController : MonoBehaviour
 {
+    /// <summary>사운드와 HUD가 같은 경고 단계로 반응할 수 있도록 공유하는 경고 종류입니다.</summary>
+    public enum WarningKind
+    {
+        UnderAttack,
+        Critical,
+    }
+
     private const string BarrierHitEvent = "event:/World/Defense/BarrierHit";
     private const string UnderAttackWarningEvent = "event:/UI/Defense/UnderAttackWarning";
     private const string CriticalWarningEvent = "event:/UI/Defense/CriticalWarning";
@@ -33,6 +41,12 @@ public sealed class DefenseObjectiveAudioController : MonoBehaviour
     private bool m_loggedMissingBarrierEvent;
     private bool m_loggedMissingUnderAttackEvent;
     private bool m_loggedMissingCriticalEvent;
+
+    /// <summary>
+    /// 일반 또는 긴급 경고음이 발동하는 순간 발생합니다.
+    /// FMOD 초기화 여부와 관계없이 발생하므로 화면 경고는 소리 재생 실패에 영향받지 않습니다.
+    /// </summary>
+    public event Action<WarningKind> OnWarningIssued;
 
     private void Awake()
     {
@@ -92,6 +106,7 @@ public sealed class DefenseObjectiveAudioController : MonoBehaviour
         if (!m_criticalWarningPlayed && healthRatio <= m_criticalHealthRatio)
         {
             m_criticalWarningPlayed = true;
+            OnWarningIssued?.Invoke(WarningKind.Critical);
             PlayOneShot(CriticalWarningEvent, Vector3.zero, ref m_loggedMissingCriticalEvent);
             m_nextWarningAllowedTime = Time.unscaledTime + m_warningCooldown;
             return;
@@ -102,6 +117,7 @@ public sealed class DefenseObjectiveAudioController : MonoBehaviour
             return;
         }
 
+        OnWarningIssued?.Invoke(WarningKind.UnderAttack);
         PlayOneShot(UnderAttackWarningEvent, Vector3.zero, ref m_loggedMissingUnderAttackEvent);
         m_nextWarningAllowedTime = Time.unscaledTime + m_warningCooldown;
     }

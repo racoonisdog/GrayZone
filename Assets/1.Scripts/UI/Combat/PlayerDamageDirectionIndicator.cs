@@ -29,17 +29,13 @@ public sealed class PlayerDamageDirectionIndicator : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_radiusPixels = 150.0f;
 
-    [Tooltip("피격 마커의 가로 폭(픽셀)입니다.")]
-    [Min(1.0f)]
-    [SerializeField] private float m_widthPixels = 58.0f;
+    [Tooltip("피격 방향을 덮는 원호 각도입니다. 값이 클수록 링 조각이 길어집니다.")]
+    [Range(5.0f, 120.0f)]
+    [SerializeField] private float m_arcAngleDegrees = 58.0f;
 
-    [Tooltip("피격 마커가 화면 중앙 쪽으로 꺾이는 깊이(픽셀)입니다.")]
+    [Tooltip("환형 부채꼴의 두께(픽셀)입니다.")]
     [Min(1.0f)]
-    [SerializeField] private float m_depthPixels = 16.0f;
-
-    [Tooltip("피격 마커 선 두께(픽셀)입니다.")]
-    [Min(1.0f)]
-    [SerializeField] private float m_lineWidthPixels = 6.0f;
+    [SerializeField] private float m_arcThicknessPixels = 11.0f;
 
     [Tooltip("배경과 구분하기 위해 마커 바깥에 추가할 어두운 외곽선 두께(픽셀)입니다.")]
     [Min(0.0f)]
@@ -50,13 +46,13 @@ public sealed class PlayerDamageDirectionIndicator : MonoBehaviour
     [SerializeField] private Color m_outlineColor = new Color32(20, 20, 20, 205);
 
     [Header("Timing")]
-    [Tooltip("피격 직후 완전히 보이는 시간(초)입니다.")]
+    [Tooltip("피격 직후 완전히 보이는 시간(초)입니다. 0이면 피격 순간부터 바로 페이드아웃합니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_holdDuration = 0.25f;
+    [SerializeField] private float m_holdDuration = 0.0f;
 
-    [Tooltip("완전 표시가 끝난 뒤 사라지는 시간(초)입니다.")]
+    [Tooltip("완전 표시가 끝난 뒤 서서히 사라지는 시간(초)입니다.")]
     [Min(0.01f)]
-    [SerializeField] private float m_fadeDuration = 0.55f;
+    [SerializeField] private float m_fadeDuration = 0.8f;
 
     private static bool s_sceneHookRegistered;
 
@@ -128,9 +124,8 @@ public sealed class PlayerDamageDirectionIndicator : MonoBehaviour
     private void OnValidate()
     {
         m_radiusPixels = Mathf.Max(0.0f, m_radiusPixels);
-        m_widthPixels = Mathf.Max(1.0f, m_widthPixels);
-        m_depthPixels = Mathf.Max(1.0f, m_depthPixels);
-        m_lineWidthPixels = Mathf.Max(1.0f, m_lineWidthPixels);
+        m_arcAngleDegrees = Mathf.Clamp(m_arcAngleDegrees, 5.0f, 120.0f);
+        m_arcThicknessPixels = Mathf.Max(1.0f, m_arcThicknessPixels);
         m_outlineWidthPixels = Mathf.Max(0.0f, m_outlineWidthPixels);
         m_holdDuration = Mathf.Max(0.0f, m_holdDuration);
         m_fadeDuration = Mathf.Max(0.01f, m_fadeDuration);
@@ -306,7 +301,7 @@ public sealed class PlayerDamageDirectionIndicator : MonoBehaviour
         float angle = Vector3.SignedAngle(cameraForward.normalized, direction.normalized, Vector3.up);
         float canvasSize = Mathf.Max(
             1.0f,
-            (m_radiusPixels + m_depthPixels + m_lineWidthPixels + m_outlineWidthPixels) * 2.0f);
+            (m_radiusPixels + m_arcThicknessPixels + m_outlineWidthPixels) * 2.0f);
 
         float rootWidth = m_rootElement.resolvedStyle.width;
         float rootHeight = m_rootElement.resolvedStyle.height;
@@ -357,40 +352,37 @@ public sealed class PlayerDamageDirectionIndicator : MonoBehaviour
     {
         Rect contentRect = context.visualElement.contentRect;
         Vector2 center = contentRect.center;
-        float halfWidth = Mathf.Max(0.5f, m_widthPixels * 0.5f);
         float radius = Mathf.Max(0.0f, m_radiusPixels);
-        float depth = Mathf.Max(1.0f, m_depthPixels);
-
-        Vector2 left = new Vector2(center.x - halfWidth, center.y - radius);
-        Vector2 tip = new Vector2(center.x, center.y - radius + depth);
-        Vector2 right = new Vector2(center.x + halfWidth, center.y - radius);
+        float halfArc = Mathf.Clamp(m_arcAngleDegrees, 5.0f, 120.0f) * 0.5f;
+        const float topAngle = 270.0f;
+        float startAngle = topAngle - halfArc;
+        float endAngle = topAngle + halfArc;
 
         Painter2D painter = context.painter2D;
-        painter.lineCap = LineCap.Round;
+        painter.lineCap = LineCap.Butt;
 
-        float outlineLineWidth = m_lineWidthPixels + m_outlineWidthPixels * 2.0f;
-        if (outlineLineWidth > m_lineWidthPixels && m_outlineColor.a > 0.0f)
+        float outlineLineWidth = m_arcThicknessPixels + m_outlineWidthPixels * 2.0f;
+        if (outlineLineWidth > m_arcThicknessPixels && m_outlineColor.a > 0.0f)
         {
-            DrawChevron(painter, left, tip, right, m_outlineColor, outlineLineWidth);
+            DrawRingSegment(painter, center, radius, startAngle, endAngle, m_outlineColor, outlineLineWidth);
         }
 
-        DrawChevron(painter, left, tip, right, m_color, m_lineWidthPixels);
+        DrawRingSegment(painter, center, radius, startAngle, endAngle, m_color, m_arcThicknessPixels);
     }
 
-    private static void DrawChevron(
+    private static void DrawRingSegment(
         Painter2D painter,
-        Vector2 left,
-        Vector2 tip,
-        Vector2 right,
+        Vector2 center,
+        float radius,
+        float startAngle,
+        float endAngle,
         Color color,
         float lineWidth)
     {
         painter.strokeColor = color;
         painter.lineWidth = Mathf.Max(1.0f, lineWidth);
         painter.BeginPath();
-        painter.MoveTo(left);
-        painter.LineTo(tip);
-        painter.LineTo(right);
+        painter.Arc(center, radius, startAngle, endAngle);
         painter.Stroke();
     }
 }
