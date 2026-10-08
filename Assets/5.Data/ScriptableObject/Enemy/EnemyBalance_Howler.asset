@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: EnemyBalance_Howler
   m_EditorClassIdentifier: Assembly-CSharp::EnemyBalanceSO
   m_enemyId: enemy.basic
-  m_maxHp: 50
+  m_maxHp: 25
   m_mass: 60
   m_wanderRadius: 8
   m_wanderInterval: 3

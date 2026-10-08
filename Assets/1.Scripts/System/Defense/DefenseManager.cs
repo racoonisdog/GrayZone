@@ -57,11 +57,15 @@ public sealed class DefenseManager : CombatSceneManager
     [Header("Defense Round")]
     [Tooltip("전투 구간 시간(초)입니다. 모든 웨이브, 모든 공격로에 같이 적용합니다. 이 시간이 끝나면 새 스폰만 멈추고 남은 적 정리로 넘어갑니다.")]
     [Min(0.01f)]
-    [SerializeField] private float m_roundDuration = 60.0f;
+    [SerializeField] private float m_roundDuration = 50.0f;
 
     [Tooltip("남은 적을 모두 정리한 뒤 다음 전투까지의 휴식 시간(초)입니다. 함정은 이 구간에만 설치할 수 있습니다. 마지막 웨이브 뒤에는 휴식이 없습니다.")]
     [Min(0.01f)]
-    [SerializeField] private float m_restDuration = 10.0f;
+    [SerializeField] private float m_restDuration = 30.0f;
+
+    [Tooltip("모든 공격로를 합쳐 동시에 살아 있을 수 있는 방어전 적의 상한입니다. 그룹이 남은 자리보다 크면 위험도가 낮은 적부터 가능한 수만 생성합니다.")]
+    [Min(1)]
+    [SerializeField] private int m_maxActiveEnemies = 35;
 
     [Tooltip("이 매니저가 웨이브를 실행시킬 방어전 스포너 목록입니다. 남은 적 수도 이 목록의 스포너가 내보낸 적만 셉니다. 비어 있는 항목은 무시합니다.")]
     [SerializeField] private List<EnemyDefenseSpawnPoint> m_spawnPoints = new List<EnemyDefenseSpawnPoint>();
@@ -109,6 +113,9 @@ public sealed class DefenseManager : CombatSceneManager
 
     [Tooltip("웨이브 시작 때 표시할 알림 문구입니다.")]
     [SerializeField] private string m_waveStartMessage = "전투가 시작됩니다";
+
+    [Tooltip("정비 구간 시작 때 표시할 알림 문구입니다.")]
+    [SerializeField] private string m_restStartMessage = "정비 시간이 시작됩니다";
 
     [Tooltip("웨이브 시작 알림이 불투명하게 유지되는 시간(초)입니다.")]
     [Min(0.0f)]
@@ -165,6 +172,12 @@ public sealed class DefenseManager : CombatSceneManager
     [SerializeField] private Vector2 m_startPromptKeyIconSize = new Vector2(30.0f, 30.0f);
 
     [Foldout("Mission Text")]
+    [Tooltip("좌상단 목표 패널의 제목 텍스트입니다. 비어 있으면 설명 텍스트와 같은 패널의 Title 오브젝트에서 찾습니다.")]
+    [SerializeField] private TMP_Text m_missionTitleText;
+
+    [Tooltip("전투 중 목표 패널 제목 문구입니다. 비어 있으면 바꾸지 않습니다.")]
+    [SerializeField] private string m_combatMissionTitle = "외곽 방어선을 지키십시오";
+
     [Tooltip("좌상단 목표 패널의 설명 텍스트입니다. 전투 중에는 아래 문구로 바꾸고, 휴식·시작 전에는 원래 문구로 돌려놓습니다. 비어 있으면 바꾸지 않습니다.")]
     [SerializeField] private TMP_Text m_missionDescriptionText;
 
@@ -234,6 +247,9 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>허공 상호작용키를 연속해서 누른 시간(초)입니다.</summary>
     private float m_emptySpaceHoldStartTimer;
 
+    /// <summary>전투 문구로 바꾸기 전 목표 패널 제목입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
+    private string m_missionTitleOriginalText;
+
     /// <summary>전투 문구로 바꾸기 전 목표 패널 설명입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
     private string m_missionDescriptionOriginalText;
 
@@ -267,6 +283,19 @@ public sealed class DefenseManager : CombatSceneManager
 
     /// <summary>현재 휴식에 남은 시간(초)입니다. 휴식 구간이 아니면 0입니다.</summary>
     public float RestTimer => IsResting ? m_restTimer : 0.0f;
+
+    /// <summary>모든 공격로를 합친 방어전 생존 적 상한입니다.</summary>
+    public int MaxActiveEnemies
+    {
+        get
+        {
+            int stageLimit = m_activeStage != null ? m_activeStage.MaxActiveEnemies : 0;
+            return stageLimit > 0 ? stageLimit : Mathf.Max(1, m_maxActiveEnemies);
+        }
+    }
+
+    /// <summary>현재 전역 상한 안에서 추가로 생성할 수 있는 적 수입니다.</summary>
+    public int AvailableEnemySpawnSlots => Mathf.Max(0, MaxActiveEnemies - CountManagedLiveEnemies());
 
     /// <summary>전투 시간이 끝나 남은 적을 정리하는 구간인지 여부입니다.</summary>
     public bool IsClearing => m_isGameStarted && m_isClearing;
@@ -369,7 +398,7 @@ public sealed class DefenseManager : CombatSceneManager
         }
 
         UpdateWaveStartMessage();
-        RefreshMissionDescription();
+        RefreshMissionText();
 
         if (!m_isGameStarted)
         {
@@ -624,7 +653,7 @@ public sealed class DefenseManager : CombatSceneManager
         BeginStageCombat();
         RefreshTrapBuildWindow();
         RefreshTimerText();
-        ShowWaveStartMessage();
+        ShowPhaseStartMessage(m_waveStartMessage);
         ResolveDefenseSceneDataManager()?.RecordWaveStarted(m_currentWave);
     }
 
@@ -804,6 +833,7 @@ public sealed class DefenseManager : CombatSceneManager
         m_roundTimer = 0.0f;
         m_restTimer = Mathf.Max(0.01f, m_restDuration);
         RefreshTimerText();
+        ShowPhaseStartMessage(m_restStartMessage);
         ResolveDefenseSceneDataManager()?.RecordRestStarted();
 
         // 휴식 복구 정책(OnRest) 함정이 먼저 되살아난 뒤 설치 구간을 엽니다. 순서가 바뀌어도 결과는 같지만,
@@ -1063,33 +1093,78 @@ public sealed class DefenseManager : CombatSceneManager
         }
     }
 
-    /// <summary>전투 중이면 목표 패널 설명을 전투 문구로 바꾸고, 그 외에는 원래 문구로 돌려놓습니다.</summary>
-    private void RefreshMissionDescription()
+    /// <summary>전투 중이면 목표 패널 문구를 전투용으로 바꾸고, 그 외에는 원래 문구로 돌려놓습니다.</summary>
+    private void RefreshMissionText()
     {
-        if (m_missionDescriptionText == null)
+        TMP_Text missionTitleText = ResolveMissionTitleText();
+        if (missionTitleText == null && m_missionDescriptionText == null)
         {
             return;
         }
 
         if (m_isPlaying && !m_isGameOver)
         {
-            if (m_missionDescriptionOriginalText == null)
+            if (missionTitleText != null && !string.IsNullOrEmpty(m_combatMissionTitle))
             {
-                m_missionDescriptionOriginalText = m_missionDescriptionText.text;
+                if (m_missionTitleOriginalText == null)
+                {
+                    m_missionTitleOriginalText = missionTitleText.text;
+                }
+
+                if (missionTitleText.text != m_combatMissionTitle)
+                {
+                    missionTitleText.text = m_combatMissionTitle;
+                }
             }
 
-            if (m_missionDescriptionText.text != m_combatMissionDescription)
+            if (m_missionDescriptionText != null && !string.IsNullOrEmpty(m_combatMissionDescription))
             {
-                m_missionDescriptionText.text = m_combatMissionDescription;
+                if (m_missionDescriptionOriginalText == null)
+                {
+                    m_missionDescriptionOriginalText = m_missionDescriptionText.text;
+                }
+
+                if (m_missionDescriptionText.text != m_combatMissionDescription)
+                {
+                    m_missionDescriptionText.text = m_combatMissionDescription;
+                }
             }
             return;
         }
 
-        if (m_missionDescriptionOriginalText != null)
+        if (missionTitleText != null && m_missionTitleOriginalText != null)
+        {
+            missionTitleText.text = m_missionTitleOriginalText;
+            m_missionTitleOriginalText = null;
+        }
+
+        if (m_missionDescriptionText != null && m_missionDescriptionOriginalText != null)
         {
             m_missionDescriptionText.text = m_missionDescriptionOriginalText;
             m_missionDescriptionOriginalText = null;
         }
+    }
+
+    /// <summary>씬 연결이 없으면 설명 텍스트와 같은 패널의 Title 오브젝트를 사용합니다.</summary>
+    private TMP_Text ResolveMissionTitleText()
+    {
+        if (m_missionTitleText != null)
+        {
+            return m_missionTitleText;
+        }
+
+        if (m_missionDescriptionText == null || m_missionDescriptionText.transform.parent == null)
+        {
+            return null;
+        }
+
+        Transform titleTransform = m_missionDescriptionText.transform.parent.Find("Title");
+        if (titleTransform != null)
+        {
+            m_missionTitleText = titleTransform.GetComponent<TMP_Text>();
+        }
+
+        return m_missionTitleText;
     }
 
     /// <summary>
@@ -1335,15 +1410,15 @@ public sealed class DefenseManager : CombatSceneManager
         m_remainingWaveText.text = string.Format(m_remainingWaveFormat, remaining, totalWaveCount);
     }
 
-    /// <summary>웨이브 시작 알림을 표시하고 설정된 유지·페이드 시간을 시작합니다.</summary>
-    private void ShowWaveStartMessage()
+    /// <summary>구간 시작 알림을 표시하고 설정된 유지·페이드 시간을 시작합니다.</summary>
+    private void ShowPhaseStartMessage(string message)
     {
         if (m_waveStartMessageText == null)
         {
             return;
         }
 
-        m_waveStartMessageText.text = m_waveStartMessage;
+        m_waveStartMessageText.text = message;
         SetWaveStartMessageVisible(true);
         SetWaveStartMessageAlpha(1.0f);
 
@@ -1423,6 +1498,7 @@ public sealed class DefenseManager : CombatSceneManager
 
         m_roundDuration = Mathf.Max(0.01f, m_roundDuration);
         m_restDuration = Mathf.Max(0.01f, m_restDuration);
+        m_maxActiveEnemies = Mathf.Max(1, m_maxActiveEnemies);
         m_clearingPullDelay = Mathf.Max(0.0f, m_clearingPullDelay);
         m_clearingOffscreenDespawnDelay = Mathf.Max(0.0f, m_clearingOffscreenDespawnDelay);
         m_clearingForceEndDelay = Mathf.Max(0.0f, m_clearingForceEndDelay);

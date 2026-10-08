@@ -11,6 +11,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private const int ExplosionPreviewSegmentCount = 48;
     private const float ExplosionPreviewHeightOffset = 0.03f;
     private const string GrenadeActionLayerName = "Grenade Action Layer";
+    private const string GrenadeEquipSoundEventPath = "event:/World/Throwable/Grenade/Equip";
+    private const string MolotovEquipSoundEventPath = "event:/World/Throwable/Molotov/Equip";
     private static readonly int AnimIDGrenadeMode = Animator.StringToHash("IsGrenadeMode");
     private static readonly int AnimIDThrow = Animator.StringToHash("DoThrow");
     private static readonly int AnimStateGrenadeThrow = Animator.StringToHash("Grenade Throw");
@@ -22,6 +24,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private static ExplosiveProjectileShooter s_crosshairOverrideOwner;
     private static CrosshairController s_crosshairOverrideTarget;
     private static CrosshairPreset s_crosshairOverrideBaseline;
+    private static bool s_loggedMissingGrenadeEquipSound;
+    private static bool s_loggedMissingMolotovEquipSound;
 
     [System.Serializable]
     private sealed class CrosshairPreset
@@ -396,8 +400,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
+        bool enteredThrowModeThisFrame = !m_wasThrowModeActive;
         CycleProjectile(m_input.ConsumeThrowSelectionDelta());
         UpdateGrenadeSelectionUI(true);
+        if (enteredThrowModeThisFrame)
+        {
+            PlaySelectedProjectileEquipSound();
+        }
+
         bool throwHeld = m_input.Throw;
 
         if (m_input.Sprint)
@@ -408,7 +418,6 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
-        bool enteredThrowModeThisFrame = !m_wasThrowModeActive;
         bool canThrow = Time.time >= m_nextThrowReadyTime;
 
         if (canThrow)
@@ -691,6 +700,49 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
         m_selectedProjectileIndex = WrapIndex(m_selectedProjectileIndex, m_projectilePrefabs.Count);
         return m_projectilePrefabs[m_selectedProjectileIndex];
+    }
+
+    /// <summary>투척 모드에 들어갈 때 현재 선택한 투척물을 꺼내는 2D 장비음을 한 번 재생합니다.</summary>
+    private void PlaySelectedProjectileEquipSound()
+    {
+        ProjectileBase selectedProjectile = GetSelectedProjectile();
+        if (selectedProjectile == null || !FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        bool isMolotov = selectedProjectile is TemporaryTrapProjectile;
+        string eventPath = isMolotov
+            ? MolotovEquipSoundEventPath
+            : GrenadeEquipSoundEventPath;
+
+        try
+        {
+            FMODUnity.RuntimeManager.PlayOneShot(eventPath);
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            bool alreadyLogged = isMolotov
+                ? s_loggedMissingMolotovEquipSound
+                : s_loggedMissingGrenadeEquipSound;
+            if (alreadyLogged)
+            {
+                return;
+            }
+
+            if (isMolotov)
+            {
+                s_loggedMissingMolotovEquipSound = true;
+            }
+            else
+            {
+                s_loggedMissingGrenadeEquipSound = true;
+            }
+
+            Debug.LogWarning(
+                $"[ExplosiveProjectileShooter] FMOD 이벤트를 찾지 못했습니다: {eventPath}\n{exception.Message}",
+                this);
+        }
     }
 
     private int GetProjectileCollisionLayers(ProjectileBase projectile)

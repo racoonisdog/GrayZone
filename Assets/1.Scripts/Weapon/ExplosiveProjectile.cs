@@ -11,6 +11,9 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class ExplosiveProjectile : ProjectileBase
 {
+    private const string ExplosionSoundEventPath = "event:/World/Throwable/Grenade/Explosion";
+    private static bool s_loggedMissingExplosionSound;
+
     [Tooltip("폭발 범위 안의 Enemy 진영 대상에게 적용할 고정 피해입니다.")]
     [Min(0)]
     [SerializeField] private int m_damage = 10;
@@ -152,6 +155,7 @@ public class ExplosiveProjectile : ProjectileBase
             m_playerDamage,
             onTargetDamaged);
 
+        PlayExplosionSound(explosionCenter);
         SpawnExplosionVfx(explosionCenter);
 
         Destroy(gameObject);
@@ -186,5 +190,29 @@ public class ExplosiveProjectile : ProjectileBase
         }
 
         Destroy(explosionVfx, m_explosionVfxLifetime);
+    }
+
+    /// <summary>수류탄이 터진 지점에서 3D 폭발음을 한 번 재생합니다.</summary>
+    private void PlayExplosionSound(Vector3 explosionCenter)
+    {
+        if (!FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            FMODUnity.RuntimeManager.PlayOneShot(ExplosionSoundEventPath, explosionCenter);
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            if (!s_loggedMissingExplosionSound)
+            {
+                s_loggedMissingExplosionSound = true;
+                Debug.LogWarning(
+                    $"[ExplosiveProjectile] FMOD 이벤트를 찾지 못했습니다: {ExplosionSoundEventPath}\n{exception.Message}",
+                    this);
+            }
+        }
     }
 }

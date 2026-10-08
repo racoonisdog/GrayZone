@@ -41,12 +41,19 @@ public sealed class DefenseStageSO : ScriptableObject
     [Min(1)]
     [SerializeField] private int m_totalWaveCount = 3;
 
+    [Tooltip("이 일차에서 동시에 살아 있을 수 있는 적의 상한입니다. 0이면 DefenseManager의 기본 상한을 사용합니다.")]
+    [Min(0)]
+    [SerializeField] private int m_maxActiveEnemies;
+
     [Header("Routes")]
     [Tooltip("공격로별 웨이브 SO 목록입니다. 같은 공격로 이름을 두 번 넣지 않습니다.")]
     [SerializeField] private List<Route> m_routes = new List<Route>();
 
     /// <summary>이 방어전의 웨이브 수입니다.</summary>
     public int TotalWaveCount => Mathf.Max(1, m_totalWaveCount);
+
+    /// <summary>이 일차의 생존 적 상한입니다. 0이면 DefenseManager 기본값을 사용합니다.</summary>
+    public int MaxActiveEnemies => Mathf.Max(0, m_maxActiveEnemies);
 
     /// <summary>공격로 목록입니다.</summary>
     public IReadOnlyList<Route> Routes => m_routes;
@@ -175,5 +182,6 @@ public sealed class DefenseStageSO : ScriptableObject
     private void OnValidate()
     {
         m_totalWaveCount = Mathf.Max(1, m_totalWaveCount);
+        m_maxActiveEnemies = Mathf.Max(0, m_maxActiveEnemies);
     }
 }

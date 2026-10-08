@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c98ef138f4c58e84badaad187e4b3347, type: 3}
+  m_Name: TestWave_Day2_W1_Bridge
+  m_EditorClassIdentifier: Assembly-CSharp::DefenseWaveSO
+  m_groups:
+  - {fileID: 11400000, guid: 7a276efdab7b4d3986f8d71d8ee6f9df, type: 2}
+  - {fileID: 11400000, guid: b18ccc3740b141c7ac9c91be342c25ec, type: 2}
+  - {fileID: 11400000, guid: f91c1e53bd37482d8b065aca2e5ac3c1, type: 2}
+  - {fileID: 11400000, guid: b0ce3c43f6a840a0af03964641a45c68, type: 2}
+  m_targetGroupValue: 10
+  m_fixedGroups: []
+  m_fixedSpawnDelay: 3
+  m_firstSpawnDelayMin: 3
+  m_firstSpawnDelayMax: 3
+  m_spawnIntervalMin: 7
+  m_spawnIntervalMax: 8
+  m_previewCombatDuration: 50
+

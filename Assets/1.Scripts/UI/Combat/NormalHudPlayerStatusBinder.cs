@@ -19,6 +19,9 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     /// <summary>조작 멤버 상태 위젯 컨테이너 이름입니다. 초상화 이름이 슬롯과 겹쳐 탐색 범위를 여기로 좁힙니다.</summary>
     private const string PlayerStatusName = "PlayerStatus";
 
+    /// <summary>주 무기 아이콘 오브젝트 이름입니다.</summary>
+    private const string PrimaryWeaponIconName = "PrimaryWeaponIcon";
+
     [Serializable]
     private sealed class HealthGaugeSlot
     {
@@ -144,6 +147,13 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     [Tooltip("예비 탄약 수 텍스트(Mag_All)입니다.")]
     [SerializeField] private TMP_Text m_magAllText;
 
+    [Header("Weapon Icon")]
+    [Tooltip("현재 조작 대원의 주 무기 아이콘입니다.")]
+    [SerializeField] private Image m_primaryWeaponIcon;
+    [SerializeField] private Sprite m_assaultRifleSprite;
+    [SerializeField] private Sprite m_shotgunSprite;
+    [SerializeField] private Sprite m_sniperRifleSprite;
+
     [Header("Player Data")]
     [SerializeField] private SquadManager m_squadManager;
     [SerializeField] private PlayerbleUnitData[] m_playerDataSources;
@@ -192,6 +202,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         // 초상화만 예외적으로 여기서도 찾습니다. 나중에 추가된 필드라 이미 저장된 씬에는 직렬화된 값이
         // 없고, 그대로 두면 기존 씬에서 초상화가 영영 비어 있게 됩니다. 인스펙터에 값이 있으면 그대로 씁니다.
         ResolvePortraitImage();
+        ResolveWeaponIcon();
 
         ValidateReferences();
         RefreshPlayerDataSources();
@@ -308,6 +319,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         }
 
         ResolvePortraitImage();
+        ResolveWeaponIcon();
 
         for (int i = 0; i < m_teamGaugeSlots.Length; i++)
         {
@@ -337,6 +349,21 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         if (portrait != null)
         {
             m_portraitImage = portrait.GetComponent<Image>();
+        }
+    }
+
+    /// <summary>주 무기 아이콘 참조가 비어 있으면 Normal HUD 자손에서 찾아 채웁니다.</summary>
+    private void ResolveWeaponIcon()
+    {
+        if (m_primaryWeaponIcon != null)
+        {
+            return;
+        }
+
+        Transform icon = FindDeep(transform, PrimaryWeaponIconName);
+        if (icon != null)
+        {
+            m_primaryWeaponIcon = icon.GetComponent<Image>();
         }
     }
 
@@ -449,6 +476,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             m_magAllText.text = ResolveReserveAmmoText();
         }
 
+        UpdateWeaponIcon();
         UpdatePortrait();
         UpdateGauge(normalizedHp);
         UpdateHpGaugeFade(maxHp > 0, normalizedHp);
@@ -535,6 +563,49 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         if (m_portraitImage.gameObject.activeSelf != (sprite != null))
         {
             m_portraitImage.gameObject.SetActive(sprite != null);
+        }
+    }
+
+    /// <summary>현재 조작 대원이 들고 있는 무기 타입에 맞는 HUD 스프라이트를 반영합니다.</summary>
+    private void UpdateWeaponIcon()
+    {
+        if (m_assaultRifleSprite == null && m_shotgunSprite == null && m_sniperRifleSprite == null)
+        {
+            return;
+        }
+
+        if (m_playerSquadMemberData == null)
+        {
+            return;
+        }
+
+        ResolveWeaponIcon();
+        if (m_primaryWeaponIcon == null)
+        {
+            return;
+        }
+
+        Gun currentGun = m_playerSquadMemberData.Gun;
+        if (currentGun == null && !m_playerSquadMemberData.HasCurrentWeaponDefinition)
+        {
+            return;
+        }
+
+        WeaponType weaponType = currentGun != null
+            ? currentGun.WeaponType
+            : m_playerSquadMemberData.CurrentWeaponType;
+
+        Sprite sprite = weaponType switch
+        {
+            WeaponType.AssaultRifle => m_assaultRifleSprite,
+            WeaponType.Shotgun => m_shotgunSprite,
+            WeaponType.SniperRifle => m_sniperRifleSprite,
+            _ => null,
+        };
+
+        if (sprite != null && m_primaryWeaponIcon.sprite != sprite)
+        {
+            m_primaryWeaponIcon.sprite = sprite;
         }
     }
 

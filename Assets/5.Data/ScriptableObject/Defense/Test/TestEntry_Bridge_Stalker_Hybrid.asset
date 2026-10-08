@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 955f9fda05926434d9cca2f76e7a3486, type: 3}
   m_Name: TestEntry_Bridge_Stalker_Hybrid
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawnEntrySO
-  m_enemyPrefab: {fileID: 2990036820463330610, guid: c2ad54a981d86c146807412dad9b2ed6, type: 3}
+  m_enemyPrefab: {fileID: 2990036820463330610, guid: e97536034c9289349ad8f20a2d96631f, type: 3}
   m_spawnCount: 1
   m_randomDuration: 0
   m_productionInterval: 25
@@ -22,8 +22,8 @@ MonoBehaviour:
   m_maxCapacity: 20
   m_walkSpeedMin: 3.2
   m_walkSpeedMax: 3.2
-  m_runSpeedMin: 6.5
-  m_runSpeedMax: 8
-  m_alwaysRun: 0
+  m_runSpeedMin: 12
+  m_runSpeedMax: 12
+  m_alwaysRun: 1
   m_defenseDisposition: 3
   m_prioritizeWaypointsForPlayerFirst: 1

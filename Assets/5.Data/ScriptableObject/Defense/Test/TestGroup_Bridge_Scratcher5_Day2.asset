@@ -13,5 +13,5 @@ MonoBehaviour:
   m_Name: TestGroup_Bridge_Scratcher5_Day2
   m_EditorClassIdentifier: Assembly-CSharp::SpawnGroupSO
   m_members:
-  - m_entry: {fileID: 11400000, guid: aa3a02819e382094d8a12b7b4bfdca91, type: 2}
+  - m_entry: {fileID: 11400000, guid: 54d96a7fbdde1124482c6e59171b95c6, type: 2}
     m_count: 5

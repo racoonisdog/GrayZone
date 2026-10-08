@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c98ef138f4c58e84badaad187e4b3347, type: 3}
+  m_Name: TestWave_Day2_W3_Tunnel
+  m_EditorClassIdentifier: Assembly-CSharp::DefenseWaveSO
+  m_groups:
+  - {fileID: 11400000, guid: ff55213b6f984ed98cf0ebef58d02f72, type: 2}
+  - {fileID: 11400000, guid: ed2d5f3f41e2446883b8c4284dbf47e8, type: 2}
+  - {fileID: 11400000, guid: 5247c005f61b4af5bb01b870089292a8, type: 2}
+  - {fileID: 11400000, guid: f27425701eef4458b4fbe0c1d9a9388a, type: 2}
+  m_targetGroupValue: 12
+  m_fixedGroups: []
+  m_fixedSpawnDelay: 3
+  m_firstSpawnDelayMin: 8
+  m_firstSpawnDelayMax: 12
+  m_spawnIntervalMin: 8
+  m_spawnIntervalMax: 10
+  m_previewCombatDuration: 50
+

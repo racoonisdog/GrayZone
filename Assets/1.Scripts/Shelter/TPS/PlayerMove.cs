@@ -15,6 +15,8 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private Transform cameraTransform;
     [SerializeField] private Animator modelAnimator;
 
+    private ShelterPlayerFootstepEmitter footstepEmitter;
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 4.5f;
     [SerializeField] private float sprintSpeed = 6f;
@@ -159,8 +161,18 @@ public class PlayerMove : MonoBehaviour
         if (modelAnimator == null)
             modelAnimator = GetComponentInChildren<Animator>();
 
+        footstepEmitter = GetComponent<ShelterPlayerFootstepEmitter>();
+
         if (modelAnimator != null)
+        {
             modelAnimator.applyRootMotion = false;
+
+            PlayerAnimationEventReceiver receiver = modelAnimator.GetComponent<PlayerAnimationEventReceiver>();
+            if (receiver == null)
+                receiver = modelAnimator.gameObject.AddComponent<PlayerAnimationEventReceiver>();
+
+            receiver.SetFootstepEmitter(footstepEmitter);
+        }
 
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
@@ -343,6 +355,7 @@ public class PlayerMove : MonoBehaviour
 
         verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
         jumpedThisFrame = true;
+        footstepEmitter?.PlayJump();
     }
 
     private bool WasJumpPressed()

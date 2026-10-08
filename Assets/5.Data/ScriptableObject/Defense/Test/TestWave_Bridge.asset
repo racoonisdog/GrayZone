@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: TestWave_Bridge
   m_EditorClassIdentifier: Assembly-CSharp::DefenseWaveSO
   m_groups:
-  - {fileID: 11400000, guid: 2d9647b0090ff6d4982d0bcef006f0b1, type: 2}
+  - {fileID: 11400000, guid: 3071407b6e8543608a60ade522e7d0dd, type: 2}
+  - {fileID: 11400000, guid: 7a276efdab7b4d3986f8d71d8ee6f9df, type: 2}
+  - {fileID: 11400000, guid: b18ccc3740b141c7ac9c91be342c25ec, type: 2}
+  - {fileID: 11400000, guid: f91c1e53bd37482d8b065aca2e5ac3c1, type: 2}
   m_firstSpawnDelayMin: 3
   m_firstSpawnDelayMax: 3
-  m_spawnIntervalMin: 13
-  m_spawnIntervalMax: 15
-  m_previewCombatDuration: 60
+  m_spawnIntervalMin: 5
+  m_spawnIntervalMax: 6
+  m_previewCombatDuration: 50
