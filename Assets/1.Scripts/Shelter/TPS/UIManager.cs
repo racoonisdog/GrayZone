@@ -479,6 +479,8 @@ public class UIManager : MonoBehaviour
         m_facilityUpgradeUI.Open(facilityId);
         if (m_returnUIAfterFacilityUpgrade == ShelterUIType.Manufacturing)
             m_manufacturingUI?.SetMenuVisible(false);
+        else if (m_returnUIAfterFacilityUpgrade == ShelterUIType.Medical)
+            m_medicalUI?.SetMenuVisible(false);
         SetActiveUI(ShelterUIType.FacilityUpgrade);
 
         if (m_logMessages)
@@ -600,6 +602,8 @@ public class UIManager : MonoBehaviour
 
         if (returnUI == ShelterUIType.Manufacturing)
             m_manufacturingUI.SetMenuVisible(true);
+        else if (returnUI == ShelterUIType.Medical)
+            m_medicalUI.SetMenuVisible(true);
 
         SetActiveUI(returnUI);
     }

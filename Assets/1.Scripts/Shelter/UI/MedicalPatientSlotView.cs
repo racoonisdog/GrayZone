@@ -17,6 +17,8 @@ public class MedicalPatientSlotView : MonoBehaviour
     [SerializeField] private Button m_cancelButton;   // 점유 시 표시되는 배치취소 버튼 (슬롯과 형제, 배경 아래)
     [FormerlySerializedAs("m_npccatalog")]
     [SerializeField] private CharacterPortraitCatalog m_characterCatalog;
+    [Tooltip("선택: 캐릭터별 부상 이미지. 환자의 현재 부상 상태 이미지가 있으면 기본 초상화 대신 표시합니다.")]
+    [SerializeField] private CharacterInjuryPortraitCatalog m_characterInjuryCatalog;
 
     [Header("Status Display (선택 — 없으면 무시)")]
     [SerializeField] private GameObject m_gaugeRoot;     // 레벨별 게이지 바 표시/숨김 대상
@@ -34,6 +36,13 @@ public class MedicalPatientSlotView : MonoBehaviour
     [SerializeField] private string m_stateFormat = "상태 : {0}";
     [SerializeField] private string m_daysFormat = "{0}일";
 
+    [Header("Empty Slot State Text")]
+    [Tooltip("시설 레벨이 부족해 해금되지 않은 슬롯")]
+    [SerializeField] private string m_lockedStateText = "시설 업그레이드시 해제";
+    [Tooltip("해금됐지만 지금은 사용할 수 없는 슬롯")]
+    [SerializeField] private string m_unavailableStateText = "잠김";
+    [Tooltip("환자를 배치할 수 있는 빈 슬롯")]
+    [SerializeField] private string m_availableStateText = "사용 가능";
 
     private int m_slotIndex = -1;
     private bool m_isUnlocked;
@@ -41,6 +50,7 @@ public class MedicalPatientSlotView : MonoBehaviour
     private bool m_isAvailable;
     private string m_patientRuntimeId;           // null/공백 = 비점유
     private string m_patientDefinitionId;
+    private CharacterInjuryState m_patientInjuryState;
     private Action<MedicalPatientSlotView> m_clicked;
 
     /// <summary>세이브/로드 시에만 사용하는 슬롯 식별자</summary>
@@ -125,9 +135,25 @@ public class MedicalPatientSlotView : MonoBehaviour
     {
         m_patientRuntimeId = null;
         m_patientDefinitionId = null;
+        m_patientInjuryState = CharacterInjuryState.Normal;
         UpdateVisual();
         UpdateButtonStates();
         ClearStatusDisplay();
+        ApplyEmptySlotStateText();
+    }
+
+    // 환자가 없는 슬롯은 잠김/사용 불가/사용 가능 상태를 부상상태 텍스트 자리에 표시한다.
+    private void ApplyEmptySlotStateText()
+    {
+        if (m_injuryStateText == null || HasPatient)
+            return;
+
+        if (!m_isUnlocked)
+            m_injuryStateText.text = m_lockedStateText;
+        else if (!m_isAvailable)
+            m_injuryStateText.text = m_unavailableStateText;
+        else
+            m_injuryStateText.text = m_availableStateText;
     }
 
     // 배치 이전 상태로 표시 초기화 (취소/완치 시) — 게이지·아이콘·텍스트 비움.
@@ -166,6 +192,13 @@ public class MedicalPatientSlotView : MonoBehaviour
     /// <param name="showGauge">게이지 바를 표시할지 여부</param>
     public void ApplyStatus(PatientStatus status, bool showGauge)
     {
+        // 부상 상태별 초상화를 쓰도록 상태를 기억하고 슬롯 이미지를 다시 고른다.
+        if (m_patientInjuryState != status.InjuryState)
+        {
+            m_patientInjuryState = status.InjuryState;
+            UpdateVisual();
+        }
+
         if (m_gaugeRoot != null)
             m_gaugeRoot.SetActive(showGauge);
 
@@ -223,6 +256,7 @@ public class MedicalPatientSlotView : MonoBehaviour
         if (!m_isUnlocked)
         {
             m_slotImage.sprite = m_lockedSprite;
+            ApplyEmptySlotStateText();
             return;
         }
 
@@ -231,18 +265,26 @@ public class MedicalPatientSlotView : MonoBehaviour
             // usedSprite 미지정 시에도 임시 빌드 상태를 구분할 수 있도록 잠금 이미지를 대신 사용한다.
             m_slotImage.sprite = m_usedSprite != null ? m_usedSprite : m_lockedSprite;
             ClearStatusDisplay();
+            ApplyEmptySlotStateText();
             return;
         }
 
-        if (HasPatient && m_characterCatalog != null)
+        if (HasPatient && (m_characterInjuryCatalog != null || m_characterCatalog != null))
         {
-            Sprite portrait = m_characterCatalog.GetPortrait(m_patientDefinitionId);
+            Sprite portrait = m_characterInjuryCatalog != null
+                ? m_characterInjuryCatalog.GetIcon(m_patientDefinitionId, m_patientInjuryState)
+                : null;
+            if (portrait == null && m_characterCatalog != null)
+                portrait = m_characterCatalog.GetPortrait(m_patientDefinitionId);
+
             m_slotImage.sprite = portrait != null ? portrait : m_unlockedSprite;
         }
         else
         {
             m_slotImage.sprite = m_unlockedSprite;
         }
+
+        ApplyEmptySlotStateText();
     }
 
     private void CacheReferences()
