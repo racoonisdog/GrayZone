@@ -5,6 +5,9 @@ using UnityEngine;
 /// </summary>
 public static class CombatDamage
 {
+    /// <summary>Unity 내장 Ignore Raycast 레이어 번호입니다. 사격 판정에서 통과시킵니다.</summary>
+    private const int IgnoreRaycastLayer = 2;
+
     /// <summary>
     /// 한 번의 명중 판정이 끝난 뒤 돌려주는 결과입니다. 크로스헤어와 처치 피드백이 이 값을 씁니다.
     /// </summary>
@@ -25,14 +28,14 @@ public static class CombatDamage
         /// <remarks>
         /// 피해가 성립하지 않았으면 0입니다. 크로스헤어 히트마커가 타격 크기를 표현하는 데 씁니다.
         /// </remarks>
-        public readonly int Damage;
+        public readonly float Damage;
 
         /// <summary>한 번의 명중 결과를 묶습니다.</summary>
         /// <param name="applied">피해가 실제로 들어갔는지 여부입니다.</param>
         /// <param name="headshot">약점 히트박스에 맞았는지 여부입니다.</param>
         /// <param name="killed">이 명중으로 대상이 죽었는지 여부입니다.</param>
         /// <param name="damage">실제로 들어간 최종 피해량입니다. 피해가 없으면 0입니다.</param>
-        public HitFeedback(bool applied, bool headshot, bool killed, int damage = 0)
+        public HitFeedback(bool applied, bool headshot, bool killed, float damage = 0.0f)
         {
             Applied = applied;
             Headshot = headshot;
@@ -84,6 +87,14 @@ public static class CombatDamage
     public static bool BlocksShot(Collider collider, Faction attacker, bool allyPassThrough)
     {
         if (collider == null)
+        {
+            return false;
+        }
+
+        // Ignore Raycast 레이어는 사격 판정에서 없는 것으로 봅니다. 사격 레이는 레이어 마스크를 직접 넘기므로
+        // Unity가 기본으로 해 주는 Ignore Raycast 제외가 적용되지 않아, 방어 구역 판정 박스(OnlyTargetZone) 같은
+        // 판정용 볼륨에 탄과 조준점이 걸렸습니다. Ignore Raycast는 Unity 내장 레이어라 번호가 항상 2입니다.
+        if (collider.gameObject.layer == IgnoreRaycastLayer)
         {
             return false;
         }
@@ -206,7 +217,7 @@ public static class CombatDamage
     public static HitFeedback ResolveHit(
         Collider collider,
         Faction attacker,
-        int baseDamage,
+        float baseDamage,
         float headshotDamageMultiplier = 1.0f,
         bool allowHeadshot = true,
         GameObject attackerObject = null,
@@ -231,9 +242,12 @@ public static class CombatDamage
 
         bool headshot = allowHeadshot && hitbox.IsHeadshot;
         float multiplier = headshot ? Mathf.Max(0.0f, headshotDamageMultiplier) : 1.0f;
-        int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * multiplier));
+        float damage = baseDamage * multiplier;
 
-        if (!target.TakeDamage(damage, attackerObject))
+        DamageNumberDebug.SetPendingHeadshot(headshot);
+        bool applied = target.TakeDamage(damage, attackerObject);
+        DamageNumberDebug.ClearPending();
+        if (!applied)
         {
             return HitFeedback.None;
         }
@@ -262,7 +276,7 @@ public static class CombatDamage
     /// <c>Conditional</c>이라 비-Editor 빌드에서는 호출 자체가 사라져 문자열 조립 비용도 남지 않습니다.
     /// </remarks>
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    private static void LogHitPart(Hitbox hitbox, IDamageable target, int damage, bool headshot)
+    private static void LogHitPart(Hitbox hitbox, IDamageable target, float damage, bool headshot)
     {
         if (hitbox == null || !hitbox.LogHit)
         {

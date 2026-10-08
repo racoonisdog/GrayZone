@@ -13,12 +13,17 @@ public sealed class SeoHaTeamHealSkill : CharacterSkill
         public float Elapsed;
     }
 
-    [Tooltip("각 팀원의 최대 HP에서 회복할 비율입니다. 30이면 최대 HP의 30%를 회복합니다.")]
+    [Tooltip("이 스킬의 밸런스 수치 SO입니다(쿨타임, 회복 비율, 원격 구조 체력). 비어 있으면 인스펙터 값을 그대로 씁니다.")]
+    [SerializeField] private SeoHaTeamHealSkillSO m_balanceSO;
+
+    [Tooltip("각 팀원의 최대 HP에서 회복할 비율입니다. 30이면 최대 HP의 30%를 회복합니다. 밸런스 SO가 있으면 SO 값으로 덮입니다.")]
     [Range(1.0f, 100.0f)]
+    [BalanceField]
     [SerializeField] private float m_healPercent = 30.0f;
 
-    [Tooltip("다운된 대상을 스킬로 원격 구조했을 때 부여할 체력입니다. 일반 전체 회복량과 별도입니다.")]
+    [Tooltip("다운된 대상을 스킬로 원격 구조했을 때 부여할 체력입니다. 일반 전체 회복량과 별도입니다. 밸런스 SO가 있으면 SO 값으로 덮입니다.")]
     [Min(1)]
+    [BalanceField]
     [SerializeField] private int m_skillReviveHp = 20;
 
     [Tooltip("One-shot visual played around every squad member who is healed or revived.")]
@@ -29,10 +34,15 @@ public sealed class SeoHaTeamHealSkill : CharacterSkill
     private Coroutine m_remoteRescueRoutine;
     private float m_remoteRescueEndTime;
 
+    protected override ScriptableObject BalanceSource => m_balanceSO;
+
     public override CharacterSkillType SkillType => CharacterSkillType.SeoHaTeamHeal;
     public override string DisplayName => "응급 치료";
-    public override string Description => "일반 대원은 즉시 회복하고 다운된 동료는 원격으로 구조 게이지를 채웁니다.";
+    public override string Description => "전체 팀원을 회복 또는 구조합니다.";
     public override bool IsActive => m_remoteRescueRoutine != null;
+    public override string HudDetailText => IsActive
+        ? $"원격 구조 중 {ActiveRemaining:0.0}초"
+        : $"회복량 {m_healPercent:0}% (구조 시 회복량 {m_skillReviveHp})";
     public override float ActiveDuration
     {
         get

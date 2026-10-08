@@ -39,7 +39,7 @@ public struct TutorialPage
     [Tooltip("페이지 이미지입니다. 비어 있으면 이미지 오브젝트를 끕니다.")]
     [SerializeField] private Sprite m_image;
 
-    [Tooltip("하단 안내 문구입니다. 키 이름은 여기에 직접 적습니다(예: \"[F] 3초 유지\").")]
+    [Tooltip("하단 안내 문구입니다. 키 이름은 여기에 직접 적습니다(예: \"[Z] 3초 유지\").")]
     [SerializeField] private string m_hint;
 
     [Tooltip("본문 사이에 끼워 넣을 키 아이콘입니다(예: H, F). 비어 있으면 아이콘을 끕니다. " +
@@ -136,6 +136,29 @@ public struct TutorialPage
             m_body = body,
             m_hint = hint,
             m_waitEvent = true,
+        };
+    }
+
+    /// <summary>
+    /// 튜토리얼 창에 띄울 표시 전용 페이지를 만듭니다. 넘김 조건은 없습니다.
+    /// </summary>
+    /// <remarks>2회차부터 튜토리얼 없이 시작할 때 시작 안내(Z 3초)를 튜토리얼 창에 띄우는 데 씁니다.</remarks>
+    public static TutorialPage CreateDisplayPage(
+        string title,
+        string body,
+        string hint,
+        Sprite keyIcon,
+        Vector2 keyIconPosition,
+        Vector2 keyIconSize)
+    {
+        return new TutorialPage
+        {
+            m_title = title,
+            m_body = body,
+            m_hint = hint,
+            m_keyIcon = keyIcon,
+            m_keyIconPosition = keyIconPosition,
+            m_keyIconSize = keyIconSize,
         };
     }
 

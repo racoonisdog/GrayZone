@@ -56,7 +56,7 @@ public enum TrapRebuildPolicy
 /// 아직 <c>IDamageable</c>은 구현하지 않았습니다. 총에 맞아 부서지는 규칙이 정해지면 이 클래스에
 /// 구현해 파생 전체가 한 번에 따라오게 하는 것이 자연스럽습니다.
 /// </remarks>
-public abstract class Trap : MonoBehaviour, IInteractable
+public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequirement
 {
     [Header("Build")]
     [Tooltip("켜면 시작할 때 이미 설치된 상태입니다. 끄면 청사진 상태로 시작하며, 자원을 내고 설치하기 전까지 작동하지 않습니다.")]
@@ -70,7 +70,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
         ResourceIds.TrapMaterial)]
     [SerializeField] private string m_buildCostResourceId = ResourceIds.TrapMaterial;
 
-    [Tooltip("설치에 소모할 자원의 수량입니다. 0이면 자원 없이 설치됩니다.")]
+    [Tooltip("설치에 소모할 자원의 수량입니다. 0이면 자원 없이 설치됩니다. 함정 가격 표(Resources/Trap/TrapBuildCostTable)에 이 함정 종류가 있으면 표 값이 우선합니다.")]
     [Min(0)]
     [SerializeField] private int m_buildCostAmount = 1;
 
@@ -80,7 +80,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
     [Tooltip("설치에 필요한 홀드 시간(초)입니다. 0이면 누르는 즉시 설치됩니다. " +
              "기본 1초인 이유: 튜토리얼 넘김이 상호작용 단일 탭이라, 설치를 홀드로 두어 두 입력을 구분합니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_buildHoldDuration = 1.0f;
+    [SerializeField] private float m_buildHoldDuration = 0.3f;
 
     [Header("Display")]
     [Tooltip("함정 안내 HUD에 표시할 이름입니다. 비워 두면 함정 종류의 기본 이름을 씁니다.")]
@@ -107,9 +107,12 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// <remarks>
     /// 렌더러마다 슬롯 수가 다를 수 있어 배열째 보관합니다. 청사진 머테리얼을 덮어쓰기 전에 한 번만 잡습니다.
     /// 이미 덮어쓴 뒤에 다시 잡으면 청사진 머테리얼이 원본으로 기억되어 설치해도 파랗게 남습니다.
+    ///
+    /// <c>Material[][]</c> 대신 <see cref="MaterialSlots"/> 배열로 둡니다. 배열의 배열은 Unity가 직렬화하지 못해,
+    /// Play 중 스크립트가 다시 컴파일되면 이 값만 null로 사라지고 설치가 NullReferenceException으로 끊깁니다.
     /// </remarks>
     private Renderer[] m_visualRenderers;
-    private Material[][] m_originalMaterials;
+    private MaterialSlots[] m_originalMaterials;
     private UnityEngine.Rendering.ShadowCastingMode[] m_originalShadowModes;
 
     /// <summary>렌더러의 원래 켜짐 여부입니다. 청사진을 숨겼다가 다시 보일 때 원래부터 꺼져 있던 렌더러를 켜지 않기 위해서입니다.</summary>
@@ -263,8 +266,69 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// </remarks>
     private static DefenseManager s_sharedDefenseManager;
 
+    /// <summary>F9 디버그의 "트랩 전체 무료" 토글 값입니다. 켜면 자원을 내지 않고 설치합니다.</summary>
+    private static bool s_debugFreeBuild;
+
+    /// <summary>
+    /// 디버그로 모든 함정을 무료로 설치할지 여부입니다. 디버그 기능이 켜진 빌드에서만 효과가 있습니다.
+    /// </summary>
+    /// <remarks>함정 가격 값 자체는 바꾸지 않습니다. 끄면 원래 가격으로 바로 돌아옵니다.</remarks>
+    public static bool DebugFreeBuild
+    {
+        get => s_debugFreeBuild;
+        set => s_debugFreeBuild = value;
+    }
+
+    /// <summary>지금 디버그 무료 설치가 적용되는지 여부입니다.</summary>
+    public static bool IsDebugFreeBuild => s_debugFreeBuild && GameDevMode.DebugFeaturesEnabled;
+
+    /// <summary>Play를 다시 시작할 때 디버그 토글을 끕니다. 도메인 리로드를 끈 설정에서도 이전 값이 남지 않게 합니다.</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetDebugFreeBuild()
+    {
+        s_debugFreeBuild = false;
+        s_costTable = null;
+        s_costTableLoaded = false;
+    }
+
+    /// <summary>함정 가격 표입니다. 처음 쓸 때 Resources에서 한 번 불러옵니다.</summary>
+    private static TrapBuildCostTableSO s_costTable;
+
+    /// <summary>가격 표를 불러오려 시도했는지 여부입니다. 표가 없어도 매번 다시 찾지 않게 합니다.</summary>
+    private static bool s_costTableLoaded;
+
+    /// <summary>가격 표에서 이 함정을 가리키는 종류입니다. 파생이 정하고, 기본은 표를 쓰지 않습니다.</summary>
+    protected virtual TrapKind CostKind => TrapKind.None;
+
+    private static TrapBuildCostTableSO CostTable
+    {
+        get
+        {
+            if (!s_costTableLoaded)
+            {
+                s_costTable = Resources.Load<TrapBuildCostTableSO>(TrapBuildCostTableSO.ResourcePath);
+                s_costTableLoaded = true;
+            }
+
+            return s_costTable;
+        }
+    }
+
     /// <summary>설치 비용입니다. 수량이 0이면 비용이 없는 것으로 봅니다.</summary>
-    public ResourceCost BuildCost => new ResourceCost(m_buildCostResourceId, m_buildCostAmount);
+    /// <remarks>
+    /// 가격 표(<see cref="TrapBuildCostTableSO"/>)에 이 함정 종류가 있으면 표 값을, 없으면 프리팹에 적힌 값을 씁니다.
+    /// 기획자는 표에서 종류별로 한 번에 조절합니다.
+    /// </remarks>
+    public ResourceCost BuildCost
+    {
+        get
+        {
+            TrapBuildCostTableSO table = CostTable;
+            return table != null && table.TryGetCost(CostKind, out ResourceCost tableCost)
+                ? tableCost
+                : new ResourceCost(m_buildCostResourceId, m_buildCostAmount);
+        }
+    }
 
     /// <summary>함정 안내 HUD에 표시할 이름입니다. 인스펙터 값이 비어 있으면 <see cref="DefaultDisplayName"/>입니다.</summary>
     public string DisplayName => string.IsNullOrWhiteSpace(m_displayName) ? DefaultDisplayName : m_displayName;
@@ -280,7 +344,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
     protected virtual string DefaultDescription => string.Empty;
 
     /// <summary>이 함정에 비용이 걸려 있는지 여부입니다.</summary>
-    private bool HasBuildCost => m_buildCostAmount > 0 && !string.IsNullOrWhiteSpace(m_buildCostResourceId);
+    private bool HasBuildCost => BuildCost.IsValid;
 
     protected virtual void Awake()
     {
@@ -408,17 +472,24 @@ public abstract class Trap : MonoBehaviour, IInteractable
         ApplyBuildStateVisual();
     }
 
+    /// <summary>렌더러 하나의 머테리얼 슬롯 묶음입니다. 직렬화 가능한 형태로 감싸 재컴파일 뒤에도 남게 합니다.</summary>
+    [System.Serializable]
+    private struct MaterialSlots
+    {
+        public Material[] Materials;
+    }
+
     /// <summary>청사진 머테리얼로 덮기 전에 원래 머테리얼과 그림자 설정을 기억해 둡니다.</summary>
     private void CacheVisuals()
     {
         m_visualRenderers = GetComponentsInChildren<Renderer>(true);
-        m_originalMaterials = new Material[m_visualRenderers.Length][];
+        m_originalMaterials = new MaterialSlots[m_visualRenderers.Length];
         m_originalShadowModes = new UnityEngine.Rendering.ShadowCastingMode[m_visualRenderers.Length];
         m_originalRendererEnabled = new bool[m_visualRenderers.Length];
 
         for (int i = 0; i < m_visualRenderers.Length; i++)
         {
-            m_originalMaterials[i] = m_visualRenderers[i].sharedMaterials;
+            m_originalMaterials[i] = new MaterialSlots { Materials = m_visualRenderers[i].sharedMaterials };
             m_originalShadowModes[i] = m_visualRenderers[i].shadowCastingMode;
             m_originalRendererEnabled[i] = m_visualRenderers[i].enabled;
         }
@@ -431,19 +502,31 @@ public abstract class Trap : MonoBehaviour, IInteractable
 
     /// <inheritdoc />
     /// <remarks>
-    /// 이미 설치됐거나, 다 써서 아직 복구 시점이 오지 않았거나, 설치 구간이 아니거나(상시 설치가 아닐 때),
-    /// 자원이 모자라면 후보에서 빠집니다.
+    /// 이미 설치됐거나, 다 써서 아직 복구 시점이 오지 않았거나, 설치 구간이 아니면(상시 설치가 아닐 때) 후보에서 빠집니다.
+    /// 자원이 모자란 것은 후보에서 빼지 않습니다. 빼면 안내 HUD가 뜨지 않아 왜 설치가 안 되는지 알 수 없습니다.
+    /// 자원은 <see cref="MeetsInteractionRequirement"/>가 따로 막습니다.
     /// </remarks>
     public bool CanInteract(GameObject interactor)
     {
-        return IsBuildable && CanPayBuildCost();
+        return IsBuildable;
+    }
+
+    /// <summary>설치 비용을 지금 낼 수 있는지 여부입니다. 안내 HUD가 "자원이 부족합니다"를 띄울 때 씁니다.</summary>
+    public bool CanAffordBuild => CanPayBuildCost();
+
+    /// <inheritdoc />
+    /// <remarks>자원이 모자라면 홀드 게이지를 채우지 않고 설치하지 않습니다.</remarks>
+    public bool MeetsInteractionRequirement(GameObject interactor)
+    {
+        return CanPayBuildCost();
     }
 
     /// <inheritdoc />
     public string GetPrompt()
     {
-        return HasBuildCost
-            ? $"{m_buildPrompt} ({m_buildCostResourceId} {m_buildCostAmount})"
+        ResourceCost cost = BuildCost;
+        return cost.IsValid
+            ? $"{m_buildPrompt} ({cost.ResourceId} {cost.Amount})"
             : m_buildPrompt;
     }
 
@@ -456,7 +539,70 @@ public abstract class Trap : MonoBehaviour, IInteractable
             return;
         }
 
+        // 상호작용 판정과 같은 콜라이더 표면을 설치음 위치로 씁니다. 긴 함정의 루트 중앙에서
+        // 재생하면 플레이어가 끝부분을 설치할 때 실제 거리보다 멀게 계산되어 소리가 작아집니다.
+        Vector3 installSoundPosition = ResolveInstallSoundPosition(interactor);
+
         Build();
+        PlayInstallSound(installSoundPosition);
+    }
+
+    /// <summary>플레이어와 가장 가까운 설치 콜라이더 표면의 월드 위치를 구합니다.</summary>
+    /// <remarks>
+    /// <see cref="InteractionController"/>가 상호작용 거리를 재는 규칙과 같아야 화면에서 보이는 거리와
+    /// 사운드 감쇠 거리가 어긋나지 않습니다. 콜라이더나 상호작용자가 없으면 함정 루트를 사용합니다.
+    /// </remarks>
+    private Vector3 ResolveInstallSoundPosition(GameObject interactor)
+    {
+        if (interactor == null)
+        {
+            return transform.position;
+        }
+
+        Collider interactionCollider = GetComponentInChildren<Collider>();
+        return interactionCollider != null
+            ? interactionCollider.ClosestPoint(interactor.transform.position)
+            : transform.position;
+    }
+
+    /// <summary>플레이어가 청사진 설치를 완료했을 때 함정 종류에 맞는 3D 설치음을 재생합니다.</summary>
+    /// <remarks>
+    /// <see cref="Build"/> 안에서 재생하지 않는 이유는 투척형 임시 함정과 화염 지대도 같은 메서드를
+    /// 사용하기 때문입니다. 상호작용으로 비용을 지불하고 설치한 경우에만 소리가 나야 합니다.
+    /// 클레이모어는 전용 음원이 정해질 때까지 의도적으로 재생하지 않습니다.
+    /// </remarks>
+    private void PlayInstallSound(Vector3 position)
+    {
+        string eventPath;
+
+        switch (CostKind)
+        {
+            case TrapKind.Wire:
+                eventPath = "event:/World/Trap/Install/Wire";
+                break;
+            case TrapKind.Spike:
+                eventPath = "event:/World/Trap/Install/Spike";
+                break;
+            case TrapKind.Mine:
+                eventPath = "event:/World/Trap/Install/Mine";
+                break;
+            case TrapKind.FireBarrel:
+                eventPath = "event:/World/Trap/Install/FireBarrel";
+                break;
+            default:
+                return;
+        }
+
+        try
+        {
+            FMODUnity.RuntimeManager.PlayOneShot(eventPath, position);
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogWarning(
+                $"[Trap] '{name}': 설치 사운드를 재생하지 못했습니다 ({eventPath}). {exception.Message}",
+                this);
+        }
     }
 
     /// <summary>
@@ -468,7 +614,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// </remarks>
     private bool CanPayBuildCost()
     {
-        if (!HasBuildCost)
+        if (!HasBuildCost || IsDebugFreeBuild)
         {
             return true;
         }
@@ -480,7 +626,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
     /// <summary>설치 비용을 차감합니다. 모자라면 아무것도 차감하지 않고 <c>false</c>를 돌려줍니다.</summary>
     private bool TryPayBuildCost()
     {
-        if (!HasBuildCost)
+        if (!HasBuildCost || IsDebugFreeBuild)
         {
             return true;
         }
@@ -538,6 +684,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
             return false;
         }
 
+        DamageNumberDebug.Report(this, Mathf.Min(amount, m_currentHealth), DamageNumberDebug.TargetKind.Trap);
         m_currentHealth -= amount;
         if (m_currentHealth > 0)
         {
@@ -570,7 +717,10 @@ public abstract class Trap : MonoBehaviour, IInteractable
         ApplyBuildStateVisual();
         OnDepleted();
 
-        if (m_rebuildPolicy == TrapRebuildPolicy.Always)
+        // OnRest는 휴식이 "시작될 때" 복구됩니다. 이미 휴식(준비 시간) 중에 다 쓰면 그 알림이 다시 오지 않아
+        // 이번 휴식 내내 청사진이 숨겨집니다. 설치 구간이 열려 있으면 그 자리에서 되돌립니다.
+        if (m_rebuildPolicy == TrapRebuildPolicy.Always
+            || (m_rebuildPolicy == TrapRebuildPolicy.OnRest && m_buildWindowOpen))
         {
             Rearm();
         }
@@ -633,7 +783,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
                 if (IsBlueprint)
                 {
                     // 슬롯 수를 원본과 맞춰야 서브메시가 빠지지 않습니다.
-                    var swapped = new Material[m_originalMaterials[i].Length];
+                    var swapped = new Material[m_originalMaterials[i].Materials.Length];
                     for (int slot = 0; slot < swapped.Length; slot++)
                     {
                         swapped[slot] = m_blueprintMaterial;
@@ -647,7 +797,7 @@ public abstract class Trap : MonoBehaviour, IInteractable
                 }
                 else
                 {
-                    renderer.sharedMaterials = m_originalMaterials[i];
+                    renderer.sharedMaterials = m_originalMaterials[i].Materials;
                     renderer.shadowCastingMode = m_originalShadowModes[i];
                 }
             }

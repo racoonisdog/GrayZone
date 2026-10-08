@@ -567,8 +567,36 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 4605713857948224409}
     - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawAimTraceLine
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawAimPointSphere
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawHitscanDebugRay
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawLookPointSphere
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawCameraForwardRay
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_drawImpactPointSphere
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_visualKickMaxFovPunch
       value: 1.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_spawnImpactMarkerOnShot
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3717923713268448865, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_adsFovPunchEnvelopeCurve.m_Curve.Array.data[1].time
@@ -795,6 +823,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6964990620421309326}
+    - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7217600436643347420}
+    - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7371586435218308901}
   m_SourcePrefab: {fileID: 100100000, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
 --- !u!1 &3651029312063593687 stripped
 GameObject:
@@ -828,6 +862,35 @@ MonoBehaviour:
   m_interactionNoiseRange: 10
   m_interactionNoiseInterval: 0.5
   m_debugDrawNoiseRanges: 0
+--- !u!114 &7217600436643347420
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3651029312063593687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35420f374f22fd94085aa4ffa5f4e714, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NarinTeamHasteSkill
+  m_cooldownDuration: 30
+  m_balanceSO: {fileID: 11400000, guid: cfaac2fc63393ba4681c0fdc5cdf341d, type: 2}
+  m_hasteEffect: {fileID: 11400000, guid: ae44c5608b49eb541bc5ce78a50c8069, type: 2}
+--- !u!114 &7371586435218308901
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3651029312063593687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ef14b2e8c45944e96ed711ce481800, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StatusEffectContainer
+  m_effectAnchor: {fileID: 0}
+  m_modelTintRoot: {fileID: 0}
 --- !u!114 &3909991041034621441 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 3705982125215987319, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
@@ -948,6 +1011,10 @@ PrefabInstance:
     - target: {fileID: 4693724506572384012, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
       propertyPath: m_hitscanLayerMask.m_Bits
       value: 4294942207
+      objectReference: {fileID: 0}
+    - target: {fileID: 4693724506572384012, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
+      propertyPath: m_hipfireStandingMinSpread
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4693724506572384012, guid: 9bbd33130544b784c9cfb9d88e5ae0dc, type: 3}
       propertyPath: m_damageFalloff.m_steps.Array.size

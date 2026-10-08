@@ -113,13 +113,13 @@ public sealed class PenetrationTable
     /// <param name="baseDamage">거리 감쇠까지 적용된 피해입니다. 배율 모드에서만 쓰입니다.</param>
     /// <returns>이 대상에 넣을 피해입니다. 구간이 없으면 <paramref name="baseDamage"/> 그대로입니다.</returns>
     /// <remarks>
-    /// 구간에 걸렸다면 최소 1을 보장합니다. 맞았는데 0이 들어가면 피격 표시만 뜨고 아무 일도 일어나지 않아
-    /// 버그로 보이기 때문이며, <see cref="DamageFalloffTable.ResolveDamage"/>와 같은 규약입니다.
+    /// 소수 그대로 돌려줍니다. 거리 감쇠가 소수 피해를 내므로 여기서 반올림하면 그 값이 사라집니다.
+    /// <see cref="DamageFalloffTable.ResolveDamage"/>와 같은 규약입니다.
     ///
     /// 마지막 구간보다 많이 꿰뚫은 경우는 마지막 구간의 값을 씁니다. 무제한 관통을 켰을 때
     /// 표를 무한히 늘리지 않아도 되도록 한 규칙입니다.
     /// </remarks>
-    public int ResolveDamage(int penetrationIndex, int baseDamage)
+    public float ResolveDamage(int penetrationIndex, float baseDamage)
     {
         if (IsEmpty)
         {
@@ -140,13 +140,13 @@ public sealed class PenetrationTable
     }
 
     /// <summary>구간 하나가 내는 피해를 계산합니다.</summary>
-    public int ResolveStepDamage(PenetrationStep step, int baseDamage)
+    public float ResolveStepDamage(PenetrationStep step, float baseDamage)
     {
-        int damage = m_mode == DamageFalloffMode.FlatDamage
+        float damage = m_mode == DamageFalloffMode.FlatDamage
             ? step.FlatDamage
-            : Mathf.RoundToInt(baseDamage * step.DamageMultiplier);
+            : baseDamage * step.DamageMultiplier;
 
-        return Mathf.Max(1, damage);
+        return Mathf.Max(0.0f, damage);
     }
 
     /// <summary>구간을 관통 횟수 오름차순으로 정렬합니다.</summary>

@@ -15,8 +15,12 @@ MonoBehaviour:
   m_explosiveLevels:
   - RangeMultiplier: 1.25
   m_wireLevels:
-  - MoveSpeedScale: 0.5
+  - MoveSpeedScale: 0.4615385
     BonusDurability: 50
   m_spikeLevels:
-  - DamageMultiplier: 1.25
+  - DamageMultiplier: 3
     BonusDurability: 10
+  m_fireBarrelLevels:
+  - RangeMultiplier: 1.15
+    BonusDuration: 2
+    EnemyBonusDamagePerTick: 3

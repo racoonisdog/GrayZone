@@ -100,14 +100,19 @@ MonoBehaviour:
   m_buildCostResourceId: trap_material
   m_buildCostAmount: 0
   m_buildPrompt: "\uC124\uCE58"
-  m_buildHoldDuration: 1
+  m_buildHoldDuration: 0.3
+  m_displayName: 
+  m_description: 
   m_blueprintMaterial: {fileID: 2100000, guid: cf43b62aa6a65f148a402c99cb003910, type: 2}
   m_disableShadowWhileBlueprint: 1
   m_blueprintVisualRoot: {fileID: 0}
   m_builtVisualRoot: {fileID: 0}
   m_maxHealth: 100
+  m_currentHealth: 0
   m_rebuildPolicy: 1
-  m_damage: 1
+  m_buildChargesPerDefense: 0
+  m_remainingBuildCharges: -1
+  m_damage: 3
   m_damageMode: 1
   m_damageTickInterval: 1
   m_drawRangeGizmo: 1
@@ -116,9 +121,11 @@ MonoBehaviour:
   m_targetLayers:
     serializedVersion: 2
     m_Bits: 512
-  m_moveSpeedMultiplier: 0.1
+  m_moveSpeedMultiplier: 0.65
   m_forceWalk: 0
   m_durabilityCostPerTarget: 1
+  m_entrySlowMultiplier: 1
+  m_entrySlowDuration: 0
 --- !u!65 &4685178966383192677
 BoxCollider:
   m_ObjectHideFlags: 0

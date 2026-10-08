@@ -205,6 +205,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>행동·피격·사망 피드백의 출력 컴포넌트입니다.</summary>
     private EnemyFeedbackEmitter feedbackEmitter;
 
+    /// <summary>이동 애니메이션 주기에 맞춰 표면별 맨발 소리를 출력하는 모듈입니다.</summary>
+    private EnemyFootstepEmitter m_footstepEmitter;
+
+    /// <summary>전역 감염체 보컬 관리자에 이 개체의 상태를 제공하는 모듈입니다.</summary>
+    private EnemyVocalEmitter m_vocalEmitter;
+
     // =========================
     // 최상위 상태 인스턴스 (상태 간 전이에 사용)
     // =========================
@@ -931,11 +937,16 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_spawnAlwaysRun = false;
         m_spawnDefenseDisposition = EnemyDefenseDisposition.Default;
 
+        // 걷기 구속도 함께 비웁니다. 철조망·스파이크 안에서 풀로 돌아가면 OnTriggerExit이 오지 않아, 다시 스폰된 개체가
+        // 이전 생애의 걷기 구속을 안고 나옵니다.
+        m_forceWalkSources.Clear();
+
         if (m_moveSpeedMultipliers.Count > 0)
         {
             m_moveSpeedMultipliers.Clear();
-            RefreshMoveSpeedMultiplier();
         }
+
+        RefreshMoveSpeedMultiplier();
 
         // 버프 배율은 위에서 함께 비워졌으므로 기록만 지웁니다. 남기면 재사용된 개체가 이전 생애의 버프를
         // 가진 것으로 보이고, 같은 종류를 다시 받을 때도 기록이 어긋납니다.
@@ -2553,6 +2564,16 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             ragdollController = GetComponent<RagdollController>();
         }
 
+        if (m_footstepEmitter == null && !TryGetComponent(out m_footstepEmitter))
+        {
+            m_footstepEmitter = gameObject.AddComponent<EnemyFootstepEmitter>();
+        }
+
+        if (m_vocalEmitter == null && !TryGetComponent(out m_vocalEmitter))
+        {
+            m_vocalEmitter = gameObject.AddComponent<EnemyVocalEmitter>();
+        }
+
         enemyAttack?.SetAnimator(animator);
         ragdollController?.SetAnimator(animator);
 
@@ -2679,7 +2700,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// 경직은 여기서 다루지 않습니다. 피해와 경직은 서로 다른 값으로 판정되며(피해 0인 경직도, 경직 0인 피해도 성립),
     /// 경직력 누적은 <see cref="EnemyHealth.ApplyStagger"/>가 따로 받습니다. 발동하면 <see cref="HandleStaggered"/>로 옵니다.
     /// </remarks>
-    private void HandleDamaged(int damage, GameObject attacker)
+    private void HandleDamaged(float damage, GameObject attacker)
     {
         if (m_current == Dead)
         {

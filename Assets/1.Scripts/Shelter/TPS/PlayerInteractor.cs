@@ -108,13 +108,13 @@ public class PlayerInteractor : MonoBehaviour
     {
 #if ENABLE_INPUT_SYSTEM
         // Unity 6 project setting currently uses the new Input System.
-        if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame)
+        if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
             return true;
 #endif
 
 #if ENABLE_LEGACY_INPUT_MANAGER
         // Legacy fallback for projects that enable both input backends.
-        if (Input.GetKeyDown(KeyCode.E))
+        if (Input.GetKeyDown(KeyCode.F))
             return true;
 #endif
 

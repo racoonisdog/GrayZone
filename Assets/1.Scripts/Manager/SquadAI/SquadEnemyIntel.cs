@@ -2,6 +2,18 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
+/// AI 팀원이 공격 대상으로 삼을 수 있는 적의 범위입니다. 씬 컨트롤러(<see cref="CombatSceneManager"/>)가 정합니다.
+/// </summary>
+public enum SquadEnemyAwareness
+{
+    /// <summary>스쿼드와 교전 중인 적만 노립니다. 필드 기준입니다(§8.1).</summary>
+    EngagedOnly,
+
+    /// <summary>교전 여부와 상관없이, 스쿼드 중 누군가 보고 있는 적이면 노립니다. 방어전 기준입니다.</summary>
+    AnyVisible,
+}
+
+/// <summary>
 /// 스쿼드가 공유하는 교전 적 위치 정보입니다.
 /// </summary>
 /// <remarks>
@@ -143,12 +155,35 @@ public class SquadEnemyIntel
             return;
         }
 
-        // 1) 교전에서 빠졌거나 사라진 적을 걷어냅니다.
+        Refresh(engagement.EngagedEnemies, engagement.IsEngaged, confirm);
+    }
+
+    /// <summary>
+    /// 지정한 후보 목록과 확인 결과를 반영해 기록을 갱신합니다.
+    /// </summary>
+    /// <param name="candidates">이번에 등록할 수 있는 적 목록입니다. 필드는 교전 적, 방어전은 살아 있는 적 전체입니다.</param>
+    /// <param name="isTracked">기록을 계속 둘 적인지 판정합니다. false가 되면 유예 없이 지웁니다.</param>
+    /// <param name="confirm">해당 적을 지금 누군가 직접 확인하고 있는지 판정하는 함수입니다.</param>
+    /// <remarks>
+    /// 방어전(<see cref="SquadEnemyAwareness.AnyVisible"/>)은 교전하지 않은 적도 후보로 넘깁니다.
+    /// 확인되지 않은 적은 실시간 위치가 없어 대상 후보가 되지 않으므로, 결국 보이는 적만 노리게 됩니다.
+    /// </remarks>
+    public void Refresh(
+        IReadOnlyList<EnemyController> candidates,
+        System.Func<EnemyController, bool> isTracked,
+        System.Func<EnemyController, bool> confirm)
+    {
+        if (candidates == null || isTracked == null)
+        {
+            return;
+        }
+
+        // 1) 후보에서 빠졌거나 사라진 적을 걷어냅니다.
         m_removeBuffer.Clear();
         foreach (var pair in m_intel)
         {
             EnemyController enemy = pair.Key;
-            if (!pair.Value.IsCurrentLifetime || !engagement.IsEngaged(enemy))
+            if (!pair.Value.IsCurrentLifetime || !isTracked(enemy))
             {
                 m_removeBuffer.Add(enemy);
             }
@@ -159,9 +194,10 @@ public class SquadEnemyIntel
             m_intel.Remove(m_removeBuffer[i]);
         }
 
-        // 2) 교전 적을 등록하고 확인 여부를 갱신합니다.
-        foreach (EnemyController enemy in engagement.EngagedEnemies)
+        // 2) 후보를 등록하고 확인 여부를 갱신합니다.
+        for (int i = 0; i < candidates.Count; i++)
         {
+            EnemyController enemy = candidates[i];
             if (enemy == null || !enemy.gameObject.activeInHierarchy || (enemy.Health != null && enemy.Health.IsDead))
             {
                 continue;

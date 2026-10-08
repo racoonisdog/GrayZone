@@ -338,25 +338,25 @@ public sealed class DamageFalloffTableDrawer : PropertyDrawer
         row.y += line + spacing;
 
         int baseDamage = ResolveBaseDamage(property);
-        int resultDamage;
+        float resultDamage;
 
         if (flatMode)
         {
-            flatDamage.intValue = Mathf.Max(0, EditorGUI.IntField(row, "구간 피해", flatDamage.intValue));
-            resultDamage = Mathf.Max(1, flatDamage.intValue);
+            flatDamage.floatValue = Mathf.Max(0.0f, EditorGUI.FloatField(row, "구간 피해", flatDamage.floatValue));
+            resultDamage = flatDamage.floatValue;
         }
         else
         {
             multiplier.floatValue = EditorGUI.Slider(row, "피해 배율", multiplier.floatValue, 0.0f, 1.0f);
-            resultDamage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * Mathf.Clamp01(multiplier.floatValue)));
+            resultDamage = baseDamage * Mathf.Clamp01(multiplier.floatValue);
         }
 
         row.y += line + spacing;
 
         // 결과를 함께 보여 줍니다. 값만 보면 몇 발에 죽는지 매번 계산해야 합니다.
         string result = flatMode
-            ? $"{from:0}m ~ {distance.floatValue:0}m  →  피해 {resultDamage}  (기본 피해와 무관)"
-            : $"{from:0}m ~ {distance.floatValue:0}m  →  피해 {resultDamage}  (기본 {baseDamage})";
+            ? $"{from:0}m ~ {distance.floatValue:0}m  →  피해 {resultDamage:0.##}  (기본 피해와 무관)"
+            : $"{from:0}m ~ {distance.floatValue:0}m  →  피해 {resultDamage:0.##}  (기본 {baseDamage})";
 
         EditorGUI.LabelField(row, " ", result, EditorStyles.miniLabel);
     }
@@ -456,12 +456,12 @@ public sealed class DamageFalloffTableDrawer : PropertyDrawer
 
         // 새 구간은 앞 구간보다 한 단계 약하게 시작합니다. 같은 값이면 추가한 티가 나지 않습니다.
         float previousMultiplier = 1.0f;
-        int previousFlat = baseDamage;
+        float previousFlat = baseDamage;
         if (steps.arraySize > 0)
         {
             SerializedProperty previous = steps.GetArrayElementAtIndex(steps.arraySize - 1);
             previousMultiplier = previous.FindPropertyRelative("m_damageMultiplier").floatValue;
-            previousFlat = previous.FindPropertyRelative("m_flatDamage").intValue;
+            previousFlat = previous.FindPropertyRelative("m_flatDamage").floatValue;
         }
 
         steps.InsertArrayElementAtIndex(steps.arraySize);
@@ -471,7 +471,7 @@ public sealed class DamageFalloffTableDrawer : PropertyDrawer
         // 쓰지 않는 쪽도 함께 채웁니다. 모드를 바꿨을 때 0으로 비어 있으면 값을 다시 다 적어야 합니다.
         float nextMultiplier = Mathf.Max(0.0f, previousMultiplier - 0.15f);
         step.FindPropertyRelative("m_damageMultiplier").floatValue = nextMultiplier;
-        step.FindPropertyRelative("m_flatDamage").intValue = flatMode
+        step.FindPropertyRelative("m_flatDamage").floatValue = flatMode
             ? Mathf.Max(1, Mathf.RoundToInt(previousFlat * 0.85f))
             : Mathf.Max(1, Mathf.RoundToInt(baseDamage * nextMultiplier));
     }

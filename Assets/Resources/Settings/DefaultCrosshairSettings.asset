@@ -1,0 +1,195 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ae76597ca276e94aa6ac6a9dc7acadf, type: 3}
+  m_Name: DefaultCrosshairSettings
+  m_EditorClassIdentifier: Assembly-CSharp::DefaultCrosshairSettings
+  m_characters:
+  - characterId: 1
+    style:
+      useSpreadAccuracy: 1
+      mainShape: 1
+      mainSizePixels: 3
+      mainRingSizePixels: 8
+      mainRingThicknessPixels: 1
+      mainColor: {r: 1, g: 1, b: 1, a: 1}
+      mainStrokeThicknessPixels: 1
+      mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      subShape: 1
+      centerSpacePixels: 1
+      subSizePixels: 1
+      subWidthPixels: 10
+      subThicknessPixels: 1
+      subRingSizePixels: 16
+      subRingThicknessPixels: 1
+      subColor: {r: 1, g: 1, b: 1, a: 1}
+      subStrokeThicknessPixels: 1
+      subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      cornerRadiusPixels: 2
+      subDynamic: 1
+      subSpreadMode: 0
+      separateAdsSub: 0
+      adsMain:
+        mainShape: 1
+        mainSizePixels: 3
+        mainRingSizePixels: 8
+        mainRingThicknessPixels: 1
+        mainColor: {r: 1, g: 1, b: 1, a: 1}
+        mainStrokeThicknessPixels: 1
+        mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      adsSub:
+        subShape: 2
+        centerSpacePixels: 5
+        subSizePixels: 1
+        subWidthPixels: 10
+        subThicknessPixels: 1
+        subRingSizePixels: 16
+        subRingThicknessPixels: 1
+        subColor: {r: 1, g: 1, b: 1, a: 1}
+        subStrokeThicknessPixels: 1
+        subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+        cornerRadiusPixels: 2
+        subSpreadMode: 0
+  - characterId: 2
+    style:
+      useSpreadAccuracy: 1
+      mainShape: 1
+      mainSizePixels: 3
+      mainRingSizePixels: 8
+      mainRingThicknessPixels: 1
+      mainColor: {r: 1, g: 1, b: 1, a: 1}
+      mainStrokeThicknessPixels: 1
+      mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      subShape: 3
+      centerSpacePixels: 0
+      subSizePixels: 1
+      subWidthPixels: 10
+      subThicknessPixels: 1
+      subRingSizePixels: 0
+      subRingThicknessPixels: 1
+      subColor: {r: 1, g: 1, b: 1, a: 1}
+      subStrokeThicknessPixels: 1
+      subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      cornerRadiusPixels: 2
+      subDynamic: 1
+      subSpreadMode: 1
+      separateAdsSub: 0
+      adsMain:
+        mainShape: 1
+        mainSizePixels: 3
+        mainRingSizePixels: 8
+        mainRingThicknessPixels: 1
+        mainColor: {r: 1, g: 1, b: 1, a: 1}
+        mainStrokeThicknessPixels: 1
+        mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      adsSub:
+        subShape: 2
+        centerSpacePixels: 5
+        subSizePixels: 1
+        subWidthPixels: 10
+        subThicknessPixels: 1
+        subRingSizePixels: 16
+        subRingThicknessPixels: 1
+        subColor: {r: 1, g: 1, b: 1, a: 1}
+        subStrokeThicknessPixels: 1
+        subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+        cornerRadiusPixels: 2
+        subSpreadMode: 0
+  - characterId: 3
+    style:
+      useSpreadAccuracy: 1
+      mainShape: 1
+      mainSizePixels: 3
+      mainRingSizePixels: 8
+      mainRingThicknessPixels: 1
+      mainColor: {r: 1, g: 1, b: 1, a: 1}
+      mainStrokeThicknessPixels: 1
+      mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      subShape: 1
+      centerSpacePixels: 1
+      subSizePixels: 1
+      subWidthPixels: 10
+      subThicknessPixels: 1
+      subRingSizePixels: 16
+      subRingThicknessPixels: 1
+      subColor: {r: 1, g: 1, b: 1, a: 1}
+      subStrokeThicknessPixels: 1
+      subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      cornerRadiusPixels: 2
+      subDynamic: 1
+      subSpreadMode: 0
+      separateAdsSub: 0
+      adsMain:
+        mainShape: 1
+        mainSizePixels: 3
+        mainRingSizePixels: 8
+        mainRingThicknessPixels: 1
+        mainColor: {r: 1, g: 1, b: 1, a: 1}
+        mainStrokeThicknessPixels: 1
+        mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      adsSub:
+        subShape: 2
+        centerSpacePixels: 5
+        subSizePixels: 1
+        subWidthPixels: 10
+        subThicknessPixels: 1
+        subRingSizePixels: 16
+        subRingThicknessPixels: 1
+        subColor: {r: 1, g: 1, b: 1, a: 1}
+        subStrokeThicknessPixels: 1
+        subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+        cornerRadiusPixels: 2
+        subSpreadMode: 0
+  m_hasThrowable: 1
+  m_throwable:
+    useSpreadAccuracy: 0
+    mainShape: 2
+    mainSizePixels: 3
+    mainRingSizePixels: 14
+    mainRingThicknessPixels: 2
+    mainColor: {r: 1, g: 1, b: 1, a: 0.27450982}
+    mainStrokeThicknessPixels: 1
+    mainStrokeColor: {r: 0, g: 0, b: 0, a: 0.27450982}
+    subShape: 1
+    centerSpacePixels: 12
+    subSizePixels: 2
+    subWidthPixels: 7
+    subThicknessPixels: 2
+    subRingSizePixels: 20
+    subRingThicknessPixels: 2
+    subColor: {r: 1, g: 1, b: 1, a: 0.27450982}
+    subStrokeThicknessPixels: 1
+    subStrokeColor: {r: 0, g: 0, b: 0, a: 0.27450982}
+    cornerRadiusPixels: 2
+    subDynamic: 1
+    subSpreadMode: 0
+    separateAdsSub: 0
+    adsMain:
+      mainShape: 1
+      mainSizePixels: 3
+      mainRingSizePixels: 8
+      mainRingThicknessPixels: 1
+      mainColor: {r: 1, g: 1, b: 1, a: 1}
+      mainStrokeThicknessPixels: 1
+      mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+    adsSub:
+      subShape: 2
+      centerSpacePixels: 5
+      subSizePixels: 1
+      subWidthPixels: 10
+      subThicknessPixels: 1
+      subRingSizePixels: 16
+      subRingThicknessPixels: 1
+      subColor: {r: 1, g: 1, b: 1, a: 1}
+      subStrokeThicknessPixels: 1
+      subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+      cornerRadiusPixels: 2
+      subSpreadMode: 0

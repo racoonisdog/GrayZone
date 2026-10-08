@@ -7,6 +7,10 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public sealed class TemporaryTrapProjectile : ProjectileBase
 {
+    private const string MolotovImpactSoundEventPath = "event:/World/Throwable/Molotov/Impact";
+    private const string MolotovFireLoopEventPath = "event:/World/Throwable/Molotov/FireLoop";
+    private static bool s_loggedMissingMolotovImpactSound;
+
     [Tooltip("충돌 지점에 생성할 Trap 계열 프리팹입니다. 생성 직후 비용 없이 설치 완료 상태가 됩니다.")]
     [SerializeField] private Trap m_trapPrefab;
 
@@ -157,10 +161,44 @@ public sealed class TemporaryTrapProjectile : ProjectileBase
             ? ResolveSurfaceRotation(surfaceNormal)
             : Quaternion.identity;
         Trap trap = Instantiate(m_trapPrefab, position, rotation);
+        FireTrap fireTrap = trap as FireTrap;
+        if (fireTrap != null)
+        {
+            PlayMolotovImpactSound(position);
+        }
+
         trap.Build();
+        if (fireTrap != null)
+        {
+            fireTrap.StartLoopingSound(MolotovFireLoopEventPath);
+        }
 
         Destroy(trap.gameObject, Mathf.Max(0.01f, m_trapLifetime));
         Destroy(gameObject);
+    }
+
+    /// <summary>화염병이 깨지고 점화되는 지점에서 3D 충돌음을 한 번 재생합니다.</summary>
+    private void PlayMolotovImpactSound(Vector3 position)
+    {
+        if (!FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            FMODUnity.RuntimeManager.PlayOneShot(MolotovImpactSoundEventPath, position);
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            if (!s_loggedMissingMolotovImpactSound)
+            {
+                s_loggedMissingMolotovImpactSound = true;
+                Debug.LogWarning(
+                    $"[TemporaryTrapProjectile] FMOD 이벤트를 찾지 못했습니다: {MolotovImpactSoundEventPath}\n{exception.Message}",
+                    this);
+            }
+        }
     }
 
     private bool IsGroundLayer(int layer)

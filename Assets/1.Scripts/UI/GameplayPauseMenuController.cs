@@ -40,6 +40,18 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     [Tooltip("메뉴가 열려 있는 동안 Time.timeScale을 0으로 만들어 게임플레이를 멈춥니다.")]
     [SerializeField] private bool m_pauseTime = true;
 
+    [Tooltip("일시정지 메뉴에 설정 버튼을 둘지입니다. 끄면 '이어서 하기'와 '타이틀로 돌아가기'만 남습니다. " +
+             "셸터처럼 전투 설정 화면을 쓰지 않는 씬에서 끕니다.")]
+    [SerializeField] private bool m_showSettingsButton = true;
+
+    /// <summary>셸터 이동 입력입니다. 스쿼드가 없는 셸터에서 메뉴가 열린 동안 잠급니다.</summary>
+    private PlayerMove m_shelterMove;
+
+    /// <summary>셸터 시점 입력입니다. 스쿼드가 없는 셸터에서 메뉴가 열린 동안 잠급니다.</summary>
+    private CameraLook m_shelterLook;
+    private bool m_previousShelterMoveLocked;
+    private bool m_previousShelterLookLocked;
+
     private readonly List<PlayerInputController> m_fallbackInputControllers = new();
     private readonly Image[] m_tabBackgrounds = new Image[3];
     private readonly Outline[] m_tabOutlines = new Outline[3];
@@ -65,8 +77,8 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private bool m_restoreCursorInLateUpdate;
     private bool m_keyboardSelectionRequested;
     private int m_selectedCombatSubTab;
-    private CrosshairSettingsMockupPanel m_crosshairSettingsPanel;
-    private CrosshairSettingsMockupPanel m_throwableCrosshairSettingsPanel;
+    private CrosshairSettingsPanel m_crosshairSettingsPanel;
+    private CrosshairSettingsPanel m_throwableCrosshairSettingsPanel;
     private Slider m_mouseSensitivitySlider;
     private TextMeshProUGUI m_mouseSensitivityValue;
     private Toggle m_cameraKickToggle;
@@ -219,6 +231,10 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_settingsBaseline = settingManager != null ? settingManager.CreateSnapshot() : null;
         SyncCombatGeneralSettings(settingManager, true);
 
+        // 메뉴는 Awake에서 만들어져 저장값을 읽기 전일 수 있고, 지난번에 저장하지 않은 편집도 남아 있을 수 있어 열 때마다 확정 값을 다시 읽습니다.
+        m_crosshairSettingsPanel?.RevertToCommittedValues();
+        m_throwableCrosshairSettingsPanel?.RevertToCommittedValues();
+
         m_pausePage.SetActive(false);
         m_settingsPage.SetActive(true);
         SelectSettingsTab(0);
@@ -259,6 +275,10 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         }
 
         settingManager.ApplySettings();
+
+        // 조준선 값은 GameSettingManager의 customData로 들어가므로 파일을 쓰기 전에 넘겨야 합니다.
+        m_crosshairSettingsPanel?.ApplyPendingValues();
+        m_throwableCrosshairSettingsPanel?.ApplyPendingValues();
         if (settingManager.SaveSettings())
         {
             m_settingsBaseline = settingManager.CreateSnapshot();
@@ -313,6 +333,10 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             return;
         }
 
+        // 셸터는 스쿼드 대신 PlayerMove/CameraLook으로 움직입니다. 메뉴가 열린 동안 둘 다 잠그고,
+        // 닫을 때는 열기 전 잠금 상태로 돌려놓습니다(시설 UI가 이미 잠가 둔 경우를 풀지 않기 위해서입니다).
+        SetShelterInputEnabled(enabled);
+
         if (!enabled)
         {
             m_fallbackInputControllers.Clear();
@@ -345,6 +369,33 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         }
 
         m_fallbackInputControllers.Clear();
+    }
+
+    private void SetShelterInputEnabled(bool enabled)
+    {
+        if (!enabled)
+        {
+            m_shelterMove = FindFirstObjectByType<PlayerMove>();
+            m_shelterLook = FindFirstObjectByType<CameraLook>();
+            m_previousShelterMoveLocked = m_shelterMove != null && m_shelterMove.IsMoveLocked;
+            m_previousShelterLookLocked = m_shelterLook != null && m_shelterLook.IsLookLocked;
+            m_shelterMove?.SetMoveLocked(true);
+            m_shelterLook?.SetLookLocked(true);
+            return;
+        }
+
+        if (m_shelterMove != null)
+        {
+            m_shelterMove.SetMoveLocked(m_previousShelterMoveLocked);
+        }
+
+        if (m_shelterLook != null)
+        {
+            m_shelterLook.SetLookLocked(m_previousShelterLookLocked);
+        }
+
+        m_shelterMove = null;
+        m_shelterLook = null;
     }
 
     private void ShowPausePage()
@@ -451,10 +502,14 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_pausePage = CreateStretchObject("Gameplay Settings Screen", m_viewRoot.transform);
         CreateStretchImage("Dim Background", m_pausePage.transform, new Color(74f / 255f, 74f / 255f, 74f / 255f, 0.86f));
 
+        // 설정 버튼을 빼면 남은 두 버튼을 세 버튼일 때의 가운데(설정 자리)를 중심으로 위아래로 벌려 놓습니다.
+        float resumeY = m_showSettingsButton ? -249f : -358.5f;
+        float titleY = m_showSettingsButton ? -687f : -577.5f;
+
         m_resumeButton = CreateButton(
             "Resume",
             m_pausePage.transform,
-            new Vector2(773f, -249f),
+            new Vector2(773f, resumeY),
             new Vector2(374f, 133f),
             "이어서 하기",
             48f,
@@ -462,21 +517,24 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_resumeButton.onClick.AddListener(ResumeGameplay);
         BindPauseSelection(m_resumeButton);
 
-        Button settingsButton = CreateButton(
-            "Settings",
-            m_pausePage.transform,
-            new Vector2(773f, -468f),
-            new Vector2(374f, 133f),
-            "설정",
-            48f,
-            new Color(30f / 255f, 30f / 255f, 30f / 255f, 1f));
-        settingsButton.onClick.AddListener(OpenSettings);
-        BindPauseSelection(settingsButton);
+        if (m_showSettingsButton)
+        {
+            Button settingsButton = CreateButton(
+                "Settings",
+                m_pausePage.transform,
+                new Vector2(773f, -468f),
+                new Vector2(374f, 133f),
+                "설정",
+                48f,
+                new Color(30f / 255f, 30f / 255f, 30f / 255f, 1f));
+            settingsButton.onClick.AddListener(OpenSettings);
+            BindPauseSelection(settingsButton);
+        }
 
         Button titleButton = CreateButton(
             "Return To Title",
             m_pausePage.transform,
-            new Vector2(773f, -687f),
+            new Vector2(773f, titleY),
             new Vector2(374f, 133f),
             "타이틀로 돌아가기",
             42f,
@@ -669,13 +727,13 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         BuildCombatGeneralSettings(m_combatSubPages[0].transform);
 
-        m_crosshairSettingsPanel = m_combatSubPages[1].AddComponent<CrosshairSettingsMockupPanel>();
+        m_crosshairSettingsPanel = m_combatSubPages[1].AddComponent<CrosshairSettingsPanel>();
         m_crosshairSettingsPanel.Build(
             m_combatSubPages[1].transform as RectTransform,
             m_regularFont,
             m_boldFont);
 
-        m_throwableCrosshairSettingsPanel = m_combatSubPages[2].AddComponent<CrosshairSettingsMockupPanel>();
+        m_throwableCrosshairSettingsPanel = m_combatSubPages[2].AddComponent<CrosshairSettingsPanel>();
         m_throwableCrosshairSettingsPanel.BuildSharedThrowable(
             m_combatSubPages[2].transform as RectTransform,
             m_regularFont,

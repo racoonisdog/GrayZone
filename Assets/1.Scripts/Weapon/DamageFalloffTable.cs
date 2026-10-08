@@ -33,15 +33,15 @@ public struct DamageFalloffStep
     [Tooltip("배율 모드에서 쓰는 값입니다. 1이면 손실 없음, 0.5면 절반입니다.")]
     [SerializeField] private float m_damageMultiplier;
 
-    [Tooltip("고정 피해 모드에서 쓰는 값입니다. 기본 피해와 무관하게 이 값이 그대로 들어갑니다.")]
-    [SerializeField] private int m_flatDamage;
+    [Tooltip("고정 피해 모드에서 쓰는 값입니다. 기본 피해와 무관하게 이 값이 그대로 들어갑니다. 소수(예: 2.5)도 됩니다.")]
+    [SerializeField] private float m_flatDamage;
 
     /// <summary>구간 하나의 끝 거리와 두 모드의 값을 함께 지정합니다.</summary>
     /// <param name="maxDistance">이 구간이 끝나는 거리(m)입니다.</param>
     /// <param name="damageMultiplier">배율 모드에서 사용할 값입니다.</param>
     /// <param name="flatDamage">고정 피해 모드에서 사용할 값입니다.</param>
     /// <remarks>모드는 표가 소유하므로 구간은 두 값을 모두 들고 있다가 해당하는 쪽만 쓰입니다.</remarks>
-    public DamageFalloffStep(float maxDistance, float damageMultiplier, int flatDamage)
+    public DamageFalloffStep(float maxDistance, float damageMultiplier, float flatDamage)
     {
         m_maxDistance = maxDistance;
         m_damageMultiplier = damageMultiplier;
@@ -55,7 +55,7 @@ public struct DamageFalloffStep
     public float DamageMultiplier => Mathf.Clamp01(m_damageMultiplier);
 
     /// <summary>고정 피해 모드에서 쓰는 피해량입니다.</summary>
-    public int FlatDamage => Mathf.Max(0, m_flatDamage);
+    public float FlatDamage => Mathf.Max(0.0f, m_flatDamage);
 }
 
 /// <summary>
@@ -124,19 +124,36 @@ public sealed class DamageFalloffTable
     public bool IsEmpty => m_steps == null || m_steps.Count == 0;
 
     /// <summary>
+    /// 한 구간의 고정 피해를 바꿉니다. 런타임 디버그 트레이너용입니다.
+    /// </summary>
+    /// <remarks>
+    /// 무기는 시작할 때 표를 복제해서 쓰므로(<see cref="Clone"/>), 런타임 무기의 표를 바꿔도 밸런스 데이터 원본은 그대로입니다.
+    /// </remarks>
+    public void DebugSetStepFlatDamage(int index, float flatDamage)
+    {
+        if (m_steps == null || index < 0 || index >= m_steps.Count)
+        {
+            return;
+        }
+
+        DamageFalloffStep step = m_steps[index];
+        m_steps[index] = new DamageFalloffStep(step.MaxDistance, step.DamageMultiplier, Mathf.Max(0.0f, flatDamage));
+    }
+
+    /// <summary>
     /// 지정한 거리에 적용할 최종 피해를 돌려줍니다.
     /// </summary>
     /// <param name="distance">사격 지점에서 명중 지점까지의 거리(m)입니다.</param>
     /// <param name="baseDamage">무기의 기본 피해입니다. 배율 모드에서만 쓰입니다.</param>
     /// <returns>해당 구간의 피해입니다. 구간이 없으면 <paramref name="baseDamage"/> 그대로입니다.</returns>
     /// <remarks>
-    /// 구간에 걸렸다면 최소 1을 보장합니다. <see cref="CombatDamage.ResolveHit"/>와 같은 규약이며,
-    /// 맞았는데 0이 들어가면 피격 표시만 뜨고 아무 일도 일어나지 않아 버그로 보이기 때문입니다.
+    /// 소수 그대로 돌려줍니다. HP가 실수로 계산되므로 2.5 같은 값이 반올림 없이 쌓입니다.
+    /// 0이면 피해가 없고, 사격 쪽은 0 이하인 대상을 건너뛰어 피격 표시도 내지 않습니다.
     ///
     /// 마지막 구간보다 먼 거리는 마지막 구간의 값을 씁니다.
     /// 사거리 밖은 애초에 명중 판정이 성립하지 않으므로 그 바깥을 따로 규정하지 않습니다.
     /// </remarks>
-    public int ResolveDamage(float distance, int baseDamage)
+    public float ResolveDamage(float distance, float baseDamage)
     {
         if (IsEmpty)
         {
@@ -158,13 +175,13 @@ public sealed class DamageFalloffTable
 
     /// <summary>구간 하나가 내는 피해를 계산합니다.</summary>
     /// <remarks>드로어가 인스펙터에 결과를 미리 보여줄 때도 같은 계산을 써야 값이 어긋나지 않습니다.</remarks>
-    public int ResolveStepDamage(DamageFalloffStep step, int baseDamage)
+    public float ResolveStepDamage(DamageFalloffStep step, float baseDamage)
     {
-        int damage = m_mode == DamageFalloffMode.FlatDamage
+        float damage = m_mode == DamageFalloffMode.FlatDamage
             ? step.FlatDamage
-            : Mathf.RoundToInt(baseDamage * step.DamageMultiplier);
+            : baseDamage * step.DamageMultiplier;
 
-        return Mathf.Max(1, damage);
+        return Mathf.Max(0.0f, damage);
     }
 
     /// <summary>구간을 거리 오름차순으로 정렬합니다.</summary>

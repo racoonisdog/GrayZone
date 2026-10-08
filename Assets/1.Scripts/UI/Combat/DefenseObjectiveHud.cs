@@ -54,12 +54,21 @@ public class DefenseObjectiveHud : MonoBehaviour
     [Tooltip("표시 시점을 맞출 라운드 매니저입니다. 비어 있으면 씬에서 찾습니다.")]
     [SerializeField] private DefenseManager m_defenseManager;
 
+    [Tooltip("피격 경고 사운드와 같은 타이밍에 화면 경고를 표시할 컨트롤러입니다. 비어 있으면 방어 목표에서 찾습니다.")]
+    [SerializeField] private DefenseObjectiveAudioController m_audioController;
+
     [Header("Text")]
     [Tooltip("거점 이름입니다.")]
     [SerializeField] private string m_label = "정문";
 
     [Tooltip("경고 문구를 띄운 뒤 자동으로 지울 시간(초)입니다. 0 이하면 지우지 않습니다.")]
     [SerializeField] private float m_warningDuration = 3.0f;
+
+    [Tooltip("일반 피격 경고음과 함께 표시할 문구입니다.")]
+    [SerializeField] private string m_underAttackMessage = "외곽 방어선이 공격받고 있습니다.";
+
+    [Tooltip("위험 체력 진입 경고음과 함께 표시할 문구입니다.")]
+    [SerializeField] private string m_criticalAttackMessage = "외곽 방어선이 위험합니다!";
 
     [Header("Behaviour")]
     [Tooltip("Defense가 시작될 때 자동으로 표시할지 여부입니다. 끄면 Show()를 직접 불러야 합니다.")]
@@ -150,6 +159,7 @@ public class DefenseObjectiveHud : MonoBehaviour
 
         if (m_objective == null)
         {
+            SubscribeAudioWarning();
             return;
         }
 
@@ -159,6 +169,7 @@ public class DefenseObjectiveHud : MonoBehaviour
         m_objective.OnWarningRaised += HandleWarningRaised;
         m_objective.OnDestroyed -= HandleObjectiveDestroyed;
         m_objective.OnDestroyed += HandleObjectiveDestroyed;
+        SubscribeAudioWarning();
     }
 
     private void Unsubscribe()
@@ -170,12 +181,14 @@ public class DefenseObjectiveHud : MonoBehaviour
 
         if (m_objective == null)
         {
+            UnsubscribeAudioWarning();
             return;
         }
 
         m_objective.OnHPChanged -= HandleHpChanged;
         m_objective.OnWarningRaised -= HandleWarningRaised;
         m_objective.OnDestroyed -= HandleObjectiveDestroyed;
+        UnsubscribeAudioWarning();
     }
 
     private void HandleDefenseStarted()
@@ -197,7 +210,21 @@ public class DefenseObjectiveHud : MonoBehaviour
 
     private void HandleWarningRaised(string message)
     {
-        if (m_warningText == null)
+        ShowWarning(message);
+    }
+
+    /// <summary>피격 경고 사운드가 발동하는 타이밍에 같은 단계의 화면 문구를 표시합니다.</summary>
+    private void HandleAudioWarningIssued(DefenseObjectiveAudioController.WarningKind kind)
+    {
+        string message = kind == DefenseObjectiveAudioController.WarningKind.Critical
+            ? m_criticalAttackMessage
+            : m_underAttackMessage;
+        ShowWarning(message);
+    }
+
+    private void ShowWarning(string message)
+    {
+        if (m_warningText == null || string.IsNullOrWhiteSpace(message))
         {
             return;
         }
@@ -205,6 +232,25 @@ public class DefenseObjectiveHud : MonoBehaviour
         m_warningText.text = message;
         m_warningText.gameObject.SetActive(true);
         m_warningClearTime = m_warningDuration > 0.0f ? Time.time + m_warningDuration : 0.0f;
+    }
+
+    private void SubscribeAudioWarning()
+    {
+        if (m_audioController == null)
+        {
+            return;
+        }
+
+        m_audioController.OnWarningIssued -= HandleAudioWarningIssued;
+        m_audioController.OnWarningIssued += HandleAudioWarningIssued;
+    }
+
+    private void UnsubscribeAudioWarning()
+    {
+        if (m_audioController != null)
+        {
+            m_audioController.OnWarningIssued -= HandleAudioWarningIssued;
+        }
     }
 
     /// <summary>파괴되면 게이지를 비우고 마지막 문구를 남깁니다.</summary>
@@ -312,6 +358,13 @@ public class DefenseObjectiveHud : MonoBehaviour
         if (m_defenseManager == null)
         {
             m_defenseManager = FindFirstObjectByType<DefenseManager>(FindObjectsInactive.Include);
+        }
+
+        if (m_audioController == null)
+        {
+            m_audioController = m_objective != null
+                ? m_objective.GetComponent<DefenseObjectiveAudioController>()
+                : FindFirstObjectByType<DefenseObjectiveAudioController>(FindObjectsInactive.Include);
         }
 
         if (m_panelRoot == null)

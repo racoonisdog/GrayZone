@@ -309,7 +309,7 @@ public class SquadMemberController : MonoBehaviour
     /// 여기서 구분하지 않는 것은 <b>위치 공유</b>와 <b>피해 위협도</b>가 다른 축이기 때문입니다.
     /// 피해 위협도(§4.3)는 AI 슬롯이 따로 들고 갈 값이라 이 경로에서 만들지 않습니다.
     /// </remarks>
-    private void HandleHealthDamaged(int damage, GameObject attacker)
+    private void HandleHealthDamaged(float damage, GameObject attacker)
     {
         if (attacker == null)
         {
@@ -340,7 +340,7 @@ public class SquadMemberController : MonoBehaviour
 
         if (m_squadAIController != null)
         {
-            m_squadAIController.NotifyDamagedBy(enemy, damage);
+            m_squadAIController.NotifyDamagedBy(enemy, Mathf.CeilToInt(damage));
         }
     }
 

@@ -1,3 +1,5 @@
+using FMOD.Studio;
+using FMODUnity;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
@@ -11,6 +13,8 @@ using UnityEngine.Video;
 /// </remarks>
 public sealed class TitleScreenController : MonoBehaviour
 {
+    private const string TitleMusicEventPath = "event:/Music/Title/Main_Music";
+
     [Header("References")]
     [Tooltip("검은 배경 대신 반복 재생할 타이틀 배경 VideoPlayer입니다.")]
     [SerializeField] private VideoPlayer m_backgroundVideo;
@@ -35,6 +39,8 @@ public sealed class TitleScreenController : MonoBehaviour
     [SerializeField, Min(0f)] private float m_menuSelectionFadeDuration = 0.15f;
 
     private RenderTexture m_backgroundRenderTexture;
+    private EventInstance m_titleMusic;
+    private bool m_loggedMissingTitleMusic;
 
     private void Awake()
     {
@@ -51,11 +57,68 @@ public sealed class TitleScreenController : MonoBehaviour
     private void OnEnable()
     {
         PlayBackgroundVideo();
+        PlayTitleMusic();
+    }
+
+    private void Start()
+    {
+        // FMOD가 다른 Awake/OnEnable 초기화 뒤 준비되는 경우를 위해 한 번 더 확인합니다.
+        PlayTitleMusic();
+    }
+
+    private void OnDisable()
+    {
+        StopTitleMusic();
     }
 
     private void OnDestroy()
     {
+        StopTitleMusic();
         ReleaseBackgroundTexture();
+    }
+
+    /// <summary>타이틀 전용 FMOD BGM 루프를 시작합니다.</summary>
+    private void PlayTitleMusic()
+    {
+        if (m_titleMusic.isValid() || !RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            m_titleMusic = RuntimeManager.CreateInstance(TitleMusicEventPath);
+            if (m_titleMusic.isValid())
+            {
+                m_titleMusic.start();
+            }
+        }
+        catch (EventNotFoundException exception)
+        {
+            if (m_loggedMissingTitleMusic)
+            {
+                return;
+            }
+
+            m_loggedMissingTitleMusic = true;
+            Debug.LogWarning(
+                $"[TitleScreen] FMOD 타이틀 음악 이벤트를 찾지 못했습니다: {TitleMusicEventPath}\n{exception.Message}",
+                this
+            );
+        }
+    }
+
+    /// <summary>타이틀 씬을 벗어날 때 루프 인스턴스를 정리합니다.</summary>
+    private void StopTitleMusic()
+    {
+        if (!m_titleMusic.isValid())
+        {
+            return;
+        }
+
+        m_titleMusic.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+        m_titleMusic.release();
+        m_titleMusic.clearHandle();
     }
 
     /// <summary>배경 영상을 처음부터 반복 재생합니다.</summary>

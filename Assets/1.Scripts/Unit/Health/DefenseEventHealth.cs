@@ -147,6 +147,8 @@ public class DefenseEventHealth : HealthSystemBase
     /// </remarks>
     public event Action<string> OnWarningRaised;
 
+    protected override DamageNumberDebug.TargetKind DamageNumberKind => DamageNumberDebug.TargetKind.Objective;
+
     public override void InitializeHealth()
     {
         base.InitializeHealth();
@@ -161,7 +163,7 @@ public class DefenseEventHealth : HealthSystemBase
     /// 한 번의 큰 피해로 여러 단계를 한꺼번에 지나갈 수 있습니다. 그때는 지나친 단계를 모두 발동 처리하고
     /// 가장 낮은(가장 급한) 문구만 표시합니다. 경고를 연달아 덮어써 봐야 마지막 것만 보이기 때문입니다.
     /// </remarks>
-    protected override void OnDamageApplied(int actualDamage, int previousHp)
+    protected override void OnDamageApplied(float actualDamage, float previousHp)
     {
         base.OnDamageApplied(actualDamage, previousHp);
 

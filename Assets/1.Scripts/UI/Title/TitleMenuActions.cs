@@ -56,7 +56,14 @@ public sealed class TitleMenuActions : MonoBehaviour
     private void Awake()
     {
         ResolveButtons();
-        Bind(m_newGameButton, StartNewGame);
+
+        // 씬에서 새 게임 버튼에 MainSceneSaveManager.OnStartNewGameButtonClicked가 이미 연결돼 있으면(새 게임 데이터
+        // 생성 + 셸터 이동) 여기서는 붙이지 않습니다. 둘 다 붙으면 한 번 눌러도 셸터 씬을 두 번 불러옵니다.
+        if (m_newGameButton != null && m_newGameButton.onClick.GetPersistentEventCount() == 0)
+        {
+            Bind(m_newGameButton, StartNewGame);
+        }
+
         Bind(m_loadGameButton, LoadSavedGame);
         Bind(m_quitButton, QuitGame);
 

@@ -6,8 +6,14 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
 {
     private const string DragonBreathEffectResourcePath = "Skill/DragonBreathEffect";
 
-    [Tooltip("용숨결탄 전용 재장전 속도 배율입니다. 2이면 일반 재장전보다 2배 빠르게 모션과 장전이 완료됩니다.")]
+    [Tooltip("이 스킬의 밸런스 수치 SO입니다(쿨타임, 재장전 배율, 용숨결 피해·판정 범위). 비어 있으면 인스펙터 값과 " +
+             "용숨결 효과 프리팹 값을 그대로 씁니다. 같은 SO를 용숨결 효과 인스턴스에도 주입합니다.")]
+    [SerializeField] private ChungSolDragonBreathSkillSO m_balanceSO;
+
+    [Tooltip("용숨결탄 전용 재장전 속도 배율입니다. 2이면 일반 재장전보다 2배 빠르게 모션과 장전이 완료됩니다. " +
+             "밸런스 SO가 있으면 SO 값으로 덮입니다.")]
     [Min(0.01f)]
+    [BalanceField]
     [SerializeField] private float m_reloadSpeedMultiplier = 1.0f;
 
     [Foldout("Debug")]
@@ -20,10 +26,19 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     private bool m_isLoadingSpecialAmmo;
     private int m_specialRoundsRemaining;
 
+    protected override ScriptableObject BalanceSource => m_balanceSO;
+
     public override CharacterSkillType SkillType => CharacterSkillType.ChungSolDragonBreath;
-    public override string DisplayName => "용숨결탄";
-    public override string Description => "재장전 모션 후 Shotgun 탄창 전체를 전방 범위 피해 특수탄으로 채웁니다.";
+    public override string DisplayName => "화염 탄환";
+    public override string Description => "강력한 화염 탄환을 장전합니다.";
     public override bool IsActive => m_isLoadingSpecialAmmo || m_specialRoundsRemaining > 0;
+
+    /// <summary>장전 중이거나 특수탄이 남아 있을 때만 상태를 보여줍니다. 평소에는 Figma처럼 쿨타임 한 줄만 둡니다.</summary>
+    public override string HudDetailText => m_isLoadingSpecialAmmo
+        ? "특수탄 장전 중"
+        : m_specialRoundsRemaining > 0
+            ? $"화염 탄환 {m_specialRoundsRemaining} / {SpecialRoundsCapacity}"
+            : null;
 
     public bool IsLoadingSpecialAmmo => m_isLoadingSpecialAmmo;
     public int SpecialRoundsRemaining => m_specialRoundsRemaining;
@@ -89,7 +104,10 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
 
     private void ResolveGun()
     {
-        Gun resolved = GetComponentInChildren<Gun>(true);
+        // 활성 총을 먼저 찾습니다. 모델을 바꾸면 옛 모델 아래에 쓰지 않는 총이 비활성으로 남아, 비활성까지 한 번에 찾으면
+        // 그 총을 구독해 특수탄 발사와 장전 완료를 놓칩니다(PlayerbleUnitData.FindOwnedGun과 같은 규칙).
+        Gun active = GetComponentInChildren<Gun>(false);
+        Gun resolved = active != null ? active : GetComponentInChildren<Gun>(true);
         if (resolved == m_gun)
         {
             return;
@@ -194,6 +212,9 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             m_effectInstance = Instantiate(effectPrefab, transform);
             m_effectInstance.name = effectPrefab.name;
         }
+
+        // 용숨결 피해·판정 범위도 청솔 스킬 SO가 정합니다. 효과 프리팹 값은 SO가 없을 때의 기본값입니다.
+        BindBalance(m_effectInstance);
 
         m_effectInstance.gameObject.SetActive(false);
         return m_effectInstance;

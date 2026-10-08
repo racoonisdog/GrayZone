@@ -113,3 +113,7 @@ Packages/unity-cli/
 /FMODProject/
 /Assets/Plugins/
 /Assets/Plugins.meta
+
+# FMOD가 빌드할 때 복사하는 뱅크(빌드 결과물)
+/Assets/StreamingAssets/
+/Assets/StreamingAssets.meta

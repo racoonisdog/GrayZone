@@ -38,7 +38,7 @@ public sealed class TutorialManager : MonoBehaviour
     [SerializeField] private bool m_playOnStart = true;
 
     [Tooltip("켜면 방어전 1회차(DefenseSceneDataManager.DefenseRound == 1)에서만 튜토리얼을 시작합니다. " +
-             "2회차부터는 튜토리얼 없이 상호작용 3초 유지로 바로 시작합니다. 회차 정보가 없으면(씬 단독 실행 등) 튜토리얼을 시작합니다.")]
+             "2회차부터는 튜토리얼 없이 Z 3초 유지로 바로 시작합니다. 회차 정보가 없으면(씬 단독 실행 등) 튜토리얼을 시작합니다.")]
     [SerializeField] private bool m_onlyFirstDefenseRound = true;
 
     [Tooltip("튜토리얼 페이지 목록입니다. 위에서부터 0번, 1번… 순서로 진행합니다.")]
@@ -204,7 +204,7 @@ public sealed class TutorialManager : MonoBehaviour
         {
             TutorialPage.CreateEventPage(
                 "감염체가 몰려옵니다.\n거점을 지키세요.\n\n라운드가 끝나면 잠시 휴식이 주어집니다.",
-                "[F] 3초 유지 — 방어전 시작"),
+                "[Z] 3초 유지 — 방어전 시작"),
         };
         m_defenseStartPage = 0;
         ResolveReferences();
@@ -715,7 +715,7 @@ public sealed class TutorialManager : MonoBehaviour
     /// 방어전이 시작되면 해당 페이지에 이벤트를 보내고, 그래도 튜토리얼이 남아 있으면 닫습니다.
     /// </summary>
     /// <remarks>
-    /// 상호작용 3초 시작은 튜토리얼 중에도 막지 않습니다(DefenseManager 규칙). 그 경로로 시작되면 남은 안내는 의미가 없어 내립니다.
+    /// 튜토리얼 중에는 DefenseManager가 Z 홀드를 세지 않고 마지막 페이지가 시작을 맡습니다. 디버그 등 다른 경로로 시작되면 남은 안내는 의미가 없어 내립니다.
     /// </remarks>
     private void HandleDefenseStarted()
     {

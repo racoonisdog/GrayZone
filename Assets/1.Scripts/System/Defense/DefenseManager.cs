@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using VInspector;
 
 /// <summary>
@@ -32,6 +33,10 @@ public sealed class DefenseManager : CombatSceneManager
     /// <remarks>방어전 맵에는 소음 차폐를 쓰지 않으므로 NoiseManager가 없어도 경고하지 않습니다.</remarks>
     protected override bool UsesNoiseManager => false;
 
+    /// <inheritdoc />
+    /// <remarks>방어전에서는 정문으로 가는 적도 막아야 하므로, 스쿼드와 교전하지 않은 적이라도 보이면 바로 노립니다.</remarks>
+    public override SquadEnemyAwareness SquadEnemyAwareness => SquadEnemyAwareness.AnyVisible;
+
     /// <summary>Shooter 업그레이드 한 레벨에서 함께 배치되는 좌우 지정사수 한 쌍입니다.</summary>
     /// <remarks>
     /// 기획 기준(2026-09-29): 레벨마다 좌우 한 명씩, 2명이 추가됩니다. 1레벨은 좌우 2명(A_01, B_01),
@@ -52,11 +57,15 @@ public sealed class DefenseManager : CombatSceneManager
     [Header("Defense Round")]
     [Tooltip("전투 구간 시간(초)입니다. 모든 웨이브, 모든 공격로에 같이 적용합니다. 이 시간이 끝나면 새 스폰만 멈추고 남은 적 정리로 넘어갑니다.")]
     [Min(0.01f)]
-    [SerializeField] private float m_roundDuration = 60.0f;
+    [SerializeField] private float m_roundDuration = 50.0f;
 
     [Tooltip("남은 적을 모두 정리한 뒤 다음 전투까지의 휴식 시간(초)입니다. 함정은 이 구간에만 설치할 수 있습니다. 마지막 웨이브 뒤에는 휴식이 없습니다.")]
     [Min(0.01f)]
-    [SerializeField] private float m_restDuration = 10.0f;
+    [SerializeField] private float m_restDuration = 30.0f;
+
+    [Tooltip("모든 공격로를 합쳐 동시에 살아 있을 수 있는 방어전 적의 상한입니다. 그룹이 남은 자리보다 크면 위험도가 낮은 적부터 가능한 수만 생성합니다.")]
+    [Min(1)]
+    [SerializeField] private int m_maxActiveEnemies = 35;
 
     [Tooltip("이 매니저가 웨이브를 실행시킬 방어전 스포너 목록입니다. 남은 적 수도 이 목록의 스포너가 내보낸 적만 셉니다. 비어 있는 항목은 무시합니다.")]
     [SerializeField] private List<EnemyDefenseSpawnPoint> m_spawnPoints = new List<EnemyDefenseSpawnPoint>();
@@ -105,6 +114,9 @@ public sealed class DefenseManager : CombatSceneManager
     [Tooltip("웨이브 시작 때 표시할 알림 문구입니다.")]
     [SerializeField] private string m_waveStartMessage = "전투가 시작됩니다";
 
+    [Tooltip("정비 구간 시작 때 표시할 알림 문구입니다.")]
+    [SerializeField] private string m_restStartMessage = "정비 시간이 시작됩니다";
+
     [Tooltip("웨이브 시작 알림이 불투명하게 유지되는 시간(초)입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_waveStartMessageHoldDuration = 0.5f;
@@ -127,10 +139,51 @@ public sealed class DefenseManager : CombatSceneManager
     [SerializeField] private float m_clearingForceEndDelay = 60.0f;
 
     [Header("Defense Start Input")]
-    [Tooltip("방어전 시작 전, 현재 스쿼드 조작 멤버가 상호작용 대상이 없는 곳에서 상호작용키를 이 시간(초)만큼 홀드하면 방어전을 시작합니다. " +
-             "튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다.")]
+    [Tooltip("방어전 시작 전, 현재 스쿼드 조작 멤버가 Z키를 이 시간(초)만큼 누르고 있으면 방어전을 시작합니다. 실제 시간으로 셉니다. " +
+             "튜토리얼 여부와 관계없이 매 방어전 같은 규칙이고, 튜토리얼 중에는 마지막 페이지가 같은 규칙으로 시작을 맡습니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_emptySpaceHoldStartDuration = 3.0f;
+
+    /// <summary>방어전 시작 홀드 키입니다. 튜토리얼 마지막 페이지 안내(Z 3초)와 같은 키입니다.</summary>
+    private const Key StartHoldKey = Key.Z;
+
+    [Foldout("Start Prompt")]
+    [Tooltip("튜토리얼 없이 시작하는 판(2회차부터)에서 시작 안내를 띄울 튜토리얼 창입니다. 아래쪽을 잘라낸 압축 크기로 띄우고, " +
+             "Z를 누르는 동안 키 게이지가 찹니다. 비어 있으면 씬에서 찾습니다.")]
+    [SerializeField] private DefenseTutorialOverlay m_startPromptOverlay;
+
+    [Tooltip("시작 안내 창의 제목입니다. 비우면 튜토리얼 창에 적힌 제목을 그대로 둡니다.")]
+    [SerializeField] private string m_startPromptTitle = string.Empty;
+
+    [TextArea(2, 4)]
+    [Tooltip("시작 안내 본문입니다. 튜토리얼 마지막 페이지의 시작 안내 부분과 같은 문구이며, 키 아이콘 자리만큼 공백을 둡니다.")]
+    [SerializeField] private string m_startPromptBody = "모든 정비를 마치셨으면        를 3초간\n눌러 시작합니다.";
+
+    [Tooltip("시작 안내 하단 문구입니다. 오른쪽에 Z 키 게이지가 붙습니다.")]
+    [SerializeField] private string m_startPromptHint = "시작하려면";
+
+    [Tooltip("본문에 끼워 넣을 Z 키 아이콘입니다. 튜토리얼 마지막 페이지와 같은 이미지를 씁니다.")]
+    [SerializeField] private Sprite m_startPromptKeyIcon;
+
+    [Tooltip("Z 키 아이콘 위치(px)입니다. 패널 왼쪽 위 기준이고 y는 아래쪽이 양수입니다.")]
+    [SerializeField] private Vector2 m_startPromptKeyIconPosition = new Vector2(279.0f, 99.0f);
+
+    [Tooltip("Z 키 아이콘 크기(px)입니다.")]
+    [SerializeField] private Vector2 m_startPromptKeyIconSize = new Vector2(30.0f, 30.0f);
+
+    [Foldout("Mission Text")]
+    [Tooltip("좌상단 목표 패널의 제목 텍스트입니다. 비어 있으면 설명 텍스트와 같은 패널의 Title 오브젝트에서 찾습니다.")]
+    [SerializeField] private TMP_Text m_missionTitleText;
+
+    [Tooltip("전투 중 목표 패널 제목 문구입니다. 비어 있으면 바꾸지 않습니다.")]
+    [SerializeField] private string m_combatMissionTitle = "외곽 방어선을 지키십시오";
+
+    [Tooltip("좌상단 목표 패널의 설명 텍스트입니다. 전투 중에는 아래 문구로 바꾸고, 휴식·시작 전에는 원래 문구로 돌려놓습니다. 비어 있으면 바꾸지 않습니다.")]
+    [SerializeField] private TMP_Text m_missionDescriptionText;
+
+    [Tooltip("전투 중 목표 패널 설명 문구입니다.")]
+    [SerializeField] private string m_combatMissionDescription = "몰려드는 적을 저지하십시오.";
+    [EndFoldout]
 
     /// <summary>Defense 게임이 시작될 때 발생합니다. 튜토리얼 안내처럼 시작 시점에 붙는 UI가 구독합니다.</summary>
     /// <remarks>
@@ -194,6 +247,12 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>허공 상호작용키를 연속해서 누른 시간(초)입니다.</summary>
     private float m_emptySpaceHoldStartTimer;
 
+    /// <summary>전투 문구로 바꾸기 전 목표 패널 제목입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
+    private string m_missionTitleOriginalText;
+
+    /// <summary>전투 문구로 바꾸기 전 목표 패널 설명입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
+    private string m_missionDescriptionOriginalText;
+
     /// <summary>현재 실행 중인 웨이브 번호입니다. 첫 웨이브는 1입니다.</summary>
     private int m_currentWave;
 
@@ -224,6 +283,19 @@ public sealed class DefenseManager : CombatSceneManager
 
     /// <summary>현재 휴식에 남은 시간(초)입니다. 휴식 구간이 아니면 0입니다.</summary>
     public float RestTimer => IsResting ? m_restTimer : 0.0f;
+
+    /// <summary>모든 공격로를 합친 방어전 생존 적 상한입니다.</summary>
+    public int MaxActiveEnemies
+    {
+        get
+        {
+            int stageLimit = m_activeStage != null ? m_activeStage.MaxActiveEnemies : 0;
+            return stageLimit > 0 ? stageLimit : Mathf.Max(1, m_maxActiveEnemies);
+        }
+    }
+
+    /// <summary>현재 전역 상한 안에서 추가로 생성할 수 있는 적 수입니다.</summary>
+    public int AvailableEnemySpawnSlots => Mathf.Max(0, MaxActiveEnemies - CountManagedLiveEnemies());
 
     /// <summary>전투 시간이 끝나 남은 적을 정리하는 구간인지 여부입니다.</summary>
     public bool IsClearing => m_isGameStarted && m_isClearing;
@@ -256,7 +328,7 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>이 매니저가 제어하는 스폰 포인트 목록입니다.</summary>
     public IReadOnlyList<EnemyDefenseSpawnPoint> SpawnPoints => m_spawnPoints;
 
-    /// <summary>방어전 시작 전 허공 상호작용 홀드 진행도입니다.</summary>
+    /// <summary>방어전 시작 전 Z키 홀드 진행도입니다.</summary>
     public float EmptySpaceHoldStartProgress => m_isGameStarted
         ? 0.0f
         : Mathf.Clamp01(m_emptySpaceHoldStartTimer / m_emptySpaceHoldStartDuration);
@@ -326,10 +398,12 @@ public sealed class DefenseManager : CombatSceneManager
         }
 
         UpdateWaveStartMessage();
+        RefreshMissionText();
 
         if (!m_isGameStarted)
         {
             UpdateEmptySpaceHoldStart();
+            RefreshStartPrompt();
             return;
         }
 
@@ -393,6 +467,7 @@ public sealed class DefenseManager : CombatSceneManager
         ResolveDefenseSceneDataManager()?.ConfigureWaves(TotalWaveCount);
         PrepareStageSpawners();
         BeginRound();
+        RefreshStartPrompt();
         OnDefenseStarted?.Invoke();
     }
 
@@ -453,12 +528,13 @@ public sealed class DefenseManager : CombatSceneManager
     /// </summary>
     /// <remarks>
     /// 상시 설치가 아닌 함정은 설치 구간에만 청사진을 보이고 설치를 받습니다. 이미 설치된 함정은 그대로 둡니다.
-    /// 함정 목록은 처음 부를 때 찾습니다. 함정은 씬에 미리 배치되므로 진행 중에 새로 생기지 않습니다.
     /// 진행 중에 켜진 함정은 스스로 <see cref="IsTrapBuildWindowOpen"/>을 읽어 맞춥니다.
     /// </remarks>
     private void RefreshTrapBuildWindow()
     {
-        m_traps ??= FindObjectsByType<Trap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        // 부를 때마다 다시 찾습니다. 화염병·드럼통 불처럼 진행 중에 생기는 함정이 있어, 처음 목록만 쓰면 그것들은
+        // 구간 변화를 받지 못합니다. 구간이 바뀔 때만 불리므로 비용은 작습니다.
+        m_traps = FindObjectsByType<Trap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
         bool isOpen = IsTrapBuildWindowOpen;
         for (int i = 0; i < m_traps.Length; i++)
@@ -577,7 +653,7 @@ public sealed class DefenseManager : CombatSceneManager
         BeginStageCombat();
         RefreshTrapBuildWindow();
         RefreshTimerText();
-        ShowWaveStartMessage();
+        ShowPhaseStartMessage(m_waveStartMessage);
         ResolveDefenseSceneDataManager()?.RecordWaveStarted(m_currentWave);
     }
 
@@ -757,6 +833,7 @@ public sealed class DefenseManager : CombatSceneManager
         m_roundTimer = 0.0f;
         m_restTimer = Mathf.Max(0.01f, m_restDuration);
         RefreshTimerText();
+        ShowPhaseStartMessage(m_restStartMessage);
         ResolveDefenseSceneDataManager()?.RecordRestStarted();
 
         // 휴식 복구 정책(OnRest) 함정이 먼저 되살아난 뒤 설치 구간을 엽니다. 순서가 바뀌어도 결과는 같지만,
@@ -919,27 +996,33 @@ public sealed class DefenseManager : CombatSceneManager
     }
 
     /// <summary>
-    /// 방어전 시작 규칙입니다. 플레이어가 상호작용 대상으로 조준하지 않은 상태에서만
-    /// 상호작용키를 일정 시간 유지하면 <see cref="StartDefense"/>를 호출합니다.
+    /// 방어전 시작 규칙입니다. 현재 조작 중인 스쿼드원이 있을 때 <see cref="StartHoldKey"/>(Z)를
+    /// 일정 시간 누르고 있으면 <see cref="StartDefense"/>를 호출합니다.
     /// </summary>
     /// <remarks>
-    /// 튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다(사용자 확정 2026-10-01). 끄는 옵션은 두지 않습니다.
+    /// 튜토리얼 여부와 관계없이 매 방어전 같은 규칙입니다. 끄는 옵션은 두지 않습니다.
     /// 다른 시작 경로가 없어서, 끄면 방어전을 시작할 방법이 없어지기 때문입니다.
+    /// 튜토리얼이 진행 중이면 세지 않습니다. 튜토리얼 앞 페이지도 Z로 넘기므로, 여기서도 세면 페이지를 넘기는 동안
+    /// 시작될 수 있습니다. 그동안은 튜토리얼 마지막 페이지가 같은 규칙(Z 3초)으로 시작을 맡습니다.
+    /// 튜토리얼과 같게 실제 시간으로 셉니다. 게임 시간은 프레임이 느릴 때 잘려 3초를 눌러도 덜 찹니다.
+    /// 시간이 멈춘 동안(일시정지 메뉴 등)은 세지 않습니다.
     /// 시작 전 시간은 휴식으로 취급하므로 이 동안 함정을 설치할 수 있습니다(<see cref="IsResting"/>).
     /// </remarks>
     private void UpdateEmptySpaceHoldStart()
     {
-
-        if (!TryGetActiveSquadStartInput(out PlayerInputController startInput,
-                out InteractionController startInteraction)
-            || (startInteraction != null && startInteraction.Current != null)
-            || !startInput.Interact)
+        TutorialManager tutorial = TutorialManager.Instance;
+        Keyboard keyboard = Keyboard.current;
+        if ((tutorial != null && tutorial.IsRunning)
+            || Time.timeScale <= 0.0f
+            || keyboard == null
+            || !HasActiveSquadStartInput()
+            || !keyboard[StartHoldKey].isPressed)
         {
             m_emptySpaceHoldStartTimer = 0.0f;
             return;
         }
 
-        m_emptySpaceHoldStartTimer += Time.deltaTime;
+        m_emptySpaceHoldStartTimer += Time.unscaledDeltaTime;
         if (m_emptySpaceHoldStartTimer >= m_emptySpaceHoldStartDuration)
         {
             StartDefense();
@@ -947,28 +1030,141 @@ public sealed class DefenseManager : CombatSceneManager
     }
 
     /// <summary>
-    /// 현재 스쿼드가 직접 조작 중인 멤버에게서 방어전 시작 입력과 상호작용 상태를 가져옵니다.
+    /// 현재 스쿼드가 직접 조작 중이고 입력을 받는 멤버가 있는지 확인합니다.
     /// </summary>
     /// <remarks>
     /// 시작 입력을 Inspector에 고정하면 스쿼드 전환 뒤 비활성 멤버의 입력을 계속 읽게 됩니다.
     /// 따라서 매 프레임 <see cref="SquadManager.PlayerSquadMember"/>를 정본으로 사용합니다.
     /// </remarks>
-    private static bool TryGetActiveSquadStartInput(
-        out PlayerInputController startInput,
-        out InteractionController startInteraction)
+    private static bool HasActiveSquadStartInput()
     {
-        startInput = null;
-        startInteraction = null;
-
         SquadMemberController activeMember = SquadManager.Instance?.PlayerSquadMember;
         if (activeMember == null || !activeMember.IsPlayerSquadMember)
         {
             return false;
         }
 
-        startInput = activeMember.GetComponent<PlayerInputController>();
-        startInteraction = activeMember.GetComponent<InteractionController>();
+        PlayerInputController startInput = activeMember.GetComponent<PlayerInputController>();
         return startInput != null && startInput.isActiveAndEnabled;
+    }
+
+    /// <summary>
+    /// 시작 전이고 튜토리얼이 진행 중이 아니면 튜토리얼 창을 압축 크기로 띄워 시작 안내(Z 3초)와 키 게이지를 보여 줍니다.
+    /// </summary>
+    /// <remarks>
+    /// 2회차부터는 튜토리얼만 빠지고 시작 규칙(Z 3초)은 같으므로, 튜토리얼 마지막 페이지의 시작 안내 부분만 같은 창에 띄웁니다.
+    /// 좌상단 목표 패널은 1회차와 같게 둡니다. 튜토리얼은 Start에서 시작되므로 첫 Update부터 진행 여부를 바로 알 수 있습니다.
+    /// </remarks>
+    private void RefreshStartPrompt()
+    {
+        if (m_startPromptOverlay == null)
+        {
+            m_startPromptOverlay = FindFirstObjectByType<DefenseTutorialOverlay>(FindObjectsInactive.Include);
+            if (m_startPromptOverlay == null)
+            {
+                return;
+            }
+        }
+
+        TutorialManager tutorial = TutorialManager.Instance;
+        bool tutorialRunning = tutorial != null && tutorial.IsRunning;
+        bool showPrompt = !m_isGameStarted && !m_isGameOver && !tutorialRunning;
+        if (showPrompt)
+        {
+            if (!m_startPromptOverlay.IsCompact)
+            {
+                m_startPromptOverlay.ShowCompact(TutorialPage.CreateDisplayPage(
+                    m_startPromptTitle,
+                    m_startPromptBody,
+                    m_startPromptHint,
+                    m_startPromptKeyIcon,
+                    m_startPromptKeyIconPosition,
+                    m_startPromptKeyIconSize));
+            }
+
+            m_startPromptOverlay.SetGaugeProgress(EmptySpaceHoldStartProgress);
+            return;
+        }
+
+        // 튜토리얼이 같은 창을 쓰는 중이면 건드리지 않습니다. 압축 안내를 띄운 경우에만 내립니다.
+        if (!tutorialRunning && m_startPromptOverlay.IsCompact)
+        {
+            m_startPromptOverlay.Hide();
+        }
+    }
+
+    /// <summary>전투 중이면 목표 패널 문구를 전투용으로 바꾸고, 그 외에는 원래 문구로 돌려놓습니다.</summary>
+    private void RefreshMissionText()
+    {
+        TMP_Text missionTitleText = ResolveMissionTitleText();
+        if (missionTitleText == null && m_missionDescriptionText == null)
+        {
+            return;
+        }
+
+        if (m_isPlaying && !m_isGameOver)
+        {
+            if (missionTitleText != null && !string.IsNullOrEmpty(m_combatMissionTitle))
+            {
+                if (m_missionTitleOriginalText == null)
+                {
+                    m_missionTitleOriginalText = missionTitleText.text;
+                }
+
+                if (missionTitleText.text != m_combatMissionTitle)
+                {
+                    missionTitleText.text = m_combatMissionTitle;
+                }
+            }
+
+            if (m_missionDescriptionText != null && !string.IsNullOrEmpty(m_combatMissionDescription))
+            {
+                if (m_missionDescriptionOriginalText == null)
+                {
+                    m_missionDescriptionOriginalText = m_missionDescriptionText.text;
+                }
+
+                if (m_missionDescriptionText.text != m_combatMissionDescription)
+                {
+                    m_missionDescriptionText.text = m_combatMissionDescription;
+                }
+            }
+            return;
+        }
+
+        if (missionTitleText != null && m_missionTitleOriginalText != null)
+        {
+            missionTitleText.text = m_missionTitleOriginalText;
+            m_missionTitleOriginalText = null;
+        }
+
+        if (m_missionDescriptionText != null && m_missionDescriptionOriginalText != null)
+        {
+            m_missionDescriptionText.text = m_missionDescriptionOriginalText;
+            m_missionDescriptionOriginalText = null;
+        }
+    }
+
+    /// <summary>씬 연결이 없으면 설명 텍스트와 같은 패널의 Title 오브젝트를 사용합니다.</summary>
+    private TMP_Text ResolveMissionTitleText()
+    {
+        if (m_missionTitleText != null)
+        {
+            return m_missionTitleText;
+        }
+
+        if (m_missionDescriptionText == null || m_missionDescriptionText.transform.parent == null)
+        {
+            return null;
+        }
+
+        Transform titleTransform = m_missionDescriptionText.transform.parent.Find("Title");
+        if (titleTransform != null)
+        {
+            m_missionTitleText = titleTransform.GetComponent<TMP_Text>();
+        }
+
+        return m_missionTitleText;
     }
 
     /// <summary>
@@ -1214,15 +1410,15 @@ public sealed class DefenseManager : CombatSceneManager
         m_remainingWaveText.text = string.Format(m_remainingWaveFormat, remaining, totalWaveCount);
     }
 
-    /// <summary>웨이브 시작 알림을 표시하고 설정된 유지·페이드 시간을 시작합니다.</summary>
-    private void ShowWaveStartMessage()
+    /// <summary>구간 시작 알림을 표시하고 설정된 유지·페이드 시간을 시작합니다.</summary>
+    private void ShowPhaseStartMessage(string message)
     {
         if (m_waveStartMessageText == null)
         {
             return;
         }
 
-        m_waveStartMessageText.text = m_waveStartMessage;
+        m_waveStartMessageText.text = message;
         SetWaveStartMessageVisible(true);
         SetWaveStartMessageAlpha(1.0f);
 
@@ -1302,6 +1498,7 @@ public sealed class DefenseManager : CombatSceneManager
 
         m_roundDuration = Mathf.Max(0.01f, m_roundDuration);
         m_restDuration = Mathf.Max(0.01f, m_restDuration);
+        m_maxActiveEnemies = Mathf.Max(1, m_maxActiveEnemies);
         m_clearingPullDelay = Mathf.Max(0.0f, m_clearingPullDelay);
         m_clearingOffscreenDespawnDelay = Mathf.Max(0.0f, m_clearingOffscreenDespawnDelay);
         m_clearingForceEndDelay = Mathf.Max(0.0f, m_clearingForceEndDelay);

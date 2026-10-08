@@ -78,16 +78,55 @@ public class ReviveHudController : MonoBehaviour
     {
         PlayerbleUnitData playerData = ResolvePlayerSquadMemberData();
         DownedAllyInteractable reviveTarget = playerData != null ? playerData.CurrentReviveInteractionTarget : null;
+        bool isReviving = reviveTarget != null && playerData.IsReviving;
+
+        // 서하 스킬 같은 원격 구조는 대상이 상호작용 후보에서 빠져 위 경로로는 잡히지 않습니다. 그대로 두면 게이지가
+        // 전혀 보이지 않아, 팀원이 기립 동작만 하다 갑자기 부활한 것처럼 보입니다. 내가 직접 구조 중이 아니면 보여 줍니다.
+        if (!isReviving && TryGetRemoteRescueProgress(out float remoteProgress))
+        {
+            SetActive(m_promptRoot, false);
+            SetActive(m_revivingRoot, true);
+            SetGauge(remoteProgress);
+            return;
+        }
+
         if (reviveTarget == null)
         {
             HideHud();
             return;
         }
 
-        bool isReviving = playerData.IsReviving;
         SetActive(m_promptRoot, !isReviving);
         SetActive(m_revivingRoot, isReviving);
         SetGauge(isReviving ? playerData.ReviveGaugeAmount : 0.0f);
+    }
+
+    /// <summary>원격 구조가 진행 중인 팀원 중 가장 많이 찬 진행도를 찾습니다.</summary>
+    /// <returns>원격 구조 중인 팀원이 하나라도 있으면 <c>true</c>입니다.</returns>
+    /// <remarks>여럿이 동시에 구조되면 가장 앞선 것을 보여 줍니다. 게이지 칸이 하나뿐이라서입니다.</remarks>
+    private bool TryGetRemoteRescueProgress(out float progress)
+    {
+        progress = 0.0f;
+        if (m_squadManager == null)
+        {
+            return false;
+        }
+
+        bool found = false;
+        var members = m_squadManager.SquadMembers;
+        for (int i = 0; i < members.Count; i++)
+        {
+            DownedAllyInteractable target = members[i] != null ? members[i].GetComponent<DownedAllyInteractable>() : null;
+            if (target == null || !target.IsRemoteRescueActive)
+            {
+                continue;
+            }
+
+            found = true;
+            progress = Mathf.Max(progress, target.ReviveHoldProgress01);
+        }
+
+        return found;
     }
 
     private PlayerbleUnitData ResolvePlayerSquadMemberData()

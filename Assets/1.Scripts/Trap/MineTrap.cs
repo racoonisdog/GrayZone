@@ -13,11 +13,17 @@ using VInspector;
 /// </remarks>
 public sealed class MineTrap : ExplosiveTrap
 {
+    private const string ExplosionSoundEventPath = "event:/World/Trap/Activate/Mine";
+    private static bool s_loggedMissingExplosionSound;
+
     /// <inheritdoc />
     protected override string DefaultDisplayName => "지뢰";
 
     /// <inheritdoc />
     protected override string DefaultDescription => "밟은 적 주변을 폭발시켜 큰 피해를 줍니다";
+
+    /// <inheritdoc />
+    protected override TrapKind CostKind => TrapKind.Mine;
 
     [Header("Mine")]
     [Tooltip("폭발 피해를 줄 원통의 수평 반지름(m)입니다.")]
@@ -53,6 +59,8 @@ public sealed class MineTrap : ExplosiveTrap
     /// <inheritdoc />
     protected override int ApplyExplosionDamage()
     {
+        PlayExplosionSound();
+
         return ExplosionDamage.DetonateCylinder(
             ExplosionCenter,
             ExplosionRadius,
@@ -61,6 +69,28 @@ public sealed class MineTrap : ExplosiveTrap
             m_damageTargetLayers,
             gameObject,
             m_showExplosionRangeVisual);
+    }
+
+    /// <summary>지뢰가 실제로 폭발하는 프레임에 3D 폭발음을 한 번 재생합니다.</summary>
+    private void PlayExplosionSound()
+    {
+        if (!FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            FMODUnity.RuntimeManager.PlayOneShot(ExplosionSoundEventPath, ExplosionCenter);
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            if (!s_loggedMissingExplosionSound)
+            {
+                s_loggedMissingExplosionSound = true;
+                Debug.LogWarning($"[MineTrap] FMOD 이벤트를 찾지 못했습니다: {ExplosionSoundEventPath}\n{exception.Message}", this);
+            }
+        }
     }
 
     /// <inheritdoc />

@@ -249,15 +249,29 @@ public class PlayerbleUnitData : MonoBehaviour, IAmmoReserve
     /// 홀드 진행도는 구조하는 쪽과 구조받는 쪽 양쪽에 있습니다. 한쪽만 보면 입력 맵이 다시 스위치되는 순간
     /// 진행 중인데도 꺼진 것으로 보이므로 둘 중 하나라도 진행 중이면 진행으로 봅니다.
     /// </remarks>
+    /// <remarks>
+    /// 대상 쪽 진행은 <b>이 캐릭터가 구조자일 때만</b> 셉니다. 대상의 홀드 여부만 보면 AI 동료가 구조하는 대상을
+    /// 바라보기만 해도 내 구조 게이지가 떠서, 내가 살리는 것처럼 보입니다.
+    /// </remarks>
     public bool IsReviving => CurrentReviveInteractionTarget != null
         && (m_interactionController.HoldProgress01 > 0.0f
-            || CurrentReviveInteractionTarget.IsReviveHoldActive);
+            || IsActiveReviverOf(CurrentReviveInteractionTarget));
 
     /// <summary>구조 홀드 진행도를 0~1로 돌려줍니다. 대상이 없으면 0입니다.</summary>
     /// <remarks>양쪽 진행도 중 큰 값을 씁니다. <see cref="IsReviving"/>과 같은 이유입니다.</remarks>
     public float ReviveGaugeAmount => CurrentReviveInteractionTarget != null
-        ? Mathf.Clamp01(Mathf.Max(m_interactionController.HoldProgress01, CurrentReviveInteractionTarget.ReviveHoldProgress01))
+        ? Mathf.Clamp01(IsActiveReviverOf(CurrentReviveInteractionTarget)
+            ? Mathf.Max(m_interactionController.HoldProgress01, CurrentReviveInteractionTarget.ReviveHoldProgress01)
+            : m_interactionController.HoldProgress01)
         : 0.0f;
+
+    /// <summary>이 캐릭터가 지금 그 대상을 직접 구조하고 있는지 여부입니다.</summary>
+    private bool IsActiveReviverOf(DownedAllyInteractable target)
+    {
+        return target != null
+            && m_squadMember != null
+            && target.ActiveInteractorMember == m_squadMember;
+    }
 
     /// <summary>
     /// 현재 부상 상태입니다.
@@ -400,7 +414,9 @@ public class PlayerbleUnitData : MonoBehaviour, IAmmoReserve
             m_characterId = snapshot.CharacterId;
         }
 
-        if (!string.IsNullOrWhiteSpace(snapshot.DisplayName))
+        // 전투 씬에는 화면 표시용 한글 이름(나린·청솔·서하)이 설정돼 있습니다. 셸터 데이터의 이름은 영문 ID라
+        // 덮어쓰면 결과 화면·조준선 설정 등에서 영문으로 바뀌고 폰트에 없는 글자가 깨집니다. 씬 이름이 없을 때만 받습니다.
+        if (!string.IsNullOrWhiteSpace(snapshot.DisplayName) && string.IsNullOrWhiteSpace(m_displayName))
         {
             m_displayName = snapshot.DisplayName;
         }

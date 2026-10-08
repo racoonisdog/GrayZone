@@ -255,7 +255,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Texture: {fileID: 2800000, guid: 6f0d39bd5425bdc48b2156104793ec71, type: 3}
+  m_Texture: {fileID: 2800000, guid: b17ffb60d53c63f42804caa7c5bfb043, type: 3}
   m_UVRect:
     serializedVersion: 2
     x: 0
@@ -2334,8 +2334,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TitleScreenController
   m_backgroundVideo: {fileID: 2001254393}
   m_backgroundImage: {fileID: 397326124}
-  m_menuSelectionLeftTexture: {fileID: 2800000, guid: d0e5ec4749838ff4ea0f04411596fc1b, type: 3}
-  m_menuSelectionRightTexture: {fileID: 2800000, guid: 8f4ced4c84c3df74684e009a68793c36, type: 3}
+  m_menuSelectionLeftTexture: {fileID: 2800000, guid: 9b7ff32310b00614b8d4558620c7d5bf, type: 3}
+  m_menuSelectionRightTexture: {fileID: 2800000, guid: 3403d44aa1b130d47b0308ec105320ef, type: 3}
   m_menuButtons:
   - {fileID: 1952490560}
   - {fileID: 453346548}
@@ -2946,6 +2946,7 @@ GameObject:
   - component: {fileID: 2001254395}
   - component: {fileID: 2001254394}
   - component: {fileID: 2001254393}
+  - component: {fileID: 6874140991324012261}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -2961,7 +2962,7 @@ VideoPlayer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2001254392}
   m_Enabled: 1
-  m_VideoClip: {fileID: 32900000, guid: df50606475083fb43be7fc03737e53e2, type: 3}
+  m_VideoClip: {fileID: 32900000, guid: 078f9043906df924eb60e50ea38b40ba, type: 3}
   m_TargetCameraAlpha: 1
   m_TargetCamera3DLayout: 0
   m_TargetCamera: {fileID: 0}
@@ -3055,6 +3056,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1589198060}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6874140991324012261
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2001254392}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86c6556701af9e04380698b89f691b6e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: FMODUnity::FMODUnity.StudioListener
+  nonRigidbodyVelocity: 0
+  attenuationObject: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

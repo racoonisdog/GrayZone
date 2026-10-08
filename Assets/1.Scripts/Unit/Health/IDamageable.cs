@@ -26,4 +26,12 @@ public interface IDamageable
     /// 결과 알림 이벤트까지 함께 실어 보내지 않으면 중간에 사라집니다.
     /// </param>
     bool TakeDamage(int amount, GameObject attacker = null);
+
+    /// <summary>
+    /// 소수 피해를 적용합니다. HP가 실제로 변경된 경우에만 true를 반환합니다.
+    /// </summary>
+    /// <remarks>
+    /// HP는 내부적으로 실수로 계산하고 표시만 정수로 합니다. 총기 구간 피해처럼 2.5 같은 값이 그대로 누적됩니다.
+    /// </remarks>
+    bool TakeDamage(float amount, GameObject attacker = null);
 }

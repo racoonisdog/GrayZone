@@ -39,6 +39,13 @@ public class SquadAIController : MonoBehaviour
         public Vector3 Position;
         public Vector3 Destination;
         public Vector3 Velocity;
+
+        /// <summary>이 자리의 AI가 받아 둔 이동·사수 명령(Q/E)이 있는지입니다.</summary>
+        /// <remarks>전환하면 위치를 맞바꾸므로, 그 자리를 이어받는 멤버가 명령도 이어받아야 지키던 자리가 풀리지 않습니다.</remarks>
+        public bool HasMoveOrder;
+
+        /// <summary>이어받을 사수 위치입니다.</summary>
+        public Vector3 MoveOrderPosition;
     }
 
     [Foldout("Follow Options")]
@@ -671,6 +678,8 @@ public class SquadAIController : MonoBehaviour
             Position = transform.position,
             Destination = canReadAgentPath ? m_agent.destination : transform.position,
             Velocity = m_agent.enabled ? m_agent.velocity : Vector3.zero,
+            HasMoveOrder = m_hasMoveOrder,
+            MoveOrderPosition = m_moveOrderPosition,
         };
     }
 
@@ -680,7 +689,19 @@ public class SquadAIController : MonoBehaviour
     /// <param name="state">적용할 AI 추종 상태입니다.</param>
     public void ApplyFollowCarryoverState(FollowCarryoverState state)
     {
-        if (!state.HasState || m_agent == null || !m_agent.enabled)
+        if (!state.HasState)
+        {
+            return;
+        }
+
+        // 이 자리에 걸려 있던 이동·사수 명령을 이어받습니다. 명령은 길찾기 상태와 무관하게 남겨야
+        // 에이전트가 잠시 꺼져 있어도 다음 갱신에서 그 자리로 갑니다.
+        if (state.HasMoveOrder)
+        {
+            IssueMoveOrder(state.MoveOrderPosition);
+        }
+
+        if (m_agent == null || !m_agent.enabled)
         {
             return;
         }

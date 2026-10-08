@@ -43,7 +43,7 @@ public sealed class FireTrap : Trap
     }
 
     [Header("Fire Trap")]
-    [Tooltip("화염 지대를 지나간 것으로 볼 레이어입니다. 이 레이어의 콜라이더가 범위 안에 있으면 피해를 받습니다. 기본은 Enemy만 봅니다.")]
+    [Tooltip("화염 지대를 지나간 것으로 볼 레이어입니다. 이 레이어의 콜라이더가 범위 안에 있으면 피해를 받습니다. 기본은 Enemy만 봅니다. Player를 넣으면 팀원도 줄어든 피해를 받습니다.")]
     [SerializeField] private LayerMask m_targetLayers = 1 << 9;
 
     [Tooltip("화염 지대가 지속될 시간(초)입니다. 설치가 끝난 순간부터 세며, 다 되면 화염 지대가 사라집니다.")]
@@ -58,11 +58,25 @@ public sealed class FireTrap : Trap
     [Min(0.01f)]
     [SerializeField] private float m_fireTickInterval = 0.5f;
 
+    [Tooltip("플레이어 진영(팀원)이 받는 피해 배율입니다. 0.5면 적이 받는 피해의 절반입니다. 팀원이 피해를 받으려면 대상 레이어에 Player가 들어 있어야 합니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_allyDamageMultiplier = 0.5f;
+
     [Tooltip("켜면 범위에 들어온 순간 1틱 분량의 피해를 바로 줍니다. 끄면 첫 틱 간격이 지난 뒤부터 피해가 들어갑니다.")]
     [SerializeField] private bool m_damageOnEnter = true;
 
     [Tooltip("켜면 범위 안의 폭발물 함정(지뢰·클레이모어 등)에 불이 붙어 연쇄로 터집니다. 점화 순간과 이후 피해 간격마다 확인합니다.")]
     [SerializeField] private bool m_igniteExplosives = true;
+
+    [Header("Burning On Exit")]
+    [Tooltip("화염 지대에서 벗어난 적에게 걸 화상입니다. 불이 꺼질 때 안에 있던 대상도 벗어난 것으로 봅니다. 비어 있으면 Resources 기본 화상을 씁니다.")]
+    [SerializeField] private StatusEffectDefinitionSO m_exitBurningEffect;
+
+    [Tooltip("화염 지대에서 벗어난 팀원(플레이어 진영)에게 걸 화상입니다. 적보다 약한 값입니다. 비어 있으면 Resources 기본 팀원 화상을 씁니다.")]
+    [SerializeField] private StatusEffectDefinitionSO m_allyExitBurningEffect;
+
+    private const string ExitBurningResourcePath = "StatusEffects/Burning";
+    private const string AllyExitBurningResourcePath = "StatusEffects/Burning_Ally";
 
     /// <summary>다음 연쇄 점화 확인까지 남은 시간(초)입니다.</summary>
     private float m_chainTimer;
@@ -83,6 +97,14 @@ public sealed class FireTrap : Trap
     /// <summary>점화되어 지속 시간이 흐르고 있는지 여부입니다.</summary>
     private bool m_isIgnited;
 
+    /// <summary>이 화염 지대를 생성한 쪽이 요청한 선택적 3D 지속음입니다.</summary>
+    private FMOD.Studio.EventInstance m_loopingSoundInstance;
+
+    private static bool s_loggedMissingLoopingSound;
+
+    /// <summary>적에게만 틱마다 더하는 피해입니다. 생성한 쪽(화염 드럼통 업그레이드)이 정합니다. 팀원 피해에는 더하지 않습니다.</summary>
+    private float m_enemyBonusDamagePerTick;
+
     /// <summary>화염 지대가 사라지기까지 남은 시간(초)입니다.</summary>
     public float RemainingTime => m_remainingTime;
 
@@ -97,6 +119,70 @@ public sealed class FireTrap : Trap
 
     /// <inheritdoc />
     protected override bool HasTargetInRange => m_occupants.Count > 0;
+
+    /// <summary>
+    /// 화염 지대의 지속 시간을 바꿉니다. 생성한 쪽이 프리팹 값과 다른 시간을 쓰고 싶을 때 부릅니다.
+    /// </summary>
+    /// <param name="duration">지속 시간(초)입니다.</param>
+    /// <remarks>
+    /// 점화 전에 부르면 점화 순간부터 이 시간을 셉니다. 이미 점화됐으면 남은 시간을 이 값으로 다시 맞춥니다.
+    /// 화염 드럼통(<see cref="FireBarrelTrap"/>)이 같은 화염 프리팹을 쓰면서 자기 시간을 넣는 데 씁니다.
+    /// </remarks>
+    public void SetDuration(float duration)
+    {
+        m_duration = Mathf.Max(0.01f, duration);
+        if (m_isIgnited)
+        {
+            m_remainingTime = m_duration;
+        }
+    }
+
+    /// <summary>
+    /// 화염 지대 범위를 배율만큼 넓힙니다. 판정 콜라이더와 불 이펙트가 함께 커지도록 오브젝트 크기를 바꿉니다.
+    /// </summary>
+    /// <param name="multiplier">범위 배율입니다. 1이면 프리팹 크기 그대로입니다.</param>
+    /// <remarks>불 이펙트는 부모 크기를 따르는 설정(Hierarchy)이라 함께 커집니다. 생성 직후, 설치 전에 부릅니다.</remarks>
+    public void SetRangeMultiplier(float multiplier)
+    {
+        transform.localScale *= Mathf.Max(0.01f, multiplier);
+    }
+
+    /// <summary>적에게만 틱마다 더할 피해를 정합니다. 팀원이 받는 피해는 바뀌지 않습니다.</summary>
+    /// <param name="damagePerTick">틱마다 더할 피해입니다. 0이면 추가 피해가 없습니다.</param>
+    public void SetEnemyBonusDamagePerTick(float damagePerTick)
+    {
+        m_enemyBonusDamagePerTick = Mathf.Max(0.0f, damagePerTick);
+    }
+
+    /// <summary>
+    /// 이 화염 지대가 살아 있는 동안 지정한 3D 루프를 재생합니다.
+    /// </summary>
+    /// <remarks>화염 드럼통처럼 별도 지속음이 필요한 생성 경로만 호출합니다. 화염병에는 자동 적용되지 않습니다.</remarks>
+    public void StartLoopingSound(string eventPath)
+    {
+        StopLoopingSound(FMOD.Studio.STOP_MODE.IMMEDIATE);
+
+        if (string.IsNullOrWhiteSpace(eventPath) || !FMODUnity.RuntimeManager.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            m_loopingSoundInstance = FMODUnity.RuntimeManager.CreateInstance(eventPath);
+            FMODUnity.RuntimeManager.AttachInstanceToGameObject(m_loopingSoundInstance, gameObject);
+            m_loopingSoundInstance.start();
+        }
+        catch (FMODUnity.EventNotFoundException exception)
+        {
+            m_loopingSoundInstance.clearHandle();
+            if (!s_loggedMissingLoopingSound)
+            {
+                s_loggedMissingLoopingSound = true;
+                Debug.LogWarning($"[FireTrap] FMOD 이벤트를 찾지 못했습니다: {eventPath}\n{exception.Message}", this);
+            }
+        }
+    }
 
     /// <inheritdoc />
     protected override void OnBuilt()
@@ -172,6 +258,12 @@ public sealed class FireTrap : Trap
         }
     }
 
+    protected override void Awake()
+    {
+        base.Awake();
+        EnsureTriggerBody();
+    }
+
     /// <summary>트리거 콜라이더가 하나도 없으면 인스펙터에서 경고합니다.</summary>
     private void OnValidate()
     {
@@ -234,7 +326,54 @@ public sealed class FireTrap : Trap
         if (occupant.Colliders.Count == 0)
         {
             m_occupants.Remove(damageable);
+            ApplyExitBurning(damageable);
         }
+    }
+
+    /// <summary>
+    /// 화염 지대에서 벗어난 대상에게 화상을 겁니다. 적은 기본 화상, 팀원은 약한 팀원 화상을 받습니다.
+    /// </summary>
+    /// <remarks>
+    /// 화상 피해는 진영 규칙을 거쳐 들어가므로, 피해를 준 쪽 진영을 받는 쪽의 반대로 넘깁니다.
+    /// 같은 진영으로 넘기면 팀원 화상이 아군 피해로 걸러져 들어가지 않습니다.
+    /// 죽은 대상과 피해를 받지 않는 대상(함정 등)에는 걸지 않습니다.
+    /// </remarks>
+    private void ApplyExitBurning(IDamageable damageable)
+    {
+        if (!IsAliveTarget(damageable))
+        {
+            return;
+        }
+
+        bool isAlly = damageable.Faction == Faction.Player;
+        StatusEffectDefinitionSO burning = isAlly ? ResolveAllyExitBurningEffect() : ResolveExitBurningEffect();
+        if (burning == null)
+        {
+            return;
+        }
+
+        Faction sourceFaction = isAlly ? Faction.Enemy : Faction.Player;
+        StatusEffectContainer.GetOrAdd(damageable)?.Apply(burning, sourceFaction, gameObject);
+    }
+
+    private StatusEffectDefinitionSO ResolveExitBurningEffect()
+    {
+        if (m_exitBurningEffect == null)
+        {
+            m_exitBurningEffect = Resources.Load<StatusEffectDefinitionSO>(ExitBurningResourcePath);
+        }
+
+        return m_exitBurningEffect;
+    }
+
+    private StatusEffectDefinitionSO ResolveAllyExitBurningEffect()
+    {
+        if (m_allyExitBurningEffect == null)
+        {
+            m_allyExitBurningEffect = Resources.Load<StatusEffectDefinitionSO>(AllyExitBurningResourcePath);
+        }
+
+        return m_allyExitBurningEffect;
     }
 
     /// <summary>
@@ -314,18 +453,30 @@ public sealed class FireTrap : Trap
     {
         base.OnDisable();
         ClearOccupants();
+        StopLoopingSound(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
     }
 
     /// <inheritdoc />
     protected override void OnDepleted()
     {
         ClearOccupants();
+        StopLoopingSound(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
     }
 
     /// <summary>1틱 분량의 피해를 넣습니다. 정수로 떨어지지 않는 나머지는 다음 틱으로 넘깁니다.</summary>
+    /// <remarks>
+    /// 팀원(플레이어 진영)은 <c>m_allyDamageMultiplier</c>만큼 줄여서 받습니다.
+    /// 적은 업그레이드로 정해진 틱당 추가 피해(<see cref="SetEnemyBonusDamagePerTick"/>)를 더 받습니다.
+    /// </remarks>
     private void ApplyTickDamage(IDamageable damageable, Occupant occupant)
     {
-        occupant.PendingDamage += m_damagePerSecond * FireTickInterval;
+        bool isAlly = damageable.Faction == Faction.Player;
+        float multiplier = isAlly ? m_allyDamageMultiplier : 1.0f;
+        occupant.PendingDamage += m_damagePerSecond * FireTickInterval * multiplier;
+        if (!isAlly)
+        {
+            occupant.PendingDamage += m_enemyBonusDamagePerTick;
+        }
 
         int amount = Mathf.FloorToInt(occupant.PendingDamage);
         if (amount <= 0)
@@ -359,8 +510,14 @@ public sealed class FireTrap : Trap
     }
 
     /// <summary>지속 시간이 끝난 화염 지대를 정리하고 제거합니다.</summary>
+    /// <remarks>불이 꺼질 때 안에 있던 대상도 불에서 벗어난 것이므로 화상을 겁니다.</remarks>
     private void Expire()
     {
+        foreach (IDamageable damageable in m_occupants.Keys)
+        {
+            ApplyExitBurning(damageable);
+        }
+
         ClearOccupants();
         enabled = false;
         Destroy(gameObject);
@@ -373,10 +530,50 @@ public sealed class FireTrap : Trap
         m_removalBuffer.Clear();
     }
 
-    /// <summary>이 콜라이더가 이 함정이 반응할 레이어인지 여부입니다.</summary>
+    /// <summary>현재 화염 지속음을 정지하고 FMOD 인스턴스를 해제합니다.</summary>
+    private void StopLoopingSound(FMOD.Studio.STOP_MODE stopMode)
+    {
+        if (!m_loopingSoundInstance.isValid())
+        {
+            m_loopingSoundInstance.clearHandle();
+            return;
+        }
+
+        m_loopingSoundInstance.stop(stopMode);
+        m_loopingSoundInstance.release();
+        m_loopingSoundInstance.clearHandle();
+    }
+
+    /// <summary>이 콜라이더가 이 함정이 반응할 대상인지 여부입니다.</summary>
+    /// <remarks>
+    /// 트리거 콜라이더(구조 감지 구, 적 접촉 센서 등)는 몸이 아니라 감지 범위라 제외합니다. 점화 순간의
+    /// 범위 검사(<c>QueryTriggerInteraction.Ignore</c>)와 같은 기준입니다. 넣으면 몸보다 넓은 범위에서 불이 붙습니다.
+    /// </remarks>
     private bool IsTarget(Collider other)
     {
-        return other != null && (m_targetLayers.value & (1 << other.gameObject.layer)) != 0;
+        return other != null
+            && !other.isTrigger
+            && (m_targetLayers.value & (1 << other.gameObject.layer)) != 0;
+    }
+
+    /// <summary>
+    /// 트리거 감지에 필요한 키네마틱 Rigidbody를 보장합니다.
+    /// </summary>
+    /// <remarks>
+    /// 트리거 이벤트는 둘 중 한쪽에 Rigidbody나 CharacterController가 있어야 옵니다. AI 팀원은 CharacterController를
+    /// 끄고 일반 콜라이더만 쓰므로, 화염 쪽에 바디가 없으면 조작 중인 캐릭터만 불에 타고 나머지는 지나가도 멀쩡합니다.
+    /// 프리팹마다 붙이는 것을 잊지 않도록 코드에서 보장합니다.
+    /// </remarks>
+    private void EnsureTriggerBody()
+    {
+        Rigidbody body = GetComponent<Rigidbody>();
+        if (body == null)
+        {
+            body = gameObject.AddComponent<Rigidbody>();
+        }
+
+        body.isKinematic = true;
+        body.useGravity = false;
     }
 
     /// <summary>파괴되지 않았고 죽지도 않은 대상인지 여부입니다.</summary>

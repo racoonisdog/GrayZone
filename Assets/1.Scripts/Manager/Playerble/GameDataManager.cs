@@ -496,7 +496,19 @@ public class GameDataManager : MonoBehaviour
                 return false;
             }
 
+            // 전투 이탈한 뒤 셸터에서 살리지 않은 대원은 출격하지 않습니다.
+            if (character.IsCombatOut || character.CurrentHp <= 0)
+            {
+                continue;
+            }
+
             fixedSquadRuntimeIds.Add(character.RuntimeId);
+        }
+
+        if (fixedSquadRuntimeIds.Count == 0)
+        {
+            Debug.LogWarning("[GameDataManager] 출격할 수 있는 대원이 없습니다. 전투 이탈한 대원을 먼저 회복시켜야 합니다.");
+            return false;
         }
 
         playableSquadRuntimeIds = fixedSquadRuntimeIds;

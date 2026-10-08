@@ -19,6 +19,9 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     /// <summary>조작 멤버 상태 위젯 컨테이너 이름입니다. 초상화 이름이 슬롯과 겹쳐 탐색 범위를 여기로 좁힙니다.</summary>
     private const string PlayerStatusName = "PlayerStatus";
 
+    /// <summary>주 무기 아이콘 오브젝트 이름입니다.</summary>
+    private const string PrimaryWeaponIconName = "PrimaryWeaponIcon";
+
     [Serializable]
     private sealed class HealthGaugeSlot
     {
@@ -126,11 +129,30 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     [Tooltip("켜면 체력 텍스트를 '현재/최대'로 표시합니다. 끄면 현재 값만 표시합니다.")]
     [SerializeField] private bool m_showMaxHpInText;
 
+    [Header("HP Gauge Fade")]
+    [Tooltip("하단 중앙 체력바(Big life gauge)의 CanvasGroupFader입니다. 비워 두면 체력 구간 페이드를 쓰지 않고 항상 표시합니다.")]
+    [SerializeField] private CanvasGroupFader m_hpGaugeFader;
+
+    [Tooltip("체력이 이 비율(%) 이하로 내려가면 체력바를 페이드 인합니다.")]
+    [Range(0f, 100f)]
+    [SerializeField] private float m_hpGaugeFadeInPercent = 50f;
+
+    [Tooltip("체력이 이 비율(%) 이상으로 올라가면 체력바를 페이드 아웃합니다. 페이드 인 비율보다 작을 수 없습니다. 두 값 사이에서는 직전 상태를 유지합니다.")]
+    [Range(0f, 100f)]
+    [SerializeField] private float m_hpGaugeFadeOutPercent = 70f;
+
     [Header("Ammo")]
     [Tooltip("현재 탄창 탄약 수 텍스트(Mag_Count)입니다.")]
     [SerializeField] private TMP_Text m_magCountText;
     [Tooltip("예비 탄약 수 텍스트(Mag_All)입니다.")]
     [SerializeField] private TMP_Text m_magAllText;
+
+    [Header("Weapon Icon")]
+    [Tooltip("현재 조작 대원의 주 무기 아이콘입니다.")]
+    [SerializeField] private Image m_primaryWeaponIcon;
+    [SerializeField] private Sprite m_assaultRifleSprite;
+    [SerializeField] private Sprite m_shotgunSprite;
+    [SerializeField] private Sprite m_sniperRifleSprite;
 
     [Header("Player Data")]
     [SerializeField] private SquadManager m_squadManager;
@@ -153,9 +175,18 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
     private PlayerbleUnitData m_playerSquadMemberData;
     private readonly List<PlayerbleUnitData> m_sortedTeamData = new();
 
+    // 체력바 페이드 상태. 처음 한 번과 다시 켜질 때는 페이드 없이 즉시 맞춥니다.
+    private bool m_hpGaugeVisible;
+    private bool m_hpGaugeVisibilityApplied;
+
     private void Reset()
     {
         AutoFindHudReferences();
+    }
+
+    private void OnValidate()
+    {
+        m_hpGaugeFadeOutPercent = Mathf.Max(m_hpGaugeFadeInPercent, m_hpGaugeFadeOutPercent);
     }
 
     private void Awake()
@@ -171,6 +202,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         // 초상화만 예외적으로 여기서도 찾습니다. 나중에 추가된 필드라 이미 저장된 씬에는 직렬화된 값이
         // 없고, 그대로 두면 기존 씬에서 초상화가 영영 비어 있게 됩니다. 인스펙터에 값이 있으면 그대로 씁니다.
         ResolvePortraitImage();
+        ResolveWeaponIcon();
 
         ValidateReferences();
         RefreshPlayerDataSources();
@@ -204,6 +236,8 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
 
     private void OnEnable()
     {
+        // 꺼져 있는 동안 페이드가 중간에 멈췄을 수 있으므로 다시 켜질 때 즉시 맞춥니다.
+        m_hpGaugeVisibilityApplied = false;
         RefreshPlayerDataSources();
         SetPlayerSquadMemberData(ResolvePlayerSquadMemberData());
         UpdateHud();
@@ -285,6 +319,7 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         }
 
         ResolvePortraitImage();
+        ResolveWeaponIcon();
 
         for (int i = 0; i < m_teamGaugeSlots.Length; i++)
         {
@@ -314,6 +349,21 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         if (portrait != null)
         {
             m_portraitImage = portrait.GetComponent<Image>();
+        }
+    }
+
+    /// <summary>주 무기 아이콘 참조가 비어 있으면 Normal HUD 자손에서 찾아 채웁니다.</summary>
+    private void ResolveWeaponIcon()
+    {
+        if (m_primaryWeaponIcon != null)
+        {
+            return;
+        }
+
+        Transform icon = FindDeep(transform, PrimaryWeaponIconName);
+        if (icon != null)
+        {
+            m_primaryWeaponIcon = icon.GetComponent<Image>();
         }
     }
 
@@ -426,9 +476,72 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
             m_magAllText.text = ResolveReserveAmmoText();
         }
 
+        UpdateWeaponIcon();
         UpdatePortrait();
         UpdateGauge(normalizedHp);
+        UpdateHpGaugeFade(maxHp > 0, normalizedHp);
         UpdateTeamGauges();
+    }
+
+    /// <summary>
+    /// 체력 비율에 따라 하단 중앙 체력바를 페이드 인·아웃합니다.
+    /// </summary>
+    /// <remarks>
+    /// 페이드 인 비율 이하이면 보이고, 페이드 아웃 비율 이상이면 숨깁니다. 두 값 사이에서는 직전 상태를
+    /// 유지해, 경계 근처에서 체력이 오르내릴 때 깜빡이지 않게 합니다. 조작 대원이 없으면 숨깁니다.
+    /// </remarks>
+    private void UpdateHpGaugeFade(bool hasData, float normalizedHp)
+    {
+        if (m_hpGaugeFader == null)
+        {
+            return;
+        }
+
+        float hpPercent = normalizedHp * 100f;
+        bool visible = m_hpGaugeVisible;
+        if (!hasData)
+        {
+            visible = false;
+        }
+        else if (hpPercent <= m_hpGaugeFadeInPercent)
+        {
+            visible = true;
+        }
+        else if (hpPercent >= m_hpGaugeFadeOutPercent)
+        {
+            visible = false;
+        }
+
+        if (!m_hpGaugeVisibilityApplied)
+        {
+            m_hpGaugeVisibilityApplied = true;
+            m_hpGaugeVisible = visible;
+            if (visible)
+            {
+                m_hpGaugeFader.ShowImmediately();
+            }
+            else
+            {
+                m_hpGaugeFader.HideImmediately();
+            }
+
+            return;
+        }
+
+        if (visible == m_hpGaugeVisible)
+        {
+            return;
+        }
+
+        m_hpGaugeVisible = visible;
+        if (visible)
+        {
+            m_hpGaugeFader.FadeIn();
+        }
+        else
+        {
+            m_hpGaugeFader.FadeOut();
+        }
     }
 
     /// <summary>
@@ -450,6 +563,49 @@ public class NormalHudPlayerStatusBinder : MonoBehaviour
         if (m_portraitImage.gameObject.activeSelf != (sprite != null))
         {
             m_portraitImage.gameObject.SetActive(sprite != null);
+        }
+    }
+
+    /// <summary>현재 조작 대원이 들고 있는 무기 타입에 맞는 HUD 스프라이트를 반영합니다.</summary>
+    private void UpdateWeaponIcon()
+    {
+        if (m_assaultRifleSprite == null && m_shotgunSprite == null && m_sniperRifleSprite == null)
+        {
+            return;
+        }
+
+        if (m_playerSquadMemberData == null)
+        {
+            return;
+        }
+
+        ResolveWeaponIcon();
+        if (m_primaryWeaponIcon == null)
+        {
+            return;
+        }
+
+        Gun currentGun = m_playerSquadMemberData.Gun;
+        if (currentGun == null && !m_playerSquadMemberData.HasCurrentWeaponDefinition)
+        {
+            return;
+        }
+
+        WeaponType weaponType = currentGun != null
+            ? currentGun.WeaponType
+            : m_playerSquadMemberData.CurrentWeaponType;
+
+        Sprite sprite = weaponType switch
+        {
+            WeaponType.AssaultRifle => m_assaultRifleSprite,
+            WeaponType.Shotgun => m_shotgunSprite,
+            WeaponType.SniperRifle => m_sniperRifleSprite,
+            _ => null,
+        };
+
+        if (sprite != null && m_primaryWeaponIcon.sprite != sprite)
+        {
+            m_primaryWeaponIcon.sprite = sprite;
         }
     }
 

@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dfdb23f20c80b8143a10493df46b8250, type: 3}
+  m_Name: ChungSolDragonBreathSkillSO
+  m_EditorClassIdentifier: Assembly-CSharp::ChungSolDragonBreathSkillSO
+  CharacterSkill_m_cooldownDuration: 30
+  ChungSolDragonBreathSkill_m_reloadSpeedMultiplier: 1
+  DragonBreathEffect_m_damage: 10
+  DragonBreathEffect_m_damageFalloff:
+    m_mode: 1
+    m_trackMinDistance: 0
+    m_trackMaxDistance: 17.5
+    m_steps:
+    - m_maxDistance: 6
+      m_damageMultiplier: 1
+      m_flatDamage: 100
+    - m_maxDistance: 12
+      m_damageMultiplier: 0.7
+      m_flatDamage: 70
+    - m_maxDistance: 17.5
+      m_damageMultiplier: 0.4
+      m_flatDamage: 40
+  DragonBreathEffect_m_damageRange: 17.5
+  DragonBreathEffect_m_damageStartRadius: 0.3
+  DragonBreathEffect_m_damageEndRadius: 1.5
+  DragonBreathEffect_m_impactDamageRadius: 1.7
+  DragonBreathEffect_m_impactScaleStartDistance: 6
+  DragonBreathEffect_m_impactFarScale: 1.6
