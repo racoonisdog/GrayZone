@@ -148,7 +148,7 @@ public sealed class CameraOcclusionFader : MonoBehaviour
             RoofOcclusionTarget target =
                 hitCollider.GetComponentInParent<RoofOcclusionTarget>();
 
-            if (target != null && target.isActiveAndEnabled)
+            if (target != null && target.isActiveAndEnabled && target.OwnsCollider(hitCollider))
                 m_currentTargets.Add(target);
         }
     }
