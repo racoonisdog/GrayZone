@@ -17,6 +17,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private static readonly int AnimIDThrow = Animator.StringToHash("DoThrow");
     private static readonly int AnimStateGrenadeThrow = Animator.StringToHash("Grenade Throw");
     private static readonly int AnimStateGrenadeCrouchThrow = Animator.StringToHash("Grenade Crouch Throw");
+    private static readonly int AnimStateGrenadeReady = Animator.StringToHash("Ready");
 
     // CrosshairController는 분대 전체가 하나를 공유합니다. 대원별 인스턴스에 복원 스냅샷을 두면
     // 조작 대원 전환/사망/비활성화 순서에 따라 이전 대원이 새 대원의 HUD를 덮을 수 있습니다.
@@ -201,6 +202,20 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 좌클릭 시점의 투척 경로입니다. 지연 생성 시 클릭 순간의 조준을 그대로 사용하기 위해 보관합니다.
+    /// </summary>
+    private struct ThrowPlan
+    {
+        public Vector3 throwStart;
+        public Vector3 initialVelocity;
+        public bool hasPlannedCollision;
+        public float plannedCollisionTime;
+        public Vector3 plannedCollisionPosition;
+        public Vector3 plannedContactPoint;
+        public Vector3 plannedSurfaceNormal;
+    }
+
     [Tooltip("마우스 휠로 순환 선택할 ProjectileBase Prefab 목록입니다.")]
     [SerializeField] private List<ProjectileBase> m_projectilePrefabs = new List<ProjectileBase>();
 
@@ -224,7 +239,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [SerializeField] private CrosshairPreset m_throwCrosshairPreset = new CrosshairPreset();
 
     [Header("Held Grenade Visual")]
-    [Tooltip("G 투척 모드 동안 오른손에 표시할 수류탄 Visual Prefab입니다.")]
+    [Tooltip("선택한 투척물에 Held Visual Prefab이 없을 때 오른손에 표시할 기본 Visual Prefab입니다.")]
     [SerializeField] private GameObject m_heldGrenadeVisualPrefab;
 
     [Tooltip("수류탄 Visual을 배치할 손 장착 소켓입니다. 비어 있으면 Humanoid 오른손 본을 사용합니다.")]
@@ -279,6 +294,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_throwCooldown = 1.0f;
 
+    [Tooltip("좌클릭 입력 후 투척물이 실제로 생성될 때까지의 지연 시간(초)입니다. 0이면 입력 즉시 생성합니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_throwReleaseDelay = 0.0f;
+
     [Tooltip("경로 표시를 구성할 선분 수입니다.")]
     [Range(4, 64)]
     [SerializeField] private int m_trajectorySegments = 24;
@@ -330,11 +349,18 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private Vector3 m_explosionPreviewCenter;
     private int m_trajectoryPointCount;
     private float m_nextThrowReadyTime;
+    private float m_pendingThrowTime = -1.0f;
+    private ProjectileBase m_pendingProjectile;
+    private ThrowPlan m_pendingThrowPlan;
     private bool m_crosshairModeInitialized;
     private bool m_throwCrosshairActive;
     private bool m_hasGrenadeModeParameter;
     private bool m_hasThrowParameter;
+    private bool m_hasGrenadeReadyState;
     private int m_grenadeActionLayerIndex = -1;
+    // 투척물별 손 Visual을 미리 만들어 두고 선택이 바뀌면 활성 대상만 교체합니다.
+    private readonly Dictionary<ProjectileBase, GameObject> m_heldVisualInstances = new Dictionary<ProjectileBase, GameObject>();
+    private GameObject m_defaultHeldVisualInstance;
     private GameObject m_heldGrenadeVisualInstance;
     private Renderer[] m_weaponRenderers;
     private bool[] m_weaponRendererEnabledStates;
@@ -369,6 +395,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
     private void LateUpdate()
     {
+        // 투척 애니메이션이 이미 시작됐으므로 투척 모드 해제나 조작 대원 전환과 무관하게 예약된 투척물은 생성합니다.
+        UpdatePendingThrow();
+
         // 공용 HUD는 현재 직접 조작 중인 캐릭터만 변경합니다. AI가 된 이전 캐릭터가
         // 자기 입력 상태로 수류탄 프리셋을 다시 쓰면 일반 크로스헤어와 값이 섞입니다.
         bool ownsPlayerCrosshair = m_aimController != null && m_aimController.IsPlayerControlled;
@@ -418,7 +447,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
-        bool canThrow = Time.time >= m_nextThrowReadyTime;
+        // 꺼내기 모션 중에는 DoThrow가 Ready까지 보류되어 투척물과 모션이 어긋나므로 Ready에서만 경로 표시와 투척을 허용합니다.
+        bool canThrow = Time.time >= m_nextThrowReadyTime && !HasPendingThrow && IsGrenadeReadyToThrow();
 
         if (canThrow)
         {
@@ -426,10 +456,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             BuildTrajectoryPlan();
             DrawTrajectory();
 
-            if (!enteredThrowModeThisFrame && throwHeld && !m_throwWasHeld && ThrowProjectile())
+            if (!enteredThrowModeThisFrame && throwHeld && !m_throwWasHeld && TryStartThrow())
             {
                 PlayThrowAnimation();
-                m_nextThrowReadyTime = Time.time + m_throwCooldown;
+                m_nextThrowReadyTime = Time.time + Mathf.Max(m_throwCooldown, m_throwReleaseDelay);
                 HideTrajectory();
             }
         }
@@ -457,16 +487,29 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         HideTrajectory();
         m_wasThrowModeActive = false;
         m_throwWasHeld = false;
+        CancelPendingThrow();
     }
 
     private void OnDestroy()
     {
         ReleaseCrosshairOverrideIfOwned();
 
-        if (m_heldGrenadeVisualInstance != null)
+        foreach (GameObject heldVisualInstance in m_heldVisualInstances.Values)
         {
-            Destroy(m_heldGrenadeVisualInstance);
+            if (heldVisualInstance != null)
+            {
+                Destroy(heldVisualInstance);
+            }
         }
+
+        m_heldVisualInstances.Clear();
+
+        if (m_defaultHeldVisualInstance != null)
+        {
+            Destroy(m_defaultHeldVisualInstance);
+        }
+
+        m_heldGrenadeVisualInstance = null;
 
         if (m_runtimeLineMaterial != null)
         {
@@ -493,6 +536,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     {
         m_hasGrenadeModeParameter = false;
         m_hasThrowParameter = false;
+        m_hasGrenadeReadyState = false;
         m_grenadeActionLayerIndex = -1;
 
         if (m_animator == null)
@@ -501,6 +545,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
 
         m_grenadeActionLayerIndex = m_animator.GetLayerIndex(GrenadeActionLayerName);
+        m_hasGrenadeReadyState = m_grenadeActionLayerIndex >= 0
+                                 && m_animator.HasState(m_grenadeActionLayerIndex, AnimStateGrenadeReady);
 
         foreach (AnimatorControllerParameter parameter in m_animator.parameters)
         {
@@ -555,6 +601,23 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                && IsGrenadeThrowState(m_animator.GetNextAnimatorStateInfo(m_grenadeActionLayerIndex));
     }
 
+    /// <summary>
+    /// Grenade Action Layer가 꺼내기/투척 모션을 마치고 Ready 상태에 머물러 있는지 확인합니다.
+    /// Ready 상태가 없는 Animator는 기존처럼 즉시 투척을 허용합니다.
+    /// </summary>
+    private bool IsGrenadeReadyToThrow()
+    {
+        if (m_animator == null || !m_hasGrenadeReadyState
+                               || m_grenadeActionLayerIndex >= m_animator.layerCount)
+        {
+            return true;
+        }
+
+        return !m_animator.IsInTransition(m_grenadeActionLayerIndex)
+               && m_animator.GetCurrentAnimatorStateInfo(m_grenadeActionLayerIndex).shortNameHash
+               == AnimStateGrenadeReady;
+    }
+
     private static bool IsGrenadeThrowState(AnimatorStateInfo state)
     {
         return state.shortNameHash == AnimStateGrenadeThrow
@@ -587,7 +650,17 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_weaponRendererEnabledStates = new bool[m_weaponRenderers.Length];
         }
 
-        if (m_heldGrenadeVisualPrefab == null)
+        bool hasProjectileHeldVisual = false;
+        for (int i = 0; m_projectilePrefabs != null && i < m_projectilePrefabs.Count; i++)
+        {
+            if (m_projectilePrefabs[i] != null && m_projectilePrefabs[i].HeldVisualPrefab != null)
+            {
+                hasProjectileHeldVisual = true;
+                break;
+            }
+        }
+
+        if (m_heldGrenadeVisualPrefab == null && !hasProjectileHeldVisual)
         {
             return;
         }
@@ -604,14 +677,83 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
-        m_heldGrenadeVisualInstance = Instantiate(m_heldGrenadeVisualPrefab, heldSocket, false);
-        m_heldGrenadeVisualInstance.name = $"{m_heldGrenadeVisualPrefab.name} (Held)";
+        if (m_heldGrenadeVisualPrefab != null)
+        {
+            m_defaultHeldVisualInstance = CreateHeldVisual(
+                m_heldGrenadeVisualPrefab,
+                heldSocket,
+                m_heldGrenadeLocalPosition,
+                Quaternion.Euler(m_heldGrenadeLocalEulerAngles),
+                m_heldGrenadeLocalScale);
+        }
 
-        Transform heldTransform = m_heldGrenadeVisualInstance.transform;
-        heldTransform.localPosition = m_heldGrenadeLocalPosition;
-        heldTransform.localRotation = Quaternion.Euler(m_heldGrenadeLocalEulerAngles);
-        heldTransform.localScale = m_heldGrenadeLocalScale;
-        m_heldGrenadeVisualInstance.SetActive(false);
+        for (int i = 0; m_projectilePrefabs != null && i < m_projectilePrefabs.Count; i++)
+        {
+            ProjectileBase projectile = m_projectilePrefabs[i];
+            if (projectile == null
+                || projectile.HeldVisualPrefab == null
+                || m_heldVisualInstances.ContainsKey(projectile))
+            {
+                continue;
+            }
+
+            m_heldVisualInstances[projectile] = CreateHeldVisual(
+                projectile.HeldVisualPrefab,
+                heldSocket,
+                projectile.HeldLocalPosition,
+                projectile.HeldLocalRotation,
+                projectile.HeldLocalScale);
+        }
+
+        RefreshHeldVisualSelection();
+    }
+
+    private static GameObject CreateHeldVisual(
+        GameObject prefab,
+        Transform socket,
+        Vector3 localPosition,
+        Quaternion localRotation,
+        Vector3 localScale)
+    {
+        GameObject instance = Instantiate(prefab, socket, false);
+        instance.name = $"{prefab.name} (Held)";
+
+        Transform heldTransform = instance.transform;
+        heldTransform.SetLocalPositionAndRotation(localPosition, localRotation);
+        heldTransform.localScale = localScale;
+        instance.SetActive(false);
+        return instance;
+    }
+
+    /// <summary>
+    /// 현재 선택한 투척물에 맞는 손 Visual로 교체합니다. 투척물 전용 Visual이 없으면 기본 Visual을 사용합니다.
+    /// </summary>
+    private void RefreshHeldVisualSelection()
+    {
+        ProjectileBase selectedProjectile = GetSelectedProjectile();
+        GameObject nextVisual = null;
+        if (selectedProjectile == null
+            || !m_heldVisualInstances.TryGetValue(selectedProjectile, out nextVisual))
+        {
+            nextVisual = m_defaultHeldVisualInstance;
+        }
+
+        if (nextVisual == m_heldGrenadeVisualInstance)
+        {
+            return;
+        }
+
+        bool wasVisible = m_heldGrenadeVisualInstance != null && m_heldGrenadeVisualInstance.activeSelf;
+        if (m_heldGrenadeVisualInstance != null)
+        {
+            m_heldGrenadeVisualInstance.SetActive(false);
+        }
+
+        m_heldGrenadeVisualInstance = nextVisual;
+        if (m_heldGrenadeVisualInstance != null)
+        {
+            m_heldGrenadeVisualInstance.SetActive(wasVisible);
+        }
     }
 
     /// <summary>
@@ -689,6 +831,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_selectedProjectileIndex = WrapIndex(
             m_selectedProjectileIndex + selectionDelta,
             m_projectilePrefabs.Count);
+        RefreshHeldVisualSelection();
     }
 
     private ProjectileBase GetSelectedProjectile()
@@ -1146,9 +1289,85 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
-    private bool ThrowProjectile()
+    private bool HasPendingThrow => m_pendingThrowTime >= 0.0f;
+
+    /// <summary>
+    /// 좌클릭 입력을 처리합니다. 지연 시간이 없으면 즉시 생성하고, 있으면 현재 경로를 보관한 뒤 생성을 예약합니다.
+    /// </summary>
+    private bool TryStartThrow()
     {
         ProjectileBase selectedProjectile = GetSelectedProjectile();
+        if (!CanThrowProjectile(selectedProjectile))
+        {
+            return false;
+        }
+
+        if (m_throwReleaseDelay <= 0.0f)
+        {
+            return ThrowProjectile(selectedProjectile);
+        }
+
+        m_pendingProjectile = selectedProjectile;
+        m_pendingThrowPlan = CaptureThrowPlan();
+        m_pendingThrowTime = Time.time + m_throwReleaseDelay;
+        return true;
+    }
+
+    private void UpdatePendingThrow()
+    {
+        if (!HasPendingThrow || Time.time < m_pendingThrowTime)
+        {
+            return;
+        }
+
+        ProjectileBase projectile = m_pendingProjectile;
+        ThrowPlan plan = m_pendingThrowPlan;
+        CancelPendingThrow();
+
+        // 대기 중 다른 대원이 같은 재고를 소모했을 수 있으므로 생성 직전에 다시 확인합니다.
+        if (!CanThrowProjectile(projectile))
+        {
+            return;
+        }
+
+        // 미리보기 경로는 다음 BuildTrajectoryPlan에서 다시 계산되므로 클릭 시점 경로로 덮어써도 됩니다.
+        RestoreThrowPlan(plan);
+        ThrowProjectile(projectile);
+    }
+
+    private void CancelPendingThrow()
+    {
+        m_pendingThrowTime = -1.0f;
+        m_pendingProjectile = null;
+    }
+
+    private ThrowPlan CaptureThrowPlan()
+    {
+        return new ThrowPlan
+        {
+            throwStart = m_throwStart,
+            initialVelocity = m_initialVelocity,
+            hasPlannedCollision = m_hasPlannedCollision,
+            plannedCollisionTime = m_plannedCollisionTime,
+            plannedCollisionPosition = m_plannedCollisionPosition,
+            plannedContactPoint = m_plannedContactPoint,
+            plannedSurfaceNormal = m_plannedSurfaceNormal,
+        };
+    }
+
+    private void RestoreThrowPlan(ThrowPlan plan)
+    {
+        m_throwStart = plan.throwStart;
+        m_initialVelocity = plan.initialVelocity;
+        m_hasPlannedCollision = plan.hasPlannedCollision;
+        m_plannedCollisionTime = plan.plannedCollisionTime;
+        m_plannedCollisionPosition = plan.plannedCollisionPosition;
+        m_plannedContactPoint = plan.plannedContactPoint;
+        m_plannedSurfaceNormal = plan.plannedSurfaceNormal;
+    }
+
+    private bool CanThrowProjectile(ProjectileBase selectedProjectile)
+    {
         if (selectedProjectile == null)
         {
             Debug.LogWarning($"[{name}] 투척할 Projectile Prefab이 없습니다.", this);
@@ -1168,11 +1387,11 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
-        if (GetProjectileQuantity(selectedProjectile) <= 0)
-        {
-            return false;
-        }
+        return GetProjectileQuantity(selectedProjectile) > 0;
+    }
 
+    private bool ThrowProjectile(ProjectileBase selectedProjectile)
+    {
         Quaternion rotation = m_initialVelocity.sqrMagnitude > 0.0001f
             ? Quaternion.LookRotation(m_initialVelocity.normalized, Vector3.up)
             : transform.rotation;
@@ -1214,7 +1433,12 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
-        UpdateGrenadeSelectionUI(true);
+        // 지연 생성 중 투척 모드가 끝났거나 조작 대원이 바뀌었으면 UI 표시는 이후 LateUpdate 흐름에 맡깁니다.
+        if (m_aimController != null && m_aimController.IsPlayerControlled
+                                    && m_input != null && m_input.ThrowMode)
+        {
+            UpdateGrenadeSelectionUI(true);
+        }
 
         return true;
     }
