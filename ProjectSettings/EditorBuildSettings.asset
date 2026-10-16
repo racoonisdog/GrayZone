@@ -13,7 +13,7 @@ EditorBuildSettings:
     guid: 356a950edf2da214082c53b560adb943
   - enabled: 1
     path: Assets/0.Scenes/Final/ShelterScene_Jung.unity
-    guid: e7f6eaf9da9daa14ba948e6e22daa322
+    guid: 651cd7bc610b0e54fbe86fab42311fcd
   - enabled: 1
     path: Assets/0.Scenes/Final/Shelter_Defense_Integrated.unity
     guid: 36f21db901d50b2439b3d881c7476699
