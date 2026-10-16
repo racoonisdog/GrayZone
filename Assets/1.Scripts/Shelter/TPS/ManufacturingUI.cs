@@ -26,9 +26,14 @@ public sealed class ManufacturingUI : MonoBehaviour
     [SerializeField] private ManufacturingCreateView m_createView;
     [SerializeField] private TMP_Text m_noticeText;
 
+    [Header("Back")]
+    [Tooltip("제조 UI가 열려 있는 동안 항상 표시되며, 누를 때마다 Esc처럼 한 단계 뒤로 돌아갑니다.")]
+    [SerializeField] private Button m_backButton;
+
     private ManufacturingManager m_currentManager;
     private Button m_boundCreateButton;
     private Button m_boundUpgradeButton;
+    private Button m_boundBackButton;
     private ManufacturingCreateView m_boundCreateView;
     private bool m_isClosing;
     private bool m_isUpgradeViewOpen;
@@ -60,6 +65,7 @@ public sealed class ManufacturingUI : MonoBehaviour
         CacheChildViews();
         BindCreateButton();
         BindUpgradeButton();
+        BindBackButton();
         BindCreateView();
     }
 
@@ -67,6 +73,7 @@ public sealed class ManufacturingUI : MonoBehaviour
     {
         UnbindCreateButton();
         UnbindUpgradeButton();
+        UnbindBackButton();
         UnbindCreateView();
         UnbindManager();
         if (!m_isOpening)
@@ -77,6 +84,7 @@ public sealed class ManufacturingUI : MonoBehaviour
     {
         UnbindCreateButton();
         UnbindUpgradeButton();
+        UnbindBackButton();
         UnbindCreateView();
     }
 
@@ -118,6 +126,7 @@ public sealed class ManufacturingUI : MonoBehaviour
         CacheChildViews();
         BindCreateButton();
         BindUpgradeButton();
+        BindBackButton();
         BindCreateView();
         ClearNotice();
         SetUpgradeViewOpen(false);
@@ -144,6 +153,7 @@ public sealed class ManufacturingUI : MonoBehaviour
         SetMenuActive(true);
         UnbindCreateButton();
         UnbindUpgradeButton();
+        UnbindBackButton();
         UnbindCreateView();
         UnbindManager();
         SetRootActive(false);
@@ -328,6 +338,41 @@ public sealed class ManufacturingUI : MonoBehaviour
 
         m_boundUpgradeButton.onClick.RemoveListener(HandleUpgradeButtonClicked);
         m_boundUpgradeButton = null;
+    }
+
+    /// <summary>
+    /// 돌아가기 버튼은 Esc 키와 같은 경로(UIManager)로 처리해 업그레이드 UI 등 최상위 UI부터 한 단계씩 닫습니다.
+    /// </summary>
+    private void HandleBackButtonClicked()
+    {
+        if (!m_isOpen)
+            return;
+
+        UIManager uiManager = FindFirstObjectByType<UIManager>();
+        if (uiManager != null && uiManager.TryHandleEscape())
+            return;
+
+        TryHandleEscape();
+    }
+
+    private void BindBackButton()
+    {
+        if (m_boundBackButton == m_backButton)
+            return;
+
+        UnbindBackButton();
+        m_boundBackButton = m_backButton;
+        if (m_boundBackButton != null)
+            m_boundBackButton.onClick.AddListener(HandleBackButtonClicked);
+    }
+
+    private void UnbindBackButton()
+    {
+        if (m_boundBackButton == null)
+            return;
+
+        m_boundBackButton.onClick.RemoveListener(HandleBackButtonClicked);
+        m_boundBackButton = null;
     }
 
     private void BindCreateView()

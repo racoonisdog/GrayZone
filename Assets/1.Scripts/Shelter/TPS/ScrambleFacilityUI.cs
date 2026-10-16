@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -114,6 +114,10 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
 
     [Header("Notice (Optional)")]
     [SerializeField] private TMP_Text m_noticeText;
+
+    [Header("Back")]
+    [Tooltip("Scramble UI가 열려 있는 동안 항상 표시되며, 누를 때마다 Esc처럼 한 단계 뒤로 돌아갑니다.")]
+    [SerializeField] private Button m_backButton;
 
     private ScrambleUpgradeType m_selectedType;
 
@@ -377,6 +381,21 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             ShowMenu();
     }
 
+    /// <summary>
+    /// 돌아가기 버튼은 Esc 키와 같은 경로(UIManager)로 처리해 최상위 UI부터 한 단계씩 닫습니다.
+    /// </summary>
+    private void HandleBackClicked()
+    {
+        if (!IsOpen)
+            return;
+
+        UIManager uiManager = FindFirstObjectByType<UIManager>();
+        if (uiManager != null && uiManager.TryHandleEscape())
+            return;
+
+        TryHandleEscape();
+    }
+
     private void HandleSortieCancelClicked()
     {
         ClearNotice();
@@ -457,6 +476,8 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             m_sortieCancelButton.onClick.AddListener(HandleSortieCancelClicked);
         if (m_battleSceneButton != null)
             m_battleSceneButton.onClick.AddListener(HandleBattleSceneClicked);
+        if (m_backButton != null)
+            m_backButton.onClick.AddListener(HandleBackClicked);
         if (UsesSelection)
         {
             m_upgradeConfirmButton.onClick.AddListener(HandleUpgradeConfirmClicked);
@@ -490,6 +511,8 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             m_sortieCancelButton.onClick.RemoveListener(HandleSortieCancelClicked);
         if (m_battleSceneButton != null)
             m_battleSceneButton.onClick.RemoveListener(HandleBattleSceneClicked);
+        if (m_backButton != null)
+            m_backButton.onClick.RemoveListener(HandleBackClicked);
         if (m_upgradeConfirmButton != null)
             m_upgradeConfirmButton.onClick.RemoveListener(HandleUpgradeConfirmClicked);
         RemoveListener(m_trapUpgradeButton, HandleTrapCardClicked, HandleTrapUpgradeClicked);
