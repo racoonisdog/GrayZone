@@ -27,6 +27,7 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
     private sealed class CameraRigState
     {
         public CinemachineThirdPersonFollow Rig;
+        public DirectionalCameraCollisionExtension CollisionExtension;
         public Vector3 BaseShoulderOffset;
     }
 
@@ -255,6 +256,7 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
             m_rigStates.Add(new CameraRigState
             {
                 Rig = rig,
+                CollisionExtension = rig.GetComponent<DirectionalCameraCollisionExtension>(),
                 BaseShoulderOffset = rig.ShoulderOffset
             });
         }
@@ -267,14 +269,11 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
         DirectionalCameraCollisionExtension collisionExtension =
             rig.GetComponent<DirectionalCameraCollisionExtension>();
 
+        // 이미 배치된 Extension은 Inspector 설정을 유지하고, 새로 추가한 경우에만 기존 설정을 이전합니다.
         if (collisionExtension == null && Application.isPlaying)
         {
             collisionExtension =
                 rig.gameObject.AddComponent<DirectionalCameraCollisionExtension>();
-        }
-
-        if (collisionExtension != null)
-        {
             collisionExtension.Configure(
                 obstacleSettings.CollisionFilter,
                 obstacleSettings.IgnoreTag,
@@ -491,7 +490,20 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
             );
             shoulderOffset.y += m_currentHeightOffset;
             state.Rig.ShoulderOffset = shoulderOffset;
+            SetDetectionDelta(state, state.BaseShoulderOffset - shoulderOffset);
         }
+    }
+
+    /// <summary>
+    /// Third Person Follow는 X를 Lerp(-x, x, CameraSide)로 적용하므로 같은 규칙으로 델타를 변환합니다.
+    /// </summary>
+    private static void SetDetectionDelta(CameraRigState state, Vector3 shoulderDelta)
+    {
+        if (state.CollisionExtension == null)
+            return;
+
+        shoulderDelta.x *= state.Rig.CameraSide * 2f - 1f;
+        state.CollisionExtension.DetectionShoulderDelta = shoulderDelta;
     }
 
     private void UpdateCameraNearClipPlane(bool collisionActive)
@@ -598,7 +610,10 @@ public sealed class CharacterCameraCollisionResponse : MonoBehaviour
         {
             CameraRigState state = m_rigStates[i];
             if (state.Rig != null)
+            {
                 state.Rig.ShoulderOffset = state.BaseShoulderOffset;
+                SetDetectionDelta(state, Vector3.zero);
+            }
         }
     }
 
