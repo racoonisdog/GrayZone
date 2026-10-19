@@ -241264,17 +241264,17 @@ MonoBehaviour:
   m_heldGrenadeLocalPosition: {x: 0, y: 0, z: 0}
   m_heldGrenadeLocalEulerAngles: {x: 0, y: 0, z: 0}
   m_heldGrenadeLocalScale: {x: 0.25, y: 0.25, z: 0.25}
-  m_throwOriginOffset: {x: 0, y: 0.2, z: 1}
-  m_throwStartOffset: {x: 0, y: 0, z: 0}
+  m_throwOriginOffset: {x: 0, y: 0, z: 0}
+  m_throwStartOffset: {x: 0, y: 0.26, z: 0}
   m_referenceThrowDistance: 20
   m_arcHeight: 1.5
   m_ascentDownwardAcceleration: 8
-  m_descentDownwardAcceleration: 24
-  m_throwSpeedMultiplier: 1.25
+  m_descentDownwardAcceleration: 16
+  m_throwSpeedMultiplier: 1.15
   m_showTrajectoryLine: 0
   m_trajectoryPreviewDistance: 20
   m_throwCooldown: 1
-  m_throwReleaseDelay: 0
+  m_throwReleaseDelay: 0.23
   m_trajectorySegments: 24
   m_collisionRadius: 0.5
   m_collisionLayers:
@@ -241283,16 +241283,16 @@ MonoBehaviour:
   m_trajectoryWidth: 0.04
   m_trajectoryColor: {r: 1, g: 0.75, b: 0.1, a: 0.9}
   m_impactRangeMaterial: {fileID: 0}
-  m_impactPreviewColor: {r: 1, g: 0.75, b: 0.1, a: 0.9}
-  m_impactPreviewFillAlpha: 0.2
-  m_impactPreviewRimColor: {r: 1, g: 0.75, b: 0.1, a: 0.9}
+  m_impactPreviewColor: {r: 0.10383281, g: 0.9433962, b: 0.51722354, a: 0.9}
+  m_impactPreviewFillAlpha: 0.1
+  m_impactPreviewRimColor: {r: 0.46226406, g: 1, b: 0.8554799, a: 0.9}
   m_impactPreviewRimWidth: 0.08
   m_impactPreviewExcludeLayers:
     serializedVersion: 2
     m_Bits: 0
   m_showLandingMarker: 1
   m_landingMarkerRadius: 0.25
-  m_landingMarkerColor: {r: 1, g: 0.75, b: 0.1, a: 0.6}
+  m_landingMarkerColor: {r: 0.082987264, g: 0.5849056, b: 0, a: 0.6}
 --- !u!1001 &1091900508
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -250271,17 +250271,17 @@ MonoBehaviour:
   m_heldGrenadeLocalPosition: {x: 0, y: 0, z: 0}
   m_heldGrenadeLocalEulerAngles: {x: 0, y: 0, z: 0}
   m_heldGrenadeLocalScale: {x: 0.25, y: 0.25, z: 0.25}
-  m_throwOriginOffset: {x: 0, y: 0.2, z: 1}
-  m_throwStartOffset: {x: 0, y: 0, z: 0}
+  m_throwOriginOffset: {x: 0, y: 0, z: 0}
+  m_throwStartOffset: {x: 0, y: 0.26, z: 0}
   m_referenceThrowDistance: 20
   m_arcHeight: 1.5
   m_ascentDownwardAcceleration: 8
-  m_descentDownwardAcceleration: 24
-  m_throwSpeedMultiplier: 1.25
+  m_descentDownwardAcceleration: 16
+  m_throwSpeedMultiplier: 1.15
   m_showTrajectoryLine: 0
   m_trajectoryPreviewDistance: 20
   m_throwCooldown: 1
-  m_throwReleaseDelay: 0
+  m_throwReleaseDelay: 0.23
   m_trajectorySegments: 24
   m_collisionRadius: 0.5
   m_collisionLayers:
@@ -250290,16 +250290,16 @@ MonoBehaviour:
   m_trajectoryWidth: 0.04
   m_trajectoryColor: {r: 1, g: 0.75, b: 0.1, a: 0.9}
   m_impactRangeMaterial: {fileID: 0}
-  m_impactPreviewColor: {r: 1, g: 0.75, b: 0.1, a: 0.9}
-  m_impactPreviewFillAlpha: 0.2
-  m_impactPreviewRimColor: {r: 1, g: 0.75, b: 0.1, a: 0.9}
+  m_impactPreviewColor: {r: 0.10383281, g: 0.9433962, b: 0.51722354, a: 0.9}
+  m_impactPreviewFillAlpha: 0.1
+  m_impactPreviewRimColor: {r: 0.46226406, g: 1, b: 0.8554799, a: 0.9}
   m_impactPreviewRimWidth: 0.08
   m_impactPreviewExcludeLayers:
     serializedVersion: 2
     m_Bits: 0
   m_showLandingMarker: 1
   m_landingMarkerRadius: 0.25
-  m_landingMarkerColor: {r: 1, g: 0.75, b: 0.1, a: 0.6}
+  m_landingMarkerColor: {r: 0.082987264, g: 0.5849056, b: 0, a: 0.6}
 --- !u!4 &1134984881 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 9217458469833325088, guid: db3ca660fb7ba434e9c979c1371e3ade, type: 3}
