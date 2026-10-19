@@ -110,6 +110,9 @@ MonoBehaviour:
   m_damageTargetLayers:
     serializedVersion: 2
     m_Bits: 262912
+  m_explosionOccluderLayers:
+    serializedVersion: 2
+    m_Bits: 131073
   m_contactExplosionExcludeLayers:
     serializedVersion: 2
     m_Bits: 256

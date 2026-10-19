@@ -37,6 +37,9 @@ public class ExplosiveProjectile : ProjectileBase
     [Tooltip("폭발 피해 후보로 검색할 Collider Layer입니다.")]
     [SerializeField] private LayerMask m_damageTargetLayers;
 
+    [Tooltip("폭발을 가로막는 벽으로 볼 Layer입니다. 이 Layer에 가려진 대상은 피해를 받지 않습니다.")]
+    [SerializeField] private LayerMask m_explosionOccluderLayers;
+
     [Tooltip("접촉 폭발과 투척 경로 충돌 판정에서 무시할 상대 Layer입니다.")]
     [SerializeField] private LayerMask m_contactExplosionExcludeLayers;
 
@@ -73,6 +76,7 @@ public class ExplosiveProjectile : ProjectileBase
     private void Reset()
     {
         m_damageTargetLayers = LayerMask.GetMask("Player", "Enemy");
+        m_explosionOccluderLayers = LayerMask.GetMask("Default", "Env_Interior");
     }
 
     private void Awake()
@@ -82,6 +86,11 @@ public class ExplosiveProjectile : ProjectileBase
         if (m_damageTargetLayers.value == 0)
         {
             m_damageTargetLayers = LayerMask.GetMask("Player", "Enemy");
+        }
+
+        if (m_explosionOccluderLayers.value == 0)
+        {
+            m_explosionOccluderLayers = LayerMask.GetMask("Default", "Env_Interior");
         }
     }
 
@@ -153,7 +162,8 @@ public class ExplosiveProjectile : ProjectileBase
             null,
             false,
             m_playerDamage,
-            onTargetDamaged);
+            onTargetDamaged,
+            m_explosionOccluderLayers);
 
         PlayExplosionSound(explosionCenter);
         SpawnExplosionVfx(explosionCenter);
