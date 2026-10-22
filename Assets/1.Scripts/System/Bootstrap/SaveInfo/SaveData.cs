@@ -4,10 +4,16 @@ using System.Collections.Generic;
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 12;
+    public const int CurrentSchemaVersion = 13;
 
     public int schemaVersion = CurrentSchemaVersion;
     public ShelterCheckpointId shelterCheckpointId = ShelterCheckpointId.BeforeDefense1;
+
+    /// <summary>방어전 클리어 횟수입니다. 다음 방어전 회차(클리어 횟수 + 1)와 일차 표시의 기준입니다.</summary>
+    public int defenseClearCount;
+
+    /// <summary>셸터 안내 진행 단계입니다.</summary>
+    public ShelterFlowState shelterFlowState = ShelterFlowState.NotStarted;
 
     public int trapUpgradeLevel;
     public int spikeUpgradeLevel;

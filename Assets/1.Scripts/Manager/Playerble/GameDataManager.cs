@@ -672,6 +672,8 @@ public class GameDataManager : MonoBehaviour
         SaveData saveData = new SaveData
         {
             shelterCheckpointId = ShelterCheckpointId,
+            defenseClearCount = DefenseClearCount,
+            shelterFlowState = ShelterFlowState,
             trapUpgradeLevel = TrapUpgradeLevel,
             spikeUpgradeLevel = SpikeUpgradeLevel,
             explosiveUpgradeLevel = ExplosiveUpgradeLevel,
@@ -728,6 +730,10 @@ public class GameDataManager : MonoBehaviour
         }
 
         shelterCheckpointId = saveData.shelterCheckpointId;
+        defenseClearCount = Mathf.Max(0, saveData.defenseClearCount);
+        shelterFlowState = saveData.shelterFlowState;
+        // 불러오기 전 판에서 정산 대기 중이던 승리가 불러온 진행 상태에 더해지지 않게 비웁니다.
+        pendingDefenseVictoryStageId = string.Empty;
         SetTrapUpgradeLevel(saveData.trapUpgradeLevel);
         SetSpikeUpgradeLevel(saveData.spikeUpgradeLevel);
         SetExplosiveUpgradeLevel(saveData.explosiveUpgradeLevel);
