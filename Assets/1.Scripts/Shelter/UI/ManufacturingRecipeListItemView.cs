@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 아이콘 목록에서 제조 레시피 하나의 선택, 잠금 표시와 hover 정보를 표현합니다.
+/// 아이콘 목록에서 제조 레시피 하나의 선택과 잠금 표시를 표현합니다.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class ManufacturingRecipeListItemView : MonoBehaviour
@@ -14,7 +14,6 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
     [SerializeField] private Image m_iconImage;
     [SerializeField] private Sprite m_fallbackIcon;
     [SerializeField] private TMP_Text m_nameText;
-    [SerializeField] private ItemListSlotHoverInfo m_hoverInfo;
     [SerializeField] private TMP_Text m_requiredFacilityLevelText;
     [SerializeField] private TMP_Text m_lockedMessageText;
 
@@ -27,16 +26,9 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
     private string m_recipeId;
     private bool m_isSelectable;
     private Action<string> m_clicked;
-    private ItemListTooltipPresenter m_tooltipPresenter;
 
     public string RecipeId => m_recipeId;
     public bool IsSelectable => m_isSelectable;
-
-    /// <summary>씬의 마스크 바깥에 배치된 공용 말풍선을 연결합니다.</summary>
-    public void SetTooltipPresenter(ItemListTooltipPresenter presenter)
-    {
-        m_tooltipPresenter = presenter;
-    }
 
     /// <summary>현재 CreateView에서 선택된 레시피인지 표시합니다.</summary>
     public void SetSelected(bool selected)
@@ -97,15 +89,6 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
         if (m_lockedMessageText != null)
             m_lockedMessageText.gameObject.SetActive(isLocked);
 
-        if (m_hoverInfo != null)
-        {
-            m_hoverInfo.Bind(
-                m_tooltipPresenter,
-                recipe.DisplayName,
-                recipe.Info);
-            m_hoverInfo.SetInfoEnabled(true);
-        }
-
         if (m_button != null)
         {
             m_button.onClick.RemoveListener(HandleClick);
@@ -147,9 +130,6 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
 
         if (m_lockedMessageText != null)
             m_lockedMessageText.gameObject.SetActive(false);
-
-        if (m_hoverInfo != null)
-            m_hoverInfo.Clear();
 
         ClearMaterial();
         SetSelected(false);
@@ -195,8 +175,5 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
 
         if (m_iconImage == null)
             m_iconImage = GetComponentInChildren<Image>(true);
-
-        if (m_hoverInfo == null)
-            m_hoverInfo = GetComponent<ItemListSlotHoverInfo>();
     }
 }

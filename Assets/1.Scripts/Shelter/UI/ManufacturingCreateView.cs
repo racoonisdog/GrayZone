@@ -20,14 +20,13 @@ public sealed class ManufacturingCreateView : MonoBehaviour
 
     [Header("Result")]
     [SerializeField] private Image m_resultImage;
-    [SerializeField] private TMP_Text m_totalResultQuantityText;
     [SerializeField] private TMP_Text m_selectedNameText;
+    [Tooltip("Select_Image 아래 ItemInfo 텍스트입니다. 선택한 레시피의 아이템 설명을 고정 표시합니다.")]
+    [SerializeField] private TMP_Text m_itemInfoText;
 
     [Header("Material Summary")]
     [SerializeField] private TMP_Text m_ownedAmountText;
-    [SerializeField] private TMP_Text m_unitAmountText;
     [SerializeField] private TMP_Text m_totalAmountText;
-    [SerializeField] private TMP_Text m_remainingAmountText;
     [SerializeField] private Color m_sufficientAmountColor = Color.white;
     [SerializeField] private Color m_insufficientAmountColor =
         new(1f, 0.25f, 0.25f, 1f);
@@ -39,7 +38,6 @@ public sealed class ManufacturingCreateView : MonoBehaviour
 
     [Header("Actions")]
     [SerializeField] private Button m_confirmButton;
-    [SerializeField] private Button m_cancelButton;
 
     [Header("Initial State")]
     [SerializeField] private bool m_startClosed = true;
@@ -76,11 +74,14 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         if (m_resultImage != null)
             m_defaultResultSprite = m_resultImage.sprite;
 
+        // Inspector 연결이 비어 있으면 Select_Image 아래 ItemInfo를 찾아 사용합니다.
+        if (m_itemInfoText == null && m_resultImage != null)
+            m_itemInfoText = m_resultImage.transform.Find("ItemInfo")?.GetComponent<TMP_Text>();
+
         CacheDefaultText(m_selectedNameText);
+        CacheDefaultText(m_itemInfoText);
         CacheDefaultText(m_ownedAmountText);
-        CacheDefaultText(m_unitAmountText);
         CacheDefaultText(m_totalAmountText);
-        CacheDefaultText(m_remainingAmountText);
 
         Prewarm();
         ResetTransientState();
@@ -272,10 +273,8 @@ public sealed class ManufacturingCreateView : MonoBehaviour
             SetResultImageVisible(false);
         }
 
-        if (m_totalResultQuantityText != null)
-            m_totalResultQuantityText.text = string.Empty;
-
         RestoreDefaultText(m_selectedNameText);
+        RestoreDefaultText(m_itemInfoText);
 
         m_canConfirm = false;
         UpdateButtonStates(false);
@@ -294,17 +293,13 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         if (m_selectedNameText != null)
             m_selectedNameText.text = recipe.DisplayName;
 
-        if (m_totalResultQuantityText == null)
-            return false;
+        if (m_itemInfoText != null)
+            m_itemInfoText.text = recipe.Info ?? string.Empty;
 
         long totalResultQuantity =
             (long)m_requestedBatchCount * recipe.ResultQuantityPerBatch;
-        bool isValid = totalResultQuantity > 0
+        return totalResultQuantity > 0
             && totalResultQuantity <= int.MaxValue;
-        m_totalResultQuantityText.text = isValid
-            ? totalResultQuantity.ToString()
-            : string.Empty;
-        return isValid;
     }
 
     private void SetResultImageVisible(bool visible)
@@ -321,7 +316,7 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     }
 
     /// <summary>
-    /// 선택된 레시피의 첫 번째 재료 견적으로 1개당/총 필요/제작 후 잔여 수량을 표시합니다.
+    /// 선택된 레시피의 첫 번째 재료 견적으로 보유/총 필요 수량을 표시합니다.
     /// 현재 레시피는 재료 1종만 사용하므로 요약 칸도 대표 재료 하나만 다룹니다.
     /// </summary>
     private void SetMaterialSummary(IReadOnlyList<ManufacturingMaterialQuoteLine> quoteLines)
@@ -333,16 +328,12 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         }
 
         ManufacturingMaterialQuoteLine line = quoteLines[0];
-        int unitAmount = line.RequiredAmount / Mathf.Max(1, m_requestedBatchCount);
-        int remainingAmount = line.OwnedAmount - line.RequiredAmount;
         Color amountColor = line.IsEnough
             ? m_sufficientAmountColor
             : m_insufficientAmountColor;
 
         SetAmountText(m_ownedAmountText, line.OwnedAmount, m_sufficientAmountColor);
-        SetAmountText(m_unitAmountText, unitAmount, m_sufficientAmountColor);
         SetAmountText(m_totalAmountText, line.RequiredAmount, amountColor);
-        SetAmountText(m_remainingAmountText, remainingAmount, amountColor);
     }
 
     /// <summary>
@@ -350,9 +341,7 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     /// </summary>
     private void ClearMaterialSummary()
     {
-        ClearAmountText(m_unitAmountText);
         ClearAmountText(m_totalAmountText);
-        ClearAmountText(m_remainingAmountText);
         RefreshOwnedMaterial();
     }
 
@@ -516,7 +505,6 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         m_decreaseOneButton?.onClick.AddListener(DecreaseOne);
         m_increaseOneButton?.onClick.AddListener(IncreaseOne);
         m_confirmButton?.onClick.AddListener(HandleConfirmClicked);
-        m_cancelButton?.onClick.AddListener(Cancel);
     }
 
     private void RemoveButtonListeners()
@@ -524,7 +512,6 @@ public sealed class ManufacturingCreateView : MonoBehaviour
         m_decreaseOneButton?.onClick.RemoveListener(DecreaseOne);
         m_increaseOneButton?.onClick.RemoveListener(IncreaseOne);
         m_confirmButton?.onClick.RemoveListener(HandleConfirmClicked);
-        m_cancelButton?.onClick.RemoveListener(Cancel);
     }
 
     private static void SetInteractable(Button button, bool interactable)
