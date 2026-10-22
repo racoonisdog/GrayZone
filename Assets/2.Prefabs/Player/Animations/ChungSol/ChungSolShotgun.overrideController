@@ -1,0 +1,13 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!221 &22100000
+AnimatorOverrideController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: ChungSolShotgun
+  m_Controller: {fileID: 9100000, guid: b9825526b5ce4919aa1454229962b6c5, type: 2}
+  m_Clips:
+  - m_OriginalClip: {fileID: -2033296940674034950, guid: 5bd31d1904471714abf025cdf0226e33, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 8df836d6909c22246a9c5ecbac91a830, type: 2}
