@@ -36,6 +36,8 @@ public sealed class DefaultSaveData : ScriptableObject
         {
             schemaVersion = SaveData.CurrentSchemaVersion,
             shelterCheckpointId = shelterCheckpointId,
+            defenseClearCount = 0,
+            shelterFlowState = ShelterFlowState.NotStarted,
             trapUpgradeLevel = Mathf.Max(0, trapUpgradeLevel),
             spikeUpgradeLevel = Mathf.Max(0, spikeUpgradeLevel),
             explosiveUpgradeLevel = Mathf.Max(0, explosiveUpgradeLevel),

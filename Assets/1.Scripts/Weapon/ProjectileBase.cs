@@ -11,6 +11,31 @@ public abstract class ProjectileBase : MonoBehaviour
     [Tooltip("이 투척물을 한 번 사용할 때 1개 소모할 인벤토리 아이템 정의입니다.")]
     [SerializeField] private ItemDefinition m_inventoryItemDefinition;
 
+    [Header("Held Visual")]
+    [Tooltip("투척 모드에서 이 투척물을 선택했을 때 손에 표시할 Visual Prefab입니다. 비우면 투척기의 기본 Visual을 사용합니다.")]
+    [SerializeField] private GameObject m_heldVisualPrefab;
+
+    [Tooltip("손 장착 소켓 기준 Visual의 로컬 위치입니다.")]
+    [SerializeField] private Vector3 m_heldLocalPosition = Vector3.zero;
+
+    [Tooltip("손 장착 소켓 기준 Visual의 로컬 회전입니다.")]
+    [SerializeField] private Vector3 m_heldLocalEulerAngles = Vector3.zero;
+
+    [Tooltip("손 장착 소켓 기준 Visual의 로컬 크기입니다.")]
+    [SerializeField] private Vector3 m_heldLocalScale = Vector3.one * 0.25f;
+
+    /// <summary>손에 표시할 Visual Prefab입니다. null이면 투척기 기본 Visual을 사용합니다.</summary>
+    public GameObject HeldVisualPrefab => m_heldVisualPrefab;
+
+    /// <summary>손 장착 소켓 기준 Visual의 로컬 위치입니다.</summary>
+    public Vector3 HeldLocalPosition => m_heldLocalPosition;
+
+    /// <summary>손 장착 소켓 기준 Visual의 로컬 회전입니다.</summary>
+    public Quaternion HeldLocalRotation => Quaternion.Euler(m_heldLocalEulerAngles);
+
+    /// <summary>손 장착 소켓 기준 Visual의 로컬 크기입니다.</summary>
+    public Vector3 HeldLocalScale => m_heldLocalScale;
+
     /// <summary>이 투척물과 연결된 인벤토리 아이템 정의입니다.</summary>
     public ItemDefinition InventoryItemDefinition => m_inventoryItemDefinition;
 

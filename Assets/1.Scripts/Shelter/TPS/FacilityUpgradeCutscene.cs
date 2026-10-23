@@ -5,7 +5,7 @@ using Unity.Cinemachine;
 using UnityEngine;
 
 /// <summary>
-/// 시설 업그레이드 연출. 검은 화면 → 시설 뷰(이전 레벨) → 검은 화면(업그레이드 적용) → 시설 뷰(새 레벨)
+/// 시설 업그레이드 연출. 검은 화면 → 시설 뷰(이전 레벨 카메라) → 검은 화면(업그레이드 적용) → 시설 뷰(새 레벨 카메라)
 /// → 검은 화면 → 원래 카메라 순으로 보여주기
 /// </summary>
 /// <remarks>
@@ -20,8 +20,9 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
     [Header("References")]
     [Tooltip("업그레이드할 시설 ID입니다. FacilityManager에 등록된 ID와 같아야 합니다.")]
     [SerializeField] private string m_facilityId;
-    [Tooltip("시설을 비추는 전용 카메라입니다. 평소에는 비활성 상태로 둡니다.")]
-    [SerializeField] private CinemachineCamera m_viewCamera;
+    [Tooltip("업그레이드 단계별 전용 카메라입니다. [0]=01(Lv.1), [1]=02(Lv.2), [2]=03(Lv.3). 평소에는 비활성 상태로 둡니다. " +
+             "업그레이드 전 모습은 이전 레벨 카메라(0→1은 01), 업그레이드 후 모습은 새 레벨 카메라로 보여줍니다.")]
+    [SerializeField] private CinemachineCamera[] m_upgradeCameras = new CinemachineCamera[3];
     [Tooltip("비어 있으면 페이드 없이 즉시 업그레이드를 적용합니다.")]
     [SerializeField] private ScreenFader m_fader;
     [Tooltip("카메라 전환을 Cut으로 바꿀 Brain입니다. 비어 있으면 Main Camera에서 찾습니다.")]
@@ -47,6 +48,7 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
     private static readonly Dictionary<string, FacilityUpgradeCutscene> s_byFacilityId = new();
 
     private Coroutine m_routine;
+    private CinemachineCamera m_activeCamera;
     private bool m_hasSavedBlend;
     private CinemachineBlendDefinition m_savedBlend;
 
@@ -78,7 +80,7 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
 
     private void Awake()
     {
-        SetCameraActive(false);
+        DeactivateAllCameras();
     }
 
     private void OnEnable()
@@ -106,7 +108,7 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
             return;
 
         m_routine = null;
-        SetCameraActive(false);
+        DeactivateAllCameras();
         RestoreBrainBlend();
         if (m_fader != null)
             m_fader.SetAlpha(0f);
@@ -135,26 +137,36 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
         Started?.Invoke();
         OverrideBrainBlendToCut();
 
-        // 1) 검은 화면 뒤에서 시설 뷰로 즉시 전환 → 이전 레벨 건물 보여주기
+        // 현재 레벨 L에서 L+1로 올라갈 때: 전 = 이전 레벨 카메라(L-1, 0→1은 01), 후 = 새 레벨 카메라(L)
+        int currentLevel = FacilityManager.Instance != null ? FacilityManager.Instance.GetUpgradeLevel(m_facilityId) : 0;
+        CinemachineCamera beforeCamera = GetUpgradeCamera(currentLevel - 1);
+        CinemachineCamera afterCamera = GetUpgradeCamera(currentLevel);
+
+        // 1) 검은 화면 뒤에서 이전 레벨 카메라로 즉시 전환 → 이전 레벨 건물 보여주기
         yield return FadeOut();
-        SetCameraActive(true);
+        SwitchCamera(beforeCamera);
         yield return null; // Brain이 LateUpdate에서 새 카메라로 전환할 한 프레임
         yield return Wait(m_blackHold);
         yield return FadeIn();
         yield return Wait(m_beforeHold);
 
-        // 2) 검은 화면 뒤에서 비용 차감 + 레벨 증가 + LevelVisuals 교체 → 새 레벨 건물 보여주기
+        // 2) 검은 화면 뒤에서 비용 차감 + 레벨 증가 + LevelVisuals 교체 + 새 레벨 카메라 전환 → 새 레벨 건물 보여주기
         yield return FadeOut();
         bool upgraded = FacilityManager.Instance != null && FacilityManager.Instance.TryUpgrade(m_facilityId);
         if (!upgraded)
             Debug.LogWarning($"[FacilityUpgradeCutscene] '{m_facilityId}' 업그레이드에 실패했습니다.", this);
+        if (afterCamera != m_activeCamera)
+        {
+            SwitchCamera(afterCamera);
+            yield return null;
+        }
         yield return Wait(m_blackHold);
         yield return FadeIn();
         yield return Wait(m_afterHold);
 
         // 3) 검은 화면 뒤에서 원래 카메라로 즉시 복귀
         yield return FadeOut();
-        SetCameraActive(false);
+        DeactivateAllCameras();
         yield return null;
         RestoreBrainBlend();
         yield return Wait(m_blackHold);
@@ -200,19 +212,52 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
         m_hasSavedBlend = false;
     }
 
-    private void SetCameraActive(bool active)
+    // 단계 인덱스를 등록된 범위로 보정해 카메라 찾기. 비어 있는 칸은 가까운 하위 단계 카메라로 대체
+    private CinemachineCamera GetUpgradeCamera(int index)
     {
-        if (m_viewCamera == null)
+        if (m_upgradeCameras == null || m_upgradeCameras.Length == 0)
+            return null;
+
+        for (int i = Mathf.Clamp(index, 0, m_upgradeCameras.Length - 1); i >= 0; i--)
+        {
+            if (m_upgradeCameras[i] != null)
+                return m_upgradeCameras[i];
+        }
+
+        return null;
+    }
+
+    private void SwitchCamera(CinemachineCamera next)
+    {
+        SetCameraActive(next, true);
+        if (m_activeCamera != null && m_activeCamera != next)
+            SetCameraActive(m_activeCamera, false);
+        m_activeCamera = next;
+    }
+
+    private void DeactivateAllCameras()
+    {
+        m_activeCamera = null;
+        if (m_upgradeCameras == null)
+            return;
+
+        foreach (CinemachineCamera upgradeCamera in m_upgradeCameras)
+            SetCameraActive(upgradeCamera, false);
+    }
+
+    private void SetCameraActive(CinemachineCamera viewCamera, bool active)
+    {
+        if (viewCamera == null)
             return;
 
         if (active)
         {
-            m_viewCamera.Priority.Enabled = true;
-            m_viewCamera.Priority.Value = m_cameraPriority;
+            viewCamera.Priority.Enabled = true;
+            viewCamera.Priority.Value = m_cameraPriority;
         }
 
-        if (m_viewCamera.gameObject.activeSelf != active)
-            m_viewCamera.gameObject.SetActive(active);
+        if (viewCamera.gameObject.activeSelf != active)
+            viewCamera.gameObject.SetActive(active);
     }
 
     private static IEnumerator Wait(float seconds)

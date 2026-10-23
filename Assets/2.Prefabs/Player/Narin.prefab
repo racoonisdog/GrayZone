@@ -829,6 +829,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       insertIndex: -1
       addedObject: {fileID: 7371586435218308901}
+    - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1634515252606818575}
   m_SourcePrefab: {fileID: 100100000, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
 --- !u!1 &3651029312063593687 stripped
 GameObject:
@@ -891,6 +894,33 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::StatusEffectContainer
   m_effectAnchor: {fileID: 0}
   m_modelTintRoot: {fileID: 0}
+--- !u!114 &1634515252606818575
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3651029312063593687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9a2b35a8829d6a4f9c6d659c573597e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterCameraCollisionResponse
+  m_outputCamera: {fileID: 0}
+  m_brain: {fileID: 0}
+  m_cameraRigs: []
+  m_renderRoot: {fileID: 0}
+  m_collisionReleaseDelay: 0.2
+  m_collisionHeightOffset: -0.45
+  m_collisionShoulderOffsetX: 0
+  m_heightBlendInDuration: 0.25
+  m_heightBlendOutDuration: 0.4
+  m_collisionNearClipPlane: 0.1
+  m_minimumVisibility: 0.2
+  m_fullDitherDistance: 0.6
+  m_ditherStartDistance: 1.8
+  m_ditherBlendInDuration: 0.1
+  m_ditherBlendOutDuration: 0.15
 --- !u!114 &3909991041034621441 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 3705982125215987319, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}

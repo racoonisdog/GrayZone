@@ -19,6 +19,9 @@ public class FacilityManager : MonoBehaviour
     /// <summary>시설 ID별 런타임 시설 상태</summary>
     public IReadOnlyDictionary<string, FacilityState> States => m_states;
 
+    /// <summary>시설의 해금 또는 업그레이드 레벨이 바뀐 뒤 발생 (표시 갱신용)</summary>
+    public event System.Action<FacilityState> StateChanged;
+
     private StorageFacility Storage => ShelterSceneDataManager.Instance?.Storage;
 
     private void Awake()
@@ -169,6 +172,7 @@ public class FacilityManager : MonoBehaviour
 
         state.Unlock();
         ShelterSceneDataManager.Instance?.MarkDirty();
+        StateChanged?.Invoke(state);
         return true;
     }
 
@@ -266,6 +270,7 @@ public class FacilityManager : MonoBehaviour
         state.SetUpgradeLevel(state.UpgradeLevel + 1);
         facility.ApplyUpgradeLevel(state.UpgradeLevel);
         ShelterSceneDataManager.Instance?.MarkDirty();
+        StateChanged?.Invoke(state);
         return true;
     }
 
@@ -295,6 +300,7 @@ public class FacilityManager : MonoBehaviour
         facility.ApplyUnlockState(true);
         facility.ApplyUpgradeLevel(clampedLevel);
         ShelterSceneDataManager.Instance?.MarkDirty();
+        StateChanged?.Invoke(state);
         return true;
     }
 

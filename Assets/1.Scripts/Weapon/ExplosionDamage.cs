@@ -24,6 +24,13 @@ public static class ExplosionDamage
     private const string TrapezoidMeshName = "ExplosionTrapezoidRange";
     private static readonly Color RangeVisualColor = new Color(1.0f, 0.35f, 0.05f, RangeVisualAlpha);
 
+    /// <summary>차폐 검사 시작점을 폭발 중심에서 위로 띄우는 거리(m)입니다.</summary>
+    /// <remarks>바닥이나 벽에 닿아 터지면 중심이 표면에 붙어 있어, 그대로 쓰면 선이 그 표면에 바로 걸립니다.</remarks>
+    private const float OcclusionOriginLift = 0.2f;
+
+    /// <summary>차폐 검사 지점을 콜라이더 위아래로 벌리는 비율입니다. 1이면 끝점까지 씁니다.</summary>
+    private const float OcclusionSampleSpread = 0.8f;
+
     /// <summary>
     /// 지정한 지점을 중심으로 원통 범위 안의 대상에게 폭발 피해를 적용합니다.
     /// </summary>
@@ -41,6 +48,9 @@ public static class ExplosionDamage
     /// Player 진영 대상에게 적용할 피해입니다. 음수면 <paramref name="damage"/>와 같은 피해를 적용합니다.
     /// </param>
     /// <param name="onTargetDamaged">피해가 실제로 적용된 대상을 즉시 전달할 선택 콜백입니다.</param>
+    /// <param name="occluderLayers">
+    /// 폭발을 가로막는 벽으로 볼 Layer입니다. 비어 있으면 차폐를 보지 않고 범위 안 대상에게 모두 피해를 줍니다.
+    /// </param>
     /// <returns>실제로 피해를 준 대상의 수입니다.</returns>
     public static int DetonateCylinder(
         Vector3 center,
@@ -51,7 +61,8 @@ public static class ExplosionDamage
         GameObject attacker = null,
         bool showRangeVisual = true,
         int playerDamage = -1,
-        Action<IDamageable> onTargetDamaged = null)
+        Action<IDamageable> onTargetDamaged = null,
+        LayerMask occluderLayers = default)
     {
         float explosionRadius = Mathf.Max(0.0f, radius);
         float halfHeight = Mathf.Max(0.0f, height) * 0.5f;
@@ -82,7 +93,9 @@ public static class ExplosionDamage
             damage,
             playerDamage >= 0 ? playerDamage : damage,
             attacker,
-            onTargetDamaged);
+            onTargetDamaged,
+            center,
+            occluderLayers);
 
         TriggerChainDetonation(
             center,
@@ -167,7 +180,7 @@ public static class ExplosionDamage
             halfNearWidth,
             halfFarWidth,
             halfHeight);
-        int damagedCount = ApplyDamage(colliders, isInsideRange, damage, damage, attacker, null);
+        int damagedCount = ApplyDamage(colliders, isInsideRange, damage, damage, attacker, null, origin, default);
 
         TriggerChainDetonation(
             boxCenter,
@@ -242,6 +255,7 @@ public static class ExplosionDamage
     /// <summary>범위 판정을 통과한 대상에게 한 번씩 피해를 넣습니다.</summary>
     /// <remarks>
     /// 같은 대상에 붙은 여러 콜라이더(몸통과 히트박스)가 함께 잡혀도 피해는 한 번만 들어갑니다.
+    /// 벽에 가려진 콜라이더는 처리한 것으로 치지 않습니다. 같은 대상의 다른 콜라이더가 보이면 그쪽으로 맞습니다.
     /// </remarks>
     private static int ApplyDamage(
         Collider[] colliders,
@@ -249,7 +263,9 @@ public static class ExplosionDamage
         int damage,
         int playerDamage,
         GameObject attacker,
-        Action<IDamageable> onTargetDamaged)
+        Action<IDamageable> onTargetDamaged,
+        Vector3 explosionOrigin,
+        LayerMask occluderLayers)
     {
         HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
         int damagedCount = 0;
@@ -262,10 +278,18 @@ public static class ExplosionDamage
             }
 
             IDamageable target = targetCollider.GetComponentInParent<IDamageable>();
-            if (target == null || !damagedTargets.Add(target))
+            if (target == null || damagedTargets.Contains(target))
             {
                 continue;
             }
+
+            if (occluderLayers.value != 0
+                && IsOccluded(explosionOrigin, targetCollider, target, occluderLayers))
+            {
+                continue;
+            }
+
+            damagedTargets.Add(target);
 
             int targetDamage = target.Faction == Faction.Player
                 ? playerDamage
@@ -286,6 +310,42 @@ public static class ExplosionDamage
         }
 
         return damagedCount;
+    }
+
+    /// <summary>폭발 지점에서 대상 콜라이더까지 벽이 가로막고 있는지 판정합니다.</summary>
+    /// <remarks>
+    /// 콜라이더의 위·가운데·아래 세 점으로 선을 긋고, 하나라도 뚫려 있으면 보이는 것으로 칩니다.
+    /// 가운데 한 점만 보면 낮은 엄폐물 뒤에 머리를 내민 대상이 통째로 빠집니다.
+    /// 선이 처음 닿은 것이 대상 자신의 일부(벽 레이어에 놓인 장비 등)라면 대상까지 닿은 것으로 봅니다.
+    /// </remarks>
+    private static bool IsOccluded(
+        Vector3 explosionOrigin,
+        Collider targetCollider,
+        IDamageable target,
+        LayerMask occluderLayers)
+    {
+        Vector3 origin = explosionOrigin + Vector3.up * OcclusionOriginLift;
+        Bounds bounds = targetCollider.bounds;
+        Vector3 verticalOffset = Vector3.up * (bounds.extents.y * OcclusionSampleSpread);
+
+        return IsLineBlocked(origin, bounds.center, target, occluderLayers)
+            && IsLineBlocked(origin, bounds.center + verticalOffset, target, occluderLayers)
+            && IsLineBlocked(origin, bounds.center - verticalOffset, target, occluderLayers);
+    }
+
+    /// <summary>두 점 사이를 벽 레이어가 막는지 판정합니다. 막은 것이 대상 자신이면 막히지 않은 것으로 봅니다.</summary>
+    private static bool IsLineBlocked(
+        Vector3 from,
+        Vector3 to,
+        IDamageable target,
+        LayerMask occluderLayers)
+    {
+        if (!Physics.Linecast(from, to, out RaycastHit hit, occluderLayers, QueryTriggerInteraction.Ignore))
+        {
+            return false;
+        }
+
+        return hit.collider.GetComponentInParent<IDamageable>() != target;
     }
 
     /// <summary>콜라이더가 폭발 원통과 겹치는지 판정합니다.</summary>

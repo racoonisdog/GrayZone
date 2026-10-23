@@ -16,6 +16,9 @@ public sealed class RoofOcclusionTarget : MonoBehaviour
     [Tooltip("Renderer 배열이 비어 있을 때 비활성 자식까지 포함해 자동 수집합니다.")]
     [SerializeField] private bool m_collectChildRenderersWhenEmpty = true;
 
+    [Tooltip("가림 감지에는 쓰지 않고 페이드만 함께 적용할 Renderer들입니다. 철골 등 지붕 부속물에 사용합니다.")]
+    [SerializeField] private Renderer[] m_followerRenderers = new Renderer[0];
+
     [Header("Shader")]
     [Tooltip("지붕 셰이더가 가림 정도(0=표시, 1=가림)를 받을 Float 프로퍼티 이름입니다.")]
     [SerializeField] private string m_fadeProperty = DefaultFadeProperty;
@@ -52,9 +55,15 @@ public sealed class RoofOcclusionTarget : MonoBehaviour
 
         m_currentFade = Mathf.Clamp01(fade);
 
-        for (int i = 0; i < m_renderers.Length; i++)
+        ApplyFadeToRenderers(m_renderers);
+        ApplyFadeToRenderers(m_followerRenderers);
+    }
+
+    private void ApplyFadeToRenderers(Renderer[] renderers)
+    {
+        for (int i = 0; i < renderers.Length; i++)
         {
-            Renderer targetRenderer = m_renderers[i];
+            Renderer targetRenderer = renderers[i];
             if (targetRenderer == null)
                 continue;
 
@@ -68,6 +77,31 @@ public sealed class RoofOcclusionTarget : MonoBehaviour
     public void RestoreImmediately()
     {
         ApplyFade(0f);
+    }
+
+    /// <summary>
+    /// 감지된 Collider가 이 구획 자체이거나 등록된 지붕 Renderer 계층에 속하는지 확인합니다.
+    /// 같은 그룹 아래의 조명, 기둥 등 다른 Collider로는 페이드하지 않기 위해 사용합니다.
+    /// </summary>
+    public bool OwnsCollider(Collider hitCollider)
+    {
+        if (hitCollider == null)
+            return false;
+
+        Initialize();
+
+        Transform hitTransform = hitCollider.transform;
+        if (hitTransform == transform)
+            return true;
+
+        for (int i = 0; i < m_renderers.Length; i++)
+        {
+            Renderer targetRenderer = m_renderers[i];
+            if (targetRenderer != null && hitTransform.IsChildOf(targetRenderer.transform))
+                return true;
+        }
+
+        return false;
     }
 
     [ContextMenu("Collect Child Renderers")]
@@ -89,6 +123,9 @@ public sealed class RoofOcclusionTarget : MonoBehaviour
 
         if (m_renderers == null)
             m_renderers = new Renderer[0];
+
+        if (m_followerRenderers == null)
+            m_followerRenderers = new Renderer[0];
 
         if (string.IsNullOrWhiteSpace(m_fadeProperty))
             m_fadeProperty = DefaultFadeProperty;

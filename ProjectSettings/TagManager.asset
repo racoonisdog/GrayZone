@@ -12,6 +12,7 @@ TagManager:
   - Frame
   - Door
   - Container
+  - Pickup
   layers:
   - Default
   - TransparentFX
@@ -42,7 +43,7 @@ TagManager:
   - 
   - 
   - 
-  - 
+  - VFX
   - ShelterRoof
   - ShelterFacility
   m_SortingLayers:

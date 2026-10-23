@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using System.Collections.Generic;
 
 /// <summary>
@@ -8,8 +9,12 @@ using System.Collections.Generic;
 public class ExplosiveProjectileShooter : MonoBehaviour
 {
     private const int MaxTrajectoryPointCount = 65;
-    private const int ExplosionPreviewSegmentCount = 48;
-    private const float ExplosionPreviewHeightOffset = 0.03f;
+    private const int LandingMarkerSegmentCount = 48;
+    private const float LandingMarkerSurfaceOffset = 0.03f;
+    private const string ExplosionRangeMaterialResourcePath = "ExplosionRange/M_ExplosionRangeSurface";
+    private const string ExplosionRangeExclusionPassName = "ExclusionStencil";
+    // 기본 Sphere 메시의 면은 실제 구보다 안쪽에 있으므로, 반경 경계가 잘리지 않도록 메시만 조금 키웁니다.
+    private const float ExplosionRangeSphereScalePadding = 1.05f;
     private const string GrenadeActionLayerName = "Grenade Action Layer";
     private const string GrenadeEquipSoundEventPath = "event:/World/Throwable/Grenade/Equip";
     private const string MolotovEquipSoundEventPath = "event:/World/Throwable/Molotov/Equip";
@@ -17,6 +22,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private static readonly int AnimIDThrow = Animator.StringToHash("DoThrow");
     private static readonly int AnimStateGrenadeThrow = Animator.StringToHash("Grenade Throw");
     private static readonly int AnimStateGrenadeCrouchThrow = Animator.StringToHash("Grenade Crouch Throw");
+    private static readonly int AnimStateGrenadeReady = Animator.StringToHash("Ready");
 
     // CrosshairController는 분대 전체가 하나를 공유합니다. 대원별 인스턴스에 복원 스냅샷을 두면
     // 조작 대원 전환/사망/비활성화 순서에 따라 이전 대원이 새 대원의 HUD를 덮을 수 있습니다.
@@ -99,6 +105,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         [Min(0.0f)]
         [SerializeField] private float m_cornerRadiusPixels = 2.0f;
 
+        /// <summary>크로스헤어의 현재 값을 그대로 복사한 프리셋을 만듭니다. 투척 모드 해제 시 복원할 원래 값으로 씁니다.</summary>
         public static CrosshairPreset Capture(CrosshairController crosshair)
         {
             return new CrosshairPreset
@@ -125,6 +132,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             };
         }
 
+        /// <summary>이 프리셋의 값을 크로스헤어에 덮어씁니다.</summary>
         public void Apply(CrosshairController crosshair)
         {
             crosshair.SetSpreadAccuracyEnabled(m_useSpreadAccuracy);
@@ -148,6 +156,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             crosshair.CornerRadiusPixels = m_cornerRadiusPixels;
         }
 
+        /// <summary>설정 화면 등 외부에서 쓰는 <see cref="CrosshairStyle"/> 형태로 바꿔 돌려줍니다.</summary>
         public CrosshairStyle ToStyle()
         {
             return new CrosshairStyle
@@ -174,6 +183,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             };
         }
 
+        /// <summary>
+        /// <see cref="CrosshairStyle"/>로 프리셋을 만듭니다. 탄퍼짐 연동 여부는 스타일 값 대신 <paramref name="useSpreadAccuracy"/>를 씁니다.
+        /// </summary>
         public static CrosshairPreset FromStyle(CrosshairStyle style, bool useSpreadAccuracy)
         {
             return new CrosshairPreset
@@ -224,7 +236,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [SerializeField] private CrosshairPreset m_throwCrosshairPreset = new CrosshairPreset();
 
     [Header("Held Grenade Visual")]
-    [Tooltip("G 투척 모드 동안 오른손에 표시할 수류탄 Visual Prefab입니다.")]
+    [Tooltip("선택한 투척물에 Held Visual Prefab이 없을 때 오른손에 표시할 기본 Visual Prefab입니다.")]
     [SerializeField] private GameObject m_heldGrenadeVisualPrefab;
 
     [Tooltip("수류탄 Visual을 배치할 손 장착 소켓입니다. 비어 있으면 Humanoid 오른손 본을 사용합니다.")]
@@ -268,7 +280,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Min(0.01f)]
     [SerializeField] private float m_throwSpeedMultiplier = 1.25f;
 
-    [Tooltip("켜면 조준 중에 포물선 궤적 선을 함께 그립니다. 끄면 착탄 지점의 원형 표시만 보입니다.")]
+    [Tooltip("켜면 조준 중에 포물선 궤적 선을 함께 그립니다. 끄면 폭발 범위와 착탄 지점 표시만 보입니다.")]
     [SerializeField] private bool m_showTrajectoryLine = false;
 
     [Tooltip("LineRenderer로 미리 보여 줄 포물선의 최대 누적 길이입니다. 실제 폭탄 이동은 제한하지 않습니다.")]
@@ -278,6 +290,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Tooltip("한 번 투척한 뒤 다음 투척 경로를 표시하고 다시 던질 수 있을 때까지의 시간입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_throwCooldown = 1.0f;
+
+    [Tooltip("좌클릭 입력 후 투척물이 실제로 생성될 때까지의 지연 시간(초)입니다. 0이면 입력 즉시 생성합니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_throwReleaseDelay = 0.0f;
 
     [Tooltip("경로 표시를 구성할 선분 수입니다.")]
     [Range(4, 64)]
@@ -298,12 +314,36 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [SerializeField] private Color m_trajectoryColor = new Color(1.0f, 0.75f, 0.1f, 0.9f);
 
     [Header("Impact Range Preview")]
-    [Tooltip("착탄 범위 원 내부 채움에 사용할 색상입니다.")]
+    [Tooltip("폭발 범위 구체와 닿은 표면을 칠할 머티리얼입니다(GrayZone/ExplosionRangeSurface). 비워 두면 Resources/ExplosionRange/M_ExplosionRangeSurface를 씁니다.")]
+    [SerializeField] private Material m_impactRangeMaterial;
+
+    [Tooltip("폭발 범위 안 표면을 채울 색상입니다.")]
     [SerializeField] private Color m_impactPreviewColor = new Color(1.0f, 0.75f, 0.1f, 0.9f);
 
-    [Tooltip("착탄 범위 원 내부 채움의 투명도입니다. 0은 완전 투명, 1은 완전 불투명입니다.")]
+    [Tooltip("폭발 범위 안 표면 채움의 투명도입니다. 0은 완전 투명, 1은 완전 불투명입니다.")]
     [Range(0.0f, 1.0f)]
     [SerializeField] private float m_impactPreviewFillAlpha = 0.2f;
+
+    [Tooltip("폭발 범위 경계 테두리 색상입니다. 알파가 테두리 투명도입니다.")]
+    [SerializeField] private Color m_impactPreviewRimColor = new Color(1.0f, 0.75f, 0.1f, 0.9f);
+
+    [Tooltip("폭발 범위 경계 테두리 두께(m)입니다. 반경 경계에서 안쪽으로 이 거리만큼 테두리 색으로 바뀝니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_impactPreviewRimWidth = 0.08f;
+
+    [Tooltip("폭발 범위 표시를 칠하지 않을 Layer입니다. 예: 아군 캐릭터, 적. 불투명 렌더러에만 적용됩니다.")]
+    [SerializeField] private LayerMask m_impactPreviewExcludeLayers = 0;
+
+    [Header("Landing Marker")]
+    [Tooltip("켜면 착탄 지점에 폭발 범위와 별개로 작은 원을 표시합니다.")]
+    [SerializeField] private bool m_showLandingMarker = true;
+
+    [Tooltip("착탄 지점 원의 반지름(m)입니다. 폭발 범위와 무관한 고정 크기입니다.")]
+    [Min(0.01f)]
+    [SerializeField] private float m_landingMarkerRadius = 0.25f;
+
+    [Tooltip("착탄 지점 원의 색상입니다. 알파가 투명도입니다.")]
+    [SerializeField] private Color m_landingMarkerColor = new Color(1.0f, 0.75f, 0.1f, 0.6f);
 
     private readonly RaycastHit[] m_previewHits = new RaycastHit[16];
     private readonly Vector3[] m_trajectoryPoints = new Vector3[MaxTrajectoryPointCount];
@@ -313,10 +353,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private Animator m_animator;
     private Collider m_sourceCollider;
     private LineRenderer m_trajectoryLine;
-    private MeshRenderer m_explosionPreviewFillRenderer;
-    private Mesh m_explosionPreviewFillMesh;
+    private MeshRenderer m_explosionRangeRenderer;
+    private Material m_runtimeExplosionRangeMaterial;
+    private ExplosionRangeExclusionPass m_explosionRangeExclusionPass;
+    private MeshRenderer m_landingMarkerRenderer;
+    private Mesh m_landingMarkerMesh;
     private Material m_runtimeLineMaterial;
-    private Material m_runtimeExplosionFillMaterial;
+    private Material m_runtimeLandingMarkerMaterial;
     private bool m_wasThrowModeActive;
     private bool m_throwWasHeld;
     private Vector3 m_throwStart;
@@ -330,11 +373,17 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private Vector3 m_explosionPreviewCenter;
     private int m_trajectoryPointCount;
     private float m_nextThrowReadyTime;
+    private float m_pendingThrowTime = -1.0f;
+    private ProjectileBase m_pendingProjectile;
     private bool m_crosshairModeInitialized;
     private bool m_throwCrosshairActive;
     private bool m_hasGrenadeModeParameter;
     private bool m_hasThrowParameter;
+    private bool m_hasGrenadeReadyState;
     private int m_grenadeActionLayerIndex = -1;
+    // 투척물별 손 Visual을 미리 만들어 두고 선택이 바뀌면 활성 대상만 교체합니다.
+    private readonly Dictionary<ProjectileBase, GameObject> m_heldVisualInstances = new Dictionary<ProjectileBase, GameObject>();
+    private GameObject m_defaultHeldVisualInstance;
     private GameObject m_heldGrenadeVisualInstance;
     private Renderer[] m_weaponRenderers;
     private bool[] m_weaponRendererEnabledStates;
@@ -343,6 +392,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     /// <summary>마우스 휠로 순환 선택하는 투척물 Prefab 목록입니다.</summary>
     public IReadOnlyList<ProjectileBase> ProjectilePrefabs => m_projectilePrefabs;
 
+    /// <summary>Play Mode 시작 시 공용 크로스헤어 임시 적용 상태(정적 필드)를 비웁니다.</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetCrosshairOverrideState()
     {
@@ -352,6 +402,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         s_crosshairOverrideBaseline = null;
     }
 
+    /// <summary>
+    /// 같은 오브젝트의 입력·조준·Animator를 연결하고, 손 Visual과 미리보기 오브젝트를 만들어 둡니다.
+    /// </summary>
     private void Awake()
     {
         MigrateLegacyProjectile();
@@ -367,8 +420,26 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         ApplyCrosshairMode(false);
     }
 
+    /// <summary>폭발 범위 제외 스텐실 패스를 끼워 넣기 위해 카메라 렌더 시작 이벤트를 구독합니다.</summary>
+    private void OnEnable()
+    {
+        RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
+    }
+
+    /// <summary>
+    /// 매 프레임 투척 흐름 전체를 진행합니다.
+    /// </summary>
+    /// <remarks>
+    /// 순서: 예약된 투척 생성 → 애니메이션·손 Visual·크로스헤어 전환 → 선택 UI 갱신 →
+    /// 휠 선택 반영 → (Ready 상태이고 쿨다운이 끝났으면) 궤적 계산·미리보기 → 좌클릭을 누른 순간이면 투척.
+    /// 직접 조작 중이 아닌 대원, 투척 모드가 아닐 때, 달리는 중에는 미리보기를 숨기고 투척하지 않습니다.
+    /// 투척 모드에 들어온 첫 프레임의 클릭은 무시합니다.
+    /// </remarks>
     private void LateUpdate()
     {
+        // 투척 애니메이션이 이미 시작됐으므로 투척 모드 해제나 조작 대원 전환과 무관하게 예약된 투척물은 생성합니다.
+        UpdatePendingThrow();
+
         // 공용 HUD는 현재 직접 조작 중인 캐릭터만 변경합니다. AI가 된 이전 캐릭터가
         // 자기 입력 상태로 수류탄 프리셋을 다시 쓰면 일반 크로스헤어와 값이 섞입니다.
         bool ownsPlayerCrosshair = m_aimController != null && m_aimController.IsPlayerControlled;
@@ -418,18 +489,19 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
-        bool canThrow = Time.time >= m_nextThrowReadyTime;
+        // 꺼내기 모션 중에는 DoThrow가 Ready까지 보류되어 투척물과 모션이 어긋나므로 Ready에서만 경로 표시와 투척을 허용합니다.
+        bool canThrow = Time.time >= m_nextThrowReadyTime && !HasPendingThrow && IsGrenadeReadyToThrow();
 
         if (canThrow)
         {
             ResolveTrajectory();
-            BuildTrajectoryPlan();
+            BuildTrajectoryPlan(GetSelectedProjectile());
             DrawTrajectory();
 
-            if (!enteredThrowModeThisFrame && throwHeld && !m_throwWasHeld && ThrowProjectile())
+            if (!enteredThrowModeThisFrame && throwHeld && !m_throwWasHeld && TryStartThrow())
             {
                 PlayThrowAnimation();
-                m_nextThrowReadyTime = Time.time + m_throwCooldown;
+                m_nextThrowReadyTime = Time.time + Mathf.Max(m_throwCooldown, m_throwReleaseDelay);
                 HideTrajectory();
             }
         }
@@ -442,8 +514,12 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_throwWasHeld = throwHeld;
     }
 
+    /// <summary>
+    /// 투척 모드에서 바꿔 둔 애니메이션·총기 표시·UI·크로스헤어를 되돌리고, 미리보기와 예약된 투척을 취소합니다.
+    /// </summary>
     private void OnDisable()
     {
+        RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
         SetGrenadeAnimationMode(false);
         SetGrenadeEquipmentVisible(false);
         if (m_hasThrowParameter)
@@ -457,42 +533,69 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         HideTrajectory();
         m_wasThrowModeActive = false;
         m_throwWasHeld = false;
+        CancelPendingThrow();
     }
 
+    /// <summary>
+    /// 공용 크로스헤어를 소유 중이면 원래 값으로 돌려놓고, 런타임에 만든 손 Visual·머티리얼·메시를 지웁니다.
+    /// </summary>
     private void OnDestroy()
     {
         ReleaseCrosshairOverrideIfOwned();
 
-        if (m_heldGrenadeVisualInstance != null)
+        foreach (GameObject heldVisualInstance in m_heldVisualInstances.Values)
         {
-            Destroy(m_heldGrenadeVisualInstance);
+            if (heldVisualInstance != null)
+            {
+                Destroy(heldVisualInstance);
+            }
         }
+
+        m_heldVisualInstances.Clear();
+
+        if (m_defaultHeldVisualInstance != null)
+        {
+            Destroy(m_defaultHeldVisualInstance);
+        }
+
+        m_heldGrenadeVisualInstance = null;
 
         if (m_runtimeLineMaterial != null)
         {
             Destroy(m_runtimeLineMaterial);
         }
 
-        if (m_runtimeExplosionFillMaterial != null)
+        if (m_runtimeExplosionRangeMaterial != null)
         {
-            Destroy(m_runtimeExplosionFillMaterial);
+            Destroy(m_runtimeExplosionRangeMaterial);
         }
 
-        if (m_explosionPreviewFillMesh != null)
+        if (m_runtimeLandingMarkerMaterial != null)
         {
-            Destroy(m_explosionPreviewFillMesh);
+            Destroy(m_runtimeLandingMarkerMaterial);
+        }
+
+        if (m_landingMarkerMesh != null)
+        {
+            Destroy(m_landingMarkerMesh);
         }
     }
 
+    /// <summary>인스펙터에서 값이 바뀔 때 예전 단일 투척물 필드를 목록으로 옮기고 선택 인덱스를 범위 안으로 맞춥니다.</summary>
     private void OnValidate()
     {
         MigrateLegacyProjectile();
     }
 
+    /// <summary>
+    /// Animator에 투척용 파라미터(IsGrenadeMode, DoThrow)와 Grenade Action Layer의 Ready 상태가 있는지 미리 확인해 둡니다.
+    /// </summary>
+    /// <remarks>없는 파라미터를 Set하면 매 프레임 경고가 나므로, 있는 것만 건드리기 위해 캐시합니다.</remarks>
     private void CacheGrenadeAnimationParameters()
     {
         m_hasGrenadeModeParameter = false;
         m_hasThrowParameter = false;
+        m_hasGrenadeReadyState = false;
         m_grenadeActionLayerIndex = -1;
 
         if (m_animator == null)
@@ -501,6 +604,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
 
         m_grenadeActionLayerIndex = m_animator.GetLayerIndex(GrenadeActionLayerName);
+        m_hasGrenadeReadyState = m_grenadeActionLayerIndex >= 0
+                                 && m_animator.HasState(m_grenadeActionLayerIndex, AnimStateGrenadeReady);
 
         foreach (AnimatorControllerParameter parameter in m_animator.parameters)
         {
@@ -517,6 +622,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>Animator의 IsGrenadeMode 값을 바꿔 투척 자세로 들어가거나 빠져나옵니다.</summary>
     private void SetGrenadeAnimationMode(bool active)
     {
         if (m_hasGrenadeModeParameter)
@@ -525,6 +631,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>손에 든 수류탄 Visual을 숨기고 DoThrow 트리거로 투척 모션을 재생합니다.</summary>
     private void PlayThrowAnimation()
     {
         if (m_hasThrowParameter)
@@ -555,6 +662,24 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                && IsGrenadeThrowState(m_animator.GetNextAnimatorStateInfo(m_grenadeActionLayerIndex));
     }
 
+    /// <summary>
+    /// Grenade Action Layer가 꺼내기/투척 모션을 마치고 Ready 상태에 머물러 있는지 확인합니다.
+    /// Ready 상태가 없는 Animator는 기존처럼 즉시 투척을 허용합니다.
+    /// </summary>
+    private bool IsGrenadeReadyToThrow()
+    {
+        if (m_animator == null || !m_hasGrenadeReadyState
+                               || m_grenadeActionLayerIndex >= m_animator.layerCount)
+        {
+            return true;
+        }
+
+        return !m_animator.IsInTransition(m_grenadeActionLayerIndex)
+               && m_animator.GetCurrentAnimatorStateInfo(m_grenadeActionLayerIndex).shortNameHash
+               == AnimStateGrenadeReady;
+    }
+
+    /// <summary>주어진 상태가 서기 또는 웅크리기 투척 상태인지 확인합니다.</summary>
     private static bool IsGrenadeThrowState(AnimatorStateInfo state)
     {
         return state.shortNameHash == AnimStateGrenadeThrow
@@ -587,7 +712,17 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_weaponRendererEnabledStates = new bool[m_weaponRenderers.Length];
         }
 
-        if (m_heldGrenadeVisualPrefab == null)
+        bool hasProjectileHeldVisual = false;
+        for (int i = 0; m_projectilePrefabs != null && i < m_projectilePrefabs.Count; i++)
+        {
+            if (m_projectilePrefabs[i] != null && m_projectilePrefabs[i].HeldVisualPrefab != null)
+            {
+                hasProjectileHeldVisual = true;
+                break;
+            }
+        }
+
+        if (m_heldGrenadeVisualPrefab == null && !hasProjectileHeldVisual)
         {
             return;
         }
@@ -604,14 +739,84 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
-        m_heldGrenadeVisualInstance = Instantiate(m_heldGrenadeVisualPrefab, heldSocket, false);
-        m_heldGrenadeVisualInstance.name = $"{m_heldGrenadeVisualPrefab.name} (Held)";
+        if (m_heldGrenadeVisualPrefab != null)
+        {
+            m_defaultHeldVisualInstance = CreateHeldVisual(
+                m_heldGrenadeVisualPrefab,
+                heldSocket,
+                m_heldGrenadeLocalPosition,
+                Quaternion.Euler(m_heldGrenadeLocalEulerAngles),
+                m_heldGrenadeLocalScale);
+        }
 
-        Transform heldTransform = m_heldGrenadeVisualInstance.transform;
-        heldTransform.localPosition = m_heldGrenadeLocalPosition;
-        heldTransform.localRotation = Quaternion.Euler(m_heldGrenadeLocalEulerAngles);
-        heldTransform.localScale = m_heldGrenadeLocalScale;
-        m_heldGrenadeVisualInstance.SetActive(false);
+        for (int i = 0; m_projectilePrefabs != null && i < m_projectilePrefabs.Count; i++)
+        {
+            ProjectileBase projectile = m_projectilePrefabs[i];
+            if (projectile == null
+                || projectile.HeldVisualPrefab == null
+                || m_heldVisualInstances.ContainsKey(projectile))
+            {
+                continue;
+            }
+
+            m_heldVisualInstances[projectile] = CreateHeldVisual(
+                projectile.HeldVisualPrefab,
+                heldSocket,
+                projectile.HeldLocalPosition,
+                projectile.HeldLocalRotation,
+                projectile.HeldLocalScale);
+        }
+
+        RefreshHeldVisualSelection();
+    }
+
+    /// <summary>손 소켓 아래에 Visual Prefab을 비활성 상태로 생성하고 위치·회전·크기를 맞춥니다.</summary>
+    private static GameObject CreateHeldVisual(
+        GameObject prefab,
+        Transform socket,
+        Vector3 localPosition,
+        Quaternion localRotation,
+        Vector3 localScale)
+    {
+        GameObject instance = Instantiate(prefab, socket, false);
+        instance.name = $"{prefab.name} (Held)";
+
+        Transform heldTransform = instance.transform;
+        heldTransform.SetLocalPositionAndRotation(localPosition, localRotation);
+        heldTransform.localScale = localScale;
+        instance.SetActive(false);
+        return instance;
+    }
+
+    /// <summary>
+    /// 현재 선택한 투척물에 맞는 손 Visual로 교체합니다. 투척물 전용 Visual이 없으면 기본 Visual을 사용합니다.
+    /// </summary>
+    private void RefreshHeldVisualSelection()
+    {
+        ProjectileBase selectedProjectile = GetSelectedProjectile();
+        GameObject nextVisual = null;
+        if (selectedProjectile == null
+            || !m_heldVisualInstances.TryGetValue(selectedProjectile, out nextVisual))
+        {
+            nextVisual = m_defaultHeldVisualInstance;
+        }
+
+        if (nextVisual == m_heldGrenadeVisualInstance)
+        {
+            return;
+        }
+
+        bool wasVisible = m_heldGrenadeVisualInstance != null && m_heldGrenadeVisualInstance.activeSelf;
+        if (m_heldGrenadeVisualInstance != null)
+        {
+            m_heldGrenadeVisualInstance.SetActive(false);
+        }
+
+        m_heldGrenadeVisualInstance = nextVisual;
+        if (m_heldGrenadeVisualInstance != null)
+        {
+            m_heldGrenadeVisualInstance.SetActive(wasVisible);
+        }
     }
 
     /// <summary>
@@ -663,6 +868,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 예전 단일 투척물 필드(m_projectilePrefab)에 값이 남아 있고 목록이 비어 있으면 목록으로 옮깁니다.
+    /// 선택 인덱스도 목록 범위 안으로 맞춥니다.
+    /// </summary>
     private void MigrateLegacyProjectile()
     {
         if (m_projectilePrefabs == null)
@@ -679,6 +888,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_selectedProjectileIndex = WrapIndex(m_selectedProjectileIndex, m_projectilePrefabs.Count);
     }
 
+    /// <summary>휠 입력만큼 선택한 투척물을 앞뒤로 넘기고(끝에서 처음으로 순환), 손 Visual도 바꿉니다.</summary>
     private void CycleProjectile(int selectionDelta)
     {
         if (selectionDelta == 0 || m_projectilePrefabs == null || m_projectilePrefabs.Count == 0)
@@ -689,8 +899,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_selectedProjectileIndex = WrapIndex(
             m_selectedProjectileIndex + selectionDelta,
             m_projectilePrefabs.Count);
+        RefreshHeldVisualSelection();
     }
 
+    /// <summary>현재 선택한 투척물 Prefab을 돌려줍니다. 목록이 비어 있으면 예전 단일 필드 값을 씁니다.</summary>
     private ProjectileBase GetSelectedProjectile()
     {
         if (m_projectilePrefabs == null || m_projectilePrefabs.Count == 0)
@@ -745,6 +957,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>투척 경로 충돌에 쓸 Layer입니다. 공통 충돌 Layer에서 투척물이 무시하도록 지정한 Layer를 뺍니다.</summary>
     private int GetProjectileCollisionLayers(ProjectileBase projectile)
     {
         int excludedLayers = projectile != null
@@ -753,6 +966,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         return m_collisionLayers.value & ~excludedLayers;
     }
 
+    /// <summary>인덱스를 0 ~ count-1 범위로 순환시킵니다. 음수도 뒤에서부터 셉니다.</summary>
     private static int WrapIndex(int index, int count)
     {
         if (count <= 0)
@@ -763,6 +977,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         return (index % count + count) % count;
     }
 
+    /// <summary>선택 UI가 연결되지 않았으면 Scene에서 찾아 연결합니다.</summary>
     private void ResolveGrenadeSelectionUI()
     {
         if (m_grenadeSelectionUI == null)
@@ -771,6 +986,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>선택 UI의 표시 여부와, 표시할 투척물 아이콘·남은 수량을 갱신합니다.</summary>
     private void UpdateGrenadeSelectionUI(bool visible)
     {
         ResolveGrenadeSelectionUI();
@@ -785,6 +1001,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>분대 공용 인벤토리가 연결되지 않았으면 Scene에서 찾아 연결합니다.</summary>
     private void ResolveInventoryManager()
     {
         if (m_inventoryManager == null)
@@ -793,6 +1010,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>공용 인벤토리에 남은 해당 투척물 수량입니다. 투척물이나 인벤토리가 없으면 0입니다.</summary>
     private int GetProjectileQuantity(ProjectileBase projectile)
     {
         ResolveInventoryManager();
@@ -801,6 +1019,13 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             : 0;
     }
 
+    /// <summary>
+    /// 투척 모드에 들어가면 공용 크로스헤어에 투척 프리셋을 적용하고, 빠져나오면 원래 값으로 돌려놓습니다.
+    /// </summary>
+    /// <remarks>
+    /// 처음 적용할 때 원래 값을 정적 필드에 저장하고 이 대원을 소유자로 기록합니다. 다른 대원이 소유 중이었다면
+    /// 그 값을 먼저 복원한 뒤 넘겨받습니다. 상태가 이미 원하는 대로면 매 프레임 다시 적용하지 않습니다.
+    /// </remarks>
     private void ApplyCrosshairMode(bool throwModeActive)
     {
         if (m_crosshairModeInitialized && m_throwCrosshairActive == throwModeActive)
@@ -905,6 +1130,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// 소유자가 누구든 공용 크로스헤어를 저장해 둔 원래 값으로 되돌리고, 소유 기록을 지웁니다.
+    /// </summary>
     private static void RestoreAndClearCrosshairOverride()
     {
         CrosshairController target = s_crosshairOverrideTarget;
@@ -928,6 +1156,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>크로스헤어가 연결되지 않았으면 AimController에서, 그래도 없으면 Scene에서 찾아 연결합니다.</summary>
     private void ResolveDefaultCrosshair()
     {
         if (m_defaultCrosshair != null)
@@ -946,6 +1175,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 손 위치와 조준점으로 투척 시작점(<see cref="m_throwStart"/>)과 초기 속도(<see cref="m_initialVelocity"/>)를 정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 던지는 속력은 항상 같습니다. 수평으로 조준했을 때 <see cref="m_referenceThrowDistance"/>만큼 날아가고
+    /// <see cref="m_arcHeight"/>만큼 솟도록 속력과 기본 발사각을 구한 뒤, 기본 발사각에 조준 상하각을 더해
+    /// ±80도로 자릅니다. 그래서 착탄 거리는 조준각에 따라 달라지며, 발사각 45도 근처에서 가장 멉니다.
+    /// 착탄 지점을 정해 두고 역산하는 방식이 아닙니다.
+    /// </remarks>
     private void ResolveTrajectory()
     {
         m_throwStart = ResolveThrowStartPosition();
@@ -992,6 +1230,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             Vector3.up * (Mathf.Sin(launchAngle) * launchSpeed);
     }
 
+    /// <summary>
+    /// 투척 시작점입니다. 손 소켓이 있으면 그 위치를, 없으면 Collider 중심에 fallback 오프셋을 더한 위치를 쓰고,
+    /// 마지막으로 <see cref="m_throwStartOffset"/>을 더합니다.
+    /// </summary>
     private Vector3 ResolveThrowStartPosition()
     {
         Vector3 origin = m_heldGrenadeSocket != null
@@ -1002,6 +1244,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         return origin + transform.TransformDirection(m_throwStartOffset);
     }
 
+    /// <summary>계산해 둔 궤적 점으로 궤적 선(켜져 있을 때만)과 폭발 범위·착탄 마커를 그립니다.</summary>
     private void DrawTrajectory()
     {
         // 궤적 선은 토글이 켜졌을 때만 그립니다. 기본은 착탄 지점의 원형 표시만 씁니다.
@@ -1024,7 +1267,21 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         DrawExplosionPreview();
     }
 
-    private void BuildTrajectoryPlan()
+    /// <summary>
+    /// 현재 초기 속도로 포물선을 따라가며 궤적 점을 모으고, 처음 부딪히는 지점(예정 충돌)과 폭발 미리보기 위치를 정합니다.
+    /// </summary>
+    /// <remarks>
+    /// 구간마다 길이가 대략 일정하도록 속도에 맞춰 시간 간격을 바꿔 가며 샘플링하고, 구간마다 SphereCast로 충돌을 봅니다.
+    /// 다음 중 먼저 오는 곳에서 멈춥니다.
+    /// <list type="bullet">
+    /// <item>충돌: 예정 충돌 정보를 기록하고 그 위치에 폭발 미리보기를 둡니다. 실제 투척물은 이 정보를 받아 같은 곳에서 터집니다.</item>
+    /// <item>신관 시간 끝: 그 위치에 폭발 미리보기를 둡니다.</item>
+    /// <item>누적 경로 길이가 <see cref="m_trajectoryPreviewDistance"/>에 닿음: 폭발 미리보기 없이 멈춥니다.
+    /// 이때는 착탄 마커와 폭발 범위가 표시되지 않고, 이후 충돌은 실제 비행 중에 판정합니다.</item>
+    /// </list>
+    /// 신관 시간에 투척 속도 배율을 곱하는 이유는 궤적 시간 축이 배율 적용 전 기준이기 때문입니다.
+    /// </remarks>
+    private void BuildTrajectoryPlan(ProjectileBase projectile)
     {
         int segmentCount = Mathf.Clamp(m_trajectorySegments, 4, MaxTrajectoryPointCount - 1);
         m_trajectoryPointCount = 1;
@@ -1043,9 +1300,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         float targetSegmentLength = previewDistance / segmentCount;
         float accumulatedDistance = 0.0f;
         float throwSpeedMultiplier = Mathf.Max(0.01f, m_throwSpeedMultiplier);
-        ProjectileBase selectedProjectile = GetSelectedProjectile();
-        float trajectoryTimeLimit = selectedProjectile != null
-            ? Mathf.Max(0.0f, selectedProjectile.FlightTimeLimit) * throwSpeedMultiplier
+        int collisionLayers = GetProjectileCollisionLayers(projectile);
+        float trajectoryTimeLimit = projectile != null
+            ? Mathf.Max(0.0f, projectile.FlightTimeLimit) * throwSpeedMultiplier
             : float.PositiveInfinity;
 
         if (trajectoryTimeLimit <= 0.0f)
@@ -1097,7 +1354,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
                 segmentDistance = segment.magnitude;
             }
 
-            if (TryGetBlockingHit(previous, next, out RaycastHit hit))
+            if (TryGetBlockingHit(previous, next, collisionLayers, out RaycastHit hit))
             {
                 float hitFraction = segmentDistance > 0.0001f
                     ? Mathf.Clamp01(hit.distance / segmentDistance)
@@ -1146,9 +1403,68 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
-    private bool ThrowProjectile()
+    /// <summary>지연 생성을 기다리는 투척이 있는지 여부입니다.</summary>
+    private bool HasPendingThrow => m_pendingThrowTime >= 0.0f;
+
+    /// <summary>
+    /// 좌클릭 입력을 처리합니다. 지연 시간이 없으면 즉시 생성하고, 있으면 생성을 예약합니다.
+    /// 예약된 투척의 도착 지점은 생성 순간의 조준으로 정해, 던지는 동안 돌아간 캐릭터 모션과 방향을 맞춥니다.
+    /// </summary>
+    private bool TryStartThrow()
     {
         ProjectileBase selectedProjectile = GetSelectedProjectile();
+        if (!CanThrowProjectile(selectedProjectile))
+        {
+            return false;
+        }
+
+        if (m_throwReleaseDelay <= 0.0f)
+        {
+            return ThrowProjectile(selectedProjectile);
+        }
+
+        m_pendingProjectile = selectedProjectile;
+        m_pendingThrowTime = Time.time + m_throwReleaseDelay;
+        return true;
+    }
+
+    /// <summary>예약된 투척의 생성 시각이 되면 재고를 다시 확인하고, 그 순간의 조준으로 궤적을 다시 계산해 생성합니다.</summary>
+    private void UpdatePendingThrow()
+    {
+        if (!HasPendingThrow || Time.time < m_pendingThrowTime)
+        {
+            return;
+        }
+
+        ProjectileBase projectile = m_pendingProjectile;
+        CancelPendingThrow();
+
+        // 대기 중 다른 대원이 같은 재고를 소모했을 수 있으므로 생성 직전에 다시 확인합니다.
+        if (!CanThrowProjectile(projectile))
+        {
+            return;
+        }
+
+        // 클릭 이후 화면을 돌렸으면 캐릭터도 그쪽을 보고 있으므로, 생성 순간의 조준과 손 위치로 경로를 다시 정합니다.
+        // 미리보기 상태도 함께 덮어쓰지만 다음 프레임 BuildTrajectoryPlan에서 다시 계산됩니다.
+        ResolveTrajectory();
+        BuildTrajectoryPlan(projectile);
+        ThrowProjectile(projectile);
+    }
+
+    /// <summary>예약된 투척을 지웁니다.</summary>
+    private void CancelPendingThrow()
+    {
+        m_pendingThrowTime = -1.0f;
+        m_pendingProjectile = null;
+    }
+
+    /// <summary>
+    /// 투척물 Prefab과 인벤토리 아이템 연결, 공용 인벤토리가 모두 있고 수량이 1개 이상인지 확인합니다.
+    /// 설정이 빠진 경우에는 경고를 남깁니다.
+    /// </summary>
+    private bool CanThrowProjectile(ProjectileBase selectedProjectile)
+    {
         if (selectedProjectile == null)
         {
             Debug.LogWarning($"[{name}] 투척할 Projectile Prefab이 없습니다.", this);
@@ -1168,11 +1484,18 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
-        if (GetProjectileQuantity(selectedProjectile) <= 0)
-        {
-            return false;
-        }
+        return GetProjectileQuantity(selectedProjectile) > 0;
+    }
 
+    /// <summary>
+    /// 투척물을 시작점에 생성하고 <see cref="ParabolicProjectileMover"/>를 붙여 계산해 둔 궤적대로 날려 보낸 뒤, 재고를 1개 소모합니다.
+    /// </summary>
+    /// <remarks>
+    /// 이동은 물리 시뮬레이션이 아니라 Mover가 직접 하므로 Rigidbody는 Kinematic으로, Collider는 Trigger로 바꿉니다.
+    /// 재고 소모에 실패하면 생성한 투척물을 지우고 false를 돌려줍니다.
+    /// </remarks>
+    private bool ThrowProjectile(ProjectileBase selectedProjectile)
+    {
         Quaternion rotation = m_initialVelocity.sqrMagnitude > 0.0001f
             ? Quaternion.LookRotation(m_initialVelocity.normalized, Vector3.up)
             : transform.rotation;
@@ -1214,12 +1537,21 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
-        UpdateGrenadeSelectionUI(true);
+        // 지연 생성 중 투척 모드가 끝났거나 조작 대원이 바뀌었으면 UI 표시는 이후 LateUpdate 흐름에 맡깁니다.
+        if (m_aimController != null && m_aimController.IsPlayerControlled
+                                    && m_input != null && m_input.ThrowMode)
+        {
+            UpdateGrenadeSelectionUI(true);
+        }
 
         return true;
     }
 
-    private bool TryGetBlockingHit(Vector3 start, Vector3 end, out RaycastHit nearestHit)
+    /// <summary>
+    /// 두 점 사이를 <see cref="m_collisionRadius"/> 구체로 훑어 가장 가까운 충돌을 찾습니다. 던진 캐릭터 자신은 무시합니다.
+    /// </summary>
+    /// <remarks><see cref="ParabolicProjectileMover"/>에도 같은 역할의 메서드가 있습니다. 판정 규칙을 바꿀 때는 둘을 함께 바꿔야 미리보기와 실제 비행이 어긋나지 않습니다.</remarks>
+    private bool TryGetBlockingHit(Vector3 start, Vector3 end, int collisionLayers, out RaycastHit nearestHit)
     {
         nearestHit = default;
         Vector3 movement = end - start;
@@ -1236,7 +1568,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             movement / distance,
             m_previewHits,
             distance,
-            GetProjectileCollisionLayers(GetSelectedProjectile()),
+            collisionLayers,
             QueryTriggerInteraction.Ignore);
 
         float nearestDistance = float.PositiveInfinity;
@@ -1261,11 +1593,15 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         return found;
     }
 
+    /// <summary>맞은 대상이 이 캐릭터 자신이거나 그 자식인지 확인합니다.</summary>
     private bool IsOwnedByPlayer(Transform hitTransform)
     {
         return hitTransform == transform || hitTransform.IsChildOf(transform);
     }
 
+    /// <summary>
+    /// 미리보기 오브젝트를 모두 만듭니다. 궤적 선, 폭발 범위 구체, 착탄 마커를 만들고 선과 마커에 쓸 머티리얼을 붙입니다.
+    /// </summary>
     private void CreateTrajectoryLine()
     {
         GameObject lineObject = new GameObject("ThrowTrajectoryPreview");
@@ -1274,18 +1610,8 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         m_trajectoryLine = lineObject.AddComponent<LineRenderer>();
         ConfigurePreviewLine(m_trajectoryLine, false);
 
-        GameObject explosionFillObject = new GameObject("ExplosionRadiusFill");
-        explosionFillObject.transform.SetParent(transform, false);
-
-        MeshFilter explosionFillFilter = explosionFillObject.AddComponent<MeshFilter>();
-        m_explosionPreviewFillRenderer = explosionFillObject.AddComponent<MeshRenderer>();
-        m_explosionPreviewFillRenderer.shadowCastingMode = ShadowCastingMode.Off;
-        m_explosionPreviewFillRenderer.receiveShadows = false;
-        m_explosionPreviewFillRenderer.sortingOrder = -1;
-        m_explosionPreviewFillRenderer.enabled = false;
-
-        m_explosionPreviewFillMesh = CreateExplosionPreviewFillMesh();
-        explosionFillFilter.sharedMesh = m_explosionPreviewFillMesh;
+        CreateExplosionRangePreview();
+        CreateLandingMarker();
 
         Shader lineShader = Shader.Find("Universal Render Pipeline/Unlit");
         if (lineShader != null)
@@ -1297,40 +1623,98 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             m_runtimeLineMaterial.SetColor("_BaseColor", m_trajectoryColor);
             m_trajectoryLine.sharedMaterial = m_runtimeLineMaterial;
 
-            m_runtimeExplosionFillMaterial = new Material(lineShader)
+            m_runtimeLandingMarkerMaterial = new Material(lineShader)
             {
                 hideFlags = HideFlags.HideAndDontSave
             };
-            ConfigureTransparentPreviewMaterial(m_runtimeExplosionFillMaterial);
-            m_runtimeExplosionFillMaterial.SetFloat("_Cull", (float)CullMode.Off);
-            m_explosionPreviewFillRenderer.sharedMaterial = m_runtimeExplosionFillMaterial;
+            ConfigureTransparentPreviewMaterial(m_runtimeLandingMarkerMaterial);
+            m_runtimeLandingMarkerMaterial.SetFloat("_Cull", (float)CullMode.Off);
+            // 같은 반투명 큐의 폭발 범위보다 나중에 그려 범위 색에 묻히지 않게 합니다.
+            m_runtimeLandingMarkerMaterial.renderQueue = (int)RenderQueue.Transparent + 1;
+            m_landingMarkerRenderer.sharedMaterial = m_runtimeLandingMarkerMaterial;
         }
     }
 
-    private static Mesh CreateExplosionPreviewFillMesh()
+    /// <summary>
+    /// 폭발 반경 크기의 구체를 만듭니다. 구체는 셰이더를 실행할 화면 영역만 정하고,
+    /// 실제로 칠할 픽셀은 셰이더가 장면 표면과 폭발 중심의 거리로 고릅니다.
+    /// </summary>
+    private void CreateExplosionRangePreview()
     {
-        Vector3[] vertices = new Vector3[ExplosionPreviewSegmentCount + 1];
+        Material sourceMaterial = m_impactRangeMaterial != null
+            ? m_impactRangeMaterial
+            : Resources.Load<Material>(ExplosionRangeMaterialResourcePath);
+        if (sourceMaterial == null)
+        {
+            Debug.LogWarning($"[{name}] 폭발 범위 머티리얼을 찾지 못해 범위 표시를 생략합니다. Resources/{ExplosionRangeMaterialResourcePath}를 확인하세요.", this);
+            return;
+        }
+
+        GameObject sphereObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        sphereObject.name = "ExplosionRangeSphere";
+        // 미리보기 구체가 궤적 SphereCast나 조준 레이캐스트에 걸리지 않도록 같은 프레임 안에 Collider를 없앱니다.
+        DestroyImmediate(sphereObject.GetComponent<Collider>());
+        sphereObject.transform.SetParent(transform, false);
+
+        m_explosionRangeRenderer = sphereObject.GetComponent<MeshRenderer>();
+        m_explosionRangeRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        m_explosionRangeRenderer.receiveShadows = false;
+        m_explosionRangeRenderer.lightProbeUsage = LightProbeUsage.Off;
+        m_explosionRangeRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+        m_explosionRangeRenderer.enabled = false;
+
+        m_runtimeExplosionRangeMaterial = new Material(sourceMaterial)
+        {
+            hideFlags = HideFlags.HideAndDontSave
+        };
+        m_explosionRangeRenderer.sharedMaterial = m_runtimeExplosionRangeMaterial;
+
+        m_explosionRangeExclusionPass = new ExplosionRangeExclusionPass();
+    }
+
+    /// <summary>
+    /// 착탄 지점에 붙일 고정 크기 원판을 만듭니다.
+    /// </summary>
+    private void CreateLandingMarker()
+    {
+        GameObject markerObject = new GameObject("LandingMarker");
+        markerObject.transform.SetParent(transform, false);
+
+        MeshFilter markerFilter = markerObject.AddComponent<MeshFilter>();
+        m_landingMarkerRenderer = markerObject.AddComponent<MeshRenderer>();
+        m_landingMarkerRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        m_landingMarkerRenderer.receiveShadows = false;
+        m_landingMarkerRenderer.enabled = false;
+
+        m_landingMarkerMesh = CreateLandingMarkerMesh();
+        markerFilter.sharedMesh = m_landingMarkerMesh;
+    }
+
+    /// <summary>반지름 1인 수평 원판 메시를 만듭니다. 실제 크기는 Transform 스케일로 맞춥니다.</summary>
+    private static Mesh CreateLandingMarkerMesh()
+    {
+        Vector3[] vertices = new Vector3[LandingMarkerSegmentCount + 1];
         Vector3[] normals = new Vector3[vertices.Length];
-        int[] triangles = new int[ExplosionPreviewSegmentCount * 3];
+        int[] triangles = new int[LandingMarkerSegmentCount * 3];
 
         vertices[0] = Vector3.zero;
         normals[0] = Vector3.up;
 
-        for (int i = 0; i < ExplosionPreviewSegmentCount; i++)
+        for (int i = 0; i < LandingMarkerSegmentCount; i++)
         {
-            float angle = 2.0f * Mathf.PI * i / ExplosionPreviewSegmentCount;
+            float angle = 2.0f * Mathf.PI * i / LandingMarkerSegmentCount;
             vertices[i + 1] = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle));
             normals[i + 1] = Vector3.up;
 
             int triangleIndex = i * 3;
             triangles[triangleIndex] = 0;
-            triangles[triangleIndex + 1] = ((i + 1) % ExplosionPreviewSegmentCount) + 1;
+            triangles[triangleIndex + 1] = ((i + 1) % LandingMarkerSegmentCount) + 1;
             triangles[triangleIndex + 2] = i + 1;
         }
 
         Mesh mesh = new Mesh
         {
-            name = "Explosion Radius Fill Mesh",
+            name = "Landing Marker Mesh",
             hideFlags = HideFlags.HideAndDontSave,
             vertices = vertices,
             normals = normals,
@@ -1340,6 +1724,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         return mesh;
     }
 
+    /// <summary>URP Unlit 머티리얼을 깊이를 쓰지 않는 알파 블렌딩 반투명으로 설정합니다.</summary>
     private static void ConfigureTransparentPreviewMaterial(Material material)
     {
         material.SetOverrideTag("RenderType", "Transparent");
@@ -1351,6 +1736,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         material.renderQueue = (int)RenderQueue.Transparent;
     }
 
+    /// <summary>미리보기 선의 두께·색과 그림자 설정을 맞추고, 처음에는 꺼 둡니다.</summary>
     private void ConfigurePreviewLine(LineRenderer lineRenderer, bool loop)
     {
         lineRenderer.useWorldSpace = true;
@@ -1363,6 +1749,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         lineRenderer.enabled = false;
     }
 
+    /// <summary>
+    /// 폭발 미리보기 위치가 정해졌으면 착탄 마커를 그리고, 선택한 투척물의 폭발 반경만큼 범위 구체를 띄웁니다.
+    /// 위치가 없으면(미리보기 거리 안에서 착탄하지 않음) 둘 다 숨깁니다.
+    /// </summary>
     private void DrawExplosionPreview()
     {
         ProjectileBase selectedProjectile = GetSelectedProjectile();
@@ -1372,46 +1762,122 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return;
         }
 
+        DrawLandingMarker();
+
         float radius = Mathf.Max(0.0f, selectedProjectile.ImpactPreviewRadius);
-        if (radius <= 0.0f)
+        if (radius <= 0.0f || m_explosionRangeRenderer == null || m_runtimeExplosionRangeMaterial == null)
         {
-            HideExplosionPreview();
+            SetExplosionRangeVisible(false);
             return;
         }
 
-        Vector3 center = m_explosionPreviewCenter + Vector3.up * ExplosionPreviewHeightOffset;
+        // 폭발 중심은 충돌 순간의 투척물 중심입니다. 표면 위치는 셰이더가 깊이로 복원하므로 높이 보정이 필요 없습니다.
+        Vector3 center = m_explosionPreviewCenter;
         ApplyImpactPreviewAppearance();
+        m_runtimeExplosionRangeMaterial.SetVector(
+            "_SphereCenterRadius",
+            new Vector4(center.x, center.y, center.z, radius));
 
-        if (m_explosionPreviewFillRenderer != null)
-        {
-            Transform fillTransform = m_explosionPreviewFillRenderer.transform;
-            fillTransform.position = center;
-            fillTransform.rotation = Quaternion.identity;
-            fillTransform.localScale = new Vector3(radius, 1.0f, radius);
-            m_explosionPreviewFillRenderer.enabled = m_impactPreviewFillAlpha > 0.0f;
-        }
+        Transform sphereTransform = m_explosionRangeRenderer.transform;
+        sphereTransform.SetPositionAndRotation(center, Quaternion.identity);
+        // 기본 Sphere 메시는 지름이 1입니다.
+        sphereTransform.localScale = Vector3.one * (radius * 2.0f * ExplosionRangeSphereScalePadding);
+        SetExplosionRangeVisible(true);
     }
 
+    /// <summary>
+    /// 착탄 지점에 고정 크기 원판을 표시합니다. 맞은 표면 방향과 관계없이 항상 수평으로 둡니다.
+    /// </summary>
+    private void DrawLandingMarker()
+    {
+        if (m_landingMarkerRenderer == null || !m_showLandingMarker || m_landingMarkerColor.a <= 0.0f)
+        {
+            if (m_landingMarkerRenderer != null)
+            {
+                m_landingMarkerRenderer.enabled = false;
+            }
+
+            return;
+        }
+
+        Transform markerTransform = m_landingMarkerRenderer.transform;
+        markerTransform.SetPositionAndRotation(
+            m_explosionPreviewCenter + Vector3.up * LandingMarkerSurfaceOffset,
+            Quaternion.identity);
+        markerTransform.localScale = new Vector3(m_landingMarkerRadius, 1.0f, m_landingMarkerRadius);
+
+        if (m_runtimeLandingMarkerMaterial != null)
+        {
+            m_runtimeLandingMarkerMaterial.SetColor("_BaseColor", m_landingMarkerColor);
+        }
+
+        m_landingMarkerRenderer.enabled = true;
+    }
+
+    /// <summary>인스펙터의 채움 색·투명도와 테두리 색·두께를 폭발 범위 머티리얼에 넣습니다. 플레이 중 값을 바꿔도 바로 반영됩니다.</summary>
     private void ApplyImpactPreviewAppearance()
     {
-        if (m_runtimeExplosionFillMaterial == null)
+        if (m_runtimeExplosionRangeMaterial == null)
         {
             return;
         }
 
         Color fillColor = m_impactPreviewColor;
         fillColor.a = Mathf.Clamp01(m_impactPreviewFillAlpha);
-        m_runtimeExplosionFillMaterial.SetColor("_BaseColor", fillColor);
+        m_runtimeExplosionRangeMaterial.SetColor("_BaseColor", fillColor);
+        m_runtimeExplosionRangeMaterial.SetColor("_RimColor", m_impactPreviewRimColor);
+        m_runtimeExplosionRangeMaterial.SetFloat("_RimWidth", m_impactPreviewRimWidth);
     }
 
-    private void HideExplosionPreview()
+    /// <summary>폭발 범위 구체를 켜거나 끕니다.</summary>
+    private void SetExplosionRangeVisible(bool visible)
     {
-        if (m_explosionPreviewFillRenderer != null)
+        if (m_explosionRangeRenderer != null)
         {
-            m_explosionPreviewFillRenderer.enabled = false;
+            m_explosionRangeRenderer.enabled = visible;
         }
     }
 
+    /// <summary>폭발 범위 구체와 착탄 마커를 숨깁니다.</summary>
+    private void HideExplosionPreview()
+    {
+        SetExplosionRangeVisible(false);
+
+        if (m_landingMarkerRenderer != null)
+        {
+            m_landingMarkerRenderer.enabled = false;
+        }
+    }
+
+    /// <summary>
+    /// 폭발 범위가 보이고 제외 Layer가 지정돼 있으면, 이번 카메라 렌더에 제외 영역 스텐실 패스를 끼워 넣습니다.
+    /// </summary>
+    private void OnBeginCameraRendering(ScriptableRenderContext context, Camera renderingCamera)
+    {
+        if (m_explosionRangeExclusionPass == null
+            || m_impactPreviewExcludeLayers.value == 0
+            || m_explosionRangeRenderer == null
+            || !m_explosionRangeRenderer.enabled
+            || (renderingCamera.cameraType != CameraType.Game && renderingCamera.cameraType != CameraType.SceneView))
+        {
+            return;
+        }
+
+        // Scene 뷰 카메라에는 이 컴포넌트가 없을 수 있어 확장 메서드로 가져옵니다(없으면 붙입니다).
+        UniversalAdditionalCameraData cameraData = renderingCamera.GetUniversalAdditionalCameraData();
+        if (cameraData == null || cameraData.scriptableRenderer == null)
+        {
+            return;
+        }
+
+        m_explosionRangeExclusionPass.Setup(
+            m_runtimeExplosionRangeMaterial,
+            m_runtimeExplosionRangeMaterial.FindPass(ExplosionRangeExclusionPassName),
+            m_impactPreviewExcludeLayers);
+        cameraData.scriptableRenderer.EnqueuePass(m_explosionRangeExclusionPass);
+    }
+
+    /// <summary>궤적 선과 폭발 미리보기를 모두 숨깁니다.</summary>
     private void HideTrajectory()
     {
         if (m_trajectoryLine != null)

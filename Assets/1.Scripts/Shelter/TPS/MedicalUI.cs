@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -19,7 +19,7 @@ public class MedicalUI : MonoBehaviour
     [SerializeField] private Button m_treatmentMenuButton;
     [Tooltip("Menu의 진료 버튼을 누르면 나타나는 진료 화면입니다.")]
     [SerializeField] private GameObject m_treatmentRoot;
-    [Tooltip("진료 화면에서는 Menu로, Menu에서는 의료실 UI를 닫습니다.")]
+    [Tooltip("의료실 UI가 열려 있는 동안 항상 표시되며, 누를 때마다 Esc처럼 한 단계 뒤로 돌아갑니다.")]
     [SerializeField] private Button m_backButton;
 
     [Header("Treatment Candidates")]
@@ -200,8 +200,18 @@ public class MedicalUI : MonoBehaviour
         Refresh();
     }
 
+    /// <summary>
+    /// 돌아가기 버튼은 Esc 키와 같은 경로(UIManager)로 처리해 업그레이드 UI 등 최상위 UI부터 한 단계씩 닫습니다.
+    /// </summary>
     private void HandleBackClicked()
     {
+        if (!m_isOpen)
+            return;
+
+        UIManager uiManager = FindFirstObjectByType<UIManager>();
+        if (uiManager != null && uiManager.TryHandleEscape())
+            return;
+
         TryHandleEscape();
     }
 

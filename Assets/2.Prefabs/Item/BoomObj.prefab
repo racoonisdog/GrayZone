@@ -98,6 +98,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExplosiveProjectile
   m_inventoryItemDefinition: {fileID: 11400000, guid: cd395eb2c76518a41a62dcd75d3bf4f6, type: 2}
+  m_heldVisualPrefab: {fileID: 3814460936360729391, guid: 6a9c1f9d41a884547bd1bf045e09c02b, type: 3}
+  m_heldLocalPosition: {x: 0, y: 0, z: 0}
+  m_heldLocalEulerAngles: {x: 0, y: 0, z: 0}
+  m_heldLocalScale: {x: 0.25, y: 0.25, z: 0.25}
   m_damage: 30
   m_playerDamage: 10
   m_explosionRadius: 5
@@ -106,6 +110,9 @@ MonoBehaviour:
   m_damageTargetLayers:
     serializedVersion: 2
     m_Bits: 262912
+  m_explosionOccluderLayers:
+    serializedVersion: 2
+    m_Bits: 131073
   m_contactExplosionExcludeLayers:
     serializedVersion: 2
     m_Bits: 256

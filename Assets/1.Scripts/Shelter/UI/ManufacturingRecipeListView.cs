@@ -14,7 +14,6 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
     [SerializeField] private ManufacturingRecipeListItemView[] m_preplacedRows =
         Array.Empty<ManufacturingRecipeListItemView>();
     [SerializeField] private ManufacturingManager m_manager;
-    [SerializeField] private ItemListTooltipPresenter m_tooltipPresenter;
 
     private readonly List<CachedRecipeRow> m_rows = new();
     private string m_selectedRecipeId = string.Empty;
@@ -41,7 +40,6 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
     private void OnDisable()
     {
         Unsubscribe();
-        m_tooltipPresenter?.Hide();
     }
 
     /// <summary>
@@ -91,7 +89,6 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
                 contentRoot,
                 false);
             row.name = $"{m_rowPrefab.name}_{recipe.RecipeId}";
-            row.SetTooltipPresenter(m_tooltipPresenter);
             row.Bind(
                 recipe,
                 m_manager.IsRecipeUnlocked(recipe),
@@ -132,7 +129,6 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
                 continue;
             }
 
-            row.SetTooltipPresenter(m_tooltipPresenter);
             row.Bind(
                 recipe,
                 m_manager.IsRecipeUnlocked(recipe),
@@ -155,7 +151,6 @@ public sealed class ManufacturingRecipeListView : MonoBehaviour
         for (int i = 0; i < m_rows.Count; i++)
         {
             CachedRecipeRow cached = m_rows[i];
-            cached.Row.SetTooltipPresenter(m_tooltipPresenter);
             cached.Row.Bind(
                 cached.Recipe,
                 m_manager.IsRecipeUnlocked(cached.Recipe),

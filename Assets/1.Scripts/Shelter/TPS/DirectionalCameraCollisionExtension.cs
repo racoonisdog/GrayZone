@@ -37,6 +37,12 @@ public sealed class DirectionalCameraCollisionExtension : CinemachineExtension
     public float CurrentDistance { get; private set; }
 
     /// <summary>
+    /// 현재 ShoulderOffset에서 기본 ShoulderOffset까지의 차이(CameraSide 반영된 로컬 값)입니다.
+    /// 충돌 판정은 이 차이를 되돌린 기본 위치 기준으로 수행합니다.
+    /// </summary>
+    public Vector3 DetectionShoulderDelta { get; set; }
+
+    /// <summary>
     /// 기존 Third Person Follow의 충돌 설정을 단일 방향 충돌 검사 설정으로 이전합니다.
     /// </summary>
     public void Configure(
@@ -94,6 +100,8 @@ public sealed class DirectionalCameraCollisionExtension : CinemachineExtension
         }
 
         Vector3 direction = cameraOffset / desiredDistance;
+
+        // 보정: 현재 목표 위치까지의 경로
         bool hasObstacle = TryFindObstacle(
             origin,
             direction,
@@ -103,7 +111,14 @@ public sealed class DirectionalCameraCollisionExtension : CinemachineExtension
             out float safeDistance
         );
 
-        IsColliding = hasObstacle;
+        // 판정: 충돌 반응으로 오프셋이 바뀌기 전 기본 위치까지의 경로
+        IsColliding = DetectObstacleAtBaseOffset(
+            origin,
+            desiredPosition,
+            state.RawOrientation,
+            characterRoot,
+            hasObstacle
+        );
         CurrentObstacle = hasObstacle ? closestHit.collider : null;
 
         CameraCollisionState collisionState = GetExtraState<CameraCollisionState>(vcam);
@@ -140,6 +155,33 @@ public sealed class DirectionalCameraCollisionExtension : CinemachineExtension
         CurrentDistance = collisionState.CurrentDistance;
         Vector3 correctedPosition = origin + direction * CurrentDistance;
         state.PositionCorrection += correctedPosition - desiredPosition;
+    }
+
+    private bool DetectObstacleAtBaseOffset(
+        Vector3 origin,
+        Vector3 desiredPosition,
+        Quaternion cameraOrientation,
+        Transform characterRoot,
+        bool currentPathBlocked)
+    {
+        if (DetectionShoulderDelta.sqrMagnitude <= Epsilon)
+            return currentPathBlocked;
+
+        Quaternion heading = Quaternion.Euler(0f, cameraOrientation.eulerAngles.y, 0f);
+        Vector3 probePosition = desiredPosition + heading * DetectionShoulderDelta;
+        Vector3 probeOffset = probePosition - origin;
+        float probeDistance = probeOffset.magnitude;
+        if (probeDistance <= Epsilon)
+            return currentPathBlocked;
+
+        return TryFindObstacle(
+            origin,
+            probeOffset / probeDistance,
+            probeDistance,
+            characterRoot,
+            out _,
+            out _
+        );
     }
 
     private bool TryFindObstacle(
