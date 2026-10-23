@@ -30075,7 +30075,6 @@ MonoBehaviour:
   m_rowPrefab: {fileID: 98162211097284947, guid: c8c4d5e2422822746aa72a850df1ef73, type: 3}
   m_preplacedRows: []
   m_manager: {fileID: 552893763}
-  m_tooltipPresenter: {fileID: 1990852244}
 --- !u!114 &137064868
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -178231,19 +178230,16 @@ MonoBehaviour:
   m_shelterDataManager: {fileID: 1713639377}
   m_recipeListView: {fileID: 137064867}
   m_resultImage: {fileID: 1259264498}
-  m_totalResultQuantityText: {fileID: 1990947014}
   m_selectedNameText: {fileID: 0}
+  m_itemInfoText: {fileID: 0}
   m_ownedAmountText: {fileID: 0}
-  m_unitAmountText: {fileID: 0}
   m_totalAmountText: {fileID: 0}
-  m_remainingAmountText: {fileID: 0}
   m_sufficientAmountColor: {r: 1, g: 1, b: 1, a: 1}
   m_insufficientAmountColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   m_requestedBatchCountText: {fileID: 1768956126}
   m_decreaseOneButton: {fileID: 1370304818}
   m_increaseOneButton: {fileID: 190224690}
   m_confirmButton: {fileID: 315883785}
-  m_cancelButton: {fileID: 1281683730}
   m_startClosed: 1
 --- !u!1 &817577415
 GameObject:
@@ -241289,7 +241285,7 @@ MonoBehaviour:
   m_impactPreviewRimWidth: 0.08
   m_impactPreviewExcludeLayers:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 536870912
   m_showLandingMarker: 1
   m_landingMarkerRadius: 0.25
   m_landingMarkerColor: {r: 0.082987264, g: 0.5849056, b: 0, a: 0.6}
@@ -250296,7 +250292,7 @@ MonoBehaviour:
   m_impactPreviewRimWidth: 0.08
   m_impactPreviewExcludeLayers:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 536870912
   m_showLandingMarker: 1
   m_landingMarkerRadius: 0.25
   m_landingMarkerColor: {r: 0.082987264, g: 0.5849056, b: 0, a: 0.6}
@@ -1063232,7 +1063228,7 @@ MonoBehaviour:
   m_impactPreviewRimWidth: 0.08
   m_impactPreviewExcludeLayers:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 536870912
   m_showLandingMarker: 1
   m_landingMarkerRadius: 0.25
   m_landingMarkerColor: {r: 0.082987264, g: 0.5849056, b: 0, a: 0.6}
