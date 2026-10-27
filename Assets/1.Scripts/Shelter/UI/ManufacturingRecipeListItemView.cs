@@ -16,8 +16,11 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
     [SerializeField] private TMP_Text m_nameText;
     [SerializeField] private TMP_Text m_requiredFacilityLevelText;
     [SerializeField] private TMP_Text m_lockedMessageText;
+    [SerializeField] private GameObject m_lockImage;
 
     [Header("Material")]
+    [SerializeField] private GameObject m_materialIcon;
+    [SerializeField] private GameObject m_multiplyMark;
     [SerializeField] private TMP_Text m_needCountText;
 
     [Header("Selection")]
@@ -89,6 +92,16 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
         if (m_lockedMessageText != null)
             m_lockedMessageText.gameObject.SetActive(isLocked);
 
+        // 비잠금: Icon / Material / x / NeedCount, 잠금: Level / Text (TMP) / lockImage. ItemName은 항상 표시합니다.
+        SetIconVisible(!isLocked);
+        SetMaterialVisible(!isLocked);
+
+        if (m_lockImage != null)
+            m_lockImage.SetActive(isLocked);
+
+        if (m_nameText != null)
+            m_nameText.gameObject.SetActive(true);
+
         if (m_button != null)
         {
             m_button.onClick.RemoveListener(HandleClick);
@@ -131,6 +144,12 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
         if (m_lockedMessageText != null)
             m_lockedMessageText.gameObject.SetActive(false);
 
+        SetIconVisible(true);
+        SetMaterialVisible(true);
+
+        if (m_lockImage != null)
+            m_lockImage.SetActive(false);
+
         ClearMaterial();
         SetSelected(false);
         gameObject.SetActive(false);
@@ -157,6 +176,38 @@ public sealed class ManufacturingRecipeListItemView : MonoBehaviour
     {
         if (m_needCountText != null)
             m_needCountText.text = string.Empty;
+    }
+
+    /// <summary>재료 아이콘, x 표시, 필요 개수를 함께 켜거나 끕니다.</summary>
+    private void SetMaterialVisible(bool visible)
+    {
+        if (m_materialIcon != null)
+            m_materialIcon.SetActive(visible);
+
+        if (m_multiplyMark != null)
+            m_multiplyMark.SetActive(visible);
+
+        if (m_needCountText != null)
+            m_needCountText.gameObject.SetActive(visible);
+    }
+
+    /// <summary>
+    /// 잠금 상태에 따라 레시피 아이콘을 숨기거나 표시합니다.
+    /// 아이콘이 이 항목이나 버튼과 같은 오브젝트에 붙어 있으면 버튼까지 꺼지지 않도록 Image만 끕니다.
+    /// </summary>
+    private void SetIconVisible(bool visible)
+    {
+        if (m_iconImage == null)
+            return;
+
+        GameObject iconObject = m_iconImage.gameObject;
+        bool sharesObject = iconObject == gameObject
+            || (m_button != null && iconObject == m_button.gameObject);
+
+        if (sharesObject)
+            m_iconImage.enabled = visible;
+        else if (iconObject.activeSelf != visible)
+            iconObject.SetActive(visible);
     }
 
     private void HandleClick()
