@@ -144,6 +144,11 @@ public sealed class DefenseManager : CombatSceneManager
     [Min(0.01f)]
     [SerializeField] private float m_emptySpaceHoldStartDuration = 3.0f;
 
+    [Tooltip("켜면 방어전을 정비(휴식) 구간부터 시작합니다. 튜토리얼이 있으면 튜토리얼이 끝난 뒤, 없으면 씬에 들어오자마자 정비 시간이 흐릅니다. " +
+             "정비 구간마다 Z를 위 시간만큼 누르고 있으면 남은 정비 시간을 건너뛰고 바로 공세를 시작합니다. " +
+             "끄면 기존처럼 시작 전에 Z 홀드로 첫 공세를 바로 시작하고, 정비 구간은 건너뛸 수 없습니다.")]
+    [SerializeField] private bool m_beginWithMaintenance;
+
     /// <summary>방어전 시작 홀드 키입니다. 튜토리얼 마지막 페이지 안내(Z 3초)와 같은 키입니다.</summary>
     private const Key StartHoldKey = Key.Z;
 
@@ -247,6 +252,15 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>허공 상호작용키를 연속해서 누른 시간(초)입니다.</summary>
     private float m_emptySpaceHoldStartTimer;
 
+    /// <summary>
+    /// 정비 건너뛰기 홀드를 세기 전에 Z를 한 번 떼야 하는지 여부입니다.
+    /// 튜토리얼 마지막 페이지를 Z 홀드로 넘기면 그 누름이 이어져 정비가 곧바로 건너뛰어지는 것을 막습니다.
+    /// </summary>
+    private bool m_maintenanceSkipNeedsRelease;
+
+    /// <summary>정비 시작 모드에서 자동 시작을 이미 시도했는지 여부입니다. 방어전 구성이 없을 때 매 프레임 오류를 내지 않기 위해서입니다.</summary>
+    private bool m_autoStartAttempted;
+
     /// <summary>전투 문구로 바꾸기 전 목표 패널 제목입니다. null이면 아직 바꾸지 않은 상태입니다.</summary>
     private string m_missionTitleOriginalText;
 
@@ -328,10 +342,20 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>이 매니저가 제어하는 스폰 포인트 목록입니다.</summary>
     public IReadOnlyList<EnemyDefenseSpawnPoint> SpawnPoints => m_spawnPoints;
 
-    /// <summary>방어전 시작 전 Z키 홀드 진행도입니다.</summary>
-    public float EmptySpaceHoldStartProgress => m_isGameStarted
-        ? 0.0f
-        : Mathf.Clamp01(m_emptySpaceHoldStartTimer / m_emptySpaceHoldStartDuration);
+    /// <summary>방어전 시작 전 Z키 홀드 진행도입니다. 정비 시작 모드에서는 정비 건너뛰기 홀드 진행도입니다.</summary>
+    public float EmptySpaceHoldStartProgress => IsStartHoldAvailable
+        ? Mathf.Clamp01(m_emptySpaceHoldStartTimer / m_emptySpaceHoldStartDuration)
+        : 0.0f;
+
+    /// <summary>방어전을 정비 구간부터 시작하고, 정비 구간을 Z 홀드로 건너뛸 수 있는지 여부입니다.</summary>
+    public bool BeginsWithMaintenance => m_beginWithMaintenance;
+
+    /// <summary>
+    /// 지금 Z 홀드가 의미 있는 구간인지 여부입니다. 기본 모드는 시작 전, 정비 시작 모드는 시작 뒤 정비 구간입니다.
+    /// </summary>
+    private bool IsStartHoldAvailable => !m_isGameOver && (m_beginWithMaintenance
+        ? m_isGameStarted && IsResting
+        : !m_isGameStarted);
 
     protected override void Awake()
     {
@@ -402,10 +426,20 @@ public sealed class DefenseManager : CombatSceneManager
 
         if (!m_isGameStarted)
         {
-            UpdateEmptySpaceHoldStart();
+            if (m_beginWithMaintenance)
+            {
+                TryAutoStartMaintenance();
+            }
+            else
+            {
+                UpdateEmptySpaceHoldStart();
+            }
+
             RefreshStartPrompt();
             return;
         }
+
+        RefreshStartPrompt();
 
         if (m_isVictoryReady)
         {
@@ -431,6 +465,11 @@ public sealed class DefenseManager : CombatSceneManager
             // 전투 시간이 끝나도 바로 휴식으로 가지 않습니다. 남은 적 수는 다음 프레임부터 정리 구간이 셉니다.
             m_roundTimer = 0.0f;
             BeginClearing();
+            return;
+        }
+
+        if (m_beginWithMaintenance && UpdateMaintenanceSkipHold())
+        {
             return;
         }
 
@@ -466,7 +505,16 @@ public sealed class DefenseManager : CombatSceneManager
         // 재시작이면 앞 판의 웨이브 기록을 비우고 다시 시작합니다.
         ResolveDefenseSceneDataManager()?.ConfigureWaves(TotalWaveCount);
         PrepareStageSpawners();
-        BeginRound();
+        if (m_beginWithMaintenance)
+        {
+            // 첫 공세 전에 정비 시간을 줍니다.
+            BeginRest();
+        }
+        else
+        {
+            BeginRound();
+        }
+
         RefreshStartPrompt();
         OnDefenseStarted?.Invoke();
     }
@@ -518,6 +566,9 @@ public sealed class DefenseManager : CombatSceneManager
             HideWaveStartMessage();
             RefreshTimerText();
             RefreshTrapBuildWindow();
+
+            // 정비 중 게임오버가 나면 Update가 더 돌지 않으므로 여기서 안내를 내립니다.
+            RefreshStartPrompt();
         }
 
         base.HandleGameOverRequested();
@@ -818,7 +869,11 @@ public sealed class DefenseManager : CombatSceneManager
         m_isClearing = false;
         if (m_currentWave >= TotalWaveCount)
         {
-            BeginVictory();
+            if (!BeginVictory())
+            {
+                Debug.LogError("[DefenseManager] 마지막 웨이브 승리 기록에 실패했습니다. 귀환 지점을 열지 않습니다.", this);
+            }
+
             return;
         }
 
@@ -832,6 +887,11 @@ public sealed class DefenseManager : CombatSceneManager
         m_isClearing = false;
         m_roundTimer = 0.0f;
         m_restTimer = Mathf.Max(0.01f, m_restDuration);
+
+        // 정비 건너뛰기 홀드는 Z를 한 번 뗀 뒤부터 셉니다. 튜토리얼 마지막 페이지를 Z 홀드로 넘긴 누름이
+        // 그대로 이어져 정비가 곧바로 건너뛰어지는 것을 막습니다.
+        m_emptySpaceHoldStartTimer = 0.0f;
+        m_maintenanceSkipNeedsRelease = true;
         RefreshTimerText();
         ShowPhaseStartMessage(m_restStartMessage);
         ResolveDefenseSceneDataManager()?.RecordRestStarted();
@@ -854,8 +914,18 @@ public sealed class DefenseManager : CombatSceneManager
             return;
         }
 
+        if (!m_isPlaying && !m_isClearing)
+        {
+            Debug.LogWarning("[DefenseManager] DebugForceVictory는 전투 또는 정리 단계에서만 사용할 수 있습니다.", this);
+            return;
+        }
+
+        if (!BeginVictory())
+        {
+            return;
+        }
+
         DespawnManagedEnemies();
-        BeginVictory();
     }
 
     /// <summary>이 매니저의 스포너가 내보낸 적을 처치로 세지 않고 모두 회수합니다. 디버그 트레이너 전용입니다.</summary>
@@ -866,8 +936,13 @@ public sealed class DefenseManager : CombatSceneManager
     }
 
     /// <summary>마지막 웨이브를 완료하고, 정산 전 귀환 구역 진입 대기 상태로 전환합니다.</summary>
-    private void BeginVictory()
+    private bool BeginVictory()
     {
+        if (!RecordVictory())
+        {
+            return false;
+        }
+
         m_isPlaying = false;
         m_isClearing = false;
         m_isVictoryReady = true;
@@ -877,10 +952,10 @@ public sealed class DefenseManager : CombatSceneManager
         RefreshTimerText();
         HideWaveStartMessage();
 
-        RecordVictory();
         SetReturnPointActive(true);
         RefreshTrapBuildWindow();
         OnDefenseVictoryReady?.Invoke();
+        return true;
     }
 
     /// <summary>
@@ -1030,6 +1105,60 @@ public sealed class DefenseManager : CombatSceneManager
     }
 
     /// <summary>
+    /// 정비 시작 모드에서 튜토리얼이 진행 중이 아니면 방어전을 시작해 정비 시간을 흐르게 합니다.
+    /// </summary>
+    /// <remarks>
+    /// 튜토리얼이 있는 판은 마지막 페이지가 <see cref="StartDefense"/>를 부르므로 여기서는 기다리기만 합니다.
+    /// 튜토리얼이 없는 판(2회차부터)은 씬에 들어온 첫 프레임에 시작합니다. 시작에 실패하면(방어전 구성 없음) 다시 시도하지 않습니다.
+    /// </remarks>
+    private void TryAutoStartMaintenance()
+    {
+        TutorialManager tutorial = TutorialManager.Instance;
+        if (m_autoStartAttempted || (tutorial != null && tutorial.IsRunning))
+        {
+            return;
+        }
+
+        m_autoStartAttempted = true;
+        StartDefense();
+    }
+
+    /// <summary>
+    /// 정비 구간에서 Z를 누르고 있는 시간을 세고, 다 차면 남은 정비 시간을 건너뛰고 바로 공세를 시작합니다.
+    /// </summary>
+    /// <returns>이번 프레임에 공세를 시작했으면 true입니다.</returns>
+    /// <remarks>시작 전 홀드(<see cref="UpdateEmptySpaceHoldStart"/>)와 같은 규칙으로 실제 시간을 셉니다. 시간이 멈춘 동안은 세지 않습니다.</remarks>
+    private bool UpdateMaintenanceSkipHold()
+    {
+        Keyboard keyboard = Keyboard.current;
+        bool pressed = keyboard != null && keyboard[StartHoldKey].isPressed;
+        if (!pressed)
+        {
+            m_maintenanceSkipNeedsRelease = false;
+        }
+
+        if (!pressed
+            || m_maintenanceSkipNeedsRelease
+            || Time.timeScale <= 0.0f
+            || !HasActiveSquadStartInput())
+        {
+            m_emptySpaceHoldStartTimer = 0.0f;
+            return false;
+        }
+
+        m_emptySpaceHoldStartTimer += Time.unscaledDeltaTime;
+        if (m_emptySpaceHoldStartTimer < m_emptySpaceHoldStartDuration)
+        {
+            return false;
+        }
+
+        m_emptySpaceHoldStartTimer = 0.0f;
+        m_restTimer = 0.0f;
+        BeginRound();
+        return true;
+    }
+
+    /// <summary>
     /// 현재 스쿼드가 직접 조작 중이고 입력을 받는 멤버가 있는지 확인합니다.
     /// </summary>
     /// <remarks>
@@ -1068,7 +1197,9 @@ public sealed class DefenseManager : CombatSceneManager
 
         TutorialManager tutorial = TutorialManager.Instance;
         bool tutorialRunning = tutorial != null && tutorial.IsRunning;
-        bool showPrompt = !m_isGameStarted && !m_isGameOver && !tutorialRunning;
+
+        // 기본 모드는 시작 전에, 정비 시작 모드는 정비 구간마다 띄웁니다(정비 건너뛰기 안내).
+        bool showPrompt = IsStartHoldAvailable && !tutorialRunning;
         if (showPrompt)
         {
             if (!m_startPromptOverlay.IsCompact)
@@ -1270,16 +1401,22 @@ public sealed class DefenseManager : CombatSceneManager
     /// <remarks>
     /// 임무 완료 표시와 승리 보상 기록은 <see cref="DefenseSceneDataManager.CompleteVictory"/>가 함께 합니다.
     /// </remarks>
-    private void RecordVictory()
+    private bool RecordVictory()
     {
         DefenseSceneDataManager defenseData = ResolveDefenseSceneDataManager();
         if (defenseData == null)
         {
             Debug.LogError("[DefenseManager] DefenseSceneDataManager가 없어 승리를 기록하지 못했습니다. 귀환 정산이 실패로 나옵니다.", this);
-            return;
+            return false;
         }
 
-        defenseData.CompleteVictory();
+        if (defenseData.CompleteVictory() != null)
+        {
+            return true;
+        }
+
+        Debug.LogError("[DefenseManager] 방어전 승리 상태 기록이 거부되었습니다. 런타임 상태를 확인하세요.", this);
+        return false;
     }
 
     /// <summary>미리 배치해 둔 귀환 구역을 켭니다.</summary>
