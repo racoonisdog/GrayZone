@@ -2510,8 +2510,17 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// 지금 FOV가 힙파이어에서 ADS로 얼마나 옮겨 갔는지(0~1)를 돌려줍니다.
     /// </summary>
     /// <param name="isAds">두 FOV가 같아 비율을 낼 수 없을 때 쓸 ADS 여부입니다.</param>
+    /// <remarks>
+    /// 전투 자세가 아니면 항상 0입니다. 조준을 풀고 자유 시점으로 나가면 <see cref="ApplyCombatZoom"/>이 더 돌지 않아
+    /// <see cref="m_baseFov"/>가 마지막 ADS FOV에 멈춰 있고, 그 값을 읽으면 조준선이 조준 모양·크기로 남습니다.
+    /// </remarks>
     private float ResolveAdsZoomProgress(bool isAds)
     {
+        if (!m_inCombatStance)
+        {
+            return 0.0f;
+        }
+
         if (Mathf.Approximately(m_hipfireFov, m_adsFov))
         {
             return isAds ? 1.0f : 0.0f;
