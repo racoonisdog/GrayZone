@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: EnemyBalance_Bloater
   m_EditorClassIdentifier: Assembly-CSharp::EnemyBalanceSO
   m_enemyId: enemy.basic
-  m_maxHp: 70
-  m_mass: 60
+  m_maxHp: 90
+  m_mass: 100
   m_wanderRadius: 8
   m_wanderInterval: 3
   m_wanderSpeed: 2
@@ -42,13 +42,13 @@ MonoBehaviour:
   m_combatSearchDuration: 6
   m_combatSearchRadius: 6
   m_hitStunDuration: 3
-  m_hitStunCooldown: 0.2
-  m_staggerThreshold: 0.9
+  m_hitStunCooldown: 1.25
+  m_staggerThreshold: 3
   m_staggerDecayPerSecond: 0
   m_attackRange: 1.8
   m_attackStartAngle: 70
   m_attackDirectionLockTime: 0.25
   m_attackImpactTime: 0.45
   m_attackRecoveryDuration: 0.75
-  m_attackDamage: 2
+  m_attackDamage: 6
   m_attackMaxTargets: 1

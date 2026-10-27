@@ -188,13 +188,16 @@ MonoBehaviour:
   m_damageTargetLayers:
     serializedVersion: 2
     m_Bits: 2560
-  m_showExplosionRangeVisual: 1
+  m_showExplosionRangeVisual: 0
   m_chainDetonationEnabled: 1
   m_chainFuseTime: 0.15
   m_alwaysShowExplosionRange: 0
   m_explosionRadius: 5
   m_explosionHeight: 4
   m_explosionCenterOffset: {x: 0, y: 1, z: 0}
+  m_explosionVfxPrefab: {fileID: 1411588298947990, guid: 22429e62552901f4d94bca4295a9886a, type: 3}
+  m_explosionVfxOffset: {x: 0, y: -1, z: 0}
+  m_explosionVfxLifetime: 4
   m_drawExplosionGizmo: 1
   m_explosionGizmoColor: {r: 1, g: 0.45, b: 0.1, a: 0.7}
 --- !u!1 &6466795850263020981

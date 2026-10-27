@@ -37,6 +37,17 @@ public sealed class MineTrap : ExplosiveTrap
     [Tooltip("폭발 중심을 지뢰 위치에서 얼마나 옮길지입니다. 바닥에 붙은 지뢰의 원통 아래 절반이 땅에 묻히는 것을 피할 때 Y를 올립니다.")]
     [SerializeField] private Vector3 m_explosionCenterOffset = new Vector3(0.0f, 1.0f, 0.0f);
 
+    [Header("Explosion VFX")]
+    [Tooltip("지뢰가 터질 때 생성할 폭발 VFX 프리팹입니다.")]
+    [SerializeField] private GameObject m_explosionVfxPrefab;
+
+    [Tooltip("폭발 피해 중심을 기준으로 VFX 위치를 보정할 로컬 오프셋입니다. 기본값은 피해 판정을 위해 올린 높이 1m를 다시 내립니다.")]
+    [SerializeField] private Vector3 m_explosionVfxOffset = Vector3.down;
+
+    [Tooltip("생성한 폭발 VFX를 제거하기까지의 시간(초)입니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_explosionVfxLifetime = 4.0f;
+
     [Header("Mine Debug")]
     [Tooltip("켜면 Scene View에 폭발 피해 범위를 그립니다. 표시 전용이라 동작에는 영향이 없습니다.")]
     [SerializeField] private bool m_drawExplosionGizmo = true;
@@ -60,6 +71,7 @@ public sealed class MineTrap : ExplosiveTrap
     protected override int ApplyExplosionDamage()
     {
         PlayExplosionSound();
+        SpawnExplosionVfx();
 
         return ExplosionDamage.DetonateCylinder(
             ExplosionCenter,
@@ -69,6 +81,47 @@ public sealed class MineTrap : ExplosiveTrap
             m_damageTargetLayers,
             gameObject,
             m_showExplosionRangeVisual);
+    }
+
+    /// <summary>폭발 피해 중심의 수평 위치를 따라 일회성 폭발 VFX를 생성합니다.</summary>
+    private void SpawnExplosionVfx()
+    {
+        if (m_explosionVfxPrefab == null)
+        {
+            return;
+        }
+
+        Vector3 position = ExplosionCenter + transform.rotation * m_explosionVfxOffset;
+        GameObject explosionVfx = Instantiate(
+            m_explosionVfxPrefab,
+            position,
+            Quaternion.identity);
+
+        // 원본 프리팹에 루프 설정이 남아 있어도 지뢰 폭발은 한 번만 재생되게 합니다.
+        // Play On Awake에만 맡기면 생성 프레임의 활성화 순서에 따라 첫 재생이 누락될 수 있으므로,
+        // 모든 설정을 바꾼 뒤 루트에서 한 번 명시적으로 다시 재생합니다.
+        ParticleSystem[] particleSystems = explosionVfx.GetComponentsInChildren<ParticleSystem>(true);
+        foreach (ParticleSystem particleSystem in particleSystems)
+        {
+            ParticleSystem.MainModule main = particleSystem.main;
+            main.loop = false;
+        }
+
+        explosionVfx.SetActive(true);
+        ParticleSystem rootParticleSystem = explosionVfx.GetComponent<ParticleSystem>();
+        if (rootParticleSystem != null)
+        {
+            rootParticleSystem.Play(true);
+        }
+        else
+        {
+            foreach (ParticleSystem particleSystem in particleSystems)
+            {
+                particleSystem.Play(false);
+            }
+        }
+
+        Destroy(explosionVfx, m_explosionVfxLifetime);
     }
 
     /// <summary>지뢰가 실제로 폭발하는 프레임에 3D 폭발음을 한 번 재생합니다.</summary>

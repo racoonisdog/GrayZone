@@ -235,6 +235,9 @@ public class GameDataManager : MonoBehaviour
     public void SetDefenseClearCount(int count)
     {
         defenseClearCount = Mathf.Max(0, count);
+        shelterCheckpointId = defenseClearCount > 0
+            ? ShelterCheckpointId.AfterDefense1Clear
+            : ShelterCheckpointId.BeforeDefense1;
     }
 
     /// <summary>중복 인스턴스를 거부하고 모든 평탄 정본 필드를 정규화합니다.</summary>
@@ -639,6 +642,8 @@ public class GameDataManager : MonoBehaviour
             && string.Equals(stageId, pendingDefenseVictoryStageId, StringComparison.Ordinal))
         {
             defenseClearCount = DefenseClearCount + 1;
+            if (DefenseClearCount > 0)
+                shelterCheckpointId = ShelterCheckpointId.AfterDefense1Clear;
         }
 
         pendingDefenseVictoryStageId = string.Empty;

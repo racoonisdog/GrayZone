@@ -25,6 +25,10 @@ public sealed class WeaponFeedbackSO : ScriptableObject, IFeedbackData
     [FeedbackReference(FeedbackReferenceKind.Audio, "재장전 사운드 목록")]
     [SerializeField] private AudioClip[] m_reloadSounds = Array.Empty<AudioClip>();
 
+    [Tooltip("발사 후 펌프·노리쇠 같은 작동음을 후보 중 하나 선택해 재생할 사운드 목록입니다.")]
+    [FeedbackReference(FeedbackReferenceKind.Audio, "작동 사운드 목록")]
+    [SerializeField] private AudioClip[] m_cycleSounds = Array.Empty<AudioClip>();
+
     [Header("FMOD Audio (지정 시 AudioClip보다 우선)")]
     [Tooltip("사격할 때 재생할 FMOD 이벤트입니다. 비어 있으면 위 AudioClip 목록을 사용합니다.")]
     [SerializeField] private FMODUnity.EventReference m_shotEvent;
@@ -34,6 +38,9 @@ public sealed class WeaponFeedbackSO : ScriptableObject, IFeedbackData
 
     [Tooltip("재장전할 때 재생할 FMOD 이벤트입니다. 비어 있으면 위 AudioClip 목록을 사용합니다.")]
     [SerializeField] private FMODUnity.EventReference m_reloadEvent;
+
+    [Tooltip("발사 후 펌프·노리쇠가 작동할 때 재생할 FMOD 이벤트입니다. 비어 있으면 위 AudioClip 목록을 사용합니다.")]
+    [SerializeField] private FMODUnity.EventReference m_cycleEvent;
 
     [Header("Effects")]
     [Tooltip("총구 소켓에서 재생하거나 생성할 머즐 이펙트 프리팹입니다.")]
@@ -77,6 +84,9 @@ public sealed class WeaponFeedbackSO : ScriptableObject, IFeedbackData
     /// <summary>재장전 사운드 후보 목록입니다.</summary>
     public IReadOnlyList<AudioClip> ReloadSounds => m_reloadSounds;
 
+    /// <summary>발사 후 펌프·노리쇠 작동 사운드 후보 목록입니다.</summary>
+    public IReadOnlyList<AudioClip> CycleSounds => m_cycleSounds;
+
     /// <summary>사격할 때 우선 재생할 FMOD 이벤트입니다.</summary>
     public FMODUnity.EventReference ShotEvent => m_shotEvent;
 
@@ -85,6 +95,9 @@ public sealed class WeaponFeedbackSO : ScriptableObject, IFeedbackData
 
     /// <summary>재장전할 때 우선 재생할 FMOD 이벤트입니다.</summary>
     public FMODUnity.EventReference ReloadEvent => m_reloadEvent;
+
+    /// <summary>발사 후 펌프·노리쇠 작동 때 우선 재생할 FMOD 이벤트입니다.</summary>
+    public FMODUnity.EventReference CycleEvent => m_cycleEvent;
 
     /// <summary>머즐 이펙트 프리팹입니다.</summary>
     public GameObject MuzzleEffectPrefab => m_muzzleEffectPrefab;

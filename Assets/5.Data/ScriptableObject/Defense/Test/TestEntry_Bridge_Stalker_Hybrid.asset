@@ -25,5 +25,5 @@ MonoBehaviour:
   m_runSpeedMin: 12
   m_runSpeedMax: 12
   m_alwaysRun: 1
-  m_defenseDisposition: 3
+  m_defenseDisposition: 2
   m_prioritizeWaypointsForPlayerFirst: 1
