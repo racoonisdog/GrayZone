@@ -36,7 +36,14 @@ public abstract class CharacterSkill : MonoBehaviour
     public float CooldownRemaining => Mathf.Max(0.0f, m_nextReadyTime - Time.time);
 
     /// <summary>스킬을 지금 사용할 수 있는지 여부입니다.</summary>
-    public bool IsReady => CooldownRemaining <= 0.0f && !IsActive;
+    /// <remarks>
+    /// 기본은 효과가 끝나야 다시 쓸 수 있습니다. <see cref="CanRecastWhileActive"/>가 true인 스킬은 효과가 남아 있어도
+    /// 쿨타임만 끝나면 다시 쓸 수 있습니다.
+    /// </remarks>
+    public bool IsReady => CooldownRemaining <= 0.0f && (!IsActive || CanRecastWhileActive);
+
+    /// <summary>효과가 남아 있어도 쿨타임이 끝나면 다시 시전할 수 있는지 여부입니다. 기본은 false입니다.</summary>
+    protected virtual bool CanRecastWhileActive => false;
 
     /// <summary>남은 쿨다운을 없앱니다. 디버그 트레이너 전용입니다. 진행 중인 지속 효과는 건드리지 않습니다.</summary>
     public void DebugResetCooldown()
@@ -55,6 +62,22 @@ public abstract class CharacterSkill : MonoBehaviour
 
     /// <summary>스킬 HUD의 쿨타임 아래 줄에 표시할 상태 문구입니다. 표시할 내용이 없으면 null입니다.</summary>
     public virtual string HudDetailText => null;
+
+    /// <summary>
+    /// 초상화 옆 상태 줄(버프)에 띄울 스킬 고유 상태를 돌려줍니다. 띄울 상태가 없으면 false입니다.
+    /// </summary>
+    /// <param name="fill01">칸 뒤 게이지 채움(0~1)입니다.</param>
+    /// <param name="count">칸 우측 하단에 작게 쓸 숫자입니다. 음수면 숫자를 숨깁니다.</param>
+    /// <remarks>
+    /// 상태효과(<see cref="StatusEffectContainer"/>)로 표현되지 않는 스킬 상태(예: 청솔 특수탄 장전)를 상태 줄에 보여 주기 위한 것입니다.
+    /// 스킬 쿨타임과는 별개이며, 쿨타임은 스킬 아이콘이 따로 표시합니다.
+    /// </remarks>
+    public virtual bool TryGetHudStatus(out float fill01, out int count)
+    {
+        fill01 = 0.0f;
+        count = -1;
+        return false;
+    }
 
     /// <summary>활성·종료 등 큰 상태가 변경될 때 발생합니다. 매 프레임 남은 시간은 속성으로 조회합니다.</summary>
     public event Action<CharacterSkill> OnStateChanged;

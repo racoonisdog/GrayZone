@@ -33,12 +33,41 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     public override string Description => "강력한 화염 탄환을 장전합니다.";
     public override bool IsActive => m_isLoadingSpecialAmmo || m_specialRoundsRemaining > 0;
 
+    /// <summary>특수탄이 남아 있어도 쿨타임이 끝나면 다시 시전해 탄창을 새로 채울 수 있습니다. 장전 중에는 다시 시전하지 않습니다.</summary>
+    protected override bool CanRecastWhileActive => !m_isLoadingSpecialAmmo;
+
     /// <summary>장전 중이거나 특수탄이 남아 있을 때만 상태를 보여줍니다. 평소에는 Figma처럼 쿨타임 한 줄만 둡니다.</summary>
     public override string HudDetailText => m_isLoadingSpecialAmmo
         ? "특수탄 장전 중"
         : m_specialRoundsRemaining > 0
             ? $"화염 탄환 {m_specialRoundsRemaining} / {SpecialRoundsCapacity}"
             : null;
+
+    /// <summary>
+    /// 특수탄을 장전 중이거나 남아 있는 동안 상태 줄에 띄웁니다. 게이지는 남은 특수탄 비율, 숫자는 남은 발수입니다.
+    /// </summary>
+    /// <remarks>장전 중에는 아직 발수가 정해지지 않아 게이지를 꽉 채우고 숫자는 숨깁니다.</remarks>
+    public override bool TryGetHudStatus(out float fill01, out int count)
+    {
+        if (m_isLoadingSpecialAmmo)
+        {
+            fill01 = 1.0f;
+            count = -1;
+            return true;
+        }
+
+        if (m_specialRoundsRemaining > 0)
+        {
+            int capacity = SpecialRoundsCapacity;
+            fill01 = capacity > 0 ? Mathf.Clamp01((float)m_specialRoundsRemaining / capacity) : 1.0f;
+            count = m_specialRoundsRemaining;
+            return true;
+        }
+
+        fill01 = 0.0f;
+        count = -1;
+        return false;
+    }
 
     public bool IsLoadingSpecialAmmo => m_isLoadingSpecialAmmo;
     public int SpecialRoundsRemaining => m_specialRoundsRemaining;
@@ -89,6 +118,8 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             return false;
         }
 
+        // 특수탄이 남아 있어도 다시 시전하면 탄창 전체를 특수탄으로 새로 채웁니다. 장전을 시작하지 못하면 남은 탄은 그대로 둡니다.
+        int previousRounds = m_specialRoundsRemaining;
         m_gun.CancelReload();
         m_specialRoundsRemaining = 0;
         m_isLoadingSpecialAmmo = true;
@@ -99,6 +130,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
         }
 
         m_isLoadingSpecialAmmo = false;
+        m_specialRoundsRemaining = previousRounds;
         return false;
     }
 

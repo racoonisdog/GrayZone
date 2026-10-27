@@ -283,6 +283,9 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     [Tooltip("켜면 조준 중에 포물선 궤적 선을 함께 그립니다. 끄면 폭발 범위와 착탄 지점 표시만 보입니다.")]
     [SerializeField] private bool m_showTrajectoryLine = false;
 
+    [Tooltip("선택한 투척물이 없을 때 투척을 누르면 조준선 위에 띄울 경고 문구입니다(AimWarningText). 비우면 띄우지 않습니다.")]
+    [SerializeField] private string m_outOfProjectileMessage = "투척물이 부족합니다!";
+
     [Tooltip("LineRenderer로 미리 보여 줄 포물선의 최대 누적 길이입니다. 실제 폭탄 이동은 제한하지 않습니다.")]
     [Min(0.1f)]
     [SerializeField] private float m_trajectoryPreviewDistance = 20.0f;
@@ -1484,7 +1487,14 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
-        return GetProjectileQuantity(selectedProjectile) > 0;
+        if (GetProjectileQuantity(selectedProjectile) <= 0)
+        {
+            // 투척 시도마다 조준선 위에 경고를 다시 띄웁니다. 경고 문구가 없는 씬에서는 아무 일도 없습니다.
+            AimWarningText.Show(m_outOfProjectileMessage);
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
