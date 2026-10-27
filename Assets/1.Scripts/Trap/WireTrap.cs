@@ -40,6 +40,9 @@ public class WireTrap : Trap
 
         /// <summary>들어올 때의 적 스폰 세대입니다. 풀로 돌아갔다 다시 나온 개체를 같은 적으로 보지 않기 위해 둡니다.</summary>
         public uint SpawnGeneration;
+
+        /// <summary>같은 적에 연결된 트리거 콜라이더들입니다. 모두 나가야 감속을 풉니다.</summary>
+        public HashSet<Collider> Colliders;
     }
 
     [Header("Wire Trap")]
@@ -117,11 +120,8 @@ public class WireTrap : Trap
             return;
         }
 
-        Bounds bounds = trigger.bounds;
-        Collider[] hits = Physics.OverlapBox(
-            bounds.center,
-            bounds.extents,
-            transform.rotation,
+        Collider[] hits = TrapOverlapQuery.FindOverlaps(
+            trigger,
             m_targetLayers,
             QueryTriggerInteraction.Ignore);
 
@@ -172,8 +172,20 @@ public class WireTrap : Trap
         }
 
         EnemyController enemy = other.GetComponentInParent<EnemyController>();
-        if (enemy == null || m_occupants.ContainsKey(enemy))
+        if (enemy == null)
         {
+            return;
+        }
+
+        if (m_occupants.TryGetValue(enemy, out Occupant existingOccupant))
+        {
+            if (existingOccupant.Colliders == null)
+            {
+                existingOccupant.Colliders = new HashSet<Collider>();
+                m_occupants[enemy] = existingOccupant;
+            }
+
+            existingOccupant.Colliders.Add(other);
             return;
         }
 
@@ -185,6 +197,7 @@ public class WireTrap : Trap
             Damageable = damageable,
             TickTimer = DamageInterval,
             SpawnGeneration = enemy.SpawnGeneration,
+            Colliders = new HashSet<Collider> { other },
         });
 
         UpdateActiveSound();
@@ -228,7 +241,19 @@ public class WireTrap : Trap
         }
 
         EnemyController enemy = other.GetComponentInParent<EnemyController>();
-        if (enemy != null)
+        if (enemy == null || !m_occupants.TryGetValue(enemy, out Occupant occupant))
+        {
+            return;
+        }
+
+        if (occupant.Colliders == null)
+        {
+            Release(enemy);
+            return;
+        }
+
+        occupant.Colliders.Remove(other);
+        if (occupant.Colliders.Count == 0)
         {
             Release(enemy);
         }

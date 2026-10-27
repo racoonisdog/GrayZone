@@ -174,11 +174,8 @@ public abstract class ExplosiveTrap : Trap, IChainDetonatable
             return;
         }
 
-        Bounds bounds = trigger.bounds;
-        Collider[] hits = Physics.OverlapBox(
-            bounds.center,
-            bounds.extents,
-            transform.rotation,
+        Collider[] hits = TrapOverlapQuery.FindOverlaps(
+            trigger,
             m_triggerLayers,
             QueryTriggerInteraction.Ignore);
 
