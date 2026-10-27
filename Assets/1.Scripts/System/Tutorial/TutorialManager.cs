@@ -41,6 +41,10 @@ public sealed class TutorialManager : MonoBehaviour
              "2회차부터는 튜토리얼 없이 Z 3초 유지로 바로 시작합니다. 회차 정보가 없으면(씬 단독 실행 등) 튜토리얼을 시작합니다.")]
     [SerializeField] private bool m_onlyFirstDefenseRound = true;
 
+    [Tooltip("켜면 튜토리얼이 떠 있는 동안 게임 시간을 멈추고(Time.timeScale 0) 분대 조작 입력을 막습니다. 조작키 안내 오버레이와 같은 방식입니다. " +
+             "페이지는 실제 시간으로 센 키 입력으로 넘깁니다. 이벤트를 기다리는 페이지(게임 진행이 필요한 페이지)가 있으면 끄세요.")]
+    [SerializeField] private bool m_pauseTimeWhileRunning;
+
     [Tooltip("튜토리얼 페이지 목록입니다. 위에서부터 0번, 1번… 순서로 진행합니다.")]
     [SerializeField] private List<TutorialPage> m_pages = new();
 
@@ -72,6 +76,9 @@ public sealed class TutorialManager : MonoBehaviour
     /// <summary>현재 페이지의 넘김 키를 유지한 시간(초)입니다.</summary>
     private float m_keyHoldTimer;
 
+    /// <summary>페이지에 들어온 뒤 넘김 키를 한 번 떼야 유지 시간을 세기 시작하는지 여부입니다. 처음부터 떼어 있으면 바로 풀립니다.</summary>
+    private bool m_keyNeedsRelease;
+
     private const float NoPress = -1.0f;
 
     /// <summary>InteractTap 판정용으로 상호작용을 누른 시각입니다. 누르지 않았으면 <see cref="NoPress"/>입니다.</summary>
@@ -82,6 +89,18 @@ public sealed class TutorialManager : MonoBehaviour
 
     /// <summary>상호작용 대상을 보고 있어 페이지의 상호작용 잠금을 대상에게 양보했는지 여부입니다.</summary>
     private bool m_interactYieldedToTarget;
+
+    /// <summary>이 매니저가 게임 시간을 멈추고 분대 입력을 막아 둔 상태인지 여부입니다.</summary>
+    private bool m_isHoldingPause;
+
+    /// <summary>튜토리얼이 끝나면 되돌릴 게임 시간 배율입니다.</summary>
+    private float m_resumeTimeScale = 1.0f;
+
+    /// <summary>튜토리얼 위에 열 수 있는 조작키 안내입니다. 열려 있는 동안에는 페이지를 넘기지 않습니다.</summary>
+    private KeyInfoOverlay m_keyInfoOverlay;
+
+    /// <summary>튜토리얼이 게임 시간을 멈춰 두고 있는지 여부입니다. 조작키 안내가 이 위에 열릴 때 확인합니다.</summary>
+    public bool IsPausingTime => m_isHoldingPause;
 
     /// <summary>씬에 있는 활성 튜토리얼 매니저입니다. 없으면 null입니다.</summary>
     public static TutorialManager Instance => s_instance;
@@ -194,6 +213,7 @@ public sealed class TutorialManager : MonoBehaviour
     {
         m_currentIndex = NoPage;
         ApplyInputState();
+        ReleasePause();
         ResolveView()?.Hide();
     }
 
@@ -242,6 +262,8 @@ public sealed class TutorialManager : MonoBehaviour
             PlayerInputController.SetInputLock(PlayerInputLock.None);
             InteractionController.SetTargetingSuppressed(false);
         }
+
+        ReleasePause();
     }
 
     private void OnDestroy()
@@ -296,12 +318,14 @@ public sealed class TutorialManager : MonoBehaviour
 
         // 트랩을 보고 있는지는 매 프레임 바뀌므로 잠금도 매 프레임 맞춥니다. 값이 같으면 아무것도 하지 않습니다.
         ApplyInputState();
+        HoldPause();
 
         ResolveView()?.SetGaugeProgress(ComputeGaugeProgress(m_pages[m_currentIndex]));
 
         // 조작키 안내나 일시정지 메뉴로 시간이 멈춘 동안에는 넘기지 않습니다.
         // 탭 판정은 실제 시간을 쓰기 때문에, 막지 않으면 안내를 보는 중에 누른 F로 페이지가 넘어갑니다.
-        if (Time.timeScale <= 0.0f)
+        // 튜토리얼이 스스로 멈춘 시간은 예외입니다. 그때는 위에 다른 안내가 열려 있을 때만 막습니다.
+        if (IsBlockedByOtherPause())
         {
             m_tapPressTime = NoPress;
             m_keyHoldTimer = 0.0f;
@@ -500,6 +524,13 @@ public sealed class TutorialManager : MonoBehaviour
         if (!control.isPressed)
         {
             m_keyHoldTimer = 0.0f;
+            m_keyNeedsRelease = false;
+            return false;
+        }
+
+        // 앞 페이지를 넘긴 누름이 이어지고 있으면 세지 않습니다. 떼지 않고 계속 누르면 여러 장이 한꺼번에 넘어가기 때문입니다.
+        if (m_keyNeedsRelease)
+        {
             return false;
         }
 
@@ -526,8 +557,86 @@ public sealed class TutorialManager : MonoBehaviour
     {
         m_currentIndex = NoPage;
         ApplyInputState();
+        ReleasePause();
         ResolveView()?.Hide();
         OnCompleted?.Invoke();
+    }
+
+    /// <summary>
+    /// 시간 정지 옵션이 켜져 있으면 튜토리얼이 떠 있는 동안 게임 시간을 0으로 두고 분대 조작 입력을 막습니다.
+    /// </summary>
+    /// <remarks>
+    /// 저장·복원 한 번이 아니라 매 프레임 확인합니다. 씬 시작 직후 로딩 화면처럼 자기가 저장해 둔 배율(1)로 시간을
+    /// 되돌리는 UI가 튜토리얼보다 늦게 닫힐 수 있어서입니다. 그때 다시 멈추면서 그 배율을 끝난 뒤 돌릴 값으로 기억합니다.
+    /// 분대 입력도 매 프레임 막습니다. 분대원이 튜토리얼보다 늦게 준비되면 처음 한 번 막은 것이 적용되지 않기 때문입니다.
+    /// </remarks>
+    private void HoldPause()
+    {
+        if (!m_pauseTimeWhileRunning || !IsRunning)
+        {
+            return;
+        }
+
+        if (Time.timeScale > 0.0f)
+        {
+            m_resumeTimeScale = Time.timeScale;
+            Time.timeScale = 0.0f;
+        }
+
+        m_isHoldingPause = true;
+        SetSquadGameplayInput(false);
+    }
+
+    /// <summary>튜토리얼이 멈춰 둔 게임 시간과 분대 입력을 되돌립니다. 멈춘 적이 없으면 아무것도 하지 않습니다.</summary>
+    private void ReleasePause()
+    {
+        if (!m_isHoldingPause)
+        {
+            return;
+        }
+
+        m_isHoldingPause = false;
+        if (Time.timeScale <= 0.0f)
+        {
+            Time.timeScale = m_resumeTimeScale > 0.0f ? m_resumeTimeScale : 1.0f;
+        }
+
+        SetSquadGameplayInput(true);
+    }
+
+    /// <summary>
+    /// 튜토리얼이 아닌 다른 이유로 시간이 멈춰 있어 페이지 입력을 세지 말아야 하는지 여부입니다.
+    /// </summary>
+    /// <remarks>튜토리얼이 스스로 멈춘 시간이어도 그 위에 조작키 안내가 열려 있으면 막습니다.</remarks>
+    private bool IsBlockedByOtherPause()
+    {
+        if (Time.timeScale > 0.0f)
+        {
+            return false;
+        }
+
+        if (!m_isHoldingPause)
+        {
+            return true;
+        }
+
+        if (m_keyInfoOverlay == null)
+        {
+            m_keyInfoOverlay = FindFirstObjectByType<KeyInfoOverlay>(FindObjectsInactive.Include);
+        }
+
+        return m_keyInfoOverlay != null && m_keyInfoOverlay.IsOpen;
+    }
+
+    private static void SetSquadGameplayInput(bool enabled)
+    {
+        SquadManager squadManager = SquadManager.Instance != null
+            ? SquadManager.Instance
+            : FindFirstObjectByType<SquadManager>(FindObjectsInactive.Include);
+        if (squadManager != null)
+        {
+            squadManager.ApplyInputModeToSquad(enabled);
+        }
     }
 
     /// <summary>
@@ -557,9 +666,11 @@ public sealed class TutorialManager : MonoBehaviour
         m_currentIndex = index;
         m_eventResolved = false;
         m_keyHoldTimer = 0.0f;
+        m_keyNeedsRelease = true;
         m_tapPressTime = NoPress;
 
         ApplyInputState();
+        HoldPause();
         ResolveView()?.Show(m_pages[index]);
         ResolveView()?.SetGaugeProgress(0.0f);
         OnPageChanged?.Invoke(index);

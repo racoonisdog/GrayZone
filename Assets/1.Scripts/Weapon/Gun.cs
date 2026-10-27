@@ -122,6 +122,9 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [BalanceField]
     [SerializeField] private ReloadMode m_reloadMode = ReloadMode.Magazine;
 
+    [Tooltip("켜면 한 발씩 장전(IndividualRounds) 도중 사격 버튼을 새로 누를 때 장전을 멈추고 바로 사격합니다. 이미 들어간 탄약은 유지하고, 탄창이 비어 있으면 멈추지 않습니다. 스킬 장전에는 적용하지 않습니다. 기본은 꺼짐이며 청솔 샷건에서 켭니다.")]
+    [SerializeField] private bool m_fireCancelsIndividualReload;
+
     [Tooltip("탄약이 최대치일 때도 재장전을 허용할지 여부입니다. 기본값은 false로, 풀 탄창에서는 재장전이 막히고 빈 장전 사운드만 재생됩니다. 디버그 용도로만 true로 켭니다.")]
     [SerializeField] private bool m_allowFullMagReload = false;
 
@@ -207,10 +210,15 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_hitscanRange = 100.0f;
 
-    [Tooltip("명중 시 대상을 밀어내는 넉백 충격량(N·s)입니다. 사망한 대상은 래그돌이 이 힘을 받습니다. 0이면 피격 대상이 정한 최소치만 적용됩니다.")]
+    [Tooltip("명중 시 살아 있는 대상을 밀어내는 넉백 충격량(N·s)입니다. 대상을 죽인 명중에는 사망 넉백이 대신 쓰입니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_knockbackImpulse = 0.0f;
+
+    [Tooltip("이 명중으로 대상이 죽었을 때 래그돌에 가하는 사망 넉백 충격량(N·s)입니다. 0이면 피격 대상이 정한 최소치만 적용됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_deathKnockbackImpulse = 0.0f;
 
     [Tooltip("명중 시 적의 경직력 누적에 더하는 저지력입니다. 피해·넉백과는 별개이며, 적의 경직 한계치에 닿으면 경직이 발동합니다. 경직이 없는 대상에게는 무시됩니다.")]
     [BalanceField]
@@ -645,6 +653,20 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>예비 탄약을 소모하지 않고 탄창 전체를 채우는 스킬 전용 재장전 중인지 여부입니다.</summary>
     public bool IsSkillReloading => m_isReloading && m_isSkillReloading;
 
+    /// <summary>
+    /// 지금 사격 입력으로 재장전을 멈출 수 있는지 여부입니다. 한 발씩 장전 중이고(스킬 장전 제외) 탄이 한 발 이상 들어 있으며
+    /// 발사 간격(<see cref="ShootDelay"/>)이 지나 바로 쏠 수 있을 때만 true입니다.
+    /// </summary>
+    /// <remarks>
+    /// 발사 간격을 조건에 넣는 이유: 장전 취소는 발사 간격을 줄이지 않으므로, 간격이 남은 상태에서 취소하면 장전만 끊기고 발사는 되지 않습니다.
+    /// </remarks>
+    public bool CanCancelReloadByFire => m_fireCancelsIndividualReload
+        && m_isReloading
+        && !m_isSkillReloading
+        && m_reloadMode == ReloadMode.IndividualRounds
+        && m_currentBullet > 0
+        && m_canShoot;
+
     /// <summary>현재 재장전 진행도(0~1)입니다. 재장전 중이 아니면 0입니다.</summary>
     public float ReloadProgress => !m_isReloading ? 0.0f
         : ActiveReloadDuration <= 0.0f ? 1.0f
@@ -655,8 +677,15 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </summary>
     /// <remarks>필수 참조를 갖추고, 재장전 중이 아니며, 탄약이 최대치 미만일 때만 <c>true</c>입니다. 풀 탄창 재장전 진입을 막는 데 사용합니다. <see cref="AllowFullMagReload"/>가 켜져 있으면 풀 탄창에서도 <c>true</c>입니다.</remarks>
     public bool CanReload => m_hasRequiredReferences && !m_isReloading
+        && !IsCyclingAction
         && (m_allowFullMagReload || m_currentBullet < m_maxBullet)
         && HasAmmoToReload;
+
+    /// <summary>
+    /// 샷건이 사격 뒤 펌프 동작 중인지 여부입니다. 펌프 시간은 사격 간격(<see cref="ShootDelay"/>)과 같습니다.
+    /// </summary>
+    /// <remarks>펌프가 끝나기 전에는 일반 재장전을 시작하지 않습니다(<see cref="CanReload"/>, <see cref="StartReload"/>).</remarks>
+    public bool IsCyclingAction => m_weaponType == WeaponType.Shotgun && !m_canShoot && !m_isReloading;
 
     /// <summary>재장전에 쓸 탄약이 남아 있는지 여부입니다.</summary>
     /// <remarks>
@@ -2226,6 +2255,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     public void StartReload()
     {
         if (m_isReloading
+            || IsCyclingAction
             || (!m_allowFullMagReload && m_currentBullet >= m_maxBullet)
             || !HasAmmoToReload)
         {
@@ -2544,7 +2574,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             {
                 LogTwoStageTrace($"4차 피해 적용 | 부위={target.Collider.name} 피해={damage}");
                 OnHitFeedback?.Invoke(feedback);
-                ApplyHitscanKnockback(target, shotInfo);
+                ApplyHitscanKnockback(target, shotInfo, feedback.Killed);
 
                 EnemyController enemy = target.Collider.GetComponentInParent<EnemyController>();
                 enemy?.PlayHitFeedback(target.Point, target.Normal, target.Collider.transform);
@@ -2578,7 +2608,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </remarks>
     /// <param name="hit">넉백을 받을 충돌입니다. 관통이면 대상마다 따로 부릅니다.</param>
     /// <param name="shotInfo">이번 사격의 발사 지점과 방향을 읽습니다.</param>
-    private void ApplyHitscanKnockback(in ShotPathHit hit, in HitscanShotInfo shotInfo)
+    /// <param name="killed">
+    /// 이 명중으로 대상이 죽었는지 여부입니다. true이면 <see cref="m_deathKnockbackImpulse"/>를 보냅니다.
+    /// 사망 처리에서 래그돌이 이미 켜졌으므로 대상은 이 값을 래그돌 충격으로 받습니다.
+    /// </param>
+    private void ApplyHitscanKnockback(in ShotPathHit hit, in HitscanShotInfo shotInfo, bool killed)
     {
         Collider hitCollider = hit.Collider;
         if (hitCollider == null)
@@ -2602,7 +2636,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         receiver.ApplyKnockback(
             direction,
             hit.Point,
-            m_knockbackImpulse,
+            killed ? m_deathKnockbackImpulse : m_knockbackImpulse,
             hit.Rigidbody);
     }
 

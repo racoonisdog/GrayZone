@@ -54,6 +54,12 @@ public sealed class StatusEffectDefinitionSO : ScriptableObject
     [Range(0.0f, 100.0f)]
     [SerializeField] private float m_playerDamageReductionPercent;
 
+    [Header("HUD")]
+    [Tooltip("초상화 옆 상태 줄에 표시할 아이콘입니다. 선택 항목이며, 비어 있으면 HUD에 표시하지 않습니다.")]
+    [SerializeField] private Sprite m_hudIcon;
+    [Tooltip("아이콘 뒤에 깔리는 지속 시간 게이지 이미지입니다(Image Filled / Radial 360으로 씁니다). 선택 항목이며, 비어 있으면 HUD 쪽 기본 게이지를 씁니다.")]
+    [SerializeField] private Sprite m_hudGauge;
+
     public string DisplayName => string.IsNullOrWhiteSpace(m_displayName) ? name : m_displayName;
     public StatusEffectCategory Category => m_category;
     public float Duration => Mathf.Max(0.01f, m_duration);
@@ -66,6 +72,15 @@ public sealed class StatusEffectDefinitionSO : ScriptableObject
     public float TickInterval => Mathf.Max(0.01f, m_tickInterval);
     public bool HasPeriodicDamage => PeriodicDamage > 0;
     public float PlayerDamageReductionPercent => Mathf.Clamp(m_playerDamageReductionPercent, 0.0f, 100.0f);
+
+    /// <summary>초상화 옆 상태 줄 아이콘입니다. null이면 HUD에 표시하지 않습니다.</summary>
+    public Sprite HudIcon => m_hudIcon;
+
+    /// <summary>지속 시간 게이지 이미지입니다. null이면 HUD 기본 게이지를 씁니다.</summary>
+    public Sprite HudGauge => m_hudGauge;
+
+    /// <summary>HUD에서 버프 줄(위)에 놓을지 여부입니다. 디버프와 상태이상은 아래 줄입니다.</summary>
+    public bool IsBeneficial => m_category == StatusEffectCategory.Buff;
 
     /// <summary>받는 쪽 진영에 맞춰 주기 피해를 보정합니다. 플레이어 진영이면 감소율을 적용합니다.</summary>
     /// <param name="damage">중첩까지 반영한 원래 피해입니다.</param>

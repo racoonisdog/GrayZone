@@ -129,7 +129,9 @@ public sealed class KeyInfoOverlay : MonoBehaviour
     /// </summary>
     public void Open()
     {
-        if (m_isOpen || (m_pauseTime && Time.timeScale <= 0.0f))
+        // 튜토리얼이 멈춘 시간은 예외입니다. 튜토리얼 1페이지가 "H를 눌러 확인"을 안내하므로 그 위에서 열려야 합니다.
+        // 닫을 때 저장한 0으로 되돌리므로 튜토리얼의 정지 상태와 겹쳐도 어긋나지 않습니다.
+        if (m_isOpen || (m_pauseTime && Time.timeScale <= 0.0f && !IsTutorialPausing()))
         {
             return;
         }
@@ -164,8 +166,20 @@ public sealed class KeyInfoOverlay : MonoBehaviour
         SetGameplayInputEnabled(true);
     }
 
+    private static bool IsTutorialPausing()
+    {
+        TutorialManager tutorial = TutorialManager.Instance;
+        return tutorial != null && tutorial.IsPausingTime;
+    }
+
     private void SetGameplayInputEnabled(bool enabled)
     {
+        // 튜토리얼이 분대 입력을 막아 둔 상태면 닫을 때 풀지 않습니다. 튜토리얼이 끝날 때 함께 풉니다.
+        if (enabled && IsTutorialPausing())
+        {
+            return;
+        }
+
         if (m_squadManager == null)
         {
             m_squadManager = SquadManager.Instance != null

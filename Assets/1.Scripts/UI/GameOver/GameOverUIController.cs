@@ -301,7 +301,7 @@ public class GameOverUIController : MonoBehaviour
         m_isLeaving = true;
         OnConfirmed?.Invoke(sceneName);
         RestoreTime();
-        SceneManager.LoadScene(sceneName);
+        SceneTransitionController.LoadScene(sceneName);
     }
 
     private void RestoreTime()

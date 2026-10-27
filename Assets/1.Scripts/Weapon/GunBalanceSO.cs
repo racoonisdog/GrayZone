@@ -58,9 +58,12 @@ public sealed class GunBalanceSO : ScriptableObject, IBalanceTableData
     [FormerlySerializedAs("m_hitscanRange")]
     [SerializeField] private float Gun_m_hitscanRange = 100f;
 
-    [Tooltip("명중 시 대상을 밀어내는 넉백 충격량(N·s)입니다. 사망한 대상은 래그돌이 이 힘을 받습니다. 0이면 피격 대상이 정한 최소치만 적용됩니다. (0 이상)")]
+    [Tooltip("명중 시 살아 있는 대상을 밀어내는 넉백 충격량(N·s)입니다. 대상을 죽인 명중에는 사망 넉백이 대신 쓰입니다. (0 이상)")]
     [FormerlySerializedAs("m_knockbackImpulse")]
     [SerializeField] private float Gun_m_knockbackImpulse = 0f;
+
+    [Tooltip("이 명중으로 대상이 죽었을 때 래그돌에 가하는 사망 넉백 충격량(N·s)입니다. 0이면 피격 대상이 정한 최소치만 적용됩니다. (0 이상)")]
+    [SerializeField] private float Gun_m_deathKnockbackImpulse = 0f;
 
     [Tooltip("힙파이어·서기 자세의 최소 방사각(도). (0 이상)")]
     [FormerlySerializedAs("m_hipfireMinSpread")]

@@ -155,7 +155,7 @@ public sealed class DefenseAttackPoint : MonoBehaviour
             return;
         }
 
-        int best = -1;
+        EnemyController closestWaiter = null;
         float bestDistance = float.PositiveInfinity;
         for (int i = m_waiters.Count - 1; i >= 0; i--)
         {
@@ -170,17 +170,17 @@ public sealed class DefenseAttackPoint : MonoBehaviour
             if (distance < bestDistance)
             {
                 bestDistance = distance;
-                best = i;
+                closestWaiter = waiter;
             }
         }
 
-        if (best < 0)
+        if (closestWaiter == null)
         {
             return;
         }
 
-        m_holders.Add(m_waiters[best]);
-        m_waiters.RemoveAt(best);
+        m_holders.Add(closestWaiter);
+        m_waiters.Remove(closestWaiter);
     }
 
     private void OnEnable()

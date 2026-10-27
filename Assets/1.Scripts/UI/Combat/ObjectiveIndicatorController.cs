@@ -41,6 +41,9 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_hideArrowDistance = 5.0f;
 
+    [Tooltip("끄면 목표가 화면 밖에 있어도 가장자리 방향 화살표를 띄우지 않습니다. 화면 안 마커와 월드 아이콘은 그대로 표시됩니다.")]
+    [SerializeField] private bool m_showOffscreenArrow = true;
+
     [Tooltip("목표를 가릴 수 있는 벽과 건물 Collider 레이어입니다.")]
     [SerializeField] private LayerMask m_occlusionMask;
 
@@ -141,8 +144,8 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
         bool wantsOnscreenMarker = isOnScreen && (!isWithinHideRange || isOccluded);
         bool showWorldView = isOnScreen && isWithinHideRange && !isOccluded;
         bool showOnscreenMarker = wantsOnscreenMarker && m_onscreenMarker != null;
-        bool showDirectionArrow = !isOnScreen
-            || (wantsOnscreenMarker && m_onscreenMarker == null);
+        bool showDirectionArrow = m_showOffscreenArrow
+            && (!isOnScreen || (wantsOnscreenMarker && m_onscreenMarker == null));
 
         if (m_manageWorldViewVisibility)
         {

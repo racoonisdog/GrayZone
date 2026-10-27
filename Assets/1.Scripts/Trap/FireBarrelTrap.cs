@@ -75,7 +75,7 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
 
     [Header("Chain Detonation")]
     [Tooltip("켜면 다른 폭발(수류탄, 지뢰 등)이나 화염(화염병, 용숨결 등)의 범위 안에 들었을 때 함께 터집니다. 청사진 상태에서는 반응하지 않습니다.")]
-    [SerializeField] private bool m_chainDetonationEnabled = true;
+    [SerializeField] private bool m_chainDetonationEnabled = false;
 
     [Tooltip("휘말린 뒤 실제로 터지기까지의 시간(초)입니다. 0이면 그 자리에서 터집니다. 조금 두면 연쇄가 차례로 터지는 것이 눈에 보입니다.")]
     [ShowIf(nameof(m_chainDetonationEnabled))]
