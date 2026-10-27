@@ -644372,6 +644372,7 @@ MonoBehaviour:
   m_worldCamera: {fileID: 961739752}
   m_distanceOrigin: {fileID: 1155638157}
   m_hideArrowDistance: 15
+  m_showOffscreenArrow: 1
   m_occlusionMask:
     serializedVersion: 2
     m_Bits: 3221618889
@@ -792814,6 +792815,9 @@ MonoBehaviour:
   m_lackColor: {r: 0.15216005, g: 1, b: 0, a: 1}
   m_upgradeButton: {fileID: 999497488}
   m_closeButton: {fileID: 0}
+  m_backButton: {fileID: 0}
+  m_medicalBackReference: {fileID: 0}
+  m_manufacturingBackReference: {fileID: 0}
   m_insufficientNotice: {fileID: 1991212675}
   m_maxLevelNotice: {fileID: 1386388379}
   m_uiManager: {fileID: 0}
@@ -1419942,6 +1419946,8 @@ MonoBehaviour:
   m_copyDataFromGameDataManagerOnAwake: 1
   m_PlayerMove: {fileID: 0}
   m_CameraLook: {fileID: 0}
+  m_PlayerRoot: {fileID: 0}
+  m_PlayerSpawnPoints: {fileID: 0}
   m_autoFindReferences: 1
 --- !u!4 &1819593658
 Transform:
