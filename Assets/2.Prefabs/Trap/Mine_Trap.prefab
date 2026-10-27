@@ -189,7 +189,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 2560
   m_showExplosionRangeVisual: 0
-  m_chainDetonationEnabled: 1
+  m_chainDetonationEnabled: 0
   m_chainFuseTime: 0.15
   m_alwaysShowExplosionRange: 0
   m_explosionRadius: 5

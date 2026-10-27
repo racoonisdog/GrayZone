@@ -235,11 +235,8 @@ public sealed class FireTrap : Trap
         IgniteExplosivesInRange(trigger);
         m_chainTimer = FireTickInterval;
 
-        Bounds bounds = trigger.bounds;
-        Collider[] hits = Physics.OverlapBox(
-            bounds.center,
-            bounds.extents,
-            transform.rotation,
+        Collider[] hits = TrapOverlapQuery.FindOverlaps(
+            trigger,
             m_targetLayers,
             QueryTriggerInteraction.Ignore);
 

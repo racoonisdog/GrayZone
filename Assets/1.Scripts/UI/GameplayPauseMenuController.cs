@@ -304,7 +304,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         RestoreGameplayState();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        SceneManager.LoadScene(m_titleSceneName);
+        SceneTransitionController.LoadScene(m_titleSceneName);
     }
 
     private void RestoreGameplayState()

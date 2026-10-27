@@ -5920,6 +5920,7 @@ MonoBehaviour:
   m_fireMode: 1
   m_reloadTime: 1.5
   m_reloadMode: 1
+  m_fireCancelsIndividualReload: 1
   m_allowFullMagReload: 0
   m_firePos: {fileID: 1796962771349208849}
   m_shellPos: {fileID: 3569076800804841391}
@@ -5975,7 +5976,7 @@ MonoBehaviour:
   m_spreadConcentration: 1
   m_shotNoiseLevel: 1
   m_shotNoiseRange: 40
-  m_recoilPitchKick: 0.6
+  m_recoilPitchKick: 3
   m_recoilYawKick: 0.2
   m_yawKickPattern: 0
   m_recoilRoll: 1

@@ -97,6 +97,55 @@ public sealed class StatusEffectContainer : MonoBehaviour
     public Color CurrentModelTintColor { get; private set; } = Color.white;
     public float CurrentModelTintStrength { get; private set; }
 
+    /// <summary>HUD가 읽는 적용 중인 효과 한 건의 사본입니다.</summary>
+    public readonly struct ActiveEffect
+    {
+        public ActiveEffect(StatusEffectDefinitionSO definition, float remaining, int stacks)
+        {
+            Definition = definition;
+            Remaining = remaining;
+            Stacks = stacks;
+        }
+
+        /// <summary>효과 정의입니다.</summary>
+        public StatusEffectDefinitionSO Definition { get; }
+
+        /// <summary>남은 시간(초)입니다.</summary>
+        public float Remaining { get; }
+
+        /// <summary>중첩 수입니다.</summary>
+        public int Stacks { get; }
+    }
+
+    /// <summary>
+    /// 적용 중인 효과를 처음 받은 순서대로 <paramref name="results"/>에 채웁니다. 목록은 먼저 비웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 같은 효과를 다시 받아 지속 시간만 갱신되면 순서는 바뀌지 않습니다(목록 위치를 유지하기 때문입니다).
+    /// 출처별로 따로 쌓이는 효과(<see cref="StatusEffectStackPolicy.IndependentBySource"/>)는 건마다 들어가므로,
+    /// 한 칸으로 보여 줄 쪽에서 정의 기준으로 합칩니다.
+    /// </remarks>
+    public void GetActiveEffects(List<ActiveEffect> results)
+    {
+        if (results == null)
+        {
+            return;
+        }
+
+        results.Clear();
+        float now = Time.time;
+        for (int i = 0; i < m_entries.Count; i++)
+        {
+            Entry entry = m_entries[i];
+            if (entry.Definition == null)
+            {
+                continue;
+            }
+
+            results.Add(new ActiveEffect(entry.Definition, Mathf.Max(0.0f, entry.ExpireTime - now), entry.Stacks));
+        }
+    }
+
     /// <summary>효과 추가·갱신·중첩·제거 시 UI가 목록을 다시 읽도록 알립니다.</summary>
     public event Action<StatusEffectContainer> OnChanged;
 

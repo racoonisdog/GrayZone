@@ -126,6 +126,12 @@ public sealed class TitleMenuActions : MonoBehaviour
     /// </remarks>
     private static void HandleSceneLoadedForSave(Scene scene, LoadSceneMode mode)
     {
+        // 중간에 거치는 로딩 씬은 건너뛰고, 목표 씬이 로드될 때 저장을 읽습니다.
+        if (scene.name == SceneTransitionController.LoadingSceneName)
+        {
+            return;
+        }
+
         SceneManager.sceneLoaded -= HandleSceneLoadedForSave;
         if (!s_loadSaveOnNextScene)
         {

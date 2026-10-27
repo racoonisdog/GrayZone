@@ -2,9 +2,10 @@
 // then swaps the matching scene objects in the open scene for those trap prefabs.
 //
 //   Tools > GrayZone > Traps > 1. Build FireBarrel & Spike Prefabs
-//   Tools > GrayZone > Traps > 2. Replace MetalBarrel & Thorn In Open Scene
+//   Tools > GrayZone > Traps > 2. Preview MetalBarrel & Thorn Replacement
+//   Tools > GrayZone > Traps > 3. Replace MetalBarrel & Thorn In Open Scene
 //
-// Step 2 only swaps scene-level instances of the plain MetalBarrel prefab (not MetalBarrel_d)
+// Step 3 only swaps scene-level instances of the plain MetalBarrel prefab (not MetalBarrel_d)
 // and of the Thorn_Trap2_2 model. Position, rotation, scale, parent, sibling order and active
 // state are kept. The scene is left dirty (one Undo group) and never saved here.
 
@@ -59,9 +60,29 @@ namespace GrayZone.LevelTools
             Debug.Log($"[TrapPrefabConversionTool] FireBarrel_Trap: {(barrel ? "built" : "FAILED")}, Spike_Trap: {(spike ? "rebuilt" : "FAILED")}");
         }
 
-        [MenuItem("Tools/GrayZone/Traps/2. Replace MetalBarrel & Thorn In Open Scene")]
+        [MenuItem("Tools/GrayZone/Traps/2. Preview MetalBarrel & Thorn Replacement")]
+        public static void PreviewReplacementInOpenScene()
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            List<GameObject> barrelTargets = FindReplacementTargets(scene, MetalBarrelPath);
+            List<GameObject> spikeTargets = FindReplacementTargets(scene, ThornModelPath);
+            if (barrelTargets == null || spikeTargets == null)
+            {
+                return;
+            }
+
+            Debug.Log($"[TrapPrefabConversionTool] Preview '{scene.path}': MetalBarrel -> FireBarrel_Trap {barrelTargets.Count}, Thorn_Trap2_2 -> Spike_Trap {spikeTargets.Count}. No scene objects changed.");
+        }
+
+        [MenuItem("Tools/GrayZone/Traps/3. Replace MetalBarrel & Thorn In Open Scene")]
         public static void ReplaceInOpenScene()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogWarning("[TrapPrefabConversionTool] Open-scene replacement is disabled while entering or running Play Mode.");
+                return;
+            }
+
             Scene scene = SceneManager.GetActiveScene();
             GameObject fireBarrel = AssetDatabase.LoadAssetAtPath<GameObject>(FireBarrelPrefabPath);
             GameObject spike = AssetDatabase.LoadAssetAtPath<GameObject>(SpikePrefabPath);
@@ -71,12 +92,25 @@ namespace GrayZone.LevelTools
                 return;
             }
 
+            List<GameObject> barrelTargets = FindReplacementTargets(scene, MetalBarrelPath);
+            List<GameObject> spikeTargets = FindReplacementTargets(scene, ThornModelPath);
+            if (barrelTargets == null || spikeTargets == null)
+            {
+                return;
+            }
+
+            if (barrelTargets.Count == 0 && spikeTargets.Count == 0)
+            {
+                Debug.Log($"[TrapPrefabConversionTool] '{scene.path}': no eligible MetalBarrel or Thorn_Trap2_2 instances found. Scene was not changed.");
+                return;
+            }
+
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Replace MetalBarrel & Thorn With Traps");
 
-            int barrels = ReplaceInstances(scene, MetalBarrelPath, fireBarrel, "FireBarrel_Trap");
-            int spikes = ReplaceInstances(scene, ThornModelPath, spike, "Spike_Trap");
+            int barrels = ReplaceInstances(barrelTargets, fireBarrel, "FireBarrel_Trap");
+            int spikes = ReplaceInstances(spikeTargets, spike, "Spike_Trap");
 
             Undo.CollapseUndoOperations(group);
             EditorSceneManager.MarkSceneDirty(scene);
@@ -223,13 +257,13 @@ namespace GrayZone.LevelTools
             trigger.size = new Vector3(bounds.size.x * TriggerPadding, height, bounds.size.z * TriggerPadding);
         }
 
-        static int ReplaceInstances(Scene scene, string sourceAssetPath, GameObject newPrefab, string newBaseName)
+        static List<GameObject> FindReplacementTargets(Scene scene, string sourceAssetPath)
         {
             GameObject sourceAsset = AssetDatabase.LoadAssetAtPath<GameObject>(sourceAssetPath);
             if (sourceAsset == null)
             {
                 Debug.LogError($"[TrapPrefabConversionTool] Missing source: {sourceAssetPath}");
-                return 0;
+                return null;
             }
 
             List<GameObject> targets = new List<GameObject>();
@@ -239,12 +273,19 @@ namespace GrayZone.LevelTools
                 {
                     GameObject go = t.gameObject;
                     if (PrefabUtility.IsAnyPrefabInstanceRoot(go)
-                        && PrefabUtility.GetCorrespondingObjectFromSource(go) == sourceAsset)
+                        && PrefabUtility.GetCorrespondingObjectFromSource(go) == sourceAsset
+                        && go.GetComponentInParent<Trap>() == null)
                     {
                         targets.Add(go);
                     }
                 }
             }
+
+            return targets;
+        }
+
+        static int ReplaceInstances(List<GameObject> targets, GameObject newPrefab, string newBaseName)
+        {
 
             // "MetalBarrel (3)" -> "FireBarrel_Trap (3)"; keeps the Unity duplicate suffix.
             Regex suffix = new Regex(@"(\s\(\d+\))$");
@@ -252,7 +293,7 @@ namespace GrayZone.LevelTools
             foreach (GameObject old in targets)
             {
                 Transform oldTransform = old.transform;
-                GameObject created = (GameObject)PrefabUtility.InstantiatePrefab(newPrefab, scene);
+                GameObject created = (GameObject)PrefabUtility.InstantiatePrefab(newPrefab, old.scene);
                 Undo.RegisterCreatedObjectUndo(created, "Create trap");
 
                 Transform t = created.transform;

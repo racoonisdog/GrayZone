@@ -237,26 +237,38 @@ public sealed class SquadProfileHud : MonoBehaviour
     /// </remarks>
     private static PlayerbleUnitData FindMember(IReadOnlyList<PlayerbleUnitData> sources, ProfileSlot slot)
     {
+        return FindMember(sources, slot.characterId, slot.fallbackSquadIndex);
+    }
+
+    /// <summary>
+    /// 캐릭터 ID로 분대 데이터를 찾고, 없으면 ID가 비어 있는 데이터 가운데 지정 분대 인덱스를 씁니다.
+    /// </summary>
+    /// <remarks>캐릭터별 고정 칸을 쓰는 다른 HUD(<see cref="SquadAbilityHud"/>)도 같은 규칙으로 칸 주인을 정합니다.</remarks>
+    internal static PlayerbleUnitData FindMember(
+        IReadOnlyList<PlayerbleUnitData> sources,
+        PlayerbleCharacterId characterId,
+        int fallbackSquadIndex)
+    {
         if (sources == null)
         {
             return null;
         }
 
-        if (slot.characterId != PlayerbleCharacterId.Unknown)
+        if (characterId != PlayerbleCharacterId.Unknown)
         {
             for (int i = 0; i < sources.Count; i++)
             {
                 PlayerbleUnitData data = sources[i];
-                if (data != null && data.CharacterId == slot.characterId)
+                if (data != null && data.CharacterId == characterId)
                 {
                     return data;
                 }
             }
         }
 
-        if (slot.fallbackSquadIndex >= 0 && slot.fallbackSquadIndex < sources.Count)
+        if (fallbackSquadIndex >= 0 && fallbackSquadIndex < sources.Count)
         {
-            PlayerbleUnitData data = sources[slot.fallbackSquadIndex];
+            PlayerbleUnitData data = sources[fallbackSquadIndex];
             if (data != null && data.CharacterId == PlayerbleCharacterId.Unknown)
             {
                 return data;

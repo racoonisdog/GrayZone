@@ -272,7 +272,7 @@ public class BootLogo : MonoBehaviour
             }
             else
             {
-                SceneManager.LoadScene(nextSceneName);
+                SceneTransitionController.LoadScene(nextSceneName);
             }
         }
     }
