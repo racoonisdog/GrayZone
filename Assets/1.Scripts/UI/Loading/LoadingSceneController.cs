@@ -26,6 +26,21 @@ public sealed class LoadingSceneController : MonoBehaviour
     [Tooltip("진행도를 퍼센트로 보여 줄 텍스트입니다. 비워 두면 표시하지 않습니다.")]
     [SerializeField] private TMP_Text m_progressText;
 
+    [Tooltip("문구와 점 애니메이션을 보여 줄 텍스트입니다. 비워 두면 표시하지 않습니다.")]
+    [SerializeField] private TMP_Text m_loadingLabel;
+
+    [Header("Loading Text")]
+    [Tooltip("점 앞에 표시할 문구입니다.")]
+    [SerializeField] private string m_baseLabel = "구역 이동 중";
+
+    [Tooltip("점을 0개부터 이 개수까지 늘린 뒤 다시 0개로 돌아갑니다.")]
+    [Min(1)]
+    [SerializeField] private int m_maxDotCount = 3;
+
+    [Tooltip("점이 하나 늘어나는 간격(초)입니다. 한 바퀴(점 0개~최대)는 이 값 × (최대 개수 + 1)초입니다.")]
+    [Min(0.05f)]
+    [SerializeField] private float m_dotStepInterval = 1.0f;
+
     [Header("Fallback")]
     [Tooltip("목표 씬 없이 로딩 씬이 열렸을 때(에디터에서 직접 실행 등) 불러올 씬입니다.")]
     [SerializeField] private string m_fallbackSceneName = "TitleScene";
@@ -41,6 +56,48 @@ public sealed class LoadingSceneController : MonoBehaviour
 
     private float m_displayedProgress;
     private int m_lastPercent = -1;
+    private float m_dotElapsed;
+    private int m_dotCount = -1;
+
+    private void Update()
+    {
+        // 첫 프레임은 씬 전환으로 길어지므로 그 시간은 세지 않고 점 0개부터 시작합니다.
+        if (m_dotCount < 0)
+        {
+            m_dotCount = 0;
+            m_dotElapsed = 0.0f;
+            ApplyLabel();
+            return;
+        }
+
+        // 씬을 읽느라 프레임이 길어져도 한 번에 한 칸씩만 넘어갑니다.
+        m_dotElapsed += Mathf.Min(Time.unscaledDeltaTime, m_dotStepInterval);
+        if (m_dotElapsed < m_dotStepInterval)
+        {
+            return;
+        }
+
+        m_dotElapsed -= m_dotStepInterval;
+        m_dotCount = (m_dotCount + 1) % (m_maxDotCount + 1);
+        ApplyLabel();
+    }
+
+    /// <summary>
+    /// 문구 뒤에 점을 붙입니다. 아직 나오지 않은 점은 투명하게 두어 문구 위치가 점 개수에 따라 흔들리지 않게 합니다.
+    /// </summary>
+    private void ApplyLabel()
+    {
+        if (m_loadingLabel == null)
+        {
+            return;
+        }
+
+        string shown = new string('.', m_dotCount);
+        string hidden = new string('.', m_maxDotCount - m_dotCount);
+        m_loadingLabel.text = hidden.Length > 0
+            ? $"{m_baseLabel}{shown}<alpha=#00>{hidden}"
+            : m_baseLabel + shown;
+    }
 
     private IEnumerator Start()
     {
