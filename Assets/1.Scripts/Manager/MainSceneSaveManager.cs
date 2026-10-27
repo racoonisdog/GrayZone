@@ -80,7 +80,7 @@ public class MainSceneSaveManager : MonoBehaviour
     {
         if (StartNewGame())
         {
-            SceneManager.LoadScene(ShelterSceneName);
+            SceneTransitionController.LoadScene(ShelterSceneName);
         }
     }
 
