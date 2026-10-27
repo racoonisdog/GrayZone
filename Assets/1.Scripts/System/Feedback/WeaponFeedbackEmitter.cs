@@ -56,6 +56,10 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     [FeedbackField]
     [SerializeField] private AudioClip[] m_reloadSounds = System.Array.Empty<AudioClip>();
 
+    [Tooltip("발사 후 펌프·노리쇠 같은 작동음을 후보 중 하나 선택해 재생할 사운드 목록입니다.")]
+    [FeedbackField]
+    [SerializeField] private AudioClip[] m_cycleSounds = System.Array.Empty<AudioClip>();
+
     [Tooltip("사격할 때 재생할 FMOD 이벤트입니다. 지정하면 AudioClip 목록보다 우선합니다.")]
     [FeedbackField]
     [SerializeField] private FMODUnity.EventReference m_shotEvent;
@@ -67,6 +71,10 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     [Tooltip("재장전할 때 재생할 FMOD 이벤트입니다. 지정하면 AudioClip 목록보다 우선합니다.")]
     [FeedbackField]
     [SerializeField] private FMODUnity.EventReference m_reloadEvent;
+
+    [Tooltip("발사 후 펌프·노리쇠가 작동할 때 재생할 FMOD 이벤트입니다. 지정하면 AudioClip 목록보다 우선합니다.")]
+    [FeedbackField]
+    [SerializeField] private FMODUnity.EventReference m_cycleEvent;
 
     [Tooltip("총구 소켓에서 재생하거나 생성할 머즐 이펙트 프리팹입니다.")]
     [FeedbackField]
@@ -109,6 +117,7 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     private int m_lastShotIndex = -1;
     private int m_lastDryFireIndex = -1;
     private int m_lastReloadIndex = -1;
+    private int m_lastCycleIndex = -1;
     private bool m_loggedMissingFmodEvent;
     private PersonalEffectPool m_personalEffectPool;
 
@@ -136,9 +145,11 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
         HasEvent(m_shotEvent)
         || HasEvent(m_dryFireEvent)
         || HasEvent(m_reloadEvent)
+        || HasEvent(m_cycleEvent)
         || HasAny(m_shotSounds)
         || HasAny(m_dryFireSounds)
         || HasAny(m_reloadSounds)
+        || HasAny(m_cycleSounds)
         || m_muzzleEffectPrefab != null
         || m_tracerEffectPrefab != null
         || m_impactEffectPrefab != null
@@ -316,6 +327,12 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     public void PlayReload()
     {
         PlayLocal(m_reloadEvent, m_reloadSounds, ref m_lastReloadIndex);
+    }
+
+    /// <summary>발사 후 펌프·노리쇠 같은 기계 작동음을 출력합니다.</summary>
+    public void PlayCycle()
+    {
+        PlayLocal(m_cycleEvent, m_cycleSounds, ref m_lastCycleIndex);
     }
 
     /// <summary>FMOD 이벤트 참조가 실제 이벤트를 가리키는지 확인합니다.</summary>

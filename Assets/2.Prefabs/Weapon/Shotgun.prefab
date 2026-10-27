@@ -5893,7 +5893,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SOBinder
   m_sharedBalance: {fileID: 0}
-  m_sharedFeedback: {fileID: 11400000, guid: 9edf4caf82efa9145971cfbae61b5ebe, type: 2}
+  m_sharedFeedback: {fileID: 11400000, guid: 4d74132b17eb49ce8bd62b708b601b37, type: 2}
   m_includeChildren: 1
   m_logResult: 0
 --- !u!114 &4693724506572384012
@@ -6029,6 +6029,7 @@ MonoBehaviour:
   m_shotSounds: []
   m_dryFireSounds: []
   m_reloadSounds: []
+  m_cycleSounds: []
   m_shotEvent:
     Guid:
       Data1: 0
@@ -6050,6 +6051,13 @@ MonoBehaviour:
       Data3: 0
       Data4: 0
     Path: 
+  m_cycleEvent:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path:
   m_muzzleEffectPrefab: {fileID: 0}
   m_muzzleEffectLifetime: 2
   m_tracerEffectPrefab: {fileID: 0}

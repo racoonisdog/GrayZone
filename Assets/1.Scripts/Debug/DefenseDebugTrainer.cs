@@ -244,6 +244,31 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
 
         GUILayout.Label($"함정 {traps.Length}개 (설치됨 {built})");
 
+        StorageFacility storage = ShelterSceneDataManager.Instance?.Storage;
+        if (storage == null)
+        {
+            GUILayout.Label("함정 재료: 확인 불가 (ShelterSceneDataManager 없음)");
+        }
+        else
+        {
+            GUILayout.Label($"함정 재료: {storage.GetResourceAmount(ResourceIds.TrapMaterial)}");
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("함정 재료 100으로 설정"))
+            {
+                storage.SetResourceAmount(ResourceIds.TrapMaterial, 100);
+                m_defenseActionResult = "함정 재료를 100으로 설정했습니다.";
+            }
+
+            if (GUILayout.Button("함정 재료 +100"))
+            {
+                m_defenseActionResult = storage.TryAddResource(ResourceIds.TrapMaterial, 100)
+                    ? $"함정 재료를 100 추가했습니다. 현재 {storage.GetResourceAmount(ResourceIds.TrapMaterial)}개입니다."
+                    : "함정 재료를 추가하지 못했습니다.";
+            }
+            GUILayout.EndHorizontal();
+        }
+
         // 가격 값은 그대로 두고 차감만 건너뜁니다. 끄면 원래 가격으로 바로 돌아옵니다.
         Trap.DebugFreeBuild = GUILayout.Toggle(Trap.DebugFreeBuild, " 트랩 전체 무료 (자원 차감 없이 설치)");
 

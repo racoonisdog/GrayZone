@@ -22,8 +22,8 @@ MonoBehaviour:
   m_maxCapacity: 40
   m_walkSpeedMin: 3.2
   m_walkSpeedMax: 3.2
-  m_runSpeedMin: 4.5
-  m_runSpeedMax: 7
+  m_runSpeedMin: 5.5
+  m_runSpeedMax: 6.5
   m_alwaysRun: 0
-  m_defenseDisposition: 3
+  m_defenseDisposition: 2
   m_prioritizeWaypointsForPlayerFirst: 1

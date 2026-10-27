@@ -20,10 +20,10 @@ MonoBehaviour:
   m_productionIntervalMax: 7
   m_initialSpawnDelay: 5
   m_maxCapacity: 20
-  m_walkSpeedMin: 3.2
-  m_walkSpeedMax: 3.2
-  m_runSpeedMin: 6.5
-  m_runSpeedMax: 8
+  m_walkSpeedMin: 2.8
+  m_walkSpeedMax: 2.8
+  m_runSpeedMin: 4.5
+  m_runSpeedMax: 5.5
   m_alwaysRun: 1
   m_defenseDisposition: 2
   m_prioritizeWaypointsForPlayerFirst: 1

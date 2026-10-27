@@ -43,7 +43,7 @@ MonoBehaviour:
   m_combatSearchRadius: 6
   m_hitStunDuration: 3
   m_hitStunCooldown: 0.2
-  m_staggerThreshold: 0.9
+  m_staggerThreshold: 1.4
   m_staggerDecayPerSecond: 0
   m_attackRange: 1.8
   m_attackStartAngle: 70

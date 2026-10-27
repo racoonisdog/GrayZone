@@ -495,6 +495,10 @@ PrefabInstance:
       propertyPath: m_Avatar
       value: 
       objectReference: {fileID: 9000000, guid: d67c9ceaf01706540a3b22d424c567e4, type: 3}
+    - target: {fileID: 1181764748249198491, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      propertyPath: m_Controller
+      value:
+      objectReference: {fileID: 22100000, guid: 14c93d6386c94640bd285e8c9b9db55e, type: 2}
     - target: {fileID: 1625581596183615561, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_IsActive
       value: 1
@@ -829,6 +833,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6513434160296299151}
+    - targetCorrespondingSourceObject: {fileID: 4000974284593887393, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6123456789012345678}
   m_SourcePrefab: {fileID: 100100000, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
 --- !u!114 &7071615895689084780 stripped
 MonoBehaviour:
@@ -930,6 +937,27 @@ MonoBehaviour:
   m_ditherStartDistance: 1.8
   m_ditherBlendInDuration: 0.1
   m_ditherBlendOutDuration: 0.15
+--- !u!114 &6123456789012345678
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7407144591281844666}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9d78c1ba61d4bd1ac5d18604e65e563, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::ChungSolShotgunAnimationDriver
+  m_sourceClipDuration: 1.1
+  m_enterBlendDuration: 0.02
+  m_exitBlendDuration: 0.04
+  m_cycleSoundNormalizedTime: 0.2
+  m_leftHandIk: {fileID: 0}
+  m_ikFadeOutStart: 0.38
+  m_ikReleasedStart: 0.45
+  m_ikRestoreStart: 0.72
+  m_ikRestoreEnd: 0.85
 --- !u!4 &8042323803606219392 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4526457136588419995, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}

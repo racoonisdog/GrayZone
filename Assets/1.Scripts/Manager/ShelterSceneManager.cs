@@ -25,6 +25,8 @@ public class ShelterSceneManager : MonoBehaviour
     [Header("Player Control")]
     [SerializeField] private PlayerMove m_PlayerMove;
     [SerializeField] private CameraLook m_CameraLook;
+    [SerializeField] private Transform m_PlayerRoot;
+    [SerializeField] private ShelterPlayerSpawnPoints m_PlayerSpawnPoints;
     [SerializeField] private bool m_autoFindReferences = true;
 
     /// <summary>셸터 씬의 작업 데이터 매니저 참조</summary>
@@ -59,6 +61,8 @@ public class ShelterSceneManager : MonoBehaviour
 
         if (m_copyDataFromGameDataManagerOnAwake)
             CopyShelterDataFromGameDataManager();
+
+        ApplyCheckpointSpawn();
     }
 
     private void OnEnable()
@@ -125,6 +129,34 @@ public class ShelterSceneManager : MonoBehaviour
             m_CameraLook.SetLookLocked(locked);
     }
 
+    /// <summary>저장된 셸터 체크포인트에 맞춰 플레이어 시작 위치와 방향을 적용합니다.</summary>
+    private void ApplyCheckpointSpawn()
+    {
+        GameDataManager gameData = GameDataManager.Instance;
+        if (gameData == null || m_PlayerRoot == null || m_PlayerSpawnPoints == null)
+            return;
+
+        ShelterCheckpointId checkpointId = gameData.ShelterCheckpointId;
+        if (checkpointId == ShelterCheckpointId.BeforeDefense1 && gameData.DefenseClearCount > 0)
+            checkpointId = ShelterCheckpointId.AfterDefense1Clear;
+
+        if (!m_PlayerSpawnPoints.TryGetSpawnPoint(checkpointId, out Transform spawnPoint))
+        {
+            Debug.LogWarning($"[ShelterSceneManager] Player spawn point is missing: {checkpointId}", this);
+            return;
+        }
+
+        CharacterController characterController = m_PlayerRoot.GetComponent<CharacterController>();
+        bool restoreController = characterController != null && characterController.enabled;
+        if (restoreController)
+            characterController.enabled = false;
+
+        m_PlayerRoot.SetPositionAndRotation(spawnPoint.position, spawnPoint.rotation);
+
+        if (restoreController)
+            characterController.enabled = true;
+    }
+
     private void CacheSceneReferences()
     {
         if (m_ShelterSceneDataManager == null)
@@ -135,6 +167,12 @@ public class ShelterSceneManager : MonoBehaviour
 
         if (m_PlayerMove == null)
             m_PlayerMove = FindFirstObjectByType<PlayerMove>();
+
+        if (m_PlayerRoot == null && m_PlayerMove != null)
+            m_PlayerRoot = m_PlayerMove.transform;
+
+        if (m_PlayerSpawnPoints == null)
+            m_PlayerSpawnPoints = FindFirstObjectByType<ShelterPlayerSpawnPoints>();
 
         if (m_CameraLook == null)
             m_CameraLook = FindFirstObjectByType<CameraLook>();
