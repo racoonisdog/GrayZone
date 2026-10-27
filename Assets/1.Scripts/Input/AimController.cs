@@ -584,6 +584,12 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     private readonly System.Collections.Generic.List<Gun.HitscanShotInfo> m_firedPelletBuffer = new(8);
     private bool m_wasShootPressed;
 
+    /// <summary>장전 취소용으로 지난 프레임에 사격 버튼이 눌려 있었는지 여부입니다. 새로 누른 순간을 가리기 위해 둡니다.</summary>
+    private bool m_reloadCancelShootWasHeld;
+
+    /// <summary>샷건 펌프 중에 재장전을 눌러, 펌프가 끝나면 장전을 시작하도록 예약했는지 여부입니다.</summary>
+    private bool m_reloadQueuedAfterPump;
+
     /// <summary>
     [Tooltip("전투 자세 진입/이탈 시 상체 레이어와 IK 리그 weight가 오르내리는 데 걸리는 시간입니다. 0이면 즉시 바뀝니다.")]
     [Clamp(Min = 0)]
@@ -1752,6 +1758,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         // 상체를 따로 쓰는 행동(투척 등)이 들어오면 재장전을 접고 그쪽을 먼저 보냅니다.
         CancelReloadForUpperBodyAction();
 
+        // 한 발씩 장전하는 총(청솔 샷건)은 사격 버튼을 새로 누르면 장전을 멈추고 아래 사격 분기로 이어집니다.
+        CancelReloadForShot();
+
         if (HandleReloadInput())
         {
             return;
@@ -1884,11 +1893,22 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <returns>재장전 입력을 처리했으면 true입니다.</returns>
     private bool HandleReloadInput()
     {
-        if (!m_input.Reload)
+        if (!m_input.Reload && !m_reloadQueuedAfterPump)
         {
             return false;
         }
 
+        // 샷건 펌프 중에 누른 재장전은 예약해 두고, 펌프가 끝나는 프레임에 이 분기를 지나 장전을 시작합니다.
+        // 그대로 소비하면 "풀 탄창" 경로로 빠져 빈 장전 소리만 나고 장전이 되지 않습니다. 입력 값 대신 예약을 두는 이유는
+        // 펌프보다 짧게 누르고 떼면 입력 값이 꺼져 버리기 때문입니다.
+        if (m_weaponController != null && m_weaponController.IsCyclingAction && !m_controller.IsReload)
+        {
+            m_reloadQueuedAfterPump = true;
+            m_input.ReloadInput(false);
+            return false;
+        }
+
+        m_reloadQueuedAfterPump = false;
         m_input.ReloadInput(false);
 
         if (m_controller.IsReload)
@@ -3146,6 +3166,33 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             m_weaponController.CancelReload();
         }
 
+        FinishReloadVisualState(false);
+    }
+
+    /// <summary>
+    /// 한 발씩 장전 중에 사격 버튼을 새로 누르면 장전을 멈춥니다. 총이 허용할 때만 동작합니다(<see cref="Gun.CanCancelReloadByFire"/>).
+    /// </summary>
+    /// <remarks>
+    /// 누르고 있던 입력이 아니라 새로 누른 순간만 봅니다. 빈 탄창에서 버튼을 누른 채로 있으면 자동 재장전이 걸리는데,
+    /// 그대로 세면 첫 탄이 들어가자마자 장전이 끊겨 한 발 쏘고 다시 장전하는 일이 반복되기 때문입니다.
+    /// 이미 들어간 탄약은 무기 쪽 취소 규칙대로 유지됩니다.
+    /// </remarks>
+    private void CancelReloadForShot()
+    {
+        bool shootHeld = m_input != null && m_input.Shoot;
+        bool shootPressed = shootHeld && !m_reloadCancelShootWasHeld;
+        m_reloadCancelShootWasHeld = shootHeld;
+
+        if (!shootPressed
+            || m_controller == null
+            || !m_controller.IsReload
+            || m_weaponController == null
+            || !m_weaponController.CanCancelReloadByFire)
+        {
+            return;
+        }
+
+        m_weaponController.CancelReload();
         FinishReloadVisualState(false);
     }
 

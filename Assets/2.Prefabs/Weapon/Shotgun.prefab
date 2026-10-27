@@ -5920,6 +5920,7 @@ MonoBehaviour:
   m_fireMode: 1
   m_reloadTime: 1.5
   m_reloadMode: 1
+  m_fireCancelsIndividualReload: 1
   m_allowFullMagReload: 0
   m_firePos: {fileID: 1796962771349208849}
   m_shellPos: {fileID: 3569076800804841391}
