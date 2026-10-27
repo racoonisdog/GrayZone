@@ -37,6 +37,10 @@ public sealed class ChungSolShotgunAnimationDriver : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_exitBlendDuration = 0.04f;
 
+    [Tooltip("클립 정규화 시간 기준 펌프 작동음을 시작하는 지점입니다. 원본 음원의 짧은 선행 구간을 고려해 IK 해제보다 조금 먼저 재생합니다.")]
+    [Range(0.0f, 1.0f)]
+    [SerializeField] private float m_cycleSoundNormalizedTime = 0.20f;
+
     [Header("Left Hand Pump IK")]
     [Tooltip("펌프 구간에만 해제할 왼손 Two Bone IK입니다. 비어 있으면 이름으로 자동 탐색합니다.")]
     [SerializeField] private TwoBoneIKConstraint m_leftHandIk;
@@ -67,6 +71,7 @@ public sealed class ChungSolShotgunAnimationDriver : MonoBehaviour
     private float m_returnStartTime;
     private bool m_cycleActive;
     private bool m_returningToIdle;
+    private bool m_cycleSoundPlayed;
 
     private void Awake()
     {
@@ -98,6 +103,7 @@ public sealed class ChungSolShotgunAnimationDriver : MonoBehaviour
         m_sourceClipDuration = Mathf.Max(0.01f, m_sourceClipDuration);
         m_enterBlendDuration = Mathf.Max(0.0f, m_enterBlendDuration);
         m_exitBlendDuration = Mathf.Max(0.0f, m_exitBlendDuration);
+        m_cycleSoundNormalizedTime = Mathf.Clamp01(m_cycleSoundNormalizedTime);
 
         m_ikReleasedStart = Mathf.Max(m_ikFadeOutStart, m_ikReleasedStart);
         m_ikRestoreStart = Mathf.Max(m_ikReleasedStart, m_ikRestoreStart);
@@ -124,6 +130,12 @@ public sealed class ChungSolShotgunAnimationDriver : MonoBehaviour
             float normalizedTime = Mathf.Clamp01((Time.time - m_cycleStartTime) / m_cycleDuration);
             ApplyRecoilLayerWeight(1.0f);
             ApplyLeftHandIk(normalizedTime);
+
+            if (!m_cycleSoundPlayed && normalizedTime >= m_cycleSoundNormalizedTime)
+            {
+                m_cycleSoundPlayed = true;
+                m_boundGun.PlayCycleFeedback();
+            }
 
             if (normalizedTime >= 1.0f)
             {
@@ -201,6 +213,7 @@ public sealed class ChungSolShotgunAnimationDriver : MonoBehaviour
         m_cycleStartTime = Time.time;
         m_cycleActive = true;
         m_returningToIdle = false;
+        m_cycleSoundPlayed = false;
 
         m_animator.SetFloat(ShootSpeedHash, m_sourceClipDuration / m_cycleDuration);
         m_animator.CrossFadeInFixedTime(stateHash, m_enterBlendDuration, RecoilLayerIndex, 0.0f);
@@ -242,6 +255,7 @@ public sealed class ChungSolShotgunAnimationDriver : MonoBehaviour
     {
         m_cycleActive = false;
         m_returningToIdle = false;
+        m_cycleSoundPlayed = false;
 
         if (m_animator != null && m_animator.layerCount > RecoilLayerIndex)
         {

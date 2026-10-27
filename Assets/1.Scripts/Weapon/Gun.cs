@@ -2881,6 +2881,17 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         m_audioSource.PlayOneShot(m_emptyReloadClip);
     }
 
+    /// <summary>발사 후 펌프·노리쇠 같은 무기 작동음을 재생합니다.</summary>
+    /// <remarks>총기 동작 애니메이션이 실제 타이밍을 결정하므로 애니메이션 드라이버에서 호출합니다.</remarks>
+    public void PlayCycleFeedback()
+    {
+        WeaponFeedbackEmitter emitter = ResolveFeedbackEmitter();
+        if (emitter != null)
+        {
+            emitter.PlayCycle();
+        }
+    }
+
     /// <summary>사격 입력을 누르고 있어도 드라이 사운드가 프레임마다 중첩되지 않도록 짧은 간격을 둡니다.</summary>
     private void PlayDryFireWithCooldown()
     {

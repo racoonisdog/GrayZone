@@ -13,15 +13,20 @@ MonoBehaviour:
   m_Name: TestStage_Shelter_Day2
   m_EditorClassIdentifier: Assembly-CSharp::DefenseStageSO
   m_totalWaveCount: 3
-  m_maxActiveEnemies: 50
+  m_maxActiveEnemies: 75
   m_routes:
   - m_routeId: Bridge
     m_waves:
-    - {fileID: 11400000, guid: 5ede617973b5495aab7268459a1e6180, type: 2}
-    - {fileID: 11400000, guid: ee58c8accab9452283f5a04132540282, type: 2}
-    - {fileID: 11400000, guid: d36aaba6173d43dfab6c4620eff4e1b6, type: 2}
+    - {fileID: 11400000, guid: ee708852d77fca605d15d7843bf520f9, type: 2}
+    - {fileID: 11400000, guid: 3ba63bff1322c5ab9734a104d72e7998, type: 2}
+    - {fileID: 11400000, guid: 66b4dc469f0bb4742e6bcfc27c574eb1, type: 2}
+  - m_routeId: BridgeNear
+    m_waves:
+    - {fileID: 11400000, guid: ce9074d4904c62fb5a651493d525fa0c, type: 2}
+    - {fileID: 11400000, guid: 21148ea440999f3358532ec5a579a0bd, type: 2}
+    - {fileID: 11400000, guid: a4d22966de0c00ad04edaac3ef6c1c0a, type: 2}
   - m_routeId: Tunnel
     m_waves:
-    - {fileID: 11400000, guid: 2d65593dc0f741d6a2c82975d7833495, type: 2}
-    - {fileID: 11400000, guid: f362e24ac8fe4c81a6cb110ca488a651, type: 2}
-    - {fileID: 11400000, guid: 31a79a0772984a0aaa8b7ccdc4fc27d7, type: 2}
+    - {fileID: 11400000, guid: 46cd9353857af52f60c5a078e45cb0e6, type: 2}
+    - {fileID: 11400000, guid: f4bb77bc48b20f0a7ea7e8d807b215c4, type: 2}
+    - {fileID: 11400000, guid: cd4369c4df053dc144d844613ef3c13e, type: 2}

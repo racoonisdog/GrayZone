@@ -29,6 +29,12 @@ public class FacilityUpgradeUI : MonoBehaviour
     [Header("Buttons / Notice")]
     [SerializeField] private Button m_upgradeButton;
     [SerializeField] private Button m_closeButton;
+    [Tooltip("시설 UI의 돌아가기 표시와 같은 위치에서 업그레이드 창을 닫는 투명 버튼입니다.")]
+    [SerializeField] private Button m_backButton;
+    [Tooltip("의료실 화면에 보이는 돌아가기 버튼의 실제 영역입니다.")]
+    [SerializeField] private RectTransform m_medicalBackReference;
+    [Tooltip("제조실 화면에 보이는 돌아가기 버튼의 실제 영역입니다.")]
+    [SerializeField] private RectTransform m_manufacturingBackReference;
     [SerializeField] private GameObject m_insufficientNotice; // 자원 부족 알림
     [SerializeField] private GameObject m_maxLevelNotice;      // 최대 레벨 알림
 
@@ -47,6 +53,18 @@ public class FacilityUpgradeUI : MonoBehaviour
             m_upgradeButton.onClick.AddListener(OnUpgradeClicked);
         if (m_closeButton != null)
             m_closeButton.onClick.AddListener(Close);
+        if (m_backButton != null)
+            m_backButton.onClick.AddListener(Close);
+    }
+
+    private void OnDestroy()
+    {
+        if (m_upgradeButton != null)
+            m_upgradeButton.onClick.RemoveListener(OnUpgradeClicked);
+        if (m_closeButton != null)
+            m_closeButton.onClick.RemoveListener(Close);
+        if (m_backButton != null)
+            m_backButton.onClick.RemoveListener(Close);
     }
 
     /// <summary>지정한 시설의 업그레이드 창을 연다(여는 쪽이 자기 FacilityId 전달).</summary>
@@ -54,6 +72,7 @@ public class FacilityUpgradeUI : MonoBehaviour
     {
         m_facilityId = facilityId;
         gameObject.SetActive(true);
+        AlignBackButtonToVisibleFacility();
         Refresh();
     }
 
@@ -130,6 +149,49 @@ public class FacilityUpgradeUI : MonoBehaviour
 
         if (FacilityManager.Instance != null && FacilityManager.Instance.TryUpgrade(m_facilityId))
             Refresh(); // 성공 → 새 레벨 기준으로 다시 그림 (슬롯/건물은 매니저 이벤트로 자동 갱신)
+    }
+
+    /// <summary>
+    /// 실행 해상도와 각 시설 UI의 부모 스케일을 반영해 투명 돌아가기 버튼을 실제 표시 영역에 맞춥니다.
+    /// </summary>
+    private void AlignBackButtonToVisibleFacility()
+    {
+        RectTransform hitRect = m_backButton != null ? m_backButton.transform as RectTransform : null;
+        RectTransform parentRect = hitRect != null ? hitRect.parent as RectTransform : null;
+        RectTransform referenceRect = GetVisibleBackReference();
+        if (hitRect == null || parentRect == null || referenceRect == null)
+            return;
+
+        Canvas.ForceUpdateCanvases();
+        Vector3[] corners = new Vector3[4];
+        referenceRect.GetWorldCorners(corners);
+        Vector3 localBottomLeft = parentRect.InverseTransformPoint(corners[0]);
+        Vector3 localTopRight = parentRect.InverseTransformPoint(corners[2]);
+
+        hitRect.anchorMin = Vector2.zero;
+        hitRect.anchorMax = Vector2.zero;
+        hitRect.pivot = Vector2.zero;
+        hitRect.anchoredPosition = new Vector2(
+            localBottomLeft.x - parentRect.rect.xMin,
+            localBottomLeft.y - parentRect.rect.yMin);
+        hitRect.sizeDelta = new Vector2(
+            localTopRight.x - localBottomLeft.x,
+            localTopRight.y - localBottomLeft.y);
+        hitRect.localRotation = Quaternion.identity;
+        hitRect.localScale = Vector3.one;
+        hitRect.SetAsLastSibling();
+    }
+
+    private RectTransform GetVisibleBackReference()
+    {
+        if (m_medicalBackReference != null && m_medicalBackReference.gameObject.activeInHierarchy)
+            return m_medicalBackReference;
+        if (m_manufacturingBackReference != null && m_manufacturingBackReference.gameObject.activeInHierarchy)
+            return m_manufacturingBackReference;
+
+        return m_medicalBackReference != null
+            ? m_medicalBackReference
+            : m_manufacturingBackReference;
     }
 
     private static void ClearChildren(Transform root)

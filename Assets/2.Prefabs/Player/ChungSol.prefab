@@ -952,6 +952,7 @@ MonoBehaviour:
   m_sourceClipDuration: 1.1
   m_enterBlendDuration: 0.02
   m_exitBlendDuration: 0.04
+  m_cycleSoundNormalizedTime: 0.2
   m_leftHandIk: {fileID: 0}
   m_ikFadeOutStart: 0.38
   m_ikReleasedStart: 0.45
