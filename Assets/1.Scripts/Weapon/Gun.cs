@@ -210,10 +210,15 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_hitscanRange = 100.0f;
 
-    [Tooltip("명중 시 대상을 밀어내는 넉백 충격량(N·s)입니다. 사망한 대상은 래그돌이 이 힘을 받습니다. 0이면 피격 대상이 정한 최소치만 적용됩니다.")]
+    [Tooltip("명중 시 살아 있는 대상을 밀어내는 넉백 충격량(N·s)입니다. 대상을 죽인 명중에는 사망 넉백이 대신 쓰입니다.")]
     [BalanceField]
     [Clamp(Min = 0)]
     [SerializeField] private float m_knockbackImpulse = 0.0f;
+
+    [Tooltip("이 명중으로 대상이 죽었을 때 래그돌에 가하는 사망 넉백 충격량(N·s)입니다. 0이면 피격 대상이 정한 최소치만 적용됩니다.")]
+    [BalanceField]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_deathKnockbackImpulse = 0.0f;
 
     [Tooltip("명중 시 적의 경직력 누적에 더하는 저지력입니다. 피해·넉백과는 별개이며, 적의 경직 한계치에 닿으면 경직이 발동합니다. 경직이 없는 대상에게는 무시됩니다.")]
     [BalanceField]
@@ -2569,7 +2574,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             {
                 LogTwoStageTrace($"4차 피해 적용 | 부위={target.Collider.name} 피해={damage}");
                 OnHitFeedback?.Invoke(feedback);
-                ApplyHitscanKnockback(target, shotInfo);
+                ApplyHitscanKnockback(target, shotInfo, feedback.Killed);
 
                 EnemyController enemy = target.Collider.GetComponentInParent<EnemyController>();
                 enemy?.PlayHitFeedback(target.Point, target.Normal, target.Collider.transform);
@@ -2603,7 +2608,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// </remarks>
     /// <param name="hit">넉백을 받을 충돌입니다. 관통이면 대상마다 따로 부릅니다.</param>
     /// <param name="shotInfo">이번 사격의 발사 지점과 방향을 읽습니다.</param>
-    private void ApplyHitscanKnockback(in ShotPathHit hit, in HitscanShotInfo shotInfo)
+    /// <param name="killed">
+    /// 이 명중으로 대상이 죽었는지 여부입니다. true이면 <see cref="m_deathKnockbackImpulse"/>를 보냅니다.
+    /// 사망 처리에서 래그돌이 이미 켜졌으므로 대상은 이 값을 래그돌 충격으로 받습니다.
+    /// </param>
+    private void ApplyHitscanKnockback(in ShotPathHit hit, in HitscanShotInfo shotInfo, bool killed)
     {
         Collider hitCollider = hit.Collider;
         if (hitCollider == null)
@@ -2627,7 +2636,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
         receiver.ApplyKnockback(
             direction,
             hit.Point,
-            m_knockbackImpulse,
+            killed ? m_deathKnockbackImpulse : m_knockbackImpulse,
             hit.Rigidbody);
     }
 
