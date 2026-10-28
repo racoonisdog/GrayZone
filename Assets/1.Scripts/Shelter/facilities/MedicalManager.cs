@@ -24,7 +24,12 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     [Header("Level Visuals")]
     [SerializeField] private FacilityLevelVisuals levelVisuals;
 
+    [Header("Upgrade Table")]
+    [Tooltip("MedicalUpgradeLevel 시트로 만든 레벨별 비용·효과 표입니다. 연결하면 아래 비용 배열과 고정 최대 레벨 대신 이 표를 씁니다.")]
+    [SerializeField] private FacilityUpgradeTableSO m_upgradeTable;
+
     [Header("Upgrade Cost (레벨 i → i+1, 시설이 자기 비용을 소유)")]
+    [Tooltip("업그레이드 표가 없거나 해당 레벨 행이 없을 때만 쓰는 대체 비용입니다.")]
     [SerializeField] private UpgradeCostTier[] upgradeCosts; // 길이 = 최대 업그레이드 횟수(MaxLevelIndex)
 
     [Header("Recovery")]
@@ -86,8 +91,11 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     /// <summary>의료 시설 업그레이드 레벨</summary>
     public int UpgradeLevel => CurrentLevel;
 
-    /// <summary>의료 시설의 최대 업그레이드 레벨</summary>
-    public int MaxUpgradeLevel => MaxLevelIndex;
+    /// <summary>의료 시설의 최대 업그레이드 레벨(0부터). 업그레이드 표가 있으면 표의 최대 레벨을 씁니다.</summary>
+    public int MaxUpgradeLevel =>
+        m_upgradeTable != null && m_upgradeTable.TryGetMaxLevel(out int tableMaxLevel)
+            ? tableMaxLevel - 1
+            : MaxLevelIndex;
 
     // 레벨은 FacilityManager(진실원천)에서 읽는다 — MedicalManager는 캐시하지 않는다.
     private int CurrentLevel =>
@@ -245,8 +253,12 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
     /// </summary>
     /// <param name="currentLevel">비용을 조회할 현재 업그레이드 레벨</param>
     /// <returns>해당 레벨의 업그레이드 비용 묶음 범위 밖이면 무료 묶음</returns>
+    /// <remarks>업그레이드 표가 있으면 다음 목표 레벨 행(<c>currentLevel + 2</c>)의 비용을 씁니다.</remarks>
     public CostBundle GetUpgradeCost(int currentLevel)
     {
+        if (m_upgradeTable != null && m_upgradeTable.TryGetCost(currentLevel + 2, out CostBundle tableCost))
+            return tableCost;
+
         if (upgradeCosts == null || currentLevel < 0 || currentLevel >= upgradeCosts.Length)
             return new CostBundle();
 
@@ -838,6 +850,19 @@ public class MedicalManager : MonoBehaviour, IFacilityUpgradeable, IFuelShortage
         3 => 2,
         _ => 1
     };
+
+    /// <summary>
+    /// 다음 업그레이드의 효과 문구를 업그레이드 표에서 찾습니다(표시 전용).
+    /// </summary>
+    /// <param name="currentLevel">기준이 되는 현재 업그레이드 레벨(0부터)</param>
+    /// <returns>다음 목표 레벨 행의 Effect. 표가 없거나 최대 레벨이면 빈 문자열</returns>
+    public string GetUpgradeEffectText(int currentLevel)
+    {
+        return m_upgradeTable != null
+            && m_upgradeTable.TryGetLevel(currentLevel + 2, out FacilityUpgradeTableSO.LevelEntry entry)
+            ? entry.Effect
+            : string.Empty;
+    }
 
     // 다음 레벨이 제공하는 기능 표시 줄들. 값이 바뀌는 항목만 노출(shown=actual — 슬롯 함수에서 파생).
     public System.Collections.Generic.IReadOnlyList<FacilityFeatureLine> GetUpgradeFeatureLines(int currentLevel)

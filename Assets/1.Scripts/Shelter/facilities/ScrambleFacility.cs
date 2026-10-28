@@ -29,6 +29,10 @@ public sealed class ScrambleFacility : MonoBehaviour
         ResourceIds.TrapMaterial)]
     [SerializeField] private string m_upgradeResourceId = ResourceIds.UpgradeMaterial;
 
+    [Header("Upgrade Table")]
+    [Tooltip("레벨별 비용과 Info 문구 표입니다. 연결하면 아래 단일 비용·최대 레벨 대신 이 표를 씁니다. 해당 타입 배열이 비어 있으면 아래 값을 씁니다.")]
+    [SerializeField] private ScrambleUpgradeTableSO m_upgradeTable;
+
     [Header("Upgrade Cost Per Level")]
     [Min(0)][SerializeField] private int m_trapUpgradeCost = 1;
     [Min(0)][SerializeField] private int m_spikeUpgradeCost = 1;
@@ -217,8 +221,16 @@ public sealed class ScrambleFacility : MonoBehaviour
         };
     }
 
+    /// <summary>다음 레벨로 올리는 비용입니다. 표가 있으면 다음 레벨 칸의 비용을 씁니다.</summary>
     public int GetUpgradeCost(ScrambleUpgradeType upgradeType)
     {
+        if (m_upgradeTable != null
+            && m_upgradeTable.TryGetLevel(
+                upgradeType,
+                GetUpgradeLevel(upgradeType) + 1,
+                out ScrambleUpgradeTableSO.LevelEntry entry))
+            return entry.Cost;
+
         return upgradeType switch
         {
             ScrambleUpgradeType.Trap => TrapUpgradeCost,
@@ -232,6 +244,9 @@ public sealed class ScrambleFacility : MonoBehaviour
 
     public int GetMaxUpgradeLevel(ScrambleUpgradeType upgradeType)
     {
+        if (m_upgradeTable != null && m_upgradeTable.TryGetMaxLevel(upgradeType, out int tableMaxLevel))
+            return tableMaxLevel;
+
         return upgradeType switch
         {
             ScrambleUpgradeType.Trap => m_trapMaxLevel,
@@ -241,6 +256,15 @@ public sealed class ScrambleFacility : MonoBehaviour
             ScrambleUpgradeType.Wire => m_wireMaxLevel,
             _ => 0
         };
+    }
+
+    /// <summary>지정한 레벨(1부터)의 Info 문구를 표에서 찾습니다. 표가 없거나 칸이 없으면 빈 문자열입니다.</summary>
+    public string GetUpgradeLevelInfo(ScrambleUpgradeType upgradeType, int level)
+    {
+        return m_upgradeTable != null
+            && m_upgradeTable.TryGetLevel(upgradeType, level, out ScrambleUpgradeTableSO.LevelEntry entry)
+            ? entry.Info
+            : string.Empty;
     }
 
     private static void SetUpgradeLevel(

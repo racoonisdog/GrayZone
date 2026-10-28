@@ -23,14 +23,9 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         [SerializeField] private TMP_Text m_arrowText;
         [SerializeField] private TMP_Text m_nextLevelText;
 
-        [Tooltip("카드를 선택했을 때 Detail 영역에 표시할 설명입니다.")]
-        [TextArea]
-        [SerializeField] private string m_description;
-
         public RectTransform CardRoot => m_cardRoot;
         public Sprite Icon => m_iconImage != null ? m_iconImage.sprite : null;
         public string DisplayName => m_nameText != null ? m_nameText.text : string.Empty;
-        public string Description => m_description ?? string.Empty;
 
         public void Cache(Transform uiRoot, string rowPath)
         {
@@ -104,12 +99,16 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     [SerializeField] private RectTransform m_selectFrame;
     [SerializeField] private TMP_Text m_detailNameText;
     [SerializeField] private Image m_detailIconImage;
-    [SerializeField] private TMP_Text m_detailDescriptionText;
     [SerializeField] private TMP_Text m_detailCurrentLevelText;
     [SerializeField] private TMP_Text m_detailArrowText;
     [SerializeField] private TMP_Text m_detailNextLevelText;
+    [Tooltip("선택한 업그레이드의 ScrambleUpgradeLevel 시트 Info 문구를 표시합니다. 다음 레벨 효과를, 최대 레벨이면 현재 레벨 효과를 보여 줍니다.")]
+    [FormerlySerializedAs("m_detailDescriptionText")]
+    [SerializeField] private TMP_Text m_detailLevelInfoText;
     [SerializeField] private GameObject m_costRoot;
     [SerializeField] private TMP_Text m_costText;
+    [Tooltip("업그레이드 비용 자원(ScrambleFacility의 Upgrade Resource)의 현재 보유량을 표시합니다.")]
+    [SerializeField] private TMP_Text m_ownedResourceText;
     [SerializeField] private ScrambleUpgradeType m_defaultSelectedType = ScrambleUpgradeType.Trap;
 
     [Header("Notice (Optional)")]
@@ -120,6 +119,7 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
     [SerializeField] private Button m_backButton;
 
     private ScrambleUpgradeType m_selectedType;
+    private StorageFacility m_boundStorage;
 
     public bool IsOpen => gameObject.activeSelf;
     public event Action Closed;
@@ -223,6 +223,8 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         RefreshCardButton(m_shooterUpgradeButton, ScrambleUpgradeType.Shooter);
         RefreshCardButton(m_wireUpgradeButton, ScrambleUpgradeType.Wire);
 
+        SetText(m_ownedResourceText, m_facility.GetOwnedUpgradeResourceAmount().ToString());
+
         string resourceDisplayName = ResolveUpgradeResourceDisplayName();
         RefreshUpgradeRow(
             m_trapRow,
@@ -272,7 +274,6 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
             m_selectFrame.position = row.CardRoot.position;
 
         SetText(m_detailNameText, row?.DisplayName ?? string.Empty);
-        SetText(m_detailDescriptionText, row?.Description ?? string.Empty);
         if (m_detailIconImage != null)
         {
             m_detailIconImage.sprite = row?.Icon;
@@ -285,9 +286,13 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         SetText(m_detailNextLevelText, isMaxLevel ? string.Empty : (currentLevel + 1).ToString());
         SetActive(m_detailArrowText, !isMaxLevel);
         SetActive(m_detailNextLevelText, !isMaxLevel);
+        SetText(
+            m_detailLevelInfoText,
+            m_facility.GetUpgradeLevelInfo(m_selectedType, isMaxLevel ? currentLevel : currentLevel + 1));
 
-        SetActive(m_costRoot, !isMaxLevel);
-        SetText(m_costText, isMaxLevel ? string.Empty : m_facility.GetUpgradeCost(m_selectedType).ToString());
+        // 최대 레벨에서도 비용 영역(아이콘 포함)은 그대로 두고, 더 낼 비용이 없다는 뜻으로 "-"를 표시합니다.
+        SetActive(m_costRoot, true);
+        SetText(m_costText, isMaxLevel ? "-" : m_facility.GetUpgradeCost(m_selectedType).ToString());
 
         m_upgradeConfirmButton.interactable = m_facility.CanUpgrade(m_selectedType);
     }
@@ -462,6 +467,12 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         Refresh();
     }
 
+    /// <summary>UI가 열린 동안 다른 경로로 자원이 바뀌어도 보유량과 업그레이드 가능 여부를 맞춥니다.</summary>
+    private void HandleResourcesChanged()
+    {
+        Refresh();
+    }
+
     private void Bind()
     {
         Unbind();
@@ -497,6 +508,10 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         }
         if (m_facility != null)
             m_facility.StateChanged += HandleFacilityStateChanged;
+
+        m_boundStorage = ShelterSceneDataManager.Instance?.Storage;
+        if (m_boundStorage != null)
+            m_boundStorage.ResourcesChanged += HandleResourcesChanged;
     }
 
     private void Unbind()
@@ -522,6 +537,10 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         RemoveListener(m_wireUpgradeButton, HandleWireCardClicked, HandleWireUpgradeClicked);
         if (m_facility != null)
             m_facility.StateChanged -= HandleFacilityStateChanged;
+
+        if (m_boundStorage != null)
+            m_boundStorage.ResourcesChanged -= HandleResourcesChanged;
+        m_boundStorage = null;
     }
 
     private void CacheViews()
@@ -546,13 +565,16 @@ public sealed class ScrambleFacilityUI : MonoBehaviour
         m_selectFrame ??= content.Find("SelectFrame") as RectTransform;
         m_detailNameText ??= content.Find("Detail/Name")?.GetComponent<TMP_Text>();
         m_detailIconImage ??= content.Find("Detail/Icon")?.GetComponent<Image>();
-        m_detailDescriptionText ??= content.Find("Detail/Description")?.GetComponent<TMP_Text>();
         m_detailCurrentLevelText ??= content.Find("Detail/Level/Lv")?.GetComponent<TMP_Text>();
         m_detailArrowText ??= content.Find("Detail/Level/Arrow")?.GetComponent<TMP_Text>();
         m_detailNextLevelText ??= content.Find("Detail/Level/Next")?.GetComponent<TMP_Text>();
+        if (m_detailLevelInfoText == null)
+            m_detailLevelInfoText = content.Find("Detail/LevelInfo")?.GetComponent<TMP_Text>();
         if (m_costRoot == null)
             m_costRoot = content.Find("Resource")?.gameObject;
         m_costText ??= content.Find("Resource/Number")?.GetComponent<TMP_Text>();
+        if (m_ownedResourceText == null)
+            m_ownedResourceText = content.Find("CurrentResource/Number")?.GetComponent<TMP_Text>();
 
         if (m_sortieConfirmRoot != null)
         {
