@@ -1,0 +1,11 @@
+﻿UpgradeId,Level,Cost,Info,#Memo
+Trap,1,1,화염 범위와 지속시간 증가,TrapUpgradeTable 수치와 맞출 것
+Trap,2,1,화염 범위와 지속시간 증가,
+Spike,1,1,스파이크 데미지 증가,
+Spike,2,1,스파이크 데미지 증가,
+Explosive,1,1,폭발 범위 증가,
+Explosive,2,1,폭발 데미지 증가,
+Shooter,1,1,지원 사격 인원 +1,
+Shooter,2,1,지원 사격 인원 +1,
+Wire,1,1,이동 속도 감소 강화,
+Wire,2,1,도트딜 데미지 증가,

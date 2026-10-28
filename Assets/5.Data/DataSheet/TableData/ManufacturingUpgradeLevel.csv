@@ -1,0 +1,4 @@
+﻿Level,ResourceId,Amount,Effect,#Memo
+2,upgrade_material,1,2레벨 아이템 해금,2레벨 아이템 해금 ( 화염병 )
+3,upgrade_material,2,3레벨 아이템 해금,3레벨 아이템 해금 ( 현재는 미구현 )
+4,upgrade_material,3,캐릭터 기본 총기데미지 증가,총기데미지 20% 증가 ( 구현해야함 )
