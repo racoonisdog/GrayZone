@@ -2,11 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 월드 기준 오브젝트의 위치를 따라 미니맵 위 이미지를 배치
+/// 월드 기준 오브젝트의 위치로 미니맵 위 이미지 배치를 계산하는 에디터용 도구
 /// </summary>
 /// <remarks>
 /// 좌표 변환은 MinimapPlayerMarker와 같은 공식을 쓰므로 플레이어 마커와 항상 같은 기준으로 맞음.
-/// 픽셀 좌표를 저장하지 않아 월드 오브젝트를 옮기면 미니맵도 따라감.
+/// 런타임에는 계산하지 않음. 월드 오브젝트를 옮기면 컨텍스트 메뉴 Apply로 다시 계산해 씬에 저장.
 /// </remarks>
 [RequireComponent(typeof(RectTransform))]
 public class MinimapWorldPlacement : MonoBehaviour
@@ -35,14 +35,13 @@ public class MinimapWorldPlacement : MonoBehaviour
     [SerializeField] private float artPixelsPerMeter = 15.7f;
     [Tooltip("첫 번째 기준 오브젝트의 회전(90° 단위 나머지)에 맞춰 범위를 재고 이미지를 회전. 반듯한 사각형 아트에 사용")]
     [SerializeField] private bool alignToReference;
-
-    private void Start()
-    {
-        Apply();
-    }
+    [Tooltip("alignToReference가 꺼져 있을 때 쓰는 UI 회전 각도 (양수는 반시계 방향). 범위도 이 각도 기준으로 잼")]
+    [SerializeField] private float rotation;
+    [Tooltip("기준 범위 중심 보정 (맵 공간 미터, x = 북쪽 +X, y = 서쪽 +Z). 소품 등으로 중심이 치우칠 때 사용")]
+    [SerializeField] private Vector2 centerOffset;
 
     /// <summary>
-    /// 기준 오브젝트 위치로 다시 배치
+    /// 기준 오브젝트 위치로 다시 배치 (에디터에서 실행 후 씬 저장)
     /// </summary>
     [ContextMenu("Apply")]
     public void Apply()
@@ -51,9 +50,19 @@ public class MinimapWorldPlacement : MonoBehaviour
         if (map == null || references == null || references.Length == 0)
             return;
 
-        float yaw = alignToReference ? GetResidualYaw(map, references[0]) : 0f;
+#if UNITY_EDITOR
+        UnityEditor.Undo.RecordObject(transform, "Apply Minimap Placement");
+#endif
+
+        // UI 회전 -θ = 월드 yaw +θ
+        float yaw = alignToReference ? GetResidualYaw(map, references[0]) : -rotation;
         if (!TryGetMapSpaceBounds(map, references, boundsSource, yaw, out Vector3 min, out Vector3 max))
             return;
+
+        // 보정값은 맵 공간 기준이므로 yaw 좌표계로 돌려서 더함
+        Vector3 offset = Quaternion.Euler(0f, -yaw, 0f) * new Vector3(centerOffset.x, 0f, centerOffset.y);
+        min += offset;
+        max += offset;
 
         if (sizeMode == SizeMode.ArtScale)
         {
@@ -89,11 +98,33 @@ public class MinimapWorldPlacement : MonoBehaviour
     /// </summary>
     internal static void SetOrientedBox(MinimapPlayerMarker map, RectTransform rt, Vector3 min, Vector3 max, float yaw)
     {
-        Vector3 center = Quaternion.Euler(0f, yaw, 0f) * ((min + max) * 0.5f);
-        Vector3 half = (max - min) * 0.5f;
-        SetAnchors(map, rt, center - half, center + half);
+        if (!TryGetOrientedAnchors(map, min, max, yaw, out Vector2 anchorMin, out Vector2 anchorMax))
+            return;
+
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
         // 월드 yaw +θ는 UI에서 -θ (MinimapPlayerMarker 회전과 같은 규칙)
         rt.localEulerAngles = new Vector3(0f, 0f, -yaw);
+    }
+
+    /// <summary>
+    /// yaw만큼 회전한 좌표계 기준 범위(min/max)를 회전 전 앵커(정규화 좌표)로 변환
+    /// </summary>
+    internal static bool TryGetOrientedAnchors(MinimapPlayerMarker map, Vector3 min, Vector3 max, float yaw,
+        out Vector2 anchorMin, out Vector2 anchorMax)
+    {
+        Vector3 center = Quaternion.Euler(0f, yaw, 0f) * ((min + max) * 0.5f);
+        Vector3 half = (max - min) * 0.5f;
+        anchorMin = anchorMax = default;
+
+        if (!map.TryMapSpaceToNormalized(center - half, out Vector2 a) || !map.TryMapSpaceToNormalized(center + half, out Vector2 b))
+            return false;
+
+        anchorMin = Vector2.Min(a, b);
+        anchorMax = Vector2.Max(a, b);
+        return true;
     }
 
     internal static MinimapPlayerMarker ResolveMapping(MinimapPlayerMarker assigned, Transform from)
@@ -103,20 +134,6 @@ public class MinimapWorldPlacement : MonoBehaviour
 
         Transform parent = from.parent;
         return parent != null ? parent.GetComponentInChildren<MinimapPlayerMarker>(true) : null;
-    }
-
-    /// <summary>
-    /// 맵 공간 기준 사각 범위를 RectTransform 앵커로 적용
-    /// </summary>
-    internal static void SetAnchors(MinimapPlayerMarker map, RectTransform rt, Vector3 min, Vector3 max)
-    {
-        if (!map.TryMapSpaceToNormalized(min, out Vector2 a) || !map.TryMapSpaceToNormalized(max, out Vector2 b))
-            return;
-
-        rt.anchorMin = Vector2.Min(a, b);
-        rt.anchorMax = Vector2.Max(a, b);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
     }
 
     /// <summary>
@@ -150,7 +167,7 @@ public class MinimapWorldPlacement : MonoBehaviour
                     else
                         continue;
 
-                    Encapsulate(map, toFrame, col.transform, local, ref min, ref max);
+                    Encapsulate(map, toFrame, col.transform.localToWorldMatrix, local, ref min, ref max);
                     found = true;
                 }
             }
@@ -161,7 +178,20 @@ public class MinimapWorldPlacement : MonoBehaviour
                     if (mf.sharedMesh == null)
                         continue;
 
-                    Encapsulate(map, toFrame, mf.transform, mf.sharedMesh.bounds, ref min, ref max);
+                    // 정적 배칭되면 sharedMesh가 씬 단위 Combined Mesh로 바뀌어 로컬 bounds를 쓸 수 없음 → 월드 바운드 사용
+                    MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+                    if (mr != null && mr.isPartOfStaticBatch)
+                    {
+                        if (!mr.enabled || !mr.gameObject.activeInHierarchy)
+                            continue;
+
+                        Encapsulate(map, toFrame, Matrix4x4.identity, mr.bounds, ref min, ref max);
+                    }
+                    else
+                    {
+                        Encapsulate(map, toFrame, mf.transform.localToWorldMatrix, mf.sharedMesh.bounds, ref min, ref max);
+                    }
+
                     found = true;
                 }
             }
@@ -170,7 +200,7 @@ public class MinimapWorldPlacement : MonoBehaviour
         return found;
     }
 
-    private static void Encapsulate(MinimapPlayerMarker map, Quaternion toFrame, Transform owner, Bounds local,
+    private static void Encapsulate(MinimapPlayerMarker map, Quaternion toFrame, Matrix4x4 toWorld, Bounds local,
         ref Vector3 min, ref Vector3 max)
     {
         for (int i = 0; i < 8; i++)
@@ -180,7 +210,7 @@ public class MinimapWorldPlacement : MonoBehaviour
                 (i & 2) == 0 ? -1f : 1f,
                 (i & 4) == 0 ? -1f : 1f));
 
-            Vector3 p = toFrame * map.ToMapSpace(owner.TransformPoint(corner));
+            Vector3 p = toFrame * map.ToMapSpace(toWorld.MultiplyPoint3x4(corner));
             min = Vector3.Min(min, p);
             max = Vector3.Max(max, p);
         }

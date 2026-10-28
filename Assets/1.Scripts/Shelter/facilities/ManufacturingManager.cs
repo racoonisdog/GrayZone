@@ -68,7 +68,12 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
     [Header("Level Visuals")]
     [SerializeField] private FacilityLevelVisuals levelVisuals;
 
+    [Header("Upgrade Table")]
+    [Tooltip("ManufacturingUpgradeLevel 시트로 만든 레벨별 비용·효과 표입니다. 연결하면 아래 비용 배열과 고정 최대 레벨 대신 이 표를 씁니다.")]
+    [SerializeField] private FacilityUpgradeTableSO m_upgradeTable;
+
     [Header("Upgrade Cost (레벨 i → i+1)")]
+    [Tooltip("업그레이드 표가 없거나 해당 레벨 행이 없을 때만 쓰는 대체 비용입니다.")]
     [SerializeField] private UpgradeCostTier[] upgradeCosts;
 
     [Header("Recipes")]
@@ -123,7 +128,11 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
 
     /// <summary>내부 0 기반 시설 레벨입니다. UI 표시 레벨은 <see cref="DisplayLevel"/>을 사용합니다.</summary>
     public int UpgradeLevel => CurrentLevel;
-    public int MaxUpgradeLevel => MaxLevelIndex;
+    /// <summary>내부 0 기반 최대 레벨입니다. 업그레이드 표가 있으면 표의 최대 레벨을 씁니다.</summary>
+    public int MaxUpgradeLevel =>
+        m_upgradeTable != null && m_upgradeTable.TryGetMaxLevel(out int tableMaxLevel)
+            ? tableMaxLevel - 1
+            : MaxLevelIndex;
     public int DisplayLevel => CurrentLevel + 1;
     public bool IsUnlocked => true;
     public int CraftingSlotCount => TotalCraftingSlotCount;
@@ -216,8 +225,12 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
         StateChanged?.Invoke();
     }
 
+    /// <summary>현재 레벨에서 다음 레벨로 올리는 비용입니다. 업그레이드 표가 있으면 다음 목표 레벨 행(<c>currentLevel + 2</c>)을 씁니다.</summary>
     public CostBundle GetUpgradeCost(int currentLevel)
     {
+        if (m_upgradeTable != null && m_upgradeTable.TryGetCost(currentLevel + 2, out CostBundle tableCost))
+            return tableCost;
+
         if (upgradeCosts == null || currentLevel < 0 || currentLevel >= upgradeCosts.Length)
             return new CostBundle();
 
@@ -239,6 +252,15 @@ public sealed class ManufacturingManager : MonoBehaviour, IFacilityUpgradeable, 
     }
 
     public bool AreUpgradeRequirementsMet(int currentLevel) => true;
+
+    /// <summary>다음 업그레이드의 효과 문구를 업그레이드 표에서 찾습니다(표시 전용). 표가 없거나 최대 레벨이면 빈 문자열입니다.</summary>
+    public string GetUpgradeEffectText(int currentLevel)
+    {
+        return m_upgradeTable != null
+            && m_upgradeTable.TryGetLevel(currentLevel + 2, out FacilityUpgradeTableSO.LevelEntry entry)
+            ? entry.Effect
+            : string.Empty;
+    }
 
     public IReadOnlyList<FacilityFeatureLine> GetUpgradeFeatureLines(int currentLevel)
     {

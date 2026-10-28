@@ -20,7 +20,7 @@ MonoBehaviour:
   wireUpgradeLevel: 0
   startingResources:
   - resourceId: upgrade_material
-    amount: 0
+    amount: 20
   - resourceId: crafting_material
     amount: 50
   - resourceId: trap_material

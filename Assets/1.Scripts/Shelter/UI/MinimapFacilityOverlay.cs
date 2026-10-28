@@ -6,8 +6,8 @@ using UnityEngine.UI;
 /// </summary>
 /// <remarks>
 /// FacilityManager의 상태를 읽고 StateChanged만 구독함. 시설/업그레이드 쪽은 미니맵을 알지 못함.
-/// 레벨별 위치/크기는 footprint(월드 기준 오브젝트)가 있으면 그 범위로, 없으면 원본 이미지 픽셀 좌표(좌상단 기준)로 지정함.
-/// 회전은 UI 각도로 지정함.
+/// 레벨별 위치/크기는 원본 이미지 픽셀 좌표(좌상단 기준), 회전은 UI 각도로 지정함.
+/// footprint(월드 기준 오브젝트)를 지정하고 컨텍스트 메뉴 Bake Footprints를 실행하면 그 범위로 pixelRect/rotation을 채움 (런타임에는 계산하지 않음).
 /// </remarks>
 [RequireComponent(typeof(Image))]
 public class MinimapFacilityOverlay : MonoBehaviour
@@ -16,17 +16,17 @@ public class MinimapFacilityOverlay : MonoBehaviour
     private struct LevelVisual
     {
         public Sprite sprite;
-        [Tooltip("이 레벨의 월드 외곽 기준 (예: Medical_Room_1/Wall_Collider). 지정하면 pixelRect 대신 사용")]
+        [Tooltip("이 레벨의 월드 외곽 기준 (예: Medical_Room_1/Wall_Collider). Bake Footprints 실행 시 pixelRect/rotation 계산에만 사용")]
         public Transform footprint;
-        [Tooltip("미니맵 원본 이미지 기준 픽셀 영역 (x, y = 좌상단, width, height). footprint가 없을 때 사용")]
+        [Tooltip("미니맵 원본 이미지 기준 픽셀 영역 (x, y = 좌상단, width, height)")]
         public Rect pixelRect;
-        [Tooltip("시설 탑뷰의 UI 회전 각도 (양수는 반시계 방향). footprint가 있으면 footprint 회전으로 자동 계산")]
+        [Tooltip("시설 탑뷰의 UI 회전 각도 (양수는 반시계 방향)")]
         public float rotation;
     }
 
     [Tooltip("FacilityDefinition의 시설 ID (제조실: manufacturing_center, 의료실: M_103)")]
     [SerializeField] private string facilityId;
-    [Tooltip("footprint 좌표 기준. 비워두면 부모 쪽 MinimapPlayerMarker를 사용")]
+    [Tooltip("Bake Footprints 좌표 기준. 비워두면 부모 쪽 MinimapPlayerMarker를 사용")]
     [SerializeField] private MinimapPlayerMarker mapping;
     [Tooltip("미니맵 원본 이미지 픽셀 크기 (pixelRect 기준)")]
     [SerializeField] private Vector2 sourceSize = new Vector2(1221f, 1053f);
@@ -114,19 +114,7 @@ public class MinimapFacilityOverlay : MonoBehaviour
         LevelVisual visual = levels[Mathf.Clamp(level, 0, levels.Length - 1)];
         RectTransform rt = (RectTransform)transform;
 
-        MinimapPlayerMarker map = visual.footprint != null
-            ? MinimapWorldPlacement.ResolveMapping(mapping, transform)
-            : null;
-
-        float yaw = map != null ? MinimapWorldPlacement.GetResidualYaw(map, visual.footprint) : 0f;
-
-        if (map != null && MinimapWorldPlacement.TryGetMapSpaceBounds(map, new[] { visual.footprint },
-                MinimapWorldPlacement.BoundsSource.Colliders, yaw, out Vector3 min, out Vector3 max))
-        {
-            // footprint 회전에 맞춰 범위를 재고 이미지도 같이 회전 (rotation 값은 사용하지 않음)
-            MinimapWorldPlacement.SetOrientedBox(map, rt, min, max, yaw);
-        }
-        else if (sourceSize.x > 0f && sourceSize.y > 0f)
+        if (sourceSize.x > 0f && sourceSize.y > 0f)
         {
             Rect r = visual.pixelRect;
             rt.anchorMin = new Vector2(r.xMin / sourceSize.x, 1f - r.yMax / sourceSize.y);
@@ -138,5 +126,42 @@ public class MinimapFacilityOverlay : MonoBehaviour
 
         image.sprite = visual.sprite;
         image.enabled = visual.sprite != null;
+    }
+
+    /// <summary>
+    /// 레벨별 footprint의 월드 범위/회전으로 pixelRect와 rotation을 계산해 저장 (에디터에서 실행 후 씬 저장)
+    /// </summary>
+    [ContextMenu("Bake Footprints")]
+    public void BakeFootprints()
+    {
+        MinimapPlayerMarker map = MinimapWorldPlacement.ResolveMapping(mapping, transform);
+        if (map == null || levels == null || sourceSize.x <= 0f || sourceSize.y <= 0f)
+            return;
+
+#if UNITY_EDITOR
+        UnityEditor.Undo.RecordObject(this, "Bake Minimap Footprints");
+#endif
+
+        for (int i = 0; i < levels.Length; i++)
+        {
+            LevelVisual visual = levels[i];
+            if (visual.footprint == null)
+                continue;
+
+            float yaw = MinimapWorldPlacement.GetResidualYaw(map, visual.footprint);
+            if (!MinimapWorldPlacement.TryGetMapSpaceBounds(map, new[] { visual.footprint },
+                    MinimapWorldPlacement.BoundsSource.Colliders, yaw, out Vector3 min, out Vector3 max)
+                || !MinimapWorldPlacement.TryGetOrientedAnchors(map, min, max, yaw, out Vector2 a, out Vector2 b))
+                continue;
+
+            // 앵커(좌하단 기준 0~1) → 원본 픽셀(좌상단 기준)
+            visual.pixelRect = Rect.MinMaxRect(a.x * sourceSize.x, (1f - b.y) * sourceSize.y,
+                b.x * sourceSize.x, (1f - a.y) * sourceSize.y);
+            // 월드 yaw +θ는 UI에서 -θ
+            visual.rotation = -yaw;
+            levels[i] = visual;
+        }
+
+        Refresh();
     }
 }
