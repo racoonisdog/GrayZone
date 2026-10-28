@@ -62,10 +62,9 @@ public class MinimapPlayerMarker : MonoBehaviour
         if (!hasBounds || player == null || mapRect == null || marker == null)
             return;
 
-        Vector3 p = ToMapSpace(player.position);
-        // UI 가로: 왼쪽(서) = +Z → 오른쪽으로 갈수록 Z 감소 / UI 세로: 위(북) = +X
-        float u = Mathf.Clamp01(Mathf.InverseLerp(boundsMax.z, boundsMin.z, p.z));
-        float v = Mathf.Clamp01(Mathf.InverseLerp(boundsMin.x, boundsMax.x, p.x));
+        Vector2 uv = MapSpaceToNormalized(ToMapSpace(player.position));
+        float u = Mathf.Clamp01(uv.x);
+        float v = Mathf.Clamp01(uv.y);
 
         Rect r = mapRect.rect;
         marker.anchoredPosition = new Vector2((u - 0.5f) * r.width, (v - 0.5f) * r.height);
@@ -130,12 +129,38 @@ public class MinimapPlayerMarker : MonoBehaviour
         hasBounds = true;
     }
 
-    private Vector3 ToMapSpace(Vector3 worldPos)
+    /// <summary>
+    /// 월드 좌표를 맵 기준 공간(펜스 로컬 또는 월드) 좌표로 변환
+    /// </summary>
+    public Vector3 ToMapSpace(Vector3 worldPos)
     {
         if (worldAligned || mapSpace == null)
             return worldPos;
 
         return mapSpace.InverseTransformPoint(worldPos);
+    }
+
+    /// <summary>
+    /// 맵 기준 공간 좌표를 미니맵 정규화 좌표(좌하단 0, 우상단 1)로 변환. 영역 밖이면 0~1을 벗어남
+    /// </summary>
+    /// <param name="mapSpacePos">맵 기준 공간 좌표</param>
+    /// <param name="uv">x = 가로(왼쪽 0), y = 세로(아래 0)</param>
+    /// <returns>맵 영역이 계산되어 있으면 <c>true</c></returns>
+    public bool TryMapSpaceToNormalized(Vector3 mapSpacePos, out Vector2 uv)
+    {
+        if (!hasBounds)
+            RecalculateBounds();
+
+        uv = hasBounds ? MapSpaceToNormalized(mapSpacePos) : default;
+        return hasBounds;
+    }
+
+    // UI 가로: 왼쪽(서) = +Z → 오른쪽으로 갈수록 Z 감소 / UI 세로: 위(북) = +X
+    private Vector2 MapSpaceToNormalized(Vector3 p)
+    {
+        return new Vector2(
+            (boundsMax.z - p.z) / (boundsMax.z - boundsMin.z),
+            (p.x - boundsMin.x) / (boundsMax.x - boundsMin.x));
     }
 
     private float MapYaw()
