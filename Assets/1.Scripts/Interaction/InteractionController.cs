@@ -87,6 +87,9 @@ public class InteractionController : MonoBehaviour
     private bool m_holdStarted;
     private float m_holdTimer;
 
+    // 반복 홀드 대상(IRepeatingHoldInteractable)이 한 바퀴를 끝내고, 뗄 때까지 다음 바퀴를 이어서 채우는 중인지 여부입니다.
+    private bool m_repeatingHold;
+
     /// <summary>현재 상호작용 대상입니다. 없으면 <c>null</c>입니다.</summary>
     public IInteractable Current => m_current;
 
@@ -447,6 +450,7 @@ public class InteractionController : MonoBehaviour
         m_current = next;
         m_holdTimer = 0.0f;
         HoldProgress01 = 0.0f;
+        m_repeatingHold = false;
         // m_consumed는 여기서 리셋하지 않는다. 한 번 누름으로 실행(예: 구조 완료)한 뒤 버튼을 계속 누른 채
         // 다음 대상으로 옮겨가면 자동으로 다시 채워지는 문제를 막기 위해, 버튼을 뗄 때(!pressed)만 리셋한다.
         OnCurrentChanged?.Invoke(m_current);
@@ -471,6 +475,7 @@ public class InteractionController : MonoBehaviour
             CancelActiveHold();
             m_holdTimer = 0.0f;
             HoldProgress01 = 0.0f;
+            m_repeatingHold = false;
             if (!pressed)
             {
                 m_consumed = false;
@@ -485,6 +490,7 @@ public class InteractionController : MonoBehaviour
             m_holdTimer = 0.0f;
             HoldProgress01 = 0.0f;
             m_consumed = false;
+            m_repeatingHold = false;
             return;
         }
 
@@ -500,6 +506,7 @@ public class InteractionController : MonoBehaviour
             CancelActiveHold();
             m_holdTimer = 0.0f;
             HoldProgress01 = 0.0f;
+            m_repeatingHold = false;
             return;
         }
 
@@ -516,7 +523,7 @@ public class InteractionController : MonoBehaviour
         }
 
         // 홀드: 누르고 있는 동안 누적하고, 목표 시간을 채우면 실행합니다.
-        if (m_holdTimer <= 0.0f && !m_holdStarted && !justPressed)
+        if (m_holdTimer <= 0.0f && !m_holdStarted && !justPressed && !m_repeatingHold)
         {
             return;
         }
@@ -528,8 +535,18 @@ public class InteractionController : MonoBehaviour
 
         if (m_holdTimer >= hold)
         {
+            // Execute가 대상의 상태를 바꾸므로(예: 수리로 체력이 다 참) 반복 여부는 실행 전에 읽어 둡니다.
+            bool repeat = m_current is IRepeatingHoldInteractable repeating && repeating.RepeatWhileHeld;
             bool executed = Execute();
-            if (executed)
+            if (executed && repeat)
+            {
+                // 한 바퀴를 끝내고 게이지를 비운 뒤, 누르고 있으면 다음 프레임부터 다시 채웁니다.
+                CompleteActiveHold();
+                m_holdTimer = 0.0f;
+                HoldProgress01 = 0.0f;
+                m_repeatingHold = true;
+            }
+            else if (executed)
             {
                 m_consumed = true;
                 HoldProgress01 = 1.0f;
@@ -649,6 +666,7 @@ public class InteractionController : MonoBehaviour
         HoldProgress01 = 0.0f;
         m_prevPressed = false;
         m_consumed = false;
+        m_repeatingHold = false;
     }
 
     private void OnDrawGizmos()
