@@ -164570,7 +164570,7 @@ Transform:
   m_GameObject: {fileID: 722149423}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: 0.7035333, z: -0, w: 0.7106623}
-  m_LocalPosition: {x: -63.8, y: 199.2, z: 150.7}
+  m_LocalPosition: {x: -64.1, y: 209.6, z: 169.9}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -164589,7 +164589,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshModifierVolume
   m_SerializedVersion: 0
-  m_Size: {x: 120, y: 70, z: 230}
+  m_Size: {x: 160, y: 90.8, z: 230}
   m_Center: {x: 0, y: 0, z: 0}
   m_Area: 1
   m_AffectedAgents: ffffffff
@@ -279267,7 +279267,7 @@ Transform:
   m_GameObject: {fileID: 1220026728}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: 0.41388834, z: -0, w: 0.91032773}
-  m_LocalPosition: {x: -111.7, y: 275.1, z: -118.6}
+  m_LocalPosition: {x: -111.7, y: 276.3, z: -118.6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
