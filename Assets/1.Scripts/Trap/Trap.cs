@@ -56,7 +56,7 @@ public enum TrapRebuildPolicy
 /// 아직 <c>IDamageable</c>은 구현하지 않았습니다. 총에 맞아 부서지는 규칙이 정해지면 이 클래스에
 /// 구현해 파생 전체가 한 번에 따라오게 하는 것이 자연스럽습니다.
 /// </remarks>
-public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequirement
+public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequirement, IInteractionHudInfo
 {
     [Header("Build")]
     [Tooltip("켜면 시작할 때 이미 설치된 상태입니다. 끄면 청사진 상태로 시작하며, 자원을 내고 설치하기 전까지 작동하지 않습니다.")]
@@ -335,6 +335,30 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
 
     /// <summary>함정 안내 HUD에 표시할 설명입니다. 인스펙터 값이 비어 있으면 <see cref="DefaultDescription"/>입니다.</summary>
     public string Description => string.IsNullOrWhiteSpace(m_description) ? DefaultDescription : m_description;
+
+    /// <inheritdoc />
+    string IInteractionHudInfo.HudDisplayName => DisplayName;
+
+    /// <inheritdoc />
+    string IInteractionHudInfo.HudDescription => Description;
+
+    /// <inheritdoc />
+    ResourceCost IInteractionHudInfo.HudCost => BuildCost;
+
+    /// <inheritdoc />
+    bool IInteractionHudInfo.CanAffordHudCost => CanAffordBuild;
+
+    /// <inheritdoc />
+    string IInteractionHudInfo.HudBlockedMessage => null;
+
+    /// <inheritdoc />
+    bool IInteractionHudInfo.IsHudCostWaived => IsDebugFreeBuild;
+
+    /// <inheritdoc />
+    Sprite IInteractionHudInfo.HudCostIcon => null;
+
+    /// <inheritdoc />
+    GameObject IInteractionHudInfo.HudOutlineTarget => gameObject;
 
     /// <summary>함정 종류의 기본 이름입니다. 파생이 덮어쓰지 않으면 오브젝트 이름을 씁니다.</summary>
     /// <remarks>프리팹마다 문구를 넣지 않아도 HUD가 비지 않게 하려고 종류별 기본값을 둡니다.</remarks>

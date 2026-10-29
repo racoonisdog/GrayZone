@@ -9,7 +9,9 @@ using UnityEngine.UI;
 /// 구조 HUD(<see cref="ReviveHudController"/>)와 같은 방식입니다. 레이아웃은 씬에 미리 배치돼 있고(Figma
 /// <c>Trap HUD</c>의 <c>Rectangle 71</c> 영역), 이 컴포넌트는 값과 표시 여부만 갱신합니다.
 ///
-/// 표시 조건은 <see cref="InteractionController.Current"/>가 <see cref="Trap"/>인지 하나뿐입니다. 상호작용
+/// 함정 외에 정문 수리(<see cref="DefenseRepairInteractable"/>)처럼 <see cref="IInteractionHudInfo"/>를 구현한 대상도 같은 패널로 보여 줍니다.
+///
+/// 표시 조건은 <see cref="InteractionController.Current"/>가 <see cref="IInteractionHudInfo"/>인지 하나뿐입니다. 상호작용
 /// 대상 판정(거리, 설치 구간, 자원)을 여기서 다시 하면 HUD와 실제 F 입력 결과가 갈릴 수 있어서입니다.
 /// 그래서 자원이 모자라 설치할 수 없는 함정은 대상이 되지 않고, 안내도 뜨지 않습니다.
 /// </remarks>
@@ -34,6 +36,10 @@ public sealed class TrapInfoHud : MonoBehaviour
 
     [Tooltip("F 키 둘레의 원형 홀드 게이지(Filled)입니다. 선택 사항입니다.")]
     [SerializeField] private Image m_holdGaugeFill;
+
+    [Tooltip("설명이 배치된 높이보다 길어질 때(여러 줄) 늘어난 만큼 함께 아래로 늘릴 RectTransform입니다(예: 왼쪽 강조 막대). " +
+             "패널 루트와 설명 텍스트는 자동으로 늘어납니다. 위쪽 기준(pivot y=1)으로 배치된 것만 넣습니다. 선택 사항입니다.")]
+    [SerializeField] private RectTransform[] m_growWithDescription;
 
     [Header("Squad")]
     [Tooltip("조작 대원을 제공하는 SquadManager입니다. 비어 있으면 씬에서 찾습니다.")]
@@ -76,8 +82,19 @@ public sealed class TrapInfoHud : MonoBehaviour
 
     private InteractionController m_interaction;
     private GameObject m_interactionOwner;
-    private Trap m_shownTrap;
+    private IInteractionHudInfo m_shownInfo;
     private FocusOutlineRenderer m_focusOutline;
+
+    // 대상이 비용 아이콘을 따로 정하면 바꿔 끼우고, 아니면 씬에 배치된 원래 이미지로 되돌립니다.
+    private Image m_costIconImage;
+    private Sprite m_defaultCostIconSprite;
+
+    // 설명이 여러 줄이면 씬에 배치된 높이에서 늘어난 만큼만 패널을 아래로 키웁니다. 한 줄 설명(함정)은 배치 그대로입니다.
+    private RectTransform m_panelRect;
+    private RectTransform m_descriptionRect;
+    private float m_panelBaseHeight;
+    private float m_descriptionBaseHeight;
+    private float[] m_growBaseHeights;
 
     // 색·굵기를 바꿔도 프로젝트의 머티리얼 에셋이 바뀌지 않도록 복제본에 씁니다.
     private Material m_focusOutlineInstance;
@@ -89,8 +106,59 @@ public sealed class TrapInfoHud : MonoBehaviour
             m_squadManager = FindFirstObjectByType<SquadManager>();
         }
 
+        if (m_costIcon != null)
+        {
+            m_costIconImage = m_costIcon.GetComponent<Image>();
+            m_defaultCostIconSprite = m_costIconImage != null ? m_costIconImage.sprite : null;
+        }
+
+        CacheBaseHeights();
         CreateFocusOutline();
         SetVisible(false);
+    }
+
+    private void CacheBaseHeights()
+    {
+        m_panelRect = m_panelRoot != null ? m_panelRoot.transform as RectTransform : null;
+        m_descriptionRect = m_descriptionText != null ? m_descriptionText.rectTransform : null;
+        m_panelBaseHeight = m_panelRect != null ? m_panelRect.sizeDelta.y : 0.0f;
+        m_descriptionBaseHeight = m_descriptionRect != null ? m_descriptionRect.sizeDelta.y : 0.0f;
+
+        int count = m_growWithDescription != null ? m_growWithDescription.Length : 0;
+        m_growBaseHeights = new float[count];
+        for (int i = 0; i < count; i++)
+        {
+            m_growBaseHeights[i] = m_growWithDescription[i] != null ? m_growWithDescription[i].sizeDelta.y : 0.0f;
+        }
+    }
+
+    /// <summary>설명 텍스트가 배치된 높이를 넘는 만큼 패널과 지정한 요소를 아래로 늘립니다. 넘지 않으면 배치 높이로 되돌립니다.</summary>
+    private void FitPanelToDescription(string text)
+    {
+        if (m_descriptionText == null || m_descriptionRect == null)
+        {
+            return;
+        }
+
+        float preferred = m_descriptionText.GetPreferredValues(text, m_descriptionRect.rect.width, 0.0f).y;
+        float extra = Mathf.Max(0.0f, Mathf.Ceil(preferred - m_descriptionBaseHeight));
+
+        SetHeight(m_descriptionRect, m_descriptionBaseHeight + extra);
+        SetHeight(m_panelRect, m_panelBaseHeight + extra);
+        for (int i = 0; i < m_growBaseHeights.Length; i++)
+        {
+            SetHeight(m_growWithDescription[i], m_growBaseHeights[i] + extra);
+        }
+    }
+
+    private static void SetHeight(RectTransform rect, float height)
+    {
+        if (rect == null || Mathf.Approximately(rect.sizeDelta.y, height))
+        {
+            return;
+        }
+
+        rect.sizeDelta = new Vector2(rect.sizeDelta.x, height);
     }
 
     private void OnDestroy()
@@ -120,41 +188,43 @@ public sealed class TrapInfoHud : MonoBehaviour
         m_focusOutline = new FocusOutlineRenderer(mask, m_focusOutlineInstance);
     }
 
-    /// <summary>안내가 뜬 함정의 외곽선을 이번 프레임에 그립니다.</summary>
-    private void DrawFocusOutline(Trap trap)
+    /// <summary>안내가 뜬 대상의 외곽선을 이번 프레임에 그립니다.</summary>
+    private void DrawFocusOutline(IInteractionHudInfo info)
     {
-        if (!m_showFocusOutline || m_focusOutline == null || trap == null)
+        GameObject target = info?.HudOutlineTarget;
+        if (!m_showFocusOutline || m_focusOutline == null || target == null)
         {
             return;
         }
 
         m_focusOutlineInstance.SetColor(OutlineColorId, m_focusOutlineColor);
         m_focusOutlineInstance.SetFloat(OutlineWidthId, m_focusOutlineWidth);
-        m_focusOutline.Draw(trap.gameObject);
+        m_focusOutline.Draw(target);
     }
 
     private void LateUpdate()
     {
         InteractionController interaction = ResolveInteraction();
-        Trap trap = interaction != null ? interaction.Current as Trap : null;
-        if (trap == null)
+        IInteractionHudInfo info = interaction != null ? interaction.Current as IInteractionHudInfo : null;
+        if (info == null)
         {
-            m_shownTrap = null;
+            m_shownInfo = null;
             SetVisible(false);
             return;
         }
 
-        if (trap != m_shownTrap)
+        if (!ReferenceEquals(info, m_shownInfo))
         {
-            m_shownTrap = trap;
-            ApplyTrap(trap);
+            m_shownInfo = info;
+            ApplyInfo(info);
         }
 
-        // 자원은 보고 있는 동안에도 바뀔 수 있어(다른 함정 설치, 획득) 비용 줄은 매 프레임 맞춥니다.
-        RefreshCost(trap);
+        // 자원과 설명(남은 체력 등)은 보고 있는 동안에도 바뀔 수 있어 매 프레임 맞춥니다.
+        RefreshDescription(info);
+        RefreshCost(info);
 
         SetVisible(true);
-        DrawFocusOutline(trap);
+        DrawFocusOutline(info);
 
         if (m_holdGaugeFill != null)
         {
@@ -185,35 +255,59 @@ public sealed class TrapInfoHud : MonoBehaviour
         return m_interaction;
     }
 
-    private void ApplyTrap(Trap trap)
+    private void ApplyInfo(IInteractionHudInfo info)
     {
         if (m_nameText != null)
         {
-            m_nameText.text = trap.DisplayName;
+            m_nameText.text = info.HudDisplayName;
         }
 
-        if (m_descriptionText != null)
+        if (m_costIconImage != null)
         {
-            m_descriptionText.text = trap.Description;
+            Sprite icon = info.HudCostIcon != null ? info.HudCostIcon : m_defaultCostIconSprite;
+            if (m_costIconImage.sprite != icon)
+            {
+                m_costIconImage.sprite = icon;
+            }
         }
-
     }
 
-    /// <summary>설치 비용 줄을 갱신합니다. 자원이 모자라면 비용 옆에 빨간 경고 문구를 붙입니다.</summary>
-    private void RefreshCost(Trap trap)
+    private void RefreshDescription(IInteractionHudInfo info)
     {
-        ResourceCost cost = trap.BuildCost;
+        if (m_descriptionText == null)
+        {
+            return;
+        }
+
+        string text = info.HudDescription;
+        if (m_descriptionText.text != text)
+        {
+            m_descriptionText.text = text;
+            FitPanelToDescription(text);
+        }
+    }
+
+    /// <summary>비용 줄을 갱신합니다. 자원이 모자라면 비용 옆에 빨간 경고 문구를 붙입니다.</summary>
+    private void RefreshCost(IInteractionHudInfo info)
+    {
+        ResourceCost cost = info.HudCost;
         bool hasCost = cost.IsValid;
         if (m_costText != null)
         {
             // 비용 줄은 항상 남깁니다. 0일 때 줄째 숨기면 공짜인지 표시 누락인지 구분할 수 없어서입니다.
             string text = hasCost ? string.Format(m_costFormat, cost.Amount) : m_noCostText;
-            if (hasCost && Trap.IsDebugFreeBuild)
+            string blocked = info.HudBlockedMessage;
+            if (!string.IsNullOrEmpty(blocked))
+            {
+                // 자원과 무관하게 막힌 경우(예: 체력이 가득 참)는 그 이유를 먼저 보여 줍니다.
+                text += $"  <color=#{ColorUtility.ToHtmlStringRGBA(m_insufficientColor)}>{blocked}</color>";
+            }
+            else if (hasCost && info.IsHudCostWaived)
             {
                 // 디버그 무료 중임을 알립니다. 표시가 없으면 자원이 왜 안 줄었는지 헷갈립니다.
                 text += "  (디버그 무료)";
             }
-            else if (hasCost && !trap.CanAffordBuild)
+            else if (hasCost && !info.CanAffordHudCost)
             {
                 // 비용 칸 하나에 함께 적습니다. 따로 텍스트를 두면 씬마다 배선이 필요합니다.
                 text += $"  <color=#{ColorUtility.ToHtmlStringRGBA(m_insufficientColor)}>{m_insufficientText}</color>";
