@@ -49,6 +49,19 @@ public interface IInteractionRequirement
     bool MeetsInteractionRequirement(GameObject interactor);
 }
 
+/// <summary>
+/// 홀드를 다 채워 실행한 뒤에도 계속 누르고 있으면 게이지를 처음부터 다시 채워 반복 실행하는 상호작용입니다.
+/// </summary>
+/// <remarks>
+/// 구현하지 않은 대상은 기존처럼 한 번 누를 때 한 번만 실행합니다. 반복은 버튼을 떼거나, 대상이 바뀌거나,
+/// <see cref="IInteractable.CanInteract"/>·<see cref="IInteractionRequirement"/>가 거짓이 되면 멈춥니다.
+/// </remarks>
+public interface IRepeatingHoldInteractable
+{
+    /// <summary>누르고 있는 동안 홀드를 반복할지 여부입니다.</summary>
+    bool RepeatWhileHeld { get; }
+}
+
 public interface IHoldInteractable
 {
     void BeginHold(GameObject interactor);
