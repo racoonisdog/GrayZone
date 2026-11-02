@@ -14,7 +14,8 @@ public sealed class ShelterPatrolController : MonoBehaviour
     private static readonly int TurnLeft180StateHash = Animator.StringToHash("TurnLeft180");
     private static readonly int TurnRight180StateHash = Animator.StringToHash("TurnRight180");
 
-    private const int RequiredPointCount = 3;
+    // 왕복 순찰에는 출발점과 도착점이 최소 1개씩 필요하다.
+    private const int MinimumPointCount = 2;
 
     [Header("Route")]
     [SerializeField] private PatrolPoint[] m_patrolPoints;
@@ -25,6 +26,10 @@ public sealed class ShelterPatrolController : MonoBehaviour
 
     [Min(0.001f)]
     [SerializeField] private float m_arrivalDistance = 0.05f;
+
+    [Tooltip("걷는 중 다음 지점 방향으로 회전하는 속도 (도/초)")]
+    [Min(1f)]
+    [SerializeField] private float m_turnSpeed = 360f;
 
     [Header("Grounding")]
     [SerializeField] private LayerMask m_groundLayers = Physics.DefaultRaycastLayers;
@@ -85,6 +90,7 @@ public sealed class ShelterPatrolController : MonoBehaviour
     {
         m_moveSpeed = Mathf.Max(0.01f, m_moveSpeed);
         m_arrivalDistance = Mathf.Max(0.001f, m_arrivalDistance);
+        m_turnSpeed = Mathf.Max(1f, m_turnSpeed);
         m_groundProbeHeight = Mathf.Max(0.01f, m_groundProbeHeight);
         m_groundProbeDistance = Mathf.Max(0.01f, m_groundProbeDistance);
     }
@@ -114,9 +120,9 @@ public sealed class ShelterPatrolController : MonoBehaviour
 
     private bool HasValidRoute()
     {
-        if (m_patrolPoints == null || m_patrolPoints.Length != RequiredPointCount)
+        if (m_patrolPoints == null || m_patrolPoints.Length < MinimumPointCount)
         {
-            Debug.LogError($"{nameof(ShelterPatrolController)} requires exactly {RequiredPointCount} patrol points.", this);
+            Debug.LogError($"{nameof(ShelterPatrolController)} requires at least {MinimumPointCount} patrol points.", this);
             return false;
         }
 
@@ -146,6 +152,7 @@ public sealed class ShelterPatrolController : MonoBehaviour
         Vector3 nextPosition = new Vector3(nextPositionXZ.x, transform.position.y, nextPositionXZ.y);
         SnapToGround(ref nextPosition);
         transform.position = nextPosition;
+        RotateTowardsTarget(targetPositionXZ - nextPositionXZ);
 
         if ((nextPositionXZ - targetPositionXZ).sqrMagnitude > m_arrivalDistance * m_arrivalDistance)
         {
@@ -158,6 +165,25 @@ public sealed class ShelterPatrolController : MonoBehaviour
         transform.position = nextPosition;
         m_currentPointIndex = targetPointIndex;
         HandleArrival();
+    }
+
+    // 매 프레임 현재 위치 기준 목표 방향으로 m_turnSpeed(도/초)만큼 회전한다.
+    // 중간 지점에서 경로가 꺾여도 걷는 동안 자연스럽게 방향을 튼다.
+    private void RotateTowardsTarget(Vector2 directionXZ)
+    {
+        if (directionXZ.sqrMagnitude <= Mathf.Epsilon)
+        {
+            return;
+        }
+
+        Quaternion targetRotation = Quaternion.LookRotation(
+            new Vector3(directionXZ.x, 0f, directionXZ.y),
+            Vector3.up);
+
+        transform.rotation = Quaternion.RotateTowards(
+            transform.rotation,
+            targetRotation,
+            m_turnSpeed * Time.deltaTime);
     }
 
     private void SnapToGround(ref Vector3 position)
