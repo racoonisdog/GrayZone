@@ -4,7 +4,7 @@ using System.Collections.Generic;
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 13;
+    public const int CurrentSchemaVersion = 14;
 
     public int schemaVersion = CurrentSchemaVersion;
     public ShelterCheckpointId shelterCheckpointId = ShelterCheckpointId.BeforeDefense1;
@@ -20,6 +20,9 @@ public class SaveData
     public int explosiveUpgradeLevel;
     public int shooterUpgradeLevel;
     public int wireUpgradeLevel;
+
+    /// <summary>일반 시설(FacilityManager 관리)의 해금·업그레이드 레벨입니다. 비어 있으면 각 시설 기본값으로 시작합니다.</summary>
+    public List<FacilityRuntimeState> facilities = new List<FacilityRuntimeState>();
 
     public List<ResourceAmountData> resources = new List<ResourceAmountData>();
     public List<CharacterStateSaveData> characters = new List<CharacterStateSaveData>();

@@ -54,6 +54,9 @@ public class GameDataManager : MonoBehaviour
     [SerializeField] private ShelterCheckpointId shelterCheckpointId = ShelterCheckpointId.BeforeDefense1;
     [Tooltip("셸터 씬이 마지막으로 동기화한 안내 진행 단계입니다.")]
     [SerializeField] private ShelterFlowState shelterFlowState = ShelterFlowState.NotStarted;
+
+    /// <summary>다음 셸터 도착 때 Auto 슬롯에 체크포인트 저장을 해야 하는지 여부입니다. 저장 파일에는 넣지 않습니다.</summary>
+    [System.NonSerialized] private bool checkpointAutoSavePending;
     [Tooltip("현재 출전 대상으로 선택된 캐릭터 런타임 ID 목록입니다. 최대 3명입니다.")]
     [FormerlySerializedAs("battleSquadNpcDefinitionIds")]
     [FormerlySerializedAs("playableSquadDefinitionIds")]
@@ -156,6 +159,24 @@ public class GameDataManager : MonoBehaviour
 
     /// <summary>게임오버 후 셸터로 복귀할 현재 체크포인트 ID입니다.</summary>
     public ShelterCheckpointId ShelterCheckpointId => shelterCheckpointId;
+
+    /// <summary>다음 셸터 도착 때 체크포인트 Auto 저장이 예약되어 있는지 여부입니다.</summary>
+    public bool IsCheckpointAutoSavePending => checkpointAutoSavePending;
+
+    /// <summary>
+    /// 다음 셸터 도착 때 현재 상태를 게임오버 복구용 Auto 슬롯에 저장하도록 예약합니다.
+    /// 새 게임 시작과 방어전 클리어 귀환에서만 호출합니다.
+    /// </summary>
+    public void RequestCheckpointAutoSave()
+    {
+        checkpointAutoSavePending = true;
+    }
+
+    /// <summary>체크포인트 Auto 저장 예약을 지웁니다.</summary>
+    public void ClearCheckpointAutoSaveRequest()
+    {
+        checkpointAutoSavePending = false;
+    }
 
     /// <summary>게임오버 후 셸터로 복귀할 체크포인트 ID를 변경합니다.</summary>
     public void SetShelterCheckpointId(ShelterCheckpointId checkpointId)
@@ -336,12 +357,22 @@ public class GameDataManager : MonoBehaviour
         for (int i = 0; i < characters.Count; i++)
         {
             CharacterSnapshotData snapshot = characters[i];
+            if (snapshot != null)
+            {
+                packet.TryAddCharacter(snapshot.Clone(), out _);
+            }
+
+            // 시설 도우미 배치 개념이 빠져 셸터 배치 정보를 씬 사이에 이어 주지 않습니다.
+            // 의료 환자 배치는 셸터 안에서 배치 → 치료로 끝나는 임시 상태라, 셸터를 다시 열면 배치 없음으로 시작합니다.
+            // 다시 필요해지면 아래 복원과 ApplyShelterRuntimeSnapshot의 기록을 함께 되살립니다.
+            /*
             if (snapshot != null && packet.TryAddCharacter(snapshot.Clone(), out ShelterMemberRuntimeData member))
             {
                 ShelterCharacterAssignmentData assignment = FindShelterAssignment(member.RuntimeId);
                 if (assignment != null && assignment.IsAssigned)
                     member.AssignToFacility(assignment.FacilityId, assignment.RoomId, assignment.Kind);
             }
+            */
         }
 
         return packet;
@@ -382,8 +413,11 @@ public class GameDataManager : MonoBehaviour
             if (character != null)
             {
                 characters.Add(character.CreateSnapshot());
+                // 셸터 배치 정보는 더 이상 전역 정본에 기록하지 않습니다(CreateShelterRuntimeSnapshot 주석 참고).
+                /*
                 if (character.IsAssignedToFacility)
                     shelterCharacterAssignments.Add(new ShelterCharacterAssignmentData(character));
+                */
             }
         }
 
@@ -644,6 +678,9 @@ public class GameDataManager : MonoBehaviour
             defenseClearCount = DefenseClearCount + 1;
             if (DefenseClearCount > 0)
                 shelterCheckpointId = ShelterCheckpointId.AfterDefense1Clear;
+
+            // 클리어 귀환 직후 상태가 다음 게임오버의 복구 지점이 되도록 셸터 도착 때 저장합니다.
+            RequestCheckpointAutoSave();
         }
 
         pendingDefenseVictoryStageId = string.Empty;
@@ -683,7 +720,8 @@ public class GameDataManager : MonoBehaviour
             spikeUpgradeLevel = SpikeUpgradeLevel,
             explosiveUpgradeLevel = ExplosiveUpgradeLevel,
             shooterUpgradeLevel = ShooterUpgradeLevel,
-            wireUpgradeLevel = WireUpgradeLevel
+            wireUpgradeLevel = WireUpgradeLevel,
+            facilities = CloneFacilityStates(facilityStates)
         };
 
         for (int i = 0; i < resourceAmounts.Count; i++)
@@ -739,11 +777,15 @@ public class GameDataManager : MonoBehaviour
         shelterFlowState = saveData.shelterFlowState;
         // 불러오기 전 판에서 정산 대기 중이던 승리가 불러온 진행 상태에 더해지지 않게 비웁니다.
         pendingDefenseVictoryStageId = string.Empty;
+        // 불러온 상태가 곧 저장된 체크포인트이므로 이전 판의 저장 예약은 버립니다.
+        checkpointAutoSavePending = false;
         SetTrapUpgradeLevel(saveData.trapUpgradeLevel);
         SetSpikeUpgradeLevel(saveData.spikeUpgradeLevel);
         SetExplosiveUpgradeLevel(saveData.explosiveUpgradeLevel);
         SetShooterUpgradeLevel(saveData.shooterUpgradeLevel);
         SetWireUpgradeLevel(saveData.wireUpgradeLevel);
+        // 저장에 없는 시설은 셸터 진입 시 FacilityManager가 시설 기본값(해금 여부, 레벨 0)으로 만듭니다.
+        facilityStates = CloneFacilityStates(saveData.facilities);
         ApplySavedResources(saveData.resources);
         ApplySavedCharacterStates(saveData.characters);
 

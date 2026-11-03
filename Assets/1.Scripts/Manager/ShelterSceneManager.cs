@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -63,6 +64,17 @@ public class ShelterSceneManager : MonoBehaviour
             CopyShelterDataFromGameDataManager();
 
         ApplyCheckpointSpawn();
+    }
+
+    private IEnumerator Start()
+    {
+        if (Instance != this)
+            yield break;
+
+        // 같은 씬의 다른 Start(테스트용 DefaultSaveData 적용 등)가 끝난 뒤의 셸터 상태를 저장하도록 한 프레임 기다립니다.
+        yield return null;
+
+        TrySaveCheckpointAutoSave();
     }
 
     private void OnEnable()
@@ -155,6 +167,34 @@ public class ShelterSceneManager : MonoBehaviour
 
         if (restoreController)
             characterController.enabled = true;
+    }
+
+    /// <summary>
+    /// 새 게임 시작 또는 방어전 클리어 귀환으로 예약된 경우에만 셸터 도착 상태를 Auto 슬롯에 저장합니다.
+    /// Auto 저장 파일이 아직 없으면 복구 지점이 비지 않도록 한 번 저장합니다.
+    /// </summary>
+    /// <remarks>셸터에 들어올 때마다 저장하면 업그레이드 등 체크포인트 이후 변경이 복구 지점을 덮으므로 예약 시점에만 저장합니다.</remarks>
+    private void TrySaveCheckpointAutoSave()
+    {
+        GameDataManager gameData = GameDataManager.Instance;
+        GameSaveManager saveManager = GameSaveManager.Instance != null
+            ? GameSaveManager.Instance
+            : FindFirstObjectByType<GameSaveManager>(FindObjectsInactive.Include);
+        if (gameData == null || saveManager == null)
+            return;
+
+        if (!gameData.IsCheckpointAutoSavePending && saveManager.HasAutoSave())
+            return;
+
+        if (saveManager.SaveAutoGame())
+        {
+            gameData.ClearCheckpointAutoSaveRequest();
+            Debug.Log($"[ShelterSceneManager] 체크포인트 Auto 저장 완료: {gameData.ShelterCheckpointId}, 방어전 클리어 {gameData.DefenseClearCount}회", this);
+        }
+        else
+        {
+            Debug.LogWarning("[ShelterSceneManager] 체크포인트 Auto 저장에 실패했습니다.", this);
+        }
     }
 
     private void CacheSceneReferences()

@@ -66,6 +66,8 @@ public class MainSceneSaveManager : MonoBehaviour
 
         GameDataManager.Instance.InitializeCharacters(defaultSaveData.CreateStartingCharacterSnapshots());
         GameDataManager.Instance.ApplySaveData(newGameSaveData);
+        // 새 게임으로 셸터에 처음 배치된 상태를 첫 게임오버 복구 지점으로 저장합니다.
+        GameDataManager.Instance.RequestCheckpointAutoSave();
 
         // Temporary test-scene sync. Scene managers should copy from GameDataManager on scene load later.
         if (ShelterSceneDataManager.Instance != null)
