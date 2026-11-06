@@ -431,7 +431,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         for (int i = 0; i < managers.Length; i++)
         {
-            if (managers[i] != null && managers[i].isActiveAndEnabled && managers[i].HasOpenBlockingUI)
+            if (managers[i] != null && managers[i].isActiveAndEnabled && managers[i].BlocksPauseMenu)
             {
                 return true;
             }
