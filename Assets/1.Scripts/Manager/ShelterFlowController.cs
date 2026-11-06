@@ -58,6 +58,9 @@ public sealed class ShelterFlowController : MonoBehaviour
     [Tooltip("Scene 시작 시 제조 시설 안내 단계부터 자동으로 시작함")]
     [SerializeField] private bool m_startAutomatically = true;
 
+    [Tooltip("선택 사항입니다. 연결하면 저장된 진행 단계가 없는 첫 진입에서만 컷신을 재생하고, 끝난 뒤 흐름을 시작합니다.")]
+    [SerializeField] private ShelterIntroCutscene m_introCutscene;
+
     private bool m_hasStarted;
     private ShelterFlowState m_currentState;
     private ShelterSceneDataManager m_shelterDataManager;
@@ -112,7 +115,18 @@ public sealed class ShelterFlowController : MonoBehaviour
             return;
         }
 
-        if (m_startAutomatically && !m_hasStarted)
+        if (m_hasStarted)
+            return;
+
+        // 첫 진입: 컷신이 있으면 재생하고, 끝나거나 스킵되면 NotifyIntroCompleted로 흐름을 시작함
+        if (m_introCutscene != null && m_introCutscene.HasClip)
+        {
+            ApplyCurrentState();
+            m_introCutscene.Play(NotifyIntroCompleted);
+            return;
+        }
+
+        if (m_startAutomatically)
             StartFlow();
     }
 
@@ -199,11 +213,10 @@ public sealed class ShelterFlowController : MonoBehaviour
 
         switch (m_currentState)
         {
+            // 첫 제작 완료 전까지는 제조 시설 도착 여부와 관계없이 제조 시설을 계속 안내함
             case ShelterFlowState.GuideToManufacturing:
-                m_manufacturingObjective.SetIndicatorVisible(true);
-                break;
-
             case ShelterFlowState.WaitingForFirstCraft:
+                m_manufacturingObjective.SetIndicatorVisible(true);
                 break;
 
             case ShelterFlowState.GuideToOperation:

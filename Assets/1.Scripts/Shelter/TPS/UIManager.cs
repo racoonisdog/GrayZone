@@ -85,6 +85,12 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public bool IsHudSuppressed => m_hudSuppressed;
 
+    /// <summary>
+    /// Escape 일시정지 메뉴를 열면 안 되는지 여부.
+    /// NPC 대사 또는 시설 UI(출격, 제작, 의료실 등)가 열려 있으면 <c>true</c>
+    /// </summary>
+    public bool BlocksPauseMenu => m_activeUI != ShelterUIType.None || m_dialogueOpen;
+
     /// <summary>활성 UI 종류가 변경될 때 발생</summary>
     public event Action<ShelterUIType> ActiveUIChanged;
 
