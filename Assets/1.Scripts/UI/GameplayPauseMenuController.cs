@@ -949,8 +949,14 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         // 슬라이더가 우선입니다. 슬라이더를 움직이면 드롭다운은 '사용자 지정'으로 바뀌고,
         // 드롭다운에서 프리셋을 고르면 슬라이더가 그 값으로 옮겨 갑니다.
-        m_frameLimitSlider = CreateSlider("Frame Limit Slider", panel.transform, new Vector2(32f, -470f), new Vector2(470f, 24f), MinFrameLimit, MaxFrameLimit);
-        m_frameLimitSlider.wholeNumbers = true;
+        m_frameLimitSlider = CreateHorizontalSlider(
+            "Frame Limit Slider",
+            panel.transform,
+            new Vector2(32f, -470f),
+            new Vector2(470f, 24f),
+            MinFrameLimit,
+            MaxFrameLimit,
+            true);
         m_frameLimitSlider.onValueChanged.AddListener(OnFrameLimitSliderChanged);
         m_frameLimitValue = CreateTopLeftText(
             "Frame Limit Value",
@@ -976,42 +982,6 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_frameLimitDropdown.onValueChanged.AddListener(OnFrameLimitDropdownChanged);
 
         RefreshVideoControls();
-    }
-
-    /// <summary>설정 화면 공통 모양의 가로 슬라이더를 만듭니다(마우스 감도 슬라이더와 같은 색과 구성).</summary>
-    private Slider CreateSlider(string name, Transform parent, Vector2 topLeftPosition, Vector2 size, float min, float max)
-    {
-        GameObject sliderObject = CreateTopLeftObject(name, parent, topLeftPosition, size);
-        Slider slider = sliderObject.AddComponent<Slider>();
-        slider.minValue = min;
-        slider.maxValue = max;
-
-        Image background = CreateStretchImage("Background", sliderObject.transform, new Color(1f, 1f, 1f, 0.13f));
-        background.rectTransform.offsetMin = new Vector2(0f, 8f);
-        background.rectTransform.offsetMax = new Vector2(0f, -8f);
-
-        GameObject fillArea = CreateStretchObject("Fill Area", sliderObject.transform);
-        RectTransform fillAreaRect = (RectTransform)fillArea.transform;
-        fillAreaRect.offsetMin = new Vector2(0f, 8f);
-        fillAreaRect.offsetMax = new Vector2(-12f, -8f);
-        Image fill = CreateStretchImage("Fill", fillArea.transform, new Color(0.95f, 0.08f, 0.08f, 1f));
-
-        GameObject handleArea = CreateStretchObject("Handle Slide Area", sliderObject.transform);
-        RectTransform handleAreaRect = (RectTransform)handleArea.transform;
-        handleAreaRect.offsetMin = new Vector2(8f, 0f);
-        handleAreaRect.offsetMax = new Vector2(-8f, 0f);
-        Image handle = CreateTopLeftImage("Handle", handleArea.transform, Vector2.zero, new Vector2(18f, 18f), Color.white);
-        RectTransform handleRect = handle.rectTransform;
-        handleRect.anchorMin = new Vector2(0.5f, 0.5f);
-        handleRect.anchorMax = new Vector2(0.5f, 0.5f);
-        handleRect.pivot = new Vector2(0.5f, 0.5f);
-        handleRect.anchoredPosition = Vector2.zero;
-
-        slider.fillRect = fill.rectTransform;
-        slider.handleRect = handleRect;
-        slider.targetGraphic = handle;
-        slider.direction = Slider.Direction.LeftToRight;
-        return slider;
     }
 
     /// <summary>TMP 기본 드롭다운을 만들고 설정 화면 색과 폰트에 맞춥니다.</summary>
@@ -1699,6 +1669,10 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         slider.minValue = minValue;
         slider.maxValue = maxValue;
         slider.wholeNumbers = wholeNumbers;
+
+        // 보이는 막대는 위아래를 깎아 얇게 그립니다. 슬라이더 높이 전체에서 클릭과 드래그를 받도록 투명한 영역을 깝니다.
+        Image hitArea = sliderObject.AddComponent<Image>();
+        hitArea.color = Color.clear;
 
         Image sliderBackground = CreateStretchImage(
             "Background",
