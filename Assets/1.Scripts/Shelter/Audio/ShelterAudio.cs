@@ -28,8 +28,11 @@ public sealed class ShelterAudio : MonoBehaviour
     [Tooltip("상황 ID와 FMOD 이벤트를 연결한 카탈로그 에셋입니다.")]
     [SerializeField] private ShelterSoundCatalog m_catalog;
 
-    [Tooltip("씬 시작 시 카탈로그의 BGM과 환경음을 자동 재생합니다. 인트로 컷신 뒤에 틀고 싶으면 끄고 StartSceneAudio()를 직접 호출하십시오.")]
+    [Tooltip("씬 시작 시 카탈로그의 BGM과 환경음을 자동 재생합니다. 인트로 컷신이 재생되면 컷신이 끝나거나 스킵된 뒤에 시작합니다. 끄면 StartSceneAudio()를 직접 호출해야 합니다.")]
     [SerializeField] private bool m_playSceneAudioOnStart = true;
+
+    [Tooltip("이 컷신이 재생 중이면 끝날 때까지 BGM 시작을 미룹니다. 비어 있으면 씬에서 자동으로 찾습니다.")]
+    [SerializeField] private ShelterIntroCutscene m_introCutscene;
 
     [Tooltip("에디터에서 비어 있는 상황 칸이 호출되면 상황당 한 번 로그를 남깁니다. 어디에 사운드가 필요한지 기획에 전달할 때 씁니다.")]
     [SerializeField] private bool m_logEmptySlotsInEditor = true;
@@ -73,8 +76,33 @@ public sealed class ShelterAudio : MonoBehaviour
     {
         if (s_instance == this && m_playSceneAudioOnStart)
         {
-            StartSceneAudio();
+            StartCoroutine(StartSceneAudioAfterIntro());
         }
+    }
+
+    /// <summary>
+    /// 인트로 컷신이 재생되면 끝나거나 스킵될 때까지 기다렸다가 BGM·환경음을 시작합니다.
+    /// </summary>
+    /// <remarks>
+    /// 컷신 재생 여부는 <see cref="ShelterFlowController"/>의 Start(실행 순서 100)에서 정해지므로,
+    /// 이 컴포넌트의 Start 시점에는 아직 알 수 없습니다. 한 프레임 뒤에 확인합니다.
+    /// 재진입처럼 컷신이 없으면 바로 시작합니다.
+    /// </remarks>
+    private System.Collections.IEnumerator StartSceneAudioAfterIntro()
+    {
+        yield return null;
+
+        if (m_introCutscene == null)
+        {
+            m_introCutscene = FindFirstObjectByType<ShelterIntroCutscene>();
+        }
+
+        while (m_introCutscene != null && m_introCutscene.IsPlaying)
+        {
+            yield return null;
+        }
+
+        StartSceneAudio();
     }
 
     private void OnDestroy()

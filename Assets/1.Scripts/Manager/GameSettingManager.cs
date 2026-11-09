@@ -44,6 +44,9 @@ public class GameSettingManager : MonoBehaviour
     public const float MinMouseSensitivity = 0.01f;
     public const float MaxMouseSensitivity = 10f;
 
+    public float MasterVolume => currentSettings.masterVolume;
+    public float BgmVolume => currentSettings.bgmVolume;
+    public float SfxVolume => currentSettings.sfxVolume;
     public float MouseSensitivity => currentSettings.mouseSensitivity;
     public bool CameraKickEnabled => currentSettings.cameraKickEnabled;
 
@@ -123,18 +126,33 @@ public class GameSettingManager : MonoBehaviour
     {
         currentSettings.masterVolume = Mathf.Clamp01(volume);
         ApplyMixerVolume(masterVolumeParam, currentSettings.masterVolume);
+        ApplyFmodVolume(SoundCategory.Master, currentSettings.masterVolume);
     }
 
     public void SetBgmVolume(float volume)
     {
         currentSettings.bgmVolume = Mathf.Clamp01(volume);
         ApplyMixerVolume(bgmVolumeParam, currentSettings.bgmVolume);
+        ApplyFmodVolume(SoundCategory.Bgm, currentSettings.bgmVolume);
     }
 
     public void SetSfxVolume(float volume)
     {
         currentSettings.sfxVolume = Mathf.Clamp01(volume);
         ApplyMixerVolume(sfxVolumeParam, currentSettings.sfxVolume);
+        ApplyFmodVolume(SoundCategory.Sfx, currentSettings.sfxVolume);
+    }
+
+    /// <summary>
+    /// FMOD 소리 볼륨은 씬의 <see cref="SoundManager"/>가 VCA로 적용합니다.
+    /// SoundManager가 없는 씬에서는 값만 보관되고, SoundManager가 생기면 Start에서 이 값을 읽어 갑니다.
+    /// </summary>
+    private static void ApplyFmodVolume(SoundCategory category, float volume)
+    {
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.SetVolume(category, volume);
+        }
     }
 
     public void SetMouseSensitivity(float sensitivity)

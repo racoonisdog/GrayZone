@@ -32,6 +32,22 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     [Tooltip("Figma Setting Scene에서 내보낸 뒤로가기 버튼 프레임입니다.")]
     [SerializeField] private Sprite m_backButtonFrame;
 
+    [Header("Slider Art (선택)")]
+    [Tooltip("설정 슬라이더의 트랙(배경) 이미지입니다. 비워 두면 반투명 흰색 막대로 그립니다. 길이가 바뀌므로 9-slice Border 지정을 권장합니다.")]
+    [SerializeField] private Sprite m_sliderTrackSprite;
+
+    [Tooltip("설정 슬라이더의 채움(현재 값) 이미지입니다. 비워 두면 빨간 막대로 그립니다. 값에 따라 늘어나므로 9-slice Border 지정을 권장합니다.")]
+    [SerializeField] private Sprite m_sliderFillSprite;
+
+    [Tooltip("설정 슬라이더의 핸들(손잡이) 이미지입니다. 비워 두면 흰 사각형으로 그립니다.")]
+    [SerializeField] private Sprite m_sliderHandleSprite;
+
+    [Tooltip("핸들 크기(px)입니다. 핸들 이미지 비율에 맞춰 조정합니다.")]
+    [SerializeField] private Vector2 m_sliderHandleSize = new Vector2(18f, 18f);
+
+    [Tooltip("오디오 설정 패널의 배경 이미지입니다. 비워 두면 반투명 검정 패널과 외곽선으로 그립니다.")]
+    [SerializeField] private Sprite m_audioPanelSprite;
+
     [Header("Navigation")]
     [Tooltip("타이틀로 돌아가기 버튼이 불러올 Build Settings 씬 이름입니다.")]
     [SerializeField] private string m_titleSceneName = "TitleScene";
@@ -87,6 +103,8 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private bool m_cameraKickEnabled = true;
     private bool m_committedCameraKickEnabled = true;
     private bool m_isRefreshingCombatGeneral;
+    private readonly Slider[] m_volumeSliders = new Slider[3];
+    private readonly TextMeshProUGUI[] m_volumeValueTexts = new TextMeshProUGUI[3];
 
     /// <summary>현재 일시정지 UI가 열려 있으면 <c>true</c>입니다.</summary>
     public bool IsOpen => m_isOpen;
@@ -230,6 +248,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         GameSettingManager settingManager = GameSettingManager.Instance;
         m_settingsBaseline = settingManager != null ? settingManager.CreateSnapshot() : null;
         SyncCombatGeneralSettings(settingManager, true);
+        SyncAudioSettings(settingManager);
 
         // 메뉴는 Awake에서 만들어져 저장값을 읽기 전일 수 있고, 지난번에 저장하지 않은 편집도 남아 있을 수 있어 열 때마다 확정 값을 다시 읽습니다.
         m_crosshairSettingsPanel?.RevertToCommittedValues();
@@ -262,6 +281,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         GameSettingManager.Instance.ApplySnapshot(m_settingsBaseline);
         SyncCombatGeneralSettings(GameSettingManager.Instance, true);
+        SyncAudioSettings(GameSettingManager.Instance);
     }
 
     /// <summary>현재 설정을 적용하고 사용자 설정 파일에 저장합니다.</summary>
@@ -674,10 +694,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
                 new Vector2(ReferenceWidth, 971f));
         }
 
-        BuildPlaceholderPage(
-            m_settingsContentPages[0].transform,
-            "오디오",
-            "기존 오디오 설정이 배치될 영역입니다.");
+        BuildAudioSettingsPage(m_settingsContentPages[0].transform);
         BuildCombatSettingsPage(m_settingsContentPages[1].transform);
         BuildPlaceholderPage(
             m_settingsContentPages[2].transform,
@@ -792,14 +809,184 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             TextAlignmentOptions.Right);
         m_mouseSensitivityValue.font = m_boldFont != null ? m_boldFont : m_regularFont;
 
-        GameObject sliderObject = CreateTopLeftObject(
+        m_mouseSensitivitySlider = CreateHorizontalSlider(
             "Mouse Sensitivity Slider",
             panel.transform,
             new Vector2(32f, -76f),
-            new Vector2(582f, 24f));
-        m_mouseSensitivitySlider = sliderObject.AddComponent<Slider>();
-        m_mouseSensitivitySlider.minValue = 0.01f;
-        m_mouseSensitivitySlider.maxValue = 10f;
+            new Vector2(582f, 24f),
+            0.01f,
+            10f,
+            false);
+        m_mouseSensitivitySlider.onValueChanged.AddListener(OnMouseSensitivityChanged);
+
+        m_cameraKickToggle = CreateToggle(
+            "Camera Kick Toggle",
+            panel.transform,
+            new Vector2(32f, -150f),
+            "카메라 킥 사용");
+        m_cameraKickToggle.onValueChanged.AddListener(OnCameraKickChanged);
+        TextMeshProUGUI help = CreateTopLeftText(
+            "Camera Kick Help",
+            panel.transform,
+            new Vector2(80f, -192f),
+            new Vector2(520f, 26f),
+            "끄면 사격 시 카메라 롤·FOV 시각 효과를 표시하지 않습니다.",
+            15f,
+            TextAlignmentOptions.Left);
+        help.color = new Color(1f, 1f, 1f, 0.5f);
+
+        RefreshCombatGeneralControls();
+        CommitCombatGeneralSettings();
+    }
+
+    /// <summary>
+    /// 오디오 탭: 전체·배경음·효과음 볼륨을 0~100 가로 슬라이더로 조절하는 임시 화면입니다.
+    /// </summary>
+    /// <remarks>
+    /// 값은 즉시 <see cref="GameSettingManager"/>에 반영되고, 저장·되돌리기는 다른 설정과 같은 흐름을 따릅니다.
+    /// </remarks>
+    private void BuildAudioSettingsPage(Transform parent)
+    {
+        TextMeshProUGUI title = CreateTopLeftText(
+            "Audio Title",
+            parent,
+            new Vector2(145f, -34f),
+            new Vector2(500f, 50f),
+            "오디오",
+            32f,
+            TextAlignmentOptions.Left);
+        title.font = m_boldFont != null ? m_boldFont : m_regularFont;
+
+        TextMeshProUGUI notice = CreateTopLeftText(
+            "Audio Notice",
+            parent,
+            new Vector2(145f, -82f),
+            new Vector2(900f, 32f),
+            "임시 오디오 설정입니다. 슬라이더를 드래그해 0~100 사이로 조절합니다.",
+            17f,
+            TextAlignmentOptions.Left);
+        notice.color = new Color(1f, 1f, 1f, 0.6f);
+
+        const float rowHeight = 86f;
+        string[] labels = { "전체 음량", "배경음", "효과음" };
+
+        Image panel = CreateTopLeftImage(
+            "Audio Controls",
+            parent,
+            new Vector2(145f, -132f),
+            new Vector2(650f, 40f + (rowHeight * labels.Length)),
+            new Color(0.035f, 0.035f, 0.035f, 0.92f));
+        if (m_audioPanelSprite != null)
+        {
+            ApplySprite(panel, m_audioPanelSprite);
+        }
+        else
+        {
+            Outline outline = panel.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
+            outline.effectDistance = new Vector2(1f, -1f);
+        }
+
+        TMP_FontAsset boldFont = m_boldFont != null ? m_boldFont : m_regularFont;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            float top = -30f - (rowHeight * i);
+            CreateTopLeftText(
+                $"{labels[i]} Label",
+                panel.transform,
+                new Vector2(32f, top),
+                new Vector2(220f, 30f),
+                labels[i],
+                18f,
+                TextAlignmentOptions.Left);
+
+            TextMeshProUGUI valueText = CreateTopLeftText(
+                $"{labels[i]} Value",
+                panel.transform,
+                new Vector2(518f, top),
+                new Vector2(96f, 30f),
+                string.Empty,
+                18f,
+                TextAlignmentOptions.Right);
+            valueText.font = boldFont;
+
+            Slider slider = CreateHorizontalSlider(
+                $"{labels[i]} Slider",
+                panel.transform,
+                new Vector2(32f, top - 46f),
+                new Vector2(582f, 24f),
+                0f,
+                100f,
+                true);
+
+            int channel = i;
+            slider.onValueChanged.AddListener(value => OnVolumeSliderChanged(channel, value));
+            m_volumeSliders[i] = slider;
+            m_volumeValueTexts[i] = valueText;
+        }
+
+        SyncAudioSettings(GameSettingManager.Instance);
+    }
+
+    /// <param name="channel">0 = 전체, 1 = 배경음, 2 = 효과음</param>
+    /// <param name="value">0~100 슬라이더 값</param>
+    private void OnVolumeSliderChanged(int channel, float value)
+    {
+        int percent = Mathf.RoundToInt(value);
+        m_volumeValueTexts[channel].text = percent.ToString();
+
+        GameSettingManager settingManager = GameSettingManager.Instance;
+        if (settingManager == null)
+        {
+            return;
+        }
+
+        float volume = percent / 100f;
+        switch (channel)
+        {
+            case 0: settingManager.SetMasterVolume(volume); break;
+            case 1: settingManager.SetBgmVolume(volume); break;
+            case 2: settingManager.SetSfxVolume(volume); break;
+        }
+    }
+
+    /// <summary>슬라이더 표시를 <see cref="GameSettingManager"/>의 현재 볼륨으로 맞춥니다.</summary>
+    private void SyncAudioSettings(GameSettingManager settingManager)
+    {
+        if (settingManager == null || m_volumeSliders[0] == null)
+        {
+            return;
+        }
+
+        float[] volumes = { settingManager.MasterVolume, settingManager.BgmVolume, settingManager.SfxVolume };
+        for (int i = 0; i < volumes.Length; i++)
+        {
+            int percent = Mathf.RoundToInt(Mathf.Clamp01(volumes[i]) * 100f);
+            m_volumeSliders[i].SetValueWithoutNotify(percent);
+            m_volumeValueTexts[i].text = percent.ToString();
+        }
+    }
+
+    /// <summary>
+    /// 설정 화면 공통 가로 슬라이더를 만듭니다.
+    /// </summary>
+    /// <remarks>
+    /// Slider Art 칸에 스프라이트가 있으면 그 이미지로, 비어 있으면 기본 단색(회색 트랙·빨간 채움·흰 핸들)으로 그립니다.
+    /// </remarks>
+    private Slider CreateHorizontalSlider(
+        string name,
+        Transform parent,
+        Vector2 topLeftPosition,
+        Vector2 size,
+        float minValue,
+        float maxValue,
+        bool wholeNumbers)
+    {
+        GameObject sliderObject = CreateTopLeftObject(name, parent, topLeftPosition, size);
+        Slider slider = sliderObject.AddComponent<Slider>();
+        slider.minValue = minValue;
+        slider.maxValue = maxValue;
+        slider.wholeNumbers = wholeNumbers;
 
         Image sliderBackground = CreateStretchImage(
             "Background",
@@ -822,7 +1009,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             "Handle",
             handleArea.transform,
             Vector2.zero,
-            new Vector2(18f, 18f),
+            m_sliderHandleSize,
             Color.white);
         RectTransform handleRect = handle.rectTransform;
         handleRect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -830,30 +1017,37 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         handleRect.pivot = new Vector2(0.5f, 0.5f);
         handleRect.anchoredPosition = Vector2.zero;
 
-        m_mouseSensitivitySlider.fillRect = fill.rectTransform;
-        m_mouseSensitivitySlider.handleRect = handleRect;
-        m_mouseSensitivitySlider.targetGraphic = handle;
-        m_mouseSensitivitySlider.direction = Slider.Direction.LeftToRight;
-        m_mouseSensitivitySlider.onValueChanged.AddListener(OnMouseSensitivityChanged);
+        if (m_sliderTrackSprite != null)
+        {
+            ApplySprite(sliderBackground, m_sliderTrackSprite);
+        }
 
-        m_cameraKickToggle = CreateToggle(
-            "Camera Kick Toggle",
-            panel.transform,
-            new Vector2(32f, -150f),
-            "카메라 킥 사용");
-        m_cameraKickToggle.onValueChanged.AddListener(OnCameraKickChanged);
-        TextMeshProUGUI help = CreateTopLeftText(
-            "Camera Kick Help",
-            panel.transform,
-            new Vector2(80f, -192f),
-            new Vector2(520f, 26f),
-            "끄면 사격 시 카메라 롤·FOV 시각 효과를 표시하지 않습니다.",
-            15f,
-            TextAlignmentOptions.Left);
-        help.color = new Color(1f, 1f, 1f, 0.5f);
+        if (m_sliderFillSprite != null)
+        {
+            ApplySprite(fill, m_sliderFillSprite);
+        }
 
-        RefreshCombatGeneralControls();
-        CommitCombatGeneralSettings();
+        if (m_sliderHandleSprite != null)
+        {
+            ApplySprite(handle, m_sliderHandleSprite);
+            handle.preserveAspect = true;
+        }
+
+        slider.fillRect = fill.rectTransform;
+        slider.handleRect = handleRect;
+        slider.targetGraphic = handle;
+        slider.direction = Slider.Direction.LeftToRight;
+        return slider;
+    }
+
+    /// <summary>
+    /// 아트 스프라이트를 원본 색 그대로 보이게 적용합니다. Border가 있으면 9-slice로 늘립니다.
+    /// </summary>
+    private static void ApplySprite(Image image, Sprite sprite)
+    {
+        image.sprite = sprite;
+        image.color = Color.white;
+        image.type = sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
     }
 
     private Toggle CreateToggle(string name, Transform parent, Vector2 position, string label)

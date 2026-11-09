@@ -155,11 +155,18 @@ public sealed class ShelterFlowController : MonoBehaviour
         EnterState(ShelterFlowState.WaitingForFirstCraft);
     }
 
-    /// <summary>첫 제작이 성공했음을 통지합니다.</summary>
+    /// <summary>
+    /// 첫 제작이 성공했음을 통지합니다.
+    /// 제조 시설 도착 Trigger 통과 여부와 관계없이 물품을 하나라도 제작하면 출격 시설 안내로 넘어갑니다.
+    /// </summary>
     public void NotifyFirstCraftCompleted()
     {
-        if (!m_hasStarted || m_currentState != ShelterFlowState.WaitingForFirstCraft)
+        if (!m_hasStarted
+            || (m_currentState != ShelterFlowState.GuideToManufacturing
+                && m_currentState != ShelterFlowState.WaitingForFirstCraft))
+        {
             return;
+        }
 
         EnterState(ShelterFlowState.GuideToOperation);
     }
@@ -176,6 +183,26 @@ public sealed class ShelterFlowController : MonoBehaviour
             return;
 
         EnterState(ShelterFlowState.WaitingForFirstDefenseResult);
+    }
+
+    /// <summary>
+    /// 출격으로 씬을 떠나기 직전에 통지합니다.
+    /// 셸터 데이터 동기화 전에 호출해야 귀환 후 출격 시설을 다시 안내하지 않습니다.
+    /// </summary>
+    public void NotifySortieStarted()
+    {
+        if (!m_hasStarted || m_currentState != ShelterFlowState.GuideToOperation)
+            return;
+
+        EnterState(ShelterFlowState.WaitingForFirstDefenseResult);
+    }
+
+    /// <summary>씬에 있는 흐름 컨트롤러가 있으면 출격 시작을 통지합니다.</summary>
+    public static void NotifySortieStartedInScene()
+    {
+        ShelterFlowController controller = FindFirstObjectByType<ShelterFlowController>();
+        if (controller != null)
+            controller.NotifySortieStarted();
     }
 
     /// <summary>첫 방어전 성공 결과가 반영된 뒤 셸터에 귀환했음을 통지합니다.</summary>

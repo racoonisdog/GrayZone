@@ -34,6 +34,9 @@ public sealed class ShelterPlayerFootstepEmitter : MonoBehaviour
     [Tooltip("Blend Tree의 Walk/Run 클립이 거의 동시에 같은 발 디딤 이벤트를 보낼 때 중복 재생을 막는 간격입니다.")]
     [Min(0f)]
     [SerializeField] private float m_minFootstepInterval = 0.18f;
+    [Tooltip("Blend Tree에서 이 비중 미만인 클립의 발 디딤 이벤트는 무시합니다. 0.5면 Walk/Run 중 더 많이 섞인 클립의 박자만 소리를 냅니다.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float m_minFootstepClipWeight = 0.5f;
 
     private bool m_loggedMissingMovementFmodEvent;
     private float m_nextFootstepTime;
@@ -52,6 +55,10 @@ public sealed class ShelterPlayerFootstepEmitter : MonoBehaviour
     /// <summary>걷기/달리기 클립의 AnimationEvent에서 호출됩니다.</summary>
     public void OnFootstep(AnimationEvent animationEvent)
     {
+        // Blend Tree는 비중이 0에 가까운 클립의 이벤트도 보내므로, 주도 클립의 박자만 재생합니다.
+        if (animationEvent.animatorClipInfo.weight < m_minFootstepClipWeight)
+            return;
+
         if (Time.time < m_nextFootstepTime)
             return;
 

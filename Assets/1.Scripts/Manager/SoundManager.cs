@@ -147,6 +147,31 @@ public sealed class SoundManager : MonoBehaviour
         Instance = this;
     }
 
+    /// <summary>
+    /// 저장된 옵션 볼륨을 FMOD에 적용합니다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GameSettingManager"/>는 보통 이 매니저보다 먼저(Bootstrap) 설정을 불러오므로,
+    /// 그때는 적용 대상이 없어 값만 보관됩니다. 씬에 이 매니저가 생기는 시점에 한 번 받아 옵니다.
+    /// </remarks>
+    private void Start()
+    {
+        if (Instance != this)
+        {
+            return;
+        }
+
+        GameSettingManager settings = GameSettingManager.Instance;
+        if (settings == null)
+        {
+            return;
+        }
+
+        SetVolume(SoundCategory.Master, settings.MasterVolume);
+        SetVolume(SoundCategory.Bgm, settings.BgmVolume);
+        SetVolume(SoundCategory.Sfx, settings.SfxVolume);
+    }
+
     private void OnDestroy()
     {
         if (Instance != this)
