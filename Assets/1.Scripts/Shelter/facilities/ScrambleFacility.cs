@@ -143,6 +143,9 @@ public sealed class ScrambleFacility : MonoBehaviour
             return false;
         }
 
+        // 출격 안내 단계를 동기화 전에 넘겨야 귀환 후 출격 시설을 다시 가리키지 않음
+        ShelterFlowController.NotifySortieStartedInScene();
+
         ShelterSceneDataManager shelterData = CacheShelterSceneDataManager();
         if (shelterData == null || !shelterData.PushToDataManager())
         {
