@@ -1070,19 +1070,27 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         // 첫 칸은 게임 창이 떠 있는 모니터의 기본(바탕화면) 해상도와 주사율입니다. 나머지는 그 모니터가 지원하는
         // 해상도·주사율 조합을 큰 해상도, 높은 주사율 순으로 모두 보여 줍니다. 같은 해상도라도 주사율마다 따로 고를 수 있습니다.
+        // 화면 비율은 16:9로 고정이라, 모니터가 16:9가 아니면 첫 칸은 모니터 안에 들어가는 가장 큰 16:9 해상도이고 목록도 16:9만 보여 줍니다.
         DisplayInfo display = Screen.mainWindowDisplayInfo;
-        DisplayOption native = new(new Vector2Int(display.width, display.height), display.refreshRate);
-        if (native.Size.x <= 0 || native.Size.y <= 0)
+        Vector2Int nativeSize = new(display.width, display.height);
+        RefreshRate nativeRate = display.refreshRate;
+        if (nativeSize.x <= 0 || nativeSize.y <= 0)
         {
-            native = new DisplayOption(
-                new Vector2Int(Screen.currentResolution.width, Screen.currentResolution.height),
-                Screen.currentResolution.refreshRateRatio);
+            nativeSize = new Vector2Int(Screen.currentResolution.width, Screen.currentResolution.height);
+            nativeRate = Screen.currentResolution.refreshRateRatio;
         }
+
+        DisplayOption native = new(GameSettingManager.FitToTargetAspect(nativeSize.x, nativeSize.y), nativeRate);
 
         List<DisplayOption> modes = new();
         Resolution[] resolutions = Screen.resolutions;
         for (int i = 0; i < resolutions.Length; i++)
         {
+            if (!GameSettingManager.IsTargetAspect(resolutions[i].width, resolutions[i].height))
+            {
+                continue;
+            }
+
             DisplayOption option = new(new Vector2Int(resolutions[i].width, resolutions[i].height), resolutions[i].refreshRateRatio);
             if (!option.SameAs(native) && !modes.Exists(existing => existing.SameAs(option)))
             {

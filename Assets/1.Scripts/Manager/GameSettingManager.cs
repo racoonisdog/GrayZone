@@ -52,6 +52,35 @@ public class GameSettingManager : MonoBehaviour
     public const float MinMouseSensitivity = 0.01f;
     public const float MaxMouseSensitivity = 10f;
 
+    /// <summary>게임 화면 비율(16:9)입니다. 해상도는 항상 이 비율로 맞춥니다.</summary>
+    public const float TargetAspect = 16f / 9f;
+
+    // 1366x768처럼 16:9에 가까운 해상도도 16:9로 봅니다.
+    private const float AspectTolerance = 0.01f;
+
+    /// <summary>해상도가 16:9인지 봅니다.</summary>
+    public static bool IsTargetAspect(int width, int height)
+    {
+        return width > 0 && height > 0 && Mathf.Abs((float)width / height - TargetAspect) <= AspectTolerance;
+    }
+
+    /// <summary>주어진 크기 안에 들어가는 가장 큰 16:9 해상도입니다. 이미 16:9면 그대로 돌려줍니다.</summary>
+    /// <remarks>1920x1200(16:10) 모니터는 1920x1080이 됩니다. 전체 화면에서 남는 부분은 Unity가 검은 띠로 채웁니다.</remarks>
+    public static Vector2Int FitToTargetAspect(int width, int height)
+    {
+        if (width <= 0 || height <= 0 || IsTargetAspect(width, height))
+        {
+            return new Vector2Int(width, height);
+        }
+
+        if ((float)width / height > TargetAspect)
+        {
+            return new Vector2Int(Mathf.RoundToInt(height * TargetAspect), height);
+        }
+
+        return new Vector2Int(width, Mathf.RoundToInt(width / TargetAspect));
+    }
+
     public float MasterVolume => currentSettings.masterVolume;
     public float BgmVolume => currentSettings.bgmVolume;
     public float SfxVolume => currentSettings.sfxVolume;
@@ -159,8 +188,16 @@ public class GameSettingManager : MonoBehaviour
     }
 
     /// <summary>저장된 해상도·주사율과 주어진 화면 모드로 화면을 맞춥니다.</summary>
+    /// <remarks>
+    /// 해상도는 16:9로 맞춰 적용하고 저장값도 고칩니다. 예전 저장 파일이나 기본값(1024x768 등)이 16:9가 아니어도 화면 비율은 바뀌지 않습니다.
+    /// 테두리 없는 전체 화면은 모니터 비율이 다르면 Unity가 위아래나 좌우에 검은 띠를 넣고, 창 모드는 창 크기를 바꿀 수 없어 그대로 16:9입니다.
+    /// </remarks>
     private void ApplyDisplayMode(FullScreenMode mode)
     {
+        Vector2Int size = FitToTargetAspect(currentSettings.width, currentSettings.height);
+        currentSettings.width = size.x;
+        currentSettings.height = size.y;
+
         if (currentSettings.refreshRateNumerator > 0)
         {
             Screen.SetResolution(currentSettings.width, currentSettings.height, mode, RefreshRate);
