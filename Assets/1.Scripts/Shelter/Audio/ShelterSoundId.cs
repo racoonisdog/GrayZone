@@ -29,6 +29,10 @@ public enum ShelterSoundId
     UiPanelClose = 103,
     /// <summary>재화 부족 등으로 요청이 거부됐을 때입니다.</summary>
     UiDenied = 104,
+    /// <summary>업그레이드·출격 등 최종 확정 버튼이 처리됐을 때입니다.</summary>
+    UiConfirm = 105,
+    /// <summary>+/- 입력으로 수량이 실제로 바뀌었을 때입니다.</summary>
+    UiQuantityChange = 106,
 
     // ── 시설 (200~) ───────────────────────────
     /// <summary>시설과 상호작용을 시작할 때입니다.</summary>
@@ -37,6 +41,8 @@ public enum ShelterSoundId
     FacilityUpgradeStart = 201,
     /// <summary>시설 업그레이드가 완료됐을 때입니다.</summary>
     FacilityUpgradeComplete = 202,
+    /// <summary>업그레이드 연출에서 화면이 가려지고 건물이 교체될 때 재생하는 건축 진행음입니다.</summary>
+    FacilityUpgradeBuild = 203,
 
     // ── 제작 (300~) ───────────────────────────
     /// <summary>제작을 시작할 때입니다.</summary>
@@ -49,6 +55,10 @@ public enum ShelterSoundId
     TreatmentStart = 400,
     /// <summary>치료가 완료됐을 때입니다.</summary>
     TreatmentComplete = 401,
+    /// <summary>치료 대상을 빈 환자 슬롯에 배정했을 때입니다.</summary>
+    MedicalPatientAssign = 402,
+    /// <summary>환자 슬롯의 치료 대상을 해제했을 때입니다.</summary>
+    MedicalPatientRelease = 403,
 
     // ── 진행 (500~) ───────────────────────────
     /// <summary>안내 목표가 갱신됐을 때입니다.</summary>

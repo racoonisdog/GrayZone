@@ -379,7 +379,9 @@ public class MedicalUI : MonoBehaviour, IFacilityStageSource
         if (m_currentManager == null || string.IsNullOrWhiteSpace(runtimeId))
             return;
 
-        m_currentManager.TryAssignPatient(runtimeId);
+        // 빈 슬롯이 없거나 잠겨 있으면 배정이 거부되므로, 결과에 맞는 소리를 냅니다.
+        bool assigned = m_currentManager.TryAssignPatient(runtimeId);
+        ShelterAudio.Play(assigned ? ShelterSoundId.MedicalPatientAssign : ShelterSoundId.UiDenied);
         Refresh();
     }
 

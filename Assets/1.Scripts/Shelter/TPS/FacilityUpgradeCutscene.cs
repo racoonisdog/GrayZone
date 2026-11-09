@@ -153,7 +153,9 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
         // 2) 검은 화면 뒤에서 비용 차감 + 레벨 증가 + LevelVisuals 교체 + 새 레벨 카메라 전환 → 새 레벨 건물 보여주기
         yield return FadeOut();
         bool upgraded = FacilityManager.Instance != null && FacilityManager.Instance.TryUpgrade(m_facilityId);
-        if (!upgraded)
+        if (upgraded)
+            ShelterAudio.Play(ShelterSoundId.FacilityUpgradeBuild); // 건축 진행음: 새 건물 장면까지 이어서 재생
+        else
             Debug.LogWarning($"[FacilityUpgradeCutscene] '{m_facilityId}' 업그레이드에 실패했습니다.", this);
         if (afterCamera != m_activeCamera)
         {
