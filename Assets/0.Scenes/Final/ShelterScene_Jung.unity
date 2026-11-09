@@ -545491,6 +545491,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ShelterAudio
   m_catalog: {fileID: 11400000, guid: 008303f38e0a50e4fa0285572943fa16, type: 2}
   m_playSceneAudioOnStart: 1
+  m_introCutscene: {fileID: 0}
   m_logEmptySlotsInEditor: 1
 --- !u!114 &2065074215
 MonoBehaviour:
