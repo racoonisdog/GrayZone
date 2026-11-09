@@ -162,6 +162,9 @@ public sealed class DefenseManager : CombatSceneManager
              "끄면 기존처럼 시작 전에 Z 홀드로 첫 공세를 바로 시작하고, 정비 구간은 건너뛸 수 없습니다.")]
     [SerializeField] private bool m_beginWithMaintenance;
 
+    [Tooltip("튜토리얼 전용 씬처럼 일반 방어전을 수동으로 시작해야 하는 경우 켭니다. 정비 자동 시작만 막으며, 외부에서 StartDefense를 호출하는 기능은 유지합니다.")]
+    [SerializeField] private bool m_disableAutomaticStart;
+
     /// <summary>방어전 시작 홀드 키입니다. 튜토리얼 마지막 페이지 안내(Z 3초)와 같은 키입니다.</summary>
     private const Key StartHoldKey = Key.Z;
 
@@ -1392,7 +1395,9 @@ public sealed class DefenseManager : CombatSceneManager
     /// </remarks>
     private void TryAutoStartMaintenance()
     {
-        if (m_autoStartAttempted || IsTutorialRunning())
+        if (m_disableAutomaticStart
+            || m_autoStartAttempted
+            || IsTutorialRunning())
         {
             return;
         }
