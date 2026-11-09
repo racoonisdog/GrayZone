@@ -52,6 +52,7 @@ public sealed class ShelterIntroCutscene : MonoBehaviour
     private Coroutine m_playRoutine;
     private readonly System.Collections.Generic.List<PlayerInputController> m_gatedInputs = new();
     private readonly System.Collections.Generic.List<GameplayPauseMenuController> m_disabledPauseMenus = new();
+    private readonly System.Collections.Generic.List<(PlayerMove move, bool wasLocked)> m_lockedMoves = new();
     private bool m_isPlaying;
     private bool m_finishRequested;
 
@@ -286,6 +287,19 @@ public sealed class ShelterIntroCutscene : MonoBehaviour
             m_gatedInputs.Add(inputs[i]);
         }
 
+        // 셸터 캐릭터의 PlayerMove는 키보드를 직접 읽어 입력 게이트를 거치지 않습니다.
+        // 잠그지 않으면 스킵용 Space가 점프로도 들어가므로, 원래 잠금 상태를 기억해 두고 잠급니다.
+        m_lockedMoves.Clear();
+        PlayerMove[] moves = FindObjectsByType<PlayerMove>(FindObjectsSortMode.None);
+        for (int i = 0; i < moves.Length; i++)
+        {
+            if (moves[i] == null)
+                continue;
+
+            m_lockedMoves.Add((moves[i], moves[i].IsMoveLocked));
+            moves[i].SetMoveLocked(true);
+        }
+
         m_disabledPauseMenus.Clear();
         if (m_blockPauseMenuWhilePlaying)
         {
@@ -318,6 +332,14 @@ public sealed class ShelterIntroCutscene : MonoBehaviour
         }
 
         m_gatedInputs.Clear();
+
+        for (int i = 0; i < m_lockedMoves.Count; i++)
+        {
+            if (m_lockedMoves[i].move != null)
+                m_lockedMoves[i].move.SetMoveLocked(m_lockedMoves[i].wasLocked);
+        }
+
+        m_lockedMoves.Clear();
     }
 
     private void SetVisible(bool visible)
