@@ -80,6 +80,12 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private RawImage m_previewImage;
     private CrosshairHudPreview m_hudPreview;
 
+    /// <summary>
+    /// 설정 화면의 다른 탭과 같은 슬라이더를 만드는 함수입니다. (이름, 부모, 왼쪽 위 위치, 크기, 최소, 최대, 정수만) 순서로 받습니다.
+    /// Build 전에 넣어야 하고, 비어 있으면 이 패널의 기본 슬라이더를 씁니다.
+    /// </summary>
+    public Func<string, Transform, Vector2, Vector2, float, float, bool, Slider> SliderFactory { get; set; }
+
     /// <summary>캐릭터별 조준선 편집 화면을 만듭니다.</summary>
     public void Build(RectTransform parent, TMP_FontAsset regularFont, TMP_FontAsset boldFont)
     {
@@ -401,11 +407,15 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             label, 18f, TextAlignmentOptions.Left, m_regularFont);
         TextMeshProUGUI value = CreateText("Value", rowObject.transform, new Vector2(518f, -8f), new Vector2(100f, 32f),
             string.Empty, 18f, TextAlignmentOptions.Right, m_boldFont);
-        Slider slider = CreateSlider(rowObject.transform, new Vector2(182f, -12f), new Vector2(320f, 24f), min, max);
+        bool wholeNumbers = Mathf.Approximately(step, 1f) && Mathf.Approximately(min, Mathf.Round(min));
+        Slider slider = CreateSlider(rowObject.transform, new Vector2(182f, -12f), new Vector2(320f, 24f), min, max, wholeNumbers);
         slider.onValueChanged.AddListener(raw =>
         {
             if (m_isRefreshing) return;
-            float snapped = step > 0f ? Mathf.Round(raw / step) * step : raw;
+            // 다른 탭 슬라이더처럼 값을 단위에 맞춰 자른 뒤 슬라이더와 숫자 표시를 바로 그 값으로 맞춥니다.
+            float snapped = step > 0f ? Mathf.Clamp(Mathf.Round(raw / step) * step, min, max) : raw;
+            slider.SetValueWithoutNotify(snapped);
+            value.text = valueText != null ? valueText(snapped) : $"{snapped.ToString(format)} px";
             Edit(s => setter(s, snapped));
         });
 
@@ -468,11 +478,13 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             $"{label.Replace(" 색", string.Empty)} 불투명도", 18f, TextAlignmentOptions.Left, m_regularFont);
         TextMeshProUGUI value = CreateText("Value", alphaRow.transform, new Vector2(518f, -8f), new Vector2(100f, 32f),
             string.Empty, 18f, TextAlignmentOptions.Right, m_boldFont);
-        Slider slider = CreateSlider(alphaRow.transform, new Vector2(182f, -12f), new Vector2(320f, 24f), 0f, 1f);
+        Slider slider = CreateSlider(alphaRow.transform, new Vector2(182f, -12f), new Vector2(320f, 24f), 0f, 1f, false);
         slider.onValueChanged.AddListener(raw =>
         {
             if (m_isRefreshing) return;
             float alpha = Mathf.Round(raw * 100f) / 100f;
+            slider.SetValueWithoutNotify(alpha);
+            value.text = $"{alpha * 100f:0}%";
             Edit(s =>
             {
                 Color current = getter(s);
@@ -789,14 +801,24 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
                         : "게임 화면과 같은 크기입니다. 비조준 중에는 항상 이 모습입니다.";
     }
 
-    private Slider CreateSlider(Transform parent, Vector2 position, Vector2 size, float min, float max)
+    private Slider CreateSlider(Transform parent, Vector2 position, Vector2 size, float min, float max, bool wholeNumbers)
     {
+        if (SliderFactory != null)
+        {
+            return SliderFactory("Slider", parent, position, size, min, max, wholeNumbers);
+        }
+
         GameObject sliderObject = CreateTopLeftObject("Slider", parent, position, size);
         Slider slider = sliderObject.AddComponent<Slider>();
         slider.minValue = min;
         slider.maxValue = max;
+        slider.wholeNumbers = wholeNumbers;
 
-        Image background = CreateStretchImage("Background", sliderObject.transform, new Color(1f, 1f, 1f, 0.13f));
+        // 보이는 막대는 위아래를 깎아 얇게 그립니다. 슬라이더 높이 전체에서 클릭과 드래그를 받도록 투명한 영역을 깝니다.
+        Image hitArea = sliderObject.AddComponent<Image>();
+        hitArea.color = Color.clear;
+
+        Image background =CreateStretchImage("Background", sliderObject.transform, new Color(1f, 1f, 1f, 0.13f));
         background.rectTransform.offsetMin = new Vector2(0f, 8f);
         background.rectTransform.offsetMax = new Vector2(0f, -8f);
 

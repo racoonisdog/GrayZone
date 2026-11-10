@@ -1434,13 +1434,16 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         BuildCombatGeneralSettings(m_combatSubPages[0].transform);
 
+        // 조준선 패널도 다른 탭과 같은 슬라이더(클릭 영역·아트·핸들 크기)를 쓰게 합니다.
         m_crosshairSettingsPanel = m_combatSubPages[1].AddComponent<CrosshairSettingsPanel>();
+        m_crosshairSettingsPanel.SliderFactory = CreateHorizontalSlider;
         m_crosshairSettingsPanel.Build(
             m_combatSubPages[1].transform as RectTransform,
             m_regularFont,
             m_boldFont);
 
         m_throwableCrosshairSettingsPanel = m_combatSubPages[2].AddComponent<CrosshairSettingsPanel>();
+        m_throwableCrosshairSettingsPanel.SliderFactory = CreateHorizontalSlider;
         m_throwableCrosshairSettingsPanel.BuildSharedThrowable(
             m_combatSubPages[2].transform as RectTransform,
             m_regularFont,
