@@ -21,8 +21,14 @@ public class CameraLook : MonoBehaviour
     [Header("Control Lock")]
     [SerializeField] private bool m_lookLocked;
 
+    // 커서를 잠그는 순간 커서가 화면 중앙으로 이동하면서 큰 마우스 델타가 한 번 들어온다.
+    // 그 값으로 시점이 튀지 않게 잠근 직후 몇 프레임은 델타를 버린다.
+    private const int IgnoreDeltaFramesAfterLock = 2;
+
     private float yaw;
     private float pitch;
+    private bool m_inputSuspended;
+    private int m_ignoreDeltaFrames;
 
     /// <summary>현재 카메라 좌우 회전각</summary>
     public float Yaw => yaw;
@@ -45,7 +51,7 @@ public class CameraLook : MonoBehaviour
 
     private void Update()
     {
-        if (m_lookLocked)
+        if (m_lookLocked || m_inputSuspended)
             return;
 
         HandleCursorInput();
@@ -53,13 +59,18 @@ public class CameraLook : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (m_lookLocked)
+        if (m_lookLocked || m_inputSuspended)
             return;
 
         if (lockCursorOnStart && Cursor.lockState != CursorLockMode.Locked)
             return;
 
         Vector2 mouseDelta = ReadMouseDelta();
+        if (m_ignoreDeltaFrames > 0)
+        {
+            m_ignoreDeltaFrames--;
+            return;
+        }
 
         // yaw는 제한 없이 좌우 회전하고, pitch만 위아래 각도를 제한한다.
         yaw += mouseDelta.x * mouseSensitivity;
@@ -88,6 +99,33 @@ public class CameraLook : MonoBehaviour
 
         if (lockCursorOnStart)
             LockCursor();
+    }
+
+    /// <summary>
+    /// 컷신 재생 등으로 마우스 회전만 잠시 멈춤. 커서 잠금 상태는 건드리지 않는다.
+    /// </summary>
+    /// <remarks><see cref="SetLookLocked"/>와 따로 관리하므로 UI 잠금과 서로 덮어쓰지 않는다.</remarks>
+    /// <param name="suspended">회전 입력을 멈추려면 <c>true</c></param>
+    public void SetInputSuspended(bool suspended)
+    {
+        if (m_inputSuspended == suspended)
+            return;
+
+        m_inputSuspended = suspended;
+
+        // 멈춘 동안 쌓인 델타가 재개 첫 프레임에 한꺼번에 들어오지 않게 버린다.
+        if (!m_inputSuspended)
+            m_ignoreDeltaFrames = IgnoreDeltaFramesAfterLock;
+    }
+
+    /// <summary>카메라 시점을 지정한 좌우·상하 각도로 바로 맞춤</summary>
+    /// <param name="newYaw">월드 기준 좌우 회전각</param>
+    /// <param name="newPitch">상하 회전각. minPitch~maxPitch로 제한된다.</param>
+    public void SetView(float newYaw, float newPitch)
+    {
+        yaw = newYaw;
+        pitch = Mathf.Clamp(newPitch, minPitch, maxPitch);
+        transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
     }
 
     private Vector2 ReadMouseDelta()
@@ -152,6 +190,9 @@ public class CameraLook : MonoBehaviour
 
     private void LockCursor()
     {
+        if (Cursor.lockState != CursorLockMode.Locked)
+            m_ignoreDeltaFrames = IgnoreDeltaFramesAfterLock;
+
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
