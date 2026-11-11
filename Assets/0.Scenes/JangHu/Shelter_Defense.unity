@@ -7899,7 +7899,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 31365333}
-  - component: {fileID: 31365334}
   m_Layer: 3
   m_Name: NavMesh Block
   m_TagString: Untagged
@@ -7922,23 +7921,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1267676752}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &31365334
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 31365332}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 35e95dc5ff2b64380880dd7ac5922847, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshModifierVolume
-  m_SerializedVersion: 0
-  m_Size: {x: 25, y: 56, z: 5}
-  m_Center: {x: 0, y: -3, z: 0}
-  m_Area: 1
-  m_AffectedAgents: ffffffff
 --- !u!1001 &32099154
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -159926,7 +159908,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 689396364}
-  - component: {fileID: 689396365}
   m_Layer: 3
   m_Name: NavMesh Block
   m_TagString: Untagged
@@ -159949,23 +159930,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 934500072}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &689396365
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 689396363}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 35e95dc5ff2b64380880dd7ac5922847, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshModifierVolume
-  m_SerializedVersion: 0
-  m_Size: {x: 30, y: 56, z: 5}
-  m_Center: {x: 0, y: -3, z: 0}
-  m_Area: 1
-  m_AffectedAgents: ffffffff
 --- !u!1001 &689746685
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -207017,7 +206981,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 894334755}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a5ac11cc976e418e8d13136b07e1f52, type: 3}
   m_Name: 
