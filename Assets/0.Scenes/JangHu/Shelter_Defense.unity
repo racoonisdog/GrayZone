@@ -35196,7 +35196,7 @@ GameObject:
   m_Component:
   - component: {fileID: 151743270}
   - component: {fileID: 151743271}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Cliff_Collider
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -163787,7 +163787,7 @@ GameObject:
   m_Component:
   - component: {fileID: 707879980}
   - component: {fileID: 707879981}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: EnemyDeleteTunnel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -208425,7 +208425,7 @@ GameObject:
   m_Component:
   - component: {fileID: 899879052}
   - component: {fileID: 899879053}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Tunnel_Inside_Collider
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -217407,7 +217407,7 @@ GameObject:
   - component: {fileID: 934500072}
   - component: {fileID: 934500073}
   m_Layer: 2
-  m_Name: MapGuard
+  m_Name: MapGuard(Tunnel)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -294015,7 +294015,7 @@ GameObject:
   - component: {fileID: 1267676752}
   - component: {fileID: 1267676753}
   m_Layer: 2
-  m_Name: MapGuard
+  m_Name: MapGuard(Bridge)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -297285,7 +297285,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1283959047}
   - component: {fileID: 1283959048}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Bridge_ColliderLeft
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -308220,7 +308220,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1330696051}
   - component: {fileID: 1330696052}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: EnemyDeleteBridge
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -346875,7 +346875,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1498989337}
   - component: {fileID: 1498989338}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Bridge_ColliderFront
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -357079,7 +357079,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1542848770}
   - component: {fileID: 1542848771}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Bridge_ColliderRight
   m_TagString: Untagged
   m_Icon: {fileID: 0}
