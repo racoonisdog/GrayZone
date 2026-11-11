@@ -37,6 +37,10 @@ public sealed class MenuSelectionIndicator : MonoBehaviour
              "항목 사이를 옮겨 갈 때는 쓰지 않고 바로 옮깁니다.")]
     [SerializeField, Min(0f)] private float m_appearFadeDuration = 0.2f;
 
+    [Tooltip("장식을 화면에 그릴 높이(px, 1920x1080 기준)입니다. 너비는 가져온 이미지의 비율대로 맞춥니다. " +
+             "아트를 더 큰 해상도로 다시 내보내도 화면 크기가 그대로 유지되게 하기 위해서입니다.")]
+    [SerializeField, Min(1f)] private float m_capHeight = 32f;
+
     /// <summary>장식이 지금 보이는 대상(또는 보이게 하려는 대상)입니다. 없으면 숨김 상태입니다.</summary>
     private Button m_shownButton;
 
@@ -315,7 +319,8 @@ public sealed class MenuSelectionIndicator : MonoBehaviour
         capRect.anchorMin = new Vector2(0f, 1f);
         capRect.anchorMax = new Vector2(0f, 1f);
         capRect.pivot = new Vector2(0f, 0.5f);
-        capRect.sizeDelta = new Vector2(texture.width, texture.height);
+        float aspect = texture.height > 0 ? (float)texture.width / texture.height : 1f;
+        capRect.sizeDelta = new Vector2(m_capHeight * aspect, m_capHeight);
 
         RawImage capImage = capObject.GetComponent<RawImage>();
         capImage.texture = texture;

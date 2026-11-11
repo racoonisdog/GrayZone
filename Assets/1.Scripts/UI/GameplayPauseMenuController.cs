@@ -80,6 +80,15 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
              "셸터처럼 전투 설정 화면을 쓰지 않는 씬에서 끕니다.")]
     [SerializeField] private bool m_showSettingsButton = true;
 
+    [Header("Settings Tabs")]
+    [Tooltip("설정 화면에 전투 탭(마우스 감도·조준선)을 둘지입니다. 셸터·타이틀처럼 전투가 없는 씬에서 끕니다. " +
+             "끄면 뒤에 있던 탭이 그 자리로 당겨집니다.")]
+    [SerializeField] private bool m_showCombatTab = true;
+
+    [Tooltip("켜면 일시정지 메뉴 없이 설정 화면만 씁니다. 타이틀처럼 다른 버튼이 OpenSettings를 불러 여는 씬에서 켭니다. " +
+             "ESC로 열리지 않고, ESC나 뒤로가기를 누르면 닫힙니다. 시간 정지와 입력 잠금도 하지 않습니다.")]
+    [SerializeField] private bool m_settingsOnly;
+
     /// <summary>셸터 이동 입력입니다. 스쿼드가 없는 셸터에서 메뉴가 열린 동안 잠급니다.</summary>
     private PlayerMove m_shelterMove;
 
@@ -89,9 +98,9 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private bool m_previousShelterLookLocked;
 
     private readonly List<PlayerInputController> m_fallbackInputControllers = new();
-    private readonly Image[] m_tabBackgrounds = new Image[4];
-    private readonly Outline[] m_tabOutlines = new Outline[4];
-    private readonly GameObject[] m_settingsContentPages = new GameObject[4];
+    private readonly List<Image> m_tabBackgrounds = new();
+    private readonly List<Outline> m_tabOutlines = new();
+    private readonly List<GameObject> m_settingsContentPages = new();
     private readonly Image[] m_combatSubTabBackgrounds = new Image[3];
     private readonly Outline[] m_combatSubTabOutlines = new Outline[3];
     private readonly GameObject[] m_combatSubPages = new GameObject[3];
@@ -204,6 +213,16 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             return;
         }
 
+        if (m_settingsOnly)
+        {
+            if (m_isOpen)
+            {
+                CloseSettingsOnly();
+            }
+
+            return;
+        }
+
         if (m_isOpen)
         {
             if (m_settingsPage.activeSelf)
@@ -241,7 +260,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (m_isOpen)
+        if (m_isOpen && !m_settingsOnly)
         {
             RestoreGameplayState();
         }
@@ -257,6 +276,12 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         }
 
         SetViewActive(false);
+        if (m_settingsOnly)
+        {
+            m_isOpen = false;
+            return;
+        }
+
         RestoreGameplayState();
         m_restoreCursorInLateUpdate = false;
     }
@@ -330,6 +355,13 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_crosshairSettingsPanel?.RevertToCommittedValues();
         m_throwableCrosshairSettingsPanel?.RevertToCommittedValues();
 
+        // 설정 화면만 쓰는 씬(타이틀)은 일시정지 메뉴를 거치지 않고 여기서 바로 화면을 엽니다.
+        if (m_settingsOnly && !m_isOpen)
+        {
+            m_isOpen = true;
+            SetViewActive(true);
+        }
+
         m_pausePage.SetActive(false);
         m_settingsPage.SetActive(true);
         SelectSettingsTab(0);
@@ -339,7 +371,24 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     /// <summary>설정 화면에서 일시정지 메뉴로 돌아갑니다.</summary>
     public void ReturnToPauseMenu()
     {
+        if (m_settingsOnly)
+        {
+            CloseSettingsOnly();
+            return;
+        }
+
         ShowPausePage();
+    }
+
+    /// <summary>설정 화면만 쓰는 씬에서 설정 화면을 닫습니다. 바꾼 값은 저장하지 않았어도 이번 실행 동안 유지됩니다.</summary>
+    private void CloseSettingsOnly()
+    {
+        SetViewActive(false);
+        m_isOpen = false;
+        if (EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(null);
+        }
     }
 
     /// <summary>설정 화면을 열었을 때(또는 마지막으로 저장했을 때)의 값으로 되돌리고 바로 적용합니다.</summary>
@@ -528,7 +577,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
     private void SelectSettingsTab(int selectedIndex)
     {
-        for (int i = 0; i < m_tabBackgrounds.Length; i++)
+        for (int i = 0; i < m_tabBackgrounds.Count; i++)
         {
             bool selected = i == selectedIndex;
             m_tabBackgrounds[i].color = selected
@@ -605,6 +654,9 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_settingsPage = null;
         m_resumeButton = null;
         m_firstSettingsTab = null;
+        m_tabBackgrounds.Clear();
+        m_tabOutlines.Clear();
+        m_settingsContentPages.Clear();
         m_pauseButtons.Clear();
         m_pauseSelectionIndicator = null;
         m_resolutionDropdown = null;
@@ -744,16 +796,33 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             new Vector2(1566f, 48f),
             new Color(217f / 255f, 217f / 255f, 217f / 255f, 0.56f));
 
-        string[] tabLabels = { "비디오", "오디오", "전투", "고급 설정" };
-        for (int i = 0; i < tabLabels.Length; i++)
+        // 탭은 이 목록 순서대로 왼쪽부터 놓입니다. 탭을 빼면 뒤 탭이 앞으로 당겨집니다.
+        var tabs = new List<(string Label, System.Action<Transform> BuildPage)>
+        {
+            ("비디오", BuildVideoSettingsPage),
+            ("오디오", BuildAudioSettingsPage),
+        };
+
+        if (m_showCombatTab)
+        {
+            tabs.Add(("전투", BuildCombatSettingsPage));
+        }
+
+        tabs.Add(("고급 설정", parent => BuildPlaceholderPage(
+            parent,
+            "고급 설정",
+            "고급 그래픽 및 접근성 설정이 배치될 영역입니다.")));
+
+        for (int i = 0; i < tabs.Count; i++)
         {
             int tabIndex = i;
+            string tabLabel = tabs[i].Label;
             Button tab = CreateButton(
-                $"Tab {tabLabels[i]}",
+                $"Tab {tabLabel}",
                 m_settingsPage.transform,
                 new Vector2(399f + (200f * i), 0f),
                 new Vector2(200f, 48f),
-                tabLabels[i],
+                tabLabel,
                 24f,
                 Color.clear);
 
@@ -764,15 +833,24 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             outline.useGraphicAlpha = false;
             tab.onClick.AddListener(() => SelectSettingsTab(tabIndex));
 
-            m_tabBackgrounds[i] = tabImage;
-            m_tabOutlines[i] = outline;
+            m_tabBackgrounds.Add(tabImage);
+            m_tabOutlines.Add(outline);
             if (i == 0)
             {
                 m_firstSettingsTab = tab;
             }
         }
 
-        BuildSettingsContent();
+        for (int i = 0; i < tabs.Count; i++)
+        {
+            GameObject page = CreateTopLeftObject(
+                $"Settings Content {tabs[i].Label}",
+                m_settingsPage.transform,
+                new Vector2(0f, -48f),
+                new Vector2(ReferenceWidth, 971f));
+            m_settingsContentPages.Add(page);
+            tabs[i].BuildPage(page.transform);
+        }
 
         Button revertButton = CreateButton(
             "Revert",
@@ -808,25 +886,6 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         SelectSettingsTab(0);
     }
 
-    private void BuildSettingsContent()
-    {
-        for (int i = 0; i < m_settingsContentPages.Length; i++)
-        {
-            m_settingsContentPages[i] = CreateTopLeftObject(
-                $"Settings Content {i}",
-                m_settingsPage.transform,
-                new Vector2(0f, -48f),
-                new Vector2(ReferenceWidth, 971f));
-        }
-
-        BuildVideoSettingsPage(m_settingsContentPages[0].transform);
-        BuildAudioSettingsPage(m_settingsContentPages[1].transform);
-        BuildCombatSettingsPage(m_settingsContentPages[2].transform);
-        BuildPlaceholderPage(
-            m_settingsContentPages[3].transform,
-            "고급 설정",
-            "고급 그래픽 및 접근성 설정이 배치될 영역입니다.");
-    }
 
     /// <summary>비디오 탭입니다. 지금은 해상도 드롭다운만 있습니다.</summary>
     /// <remarks>
