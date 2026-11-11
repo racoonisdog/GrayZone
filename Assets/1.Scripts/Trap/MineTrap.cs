@@ -127,14 +127,14 @@ public sealed class MineTrap : ExplosiveTrap
     /// <summary>지뢰가 실제로 폭발하는 프레임에 3D 폭발음을 한 번 재생합니다.</summary>
     private void PlayExplosionSound()
     {
-        if (!FMODUnity.RuntimeManager.IsInitialized)
+        if (!SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            FMODUnity.RuntimeManager.PlayOneShot(ExplosionSoundEventPath, ExplosionCenter);
+            SoundManager.Instance.PlayOneShot(ExplosionSoundEventPath, ExplosionCenter);
         }
         catch (FMODUnity.EventNotFoundException exception)
         {

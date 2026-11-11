@@ -921,7 +921,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
     private void PlaySelectedProjectileEquipSound()
     {
         ProjectileBase selectedProjectile = GetSelectedProjectile();
-        if (selectedProjectile == null || !FMODUnity.RuntimeManager.IsInitialized)
+        if (selectedProjectile == null || !SoundManager.IsReady)
         {
             return;
         }
@@ -933,7 +933,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
 
         try
         {
-            FMODUnity.RuntimeManager.PlayOneShot(eventPath);
+            SoundManager.Instance.PlayOneShot(eventPath);
         }
         catch (FMODUnity.EventNotFoundException exception)
         {

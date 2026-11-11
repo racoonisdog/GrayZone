@@ -1295,7 +1295,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </summary>
     private void PlayHitConfirmSound(bool headshot)
     {
-        if (m_hitConfirmEvent.IsNull)
+        if (m_hitConfirmEvent.IsNull || !SoundManager.IsReady)
         {
             return;
         }
@@ -1304,7 +1304,7 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         {
             if (!m_hitConfirmInstance.isValid())
             {
-                m_hitConfirmInstance = FMODUnity.RuntimeManager.CreateInstance(m_hitConfirmEvent);
+                m_hitConfirmInstance = SoundManager.Instance.CreateInstance(m_hitConfirmEvent);
             }
 
             m_hitConfirmInstance.setParameterByName(

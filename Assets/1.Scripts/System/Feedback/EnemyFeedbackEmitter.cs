@@ -146,14 +146,14 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
     /// <returns>FMOD 이벤트를 시작했으면 <c>true</c>, AudioClip 폴백이 필요하면 <c>false</c>입니다.</returns>
     private bool TryPlayFmodAt(FMODUnity.EventReference eventReference, Vector3 position)
     {
-        if (eventReference.IsNull || !FMODUnity.RuntimeManager.IsInitialized)
+        if (eventReference.IsNull || !SoundManager.IsReady)
         {
             return false;
         }
 
         try
         {
-            FMOD.Studio.EventInstance instance = FMODUnity.RuntimeManager.CreateInstance(eventReference);
+            FMOD.Studio.EventInstance instance = SoundManager.Instance.CreateInstance(eventReference);
             if (!instance.isValid())
             {
                 return false;
@@ -161,9 +161,7 @@ public sealed class EnemyFeedbackEmitter : MonoBehaviour
 
             instance.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(position));
             instance.setVolume(m_volume);
-            instance.start();
-            instance.release();
-            return true;
+            return SoundManager.Instance.StartOneShot(instance);
         }
         catch (FMODUnity.EventNotFoundException exception)
         {

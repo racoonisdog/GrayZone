@@ -713,7 +713,7 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
 
         try
         {
-            FMODUnity.RuntimeManager.PlayOneShot(eventPath, position);
+            SoundManager.Instance?.PlayOneShot(eventPath, position);
         }
         catch (System.Exception exception)
         {

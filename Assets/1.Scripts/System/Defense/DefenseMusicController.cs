@@ -203,7 +203,7 @@ public sealed class DefenseMusicController : MonoBehaviour
             return false;
         }
 
-        if (m_mainLoopEvent.IsNull || !RuntimeManager.IsInitialized)
+        if (m_mainLoopEvent.IsNull || !SoundManager.IsReady)
         {
             if (m_mainLoopEvent.IsNull && !m_loggedMissingMainEvent)
             {
@@ -216,7 +216,7 @@ public sealed class DefenseMusicController : MonoBehaviour
 
         try
         {
-            m_mainLoopInstance = RuntimeManager.CreateInstance(m_mainLoopEvent);
+            m_mainLoopInstance = SoundManager.Instance.CreateInstance(m_mainLoopEvent);
             if (!m_mainLoopInstance.isValid())
             {
                 return false;
@@ -371,7 +371,7 @@ public sealed class DefenseMusicController : MonoBehaviour
         m_victoryTransitionPending = false;
         StopAndReleaseMainLoop(FMOD.Studio.STOP_MODE.IMMEDIATE);
 
-        if (m_victoryResolveEvent.IsNull || !RuntimeManager.IsInitialized)
+        if (m_victoryResolveEvent.IsNull || !SoundManager.IsReady)
         {
             if (m_victoryResolveEvent.IsNull && !m_loggedMissingResolveEvent)
             {
@@ -384,7 +384,7 @@ public sealed class DefenseMusicController : MonoBehaviour
 
         try
         {
-            m_resolveInstance = RuntimeManager.CreateInstance(m_victoryResolveEvent);
+            m_resolveInstance = SoundManager.Instance.CreateInstance(m_victoryResolveEvent);
             if (m_resolveInstance.isValid())
             {
                 m_resolveInstance.start();

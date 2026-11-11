@@ -139,14 +139,14 @@ public sealed class DefenseObjectiveAudioController : MonoBehaviour
 
     private void PlayOneShot(string eventPath, Vector3 position, ref bool loggedMissingEvent)
     {
-        if (!RuntimeManager.IsInitialized)
+        if (!SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            RuntimeManager.PlayOneShot(eventPath, position);
+            SoundManager.Instance.PlayOneShot(eventPath, position);
         }
         catch (EventNotFoundException exception)
         {

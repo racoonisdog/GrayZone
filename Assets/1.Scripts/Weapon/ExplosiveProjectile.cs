@@ -205,14 +205,14 @@ public class ExplosiveProjectile : ProjectileBase
     /// <summary>수류탄이 터진 지점에서 3D 폭발음을 한 번 재생합니다.</summary>
     private void PlayExplosionSound(Vector3 explosionCenter)
     {
-        if (!FMODUnity.RuntimeManager.IsInitialized)
+        if (!SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            FMODUnity.RuntimeManager.PlayOneShot(ExplosionSoundEventPath, explosionCenter);
+            SoundManager.Instance.PlayOneShot(ExplosionSoundEventPath, explosionCenter);
         }
         catch (FMODUnity.EventNotFoundException exception)
         {
