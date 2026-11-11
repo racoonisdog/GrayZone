@@ -33951,10 +33951,10 @@ MonoBehaviour:
   m_allowPartialPath: 1
   m_drawPathLine: 1
   m_pathLineColor: {r: 1, g: 0, b: 0, a: 1}
-  m_pathLineWidth: 0.5
+  m_pathLineWidth: 0.605
   m_pathLineHeight: 0.1
   m_pathLineMaterialOverride: {fileID: 2100000, guid: 38adfdd8f6a4f924185b2953251a96e4, type: 2}
-  m_pathLineTileLength: 0.5
+  m_pathLineTileLength: 3
   m_pathLineScrollSpeed: 1
   m_groundSampleSpacing: 0.5
   m_groundSnapRadius: 1
@@ -33962,6 +33962,9 @@ MonoBehaviour:
   m_cornerRadius: 2.5
   m_cornerSegments: 12
   m_cornerMergeDistance: 1
+  m_heightFlattenTolerance: 0.3
+  m_heightCornerAngle: 25
+  m_heightCornerRadius: 1
 --- !u!4 &145747071
 Transform:
   m_ObjectHideFlags: 0
