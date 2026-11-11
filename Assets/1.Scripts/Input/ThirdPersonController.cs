@@ -146,7 +146,11 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
     [Tooltip("정지와 이동 사이를 오가는 데 걸리는 시간(초)입니다. 방향 블렌드 트리의 중심(정지 클립)과 방향 클립 사이를 얼마나 천천히 넘나들지 정합니다. 짧으면 걷기 시작과 멈춤이 뚝 끊겨 보입니다.")]
     [Min(0.0f)]
-    [SerializeField] private float m_moveStartStopDuration = 0.18f;
+    [SerializeField] private float m_moveStartStopDuration = 0.1f;
+
+    [Tooltip("이동 입력을 놓은 뒤 몸이 완전히 멈추기까지 걸리는 시간(초)입니다. 놓는 순간의 속도와 상관없이 이 시간 안에 일정하게 감속합니다. 멈춘 뒤 정지 자세로 넘어가는 시간(정지·이동 전환 시간)이 여기에 더해집니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_stopDuration = 0.15f;
 
     [Tooltip("웅크린 상태의 이동 속도입니다. 단위는 m/s입니다.")]
     [Clamp(Min = 0)]
@@ -640,6 +644,9 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>ADS/전투 자세 전환 뒤 전용 속도 보간을 유지할 남은 시간입니다.</summary>
     private float m_combatSpeedTransitionTimer;
 
+    // 이동 입력을 놓은 순간 정한 감속도(m/s²)입니다. 음수면 아직 입력을 놓지 않은 상태입니다.
+    private float m_stopDeceleration = -1.0f;
+
     /// <summary>이동 입력이 끊긴 뒤 경과한 시간입니다. Idle 시점 전환 판정에 사용합니다.</summary>
     private float m_idleTimer;
 
@@ -724,6 +731,9 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
 
     /// <summary>정지와 이동 사이를 오가는 데 걸리는 시간(초)입니다.</summary>
     public float MoveStartStopDuration => m_moveStartStopDuration;
+
+    /// <summary>이동 입력을 놓은 뒤 몸이 멈추기까지 걸리는 시간(초)입니다.</summary>
+    public float StopDuration => m_stopDuration;
 
     /// <summary>웅크림·걷기·달리기 단계 사이를 오가는 데 걸리는 시간(초)입니다.</summary>
     public float MoveStateBlendDuration => ScaleActionDuration(m_moveStateBlendDuration);
@@ -863,6 +873,10 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>정지와 이동 사이의 블렌드 시간을 설정합니다.</summary>
     /// <param name="value">새로 적용할 시간(초)입니다.</param>
     public void SetMoveStartStopDuration(float value) => m_moveStartStopDuration = Mathf.Max(0.0f, value);
+
+    /// <summary>이동 입력을 놓은 뒤 몸이 멈추기까지 걸리는 시간을 설정합니다.</summary>
+    /// <param name="value">새로 적용할 시간(초)입니다.</param>
+    public void SetStopDuration(float value) => m_stopDuration = Mathf.Max(0.0f, value);
 
     /// <summary>웅크림·걷기·달리기 단계 사이의 블렌드 시간을 설정합니다.</summary>
     /// <param name="value">새로 적용할 시간(초)입니다.</param>
@@ -2255,8 +2269,29 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             : m_speedChangeRate;
         m_combatSpeedTransitionTimer = Mathf.Max(0.0f, m_combatSpeedTransitionTimer - Time.deltaTime);
 
-        if (currentHorizontalSpeed < targetSpeed - speedOffset ||
-            currentHorizontalSpeed > targetSpeed + speedOffset)
+        bool stopping = m_input.move == Vector2.zero;
+
+        if (!stopping)
+        {
+            m_stopDeceleration = -1.0f;
+        }
+
+        if (stopping)
+        {
+            // 입력을 놓으면 그 순간의 속도에서 정지 시간 안에 0이 되도록 일정하게 줄입니다.
+            // 위의 보간으로 멈추면 남은 속도가 조금씩만 줄어 걷기 동작이 길게 이어진 채 미끄러지고,
+            // 달리다 놓을수록 더 오래 걸립니다.
+            if (m_stopDeceleration < 0.0f)
+            {
+                m_stopDeceleration = m_stopDuration > 0.0f
+                    ? currentHorizontalSpeed / m_stopDuration
+                    : float.PositiveInfinity;
+            }
+
+            m_speed = Mathf.MoveTowards(currentHorizontalSpeed, 0.0f, m_stopDeceleration * Time.deltaTime);
+        }
+        else if (currentHorizontalSpeed < targetSpeed - speedOffset ||
+                 currentHorizontalSpeed > targetSpeed + speedOffset)
         {
             m_speed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed * inputMagnitude,
                 Time.deltaTime * speedChangeRate);

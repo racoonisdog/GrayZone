@@ -649805,6 +649805,14 @@ PrefabInstance:
       propertyPath: serializeData2.initData.clothSetupDataList.Array.data[0].transformRotations.Array.data[44].value.z
       value: 0.36461642
       objectReference: {fileID: 0}
+    - target: {fileID: 6841288075322650384, guid: 00d8ab193dc5e2c4d8c55337ba2bb91f, type: 3}
+      propertyPath: m_stopDuration
+      value: 0.15
+      objectReference: {fileID: 0}
+    - target: {fileID: 6841288075322650384, guid: 00d8ab193dc5e2c4d8c55337ba2bb91f, type: 3}
+      propertyPath: m_moveStartStopDuration
+      value: 0.1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -1171642,6 +1171650,14 @@ PrefabInstance:
     - target: {fileID: 8205220063926763760, guid: d1cc3c8e7eaaee646ada25510fece90b, type: 3}
       propertyPath: serializeData2.initData.clothSetupDataList.Array.data[0].transformRotations.Array.data[15].value.z
       value: -5.67662e-16
+      objectReference: {fileID: 0}
+    - target: {fileID: 8693863936876353319, guid: d1cc3c8e7eaaee646ada25510fece90b, type: 3}
+      propertyPath: m_stopDuration
+      value: 0.15
+      objectReference: {fileID: 0}
+    - target: {fileID: 8693863936876353319, guid: d1cc3c8e7eaaee646ada25510fece90b, type: 3}
+      propertyPath: m_moveStartStopDuration
+      value: 0.1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
