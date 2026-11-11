@@ -960,13 +960,19 @@ public class ExplosiveProjectileShooter : MonoBehaviour
         }
     }
 
-    /// <summary>투척 경로 충돌에 쓸 Layer입니다. 공통 충돌 Layer에서 투척물이 무시하도록 지정한 Layer를 뺍니다.</summary>
+    /// <summary>
+    /// 투척 경로 충돌에 쓸 Layer입니다. 공통 충돌 Layer에서 투척물이 무시하도록 지정한 Layer와 Ignore Raycast Layer를 뺍니다.
+    /// </summary>
+    /// <remarks>
+    /// 맵 이탈을 막는 투명벽(Map Guard)은 Ignore Raycast Layer에 있고 플레이어블만 막습니다. 경로 표시와 실제 비행이 같은 값을 쓰므로
+    /// 둘 다 투명벽을 지나갑니다.
+    /// </remarks>
     private int GetProjectileCollisionLayers(ProjectileBase projectile)
     {
         int excludedLayers = projectile != null
             ? projectile.ContactExcludeLayers.value
             : 0;
-        return m_collisionLayers.value & ~excludedLayers;
+        return m_collisionLayers.value & ~excludedLayers & ~Physics.IgnoreRaycastLayer;
     }
 
     /// <summary>인덱스를 0 ~ count-1 범위로 순환시킵니다. 음수도 뒤에서부터 셉니다.</summary>
