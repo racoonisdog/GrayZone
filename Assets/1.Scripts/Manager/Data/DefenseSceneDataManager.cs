@@ -157,6 +157,11 @@ public sealed class DefenseSceneDataManager : CombatSceneDataManager
     /// <summary>공통 입장 데이터를 준비한 뒤, 외부 입장 데이터가 없으면 GameDataManager 값으로 방어전 입장 데이터를 만듭니다.</summary>
     protected override void Start()
     {
+        // 방어전의 함정·수리 UI가 쓰는 작업 창고를 먼저 전역 자원으로 채웁니다.
+        // 이 순서가 뒤집히면 base.Start()의 필드 입장 데이터 생성이 비어 있는 작업본을 전역 정본에
+        // 역동기화해, 셸터에서 가져온 자원과 캐릭터 데이터까지 지울 수 있습니다.
+        ShelterSceneDataManager.Instance?.InitializeFromGameData();
+
         base.Start();
 
         if (!HasDefenseEntryData)
@@ -230,7 +235,34 @@ public sealed class DefenseSceneDataManager : CombatSceneDataManager
             return;
         }
 
-        m_defenseRuntimeData.BeginRest(KillCount);
+        if (!m_defenseRuntimeData.BeginRest(KillCount))
+        {
+            Debug.LogWarning($"[DefenseSceneDataManager] 정비 시작을 기록하지 못했습니다. phase={Phase}", this);
+        }
+    }
+
+    /// <summary>
+    /// 귀환 정산 전에 방어전에서 설치·수리에 소비한 자원을 전역 정본에 먼저 반영합니다.
+    /// </summary>
+    public override FieldResultData FinalizeField(FieldEndReason endReason)
+    {
+        if (!IsFinalized)
+        {
+            GameDataManager gameData = GameDataManager.Instance;
+            ShelterSceneDataManager shelterData = ShelterSceneDataManager.Instance;
+            if (gameData != null && shelterData != null)
+            {
+                gameData.SyncResourcesFromShelter(shelterData);
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "[DefenseSceneDataManager] 방어전 자원 작업본을 전역 데이터에 반영하지 못했습니다.",
+                    this);
+            }
+        }
+
+        return base.FinalizeField(endReason);
     }
 
     /// <summary>

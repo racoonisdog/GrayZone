@@ -150,7 +150,7 @@ public sealed class EnemyVocalDirector : MonoBehaviour
 
         m_nextEvaluationTime = Time.time + Mathf.Max(0.05f, m_evaluationInterval);
 
-        if (!IsVocalPhaseActive() || !FMODUnity.RuntimeManager.IsInitialized)
+        if (!IsVocalPhaseActive() || !SoundManager.IsReady)
         {
             StopAllVoices();
             return;
@@ -296,13 +296,12 @@ public sealed class EnemyVocalDirector : MonoBehaviour
     {
         try
         {
-            EventInstance instance = FMODUnity.RuntimeManager.CreateInstance(IndividualGrowlEventPath);
+            EventInstance instance = SoundManager.Instance.CreateInstance(IndividualGrowlEventPath, emitter.gameObject);
             if (!instance.isValid())
             {
                 return false;
             }
 
-            FMODUnity.RuntimeManager.AttachInstanceToGameObject(instance, emitter.gameObject);
             instance.setProperty(EVENT_PROPERTY.MINIMUM_DISTANCE, 2.0f);
             instance.setProperty(EVENT_PROPERTY.MAXIMUM_DISTANCE, 25.0f);
             instance.setVolume(m_individualVolume);
@@ -393,13 +392,12 @@ public sealed class EnemyVocalDirector : MonoBehaviour
     {
         try
         {
-            m_wallaInstance = FMODUnity.RuntimeManager.CreateInstance(HordeWallaEventPath);
+            m_wallaInstance = SoundManager.Instance.CreateInstance(HordeWallaEventPath, m_wallaAnchor.gameObject);
             if (!m_wallaInstance.isValid())
             {
                 return;
             }
 
-            FMODUnity.RuntimeManager.AttachInstanceToGameObject(m_wallaInstance, m_wallaAnchor.gameObject);
             m_wallaInstance.setProperty(EVENT_PROPERTY.MINIMUM_DISTANCE, 3.0f);
             m_wallaInstance.setProperty(EVENT_PROPERTY.MAXIMUM_DISTANCE, 45.0f);
             m_wallaInstance.setVolume(m_wallaVolume);

@@ -80,14 +80,14 @@ public sealed class TitleScreenController : MonoBehaviour
     /// <summary>타이틀 전용 FMOD BGM 루프를 시작합니다.</summary>
     private void PlayTitleMusic()
     {
-        if (m_titleMusic.isValid() || !RuntimeManager.IsInitialized)
+        if (m_titleMusic.isValid() || !SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            m_titleMusic = RuntimeManager.CreateInstance(TitleMusicEventPath);
+            m_titleMusic = SoundManager.Instance.CreateInstance(TitleMusicEventPath);
             if (m_titleMusic.isValid())
             {
                 m_titleMusic.start();

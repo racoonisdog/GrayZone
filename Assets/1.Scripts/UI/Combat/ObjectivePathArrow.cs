@@ -120,6 +120,19 @@ public sealed class ObjectivePathArrow : MonoBehaviour
     [Min(0.0f)]
     [SerializeField] private float m_cornerMergeDistance = 1.0f;
 
+    [Tooltip("바닥 높이 변화가 이 값(m) 안쪽이면 높은 점들을 이은 선으로 높이를 펴서 그립니다. 움푹한 곳은 메우고, " +
+             "선이 원래 높이 아래로는 내려가지 않습니다. 울퉁불퉁한 바닥에서 선이 출렁이지 않게 합니다. 0이면 끕니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_heightFlattenTolerance = 0.3f;
+
+    [Tooltip("높이 그래프에서 앞뒤 기울기 각도 차가 이 값(도) 이상인 곳을 곡선으로 둥글게 꺾습니다. 계단 위아래처럼 각진 곳입니다.")]
+    [Range(1.0f, 90.0f)]
+    [SerializeField] private float m_heightCornerAngle = 25.0f;
+
+    [Tooltip("높이가 꺾이는 곳 앞뒤로 이 거리(m)만큼을 곡선으로 바꿉니다. 클수록 넓게 휘어집니다. 0이면 끕니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_heightCornerRadius = 1.0f;
+
     /// <summary>경로 계산 결과를 받는 버퍼입니다. 매번 새로 만들지 않으려고 재사용합니다.</summary>
     private NavMeshPath m_path;
 
@@ -132,6 +145,22 @@ public sealed class ObjectivePathArrow : MonoBehaviour
     /// <summary>선을 그릴 때 쓰는 꺾임점입니다. 곡선을 켜면 가까운 꺾임점을 합친 결과입니다.</summary>
     private Vector3[] m_lineCorners = new Vector3[0];
     private readonly System.Collections.Generic.List<Vector3> m_lineCornerBuffer = new System.Collections.Generic.List<Vector3>();
+
+    /// <summary>높이 평탄화에서 윗선을 이루는 선 점 번호입니다. 재사용합니다.</summary>
+    private readonly System.Collections.Generic.List<int> m_hullIndices = new System.Collections.Generic.List<int>();
+
+    /// <summary>높이 평탄화에 쓰는 선 점별 누적 수평 거리와 원래 높이입니다. 매 프레임 새로 만들지 않으려고 재사용합니다.</summary>
+    private float[] m_lineDistances = new float[0];
+    private float[] m_lineHeights = new float[0];
+
+    /// <summary>높이 꺾임을 둥글리기 직전의 높이입니다. 곡선 양 끝 높이와 기울기를 여기서 읽습니다.</summary>
+    private float[] m_lineProfileHeights = new float[0];
+
+    /// <summary>높이 꺾임 곡선이 바닥 쪽으로 파고들 때 바닥에서 띄울 최소 높이(m)입니다. 바닥과 겹쳐 깜빡이지 않게 합니다.</summary>
+    private const float CornerGroundClearance = 0.02f;
+
+    /// <summary>높이 꺾임 곡선이 바닥에 막힐 때 곡선 위치를 앞뒤로 옮겨 볼 간격(m)입니다.</summary>
+    private const float CornerShiftStep = 0.1f;
 
     private bool m_hasPath;
     private float m_remainingPathLength;
@@ -389,7 +418,11 @@ public sealed class ObjectivePathArrow : MonoBehaviour
         m_pathLine.widthMultiplier = m_pathLineWidth;
         m_pathLine.numCornerVertices = 4;
         m_pathLine.numCapVertices = 4;
-        m_pathLine.alignment = LineAlignment.View;
+        // View 정렬은 띠를 카메라 쪽으로 세워서, 낮은 시점에서는 바닥에서 떠 보이고 꺾임마다 비틀려(롤) 보입니다.
+        // 선 오브젝트가 위를 보게 고정하고 TransformZ로 정렬해 띠를 바닥과 평행하게 눕힙니다.
+        // 이 오브젝트는 회전하지 않으므로(화살표는 따로 돎) 만들 때 한 번만 맞춥니다.
+        lineObject.transform.rotation = Quaternion.LookRotation(Vector3.up, Vector3.forward);
+        m_pathLine.alignment = LineAlignment.TransformZ;
         m_pathLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         m_pathLine.receiveShadows = false;
         m_pathLine.startColor = m_pathLineColor;
@@ -501,6 +534,333 @@ public sealed class ObjectivePathArrow : MonoBehaviour
         m_lineCorners = m_lineCornerBuffer.ToArray();
     }
 
+    /// <summary>
+    /// 선 점의 높이를 허용치 안에서 일자로 폅니다. 수평 위치는 그대로 두고 y만 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// 선을 따라 간 수평 거리와 높이로 놓고, 구간 양 끝을 잇는 직선에서 높이가 가장 많이 벗어난 점을 찾습니다.
+    /// 그 차이가 허용치 안이면 그 구간을 높은 점 기준 윗선으로 펴고(<see cref="TryApplyUpperHeightHull"/>), 아니면 그 점에서
+    /// 나눠 앞뒤를 같은 방법으로 봅니다(Ramer-Douglas-Peucker).
+    /// </remarks>
+    private void FlattenLineHeights(System.Collections.Generic.List<Vector3> points)
+    {
+        int count = points.Count;
+        bool flatten = m_heightFlattenTolerance > 0.0f;
+        bool round = m_heightCornerRadius > 0.0f;
+        if ((!flatten && !round) || count < 3)
+        {
+            return;
+        }
+
+        if (m_lineDistances.Length < count)
+        {
+            m_lineDistances = new float[count * 2];
+            m_lineHeights = new float[count * 2];
+            m_lineProfileHeights = new float[count * 2];
+        }
+
+        m_lineDistances[0] = 0.0f;
+        for (int i = 0; i < count; i++)
+        {
+            m_lineHeights[i] = points[i].y;
+            if (i > 0)
+            {
+                m_lineDistances[i] = m_lineDistances[i - 1] + HorizontalDistance(points[i - 1], points[i]);
+            }
+        }
+
+        if (flatten)
+        {
+            FlattenHeightRange(points, 0, count - 1);
+        }
+
+        if (round)
+        {
+            RoundHeightCorners(points);
+        }
+    }
+
+    /// <summary>
+    /// 높이가 크게 꺾이는 곳(계단 위아래처럼 직각에 가까운 곳)을 곡선으로 둥글게 이어 줍니다. 수평 위치는 그대로 두고 y만 바꿉니다.
+    /// </summary>
+    /// <remarks>
+    /// 선을 옆에서 본 그래프(누적 수평 거리, 높이)에서 앞 구간과 뒤 구간의 기울기 각도 차가 <see cref="m_heightCornerAngle"/>
+    /// 이상인 점을 꺾임점으로 봅니다. 계단은 아래 모서리와 위 모서리가 한 칸(0.5m) 간격으로 붙어 있어서, 반경의 두 배보다
+    /// 가까운 꺾임점은 한 묶음으로 처리합니다. 묶음의 첫 꺾임점보다 반경만큼 앞에서 시작해 마지막 꺾임점보다 반경만큼 뒤에서
+    /// 끝나는 곡선 하나로 바꿉니다. 곡선은 시작점에서 들어오던 기울기, 끝점에서 나가는 기울기를 그대로 이어받는
+    /// 3차 에르미트 곡선이라 앞뒤 직선과 꺾이지 않고 이어집니다.
+    /// 계단 윗모서리처럼 곡선이 안쪽으로 파고드는 곳은 바닥보다 아래로 내려가지 않게 바닥에서 조금 띄운 높이로 막습니다.
+    /// </remarks>
+    private void RoundHeightCorners(System.Collections.Generic.List<Vector3> points)
+    {
+        int count = points.Count;
+        for (int i = 0; i < count; i++)
+        {
+            m_lineProfileHeights[i] = points[i].y;
+        }
+
+        float total = m_lineDistances[count - 1];
+        float cornerAngle = m_heightCornerAngle * Mathf.Deg2Rad;
+        float spanStart = 0.0f;
+        float spanEnd = -1.0f;
+        for (int i = 1; i < count - 1; i++)
+        {
+            float inRun = m_lineDistances[i] - m_lineDistances[i - 1];
+            float outRun = m_lineDistances[i + 1] - m_lineDistances[i];
+            if (inRun <= 0.0001f || outRun <= 0.0001f)
+            {
+                continue;
+            }
+
+            float inAngle = Mathf.Atan2(m_lineProfileHeights[i] - m_lineProfileHeights[i - 1], inRun);
+            float outAngle = Mathf.Atan2(m_lineProfileHeights[i + 1] - m_lineProfileHeights[i], outRun);
+            if (Mathf.Abs(outAngle - inAngle) < cornerAngle)
+            {
+                continue;
+            }
+
+            float cornerStart = Mathf.Max(0.0f, m_lineDistances[i] - m_heightCornerRadius);
+            float cornerEnd = Mathf.Min(total, m_lineDistances[i] + m_heightCornerRadius);
+            if (spanEnd >= 0.0f && cornerStart <= spanEnd)
+            {
+                spanEnd = cornerEnd;
+                continue;
+            }
+
+            if (spanEnd >= 0.0f)
+            {
+                ApplyCornerCurve(points, count, total, spanStart, spanEnd);
+            }
+
+            spanStart = cornerStart;
+            spanEnd = cornerEnd;
+        }
+
+        if (spanEnd >= 0.0f)
+        {
+            ApplyCornerCurve(points, count, total, spanStart, spanEnd);
+        }
+    }
+
+    /// <summary>
+    /// 꺾임 묶음 하나를 곡선으로 바꿉니다. 곡선이 바닥에 파고들지 않는 위치를 찾아 그 자리에 놓습니다.
+    /// </summary>
+    /// <remarks>
+    /// 내리막 계단 윗모서리에서 곡선을 모서리 앞부터 내리기 시작하면 아직 높은 바닥 위라서 바닥에 막힙니다. 막힌 점을 바닥 높이로
+    /// 올리면 선이 모서리까지 평평하게 가다가 수직으로 떨어져서 곡선이 사라집니다. 그래서 같은 폭의 곡선을 앞뒤로 조금씩 옮겨 보며
+    /// 모든 점이 바닥 위에 있는 위치 중 원래 자리에서 가장 가까운 곳을 씁니다. 내리막은 모서리에서부터 내려가는 곡선, 오르막은 위
+    /// 바닥 모서리에 닿으며 끝나는 곡선이 됩니다. 그런 위치가 없으면 원래 자리에 놓고 바닥 아래로 내려간 점만 바닥 위로 올립니다.
+    /// </remarks>
+    private void ApplyCornerCurve(System.Collections.Generic.List<Vector3> points, int count, float total, float start, float end)
+    {
+        float width = end - start;
+        int stepCount = Mathf.CeilToInt(width / CornerShiftStep);
+        for (int step = 0; step <= stepCount * 2; step++)
+        {
+            // 0, -1, +1, -2, +2 ... 순서로 원래 자리에서 가까운 위치부터 봅니다.
+            float shift = ((step + 1) / 2) * CornerShiftStep * (step % 2 == 1 ? -1.0f : 1.0f);
+            float shiftedStart = Mathf.Max(0.0f, start + shift);
+            float shiftedEnd = Mathf.Min(total, end + shift);
+            if (ApplyHeightCurve(points, count, shiftedStart, shiftedEnd, false))
+            {
+                ApplyHeightCurve(points, count, shiftedStart, shiftedEnd, true);
+                return;
+            }
+        }
+
+        ApplyHeightCurve(points, count, start, end, true);
+    }
+
+    /// <summary>
+    /// <paramref name="start"/>부터 <paramref name="end"/>까지(누적 거리) 점의 높이를 양 끝 높이와 기울기를 잇는 3차 곡선으로 바꿉니다.
+    /// <paramref name="write"/>가 false면 바꾸지 않고, 곡선이 모든 점에서 바닥 위에 있는지만 돌려줍니다.
+    /// </summary>
+    private bool ApplyHeightCurve(System.Collections.Generic.List<Vector3> points, int count, float start, float end, bool write)
+    {
+        float span = end - start;
+        if (span <= 0.0001f)
+        {
+            return false;
+        }
+
+        float startHeight = ProfileHeightAt(start, count);
+        float endHeight = ProfileHeightAt(end, count);
+        float startSlope = ProfileSlopeAt(start, count, false);
+        float endSlope = ProfileSlopeAt(end, count, true);
+        for (int i = 0; i < count; i++)
+        {
+            float distance = m_lineDistances[i];
+            if (distance <= start || distance >= end)
+            {
+                continue;
+            }
+
+            float t = (distance - start) / span;
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float curveHeight = (2.0f * t3 - 3.0f * t2 + 1.0f) * startHeight
+                + (t3 - 2.0f * t2 + t) * span * startSlope
+                + (-2.0f * t3 + 3.0f * t2) * endHeight
+                + (t3 - t2) * span * endSlope;
+            float minHeight = m_lineHeights[i] - m_pathLineHeight + CornerGroundClearance;
+            if (!write)
+            {
+                if (curveHeight < minHeight)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            Vector3 point = points[i];
+            point.y = Mathf.Max(curveHeight, minHeight);
+            points[i] = point;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 둥글리기 전 높이 그래프의 기울기입니다. 지점이 점 위에 딱 걸리면 <paramref name="after"/>일 때 그 뒤 구간, 아니면 앞 구간을 씁니다.
+    /// </summary>
+    private float ProfileSlopeAt(float distance, int count, bool after)
+    {
+        for (int i = 1; i < count; i++)
+        {
+            bool inSegment = after ? m_lineDistances[i] > distance : m_lineDistances[i] >= distance;
+            if (inSegment)
+            {
+                float run = m_lineDistances[i] - m_lineDistances[i - 1];
+                return run > 0.0001f ? (m_lineProfileHeights[i] - m_lineProfileHeights[i - 1]) / run : 0.0f;
+            }
+        }
+
+        return 0.0f;
+    }
+
+    /// <summary>둥글리기 전 높이 그래프에서 누적 거리 <paramref name="distance"/>의 높이를 앞뒤 점 사이 직선으로 구합니다.</summary>
+    private float ProfileHeightAt(float distance, int count)
+    {
+        if (distance <= m_lineDistances[0])
+        {
+            return m_lineProfileHeights[0];
+        }
+
+        for (int i = 1; i < count; i++)
+        {
+            if (m_lineDistances[i] >= distance)
+            {
+                float width = Mathf.Max(m_lineDistances[i] - m_lineDistances[i - 1], 0.0001f);
+                return Mathf.Lerp(m_lineProfileHeights[i - 1], m_lineProfileHeights[i], (distance - m_lineDistances[i - 1]) / width);
+            }
+        }
+
+        return m_lineProfileHeights[count - 1];
+    }
+
+    private void FlattenHeightRange(System.Collections.Generic.List<Vector3> points, int start, int end)
+    {
+        if (end - start < 2)
+        {
+            return;
+        }
+
+        float d0 = m_lineDistances[start];
+        float span = Mathf.Max(m_lineDistances[end] - d0, 0.0001f);
+        float y0 = m_lineHeights[start];
+        float y1 = m_lineHeights[end];
+        int farthest = -1;
+        float farthestDeviation = 0.0f;
+        for (int i = start + 1; i < end; i++)
+        {
+            float lineY = Mathf.Lerp(y0, y1, (m_lineDistances[i] - d0) / span);
+            float deviation = Mathf.Abs(m_lineHeights[i] - lineY);
+            if (deviation > farthestDeviation)
+            {
+                farthestDeviation = deviation;
+                farthest = i;
+            }
+        }
+
+        if (farthest < 0)
+        {
+            return;
+        }
+
+        // 직선에서 벗어난 정도가 허용치 안이어도, 윗선으로 폈을 때 올라가는 높이가 허용치를 넘으면 펴지 않고 나눕니다.
+        // 계단 앞 평지처럼, 직선 기준으로는 작아 보여도 윗선이 평지 전체를 계단 높이까지 들어 올리는 경우가 있습니다.
+        if (farthestDeviation <= m_heightFlattenTolerance && TryApplyUpperHeightHull(points, start, end))
+        {
+            return;
+        }
+
+        FlattenHeightRange(points, start, farthest);
+        FlattenHeightRange(points, farthest, end);
+    }
+
+    /// <summary>
+    /// 구간 안의 높은 점들만 이은 윗선(위쪽 볼록 껍질)으로 높이를 바꿉니다. 움푹한 곳은 메우고 솟은 곳은 그 높이를 지납니다.
+    /// </summary>
+    /// <remarks>
+    /// 윗선은 모든 점의 원래 높이 이상이라 선이 바닥에 묻히지 않습니다. 구간 양 끝은 원래 높이 그대로라 옆 구간과 끊기지 않습니다.
+    /// 어느 점이든 윗선이 원래 높이보다 허용치 넘게 올라가면 바꾸지 않고 false를 돌려줍니다.
+    /// </remarks>
+    /// <returns>높이를 바꿨으면 true입니다.</returns>
+    private bool TryApplyUpperHeightHull(System.Collections.Generic.List<Vector3> points, int start, int end)
+    {
+        m_hullIndices.Clear();
+        for (int i = start; i <= end; i++)
+        {
+            // 마지막 두 점과 새 점이 아래로 볼록하거나 일직선이면 가운데 점은 윗선 아래라 뺍니다.
+            while (m_hullIndices.Count >= 2)
+            {
+                int a = m_hullIndices[m_hullIndices.Count - 2];
+                int b = m_hullIndices[m_hullIndices.Count - 1];
+                float cross = (m_lineDistances[b] - m_lineDistances[a]) * (m_lineHeights[i] - m_lineHeights[a])
+                    - (m_lineHeights[b] - m_lineHeights[a]) * (m_lineDistances[i] - m_lineDistances[a]);
+                if (cross < 0.0f)
+                {
+                    break;
+                }
+
+                m_hullIndices.RemoveAt(m_hullIndices.Count - 1);
+            }
+
+            m_hullIndices.Add(i);
+        }
+
+        for (int pass = 0; pass < 2; pass++)
+        {
+            bool apply = pass == 1;
+            for (int h = 1; h < m_hullIndices.Count; h++)
+            {
+                int left = m_hullIndices[h - 1];
+                int right = m_hullIndices[h];
+                float width = Mathf.Max(m_lineDistances[right] - m_lineDistances[left], 0.0001f);
+                for (int i = left + 1; i < right; i++)
+                {
+                    float hullHeight = Mathf.Lerp(m_lineHeights[left], m_lineHeights[right], (m_lineDistances[i] - m_lineDistances[left]) / width);
+                    if (!apply)
+                    {
+                        if (hullHeight - m_lineHeights[i] > m_heightFlattenTolerance)
+                        {
+                            return false;
+                        }
+
+                        continue;
+                    }
+
+                    Vector3 point = points[i];
+                    point.y = hullHeight;
+                    points[i] = point;
+                }
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>꺾임점에서 곡선을 시작할 거리입니다. 곡선끼리 겹치지 않게 앞뒤 구간 길이의 절반을 넘지 않습니다.</summary>
     private float CornerRadius(Vector3 previous, Vector3 corner, Vector3 next)
     {
@@ -588,6 +948,7 @@ public sealed class ObjectivePathArrow : MonoBehaviour
         }
 
         m_linePoints.AddRange(m_groundedTail);
+        FlattenLineHeights(m_linePoints);
 
         // 텍스처 U는 캐릭터에서 목표 쪽으로 커집니다. 오프셋을 줄이면 무늬가 목표 쪽으로 흐릅니다.
         if (m_pathLineMaterialOverride != null && m_pathLineMaterial != null && m_pathLineScrollSpeed != 0.0f)

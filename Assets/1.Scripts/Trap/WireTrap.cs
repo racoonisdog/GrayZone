@@ -487,15 +487,14 @@ public class WireTrap : Trap
             return;
         }
 
-        if (m_activeSoundInstance.isValid() || !FMODUnity.RuntimeManager.IsInitialized)
+        if (m_activeSoundInstance.isValid() || !SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            m_activeSoundInstance = FMODUnity.RuntimeManager.CreateInstance(ActiveSoundEventPath);
-            FMODUnity.RuntimeManager.AttachInstanceToGameObject(m_activeSoundInstance, gameObject);
+            m_activeSoundInstance = SoundManager.Instance.CreateInstance(ActiveSoundEventPath, gameObject);
             m_activeSoundInstance.start();
         }
         catch (FMODUnity.EventNotFoundException exception)

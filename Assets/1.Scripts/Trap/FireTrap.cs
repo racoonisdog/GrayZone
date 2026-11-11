@@ -162,15 +162,14 @@ public sealed class FireTrap : Trap
     {
         StopLoopingSound(FMOD.Studio.STOP_MODE.IMMEDIATE);
 
-        if (string.IsNullOrWhiteSpace(eventPath) || !FMODUnity.RuntimeManager.IsInitialized)
+        if (string.IsNullOrWhiteSpace(eventPath) || !SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            m_loopingSoundInstance = FMODUnity.RuntimeManager.CreateInstance(eventPath);
-            FMODUnity.RuntimeManager.AttachInstanceToGameObject(m_loopingSoundInstance, gameObject);
+            m_loopingSoundInstance = SoundManager.Instance.CreateInstance(eventPath, gameObject);
             m_loopingSoundInstance.start();
         }
         catch (FMODUnity.EventNotFoundException exception)

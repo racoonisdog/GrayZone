@@ -160,6 +160,7 @@ public sealed class TutorialEvents : MonoBehaviour
 
         HideMarker();
         HidePathLine();
+        DespawnEnemies(null, 0);
         StopCinematic();
         ResumeTime();
     }

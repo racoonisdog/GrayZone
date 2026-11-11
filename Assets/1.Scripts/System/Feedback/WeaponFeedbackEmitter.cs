@@ -387,25 +387,22 @@ public sealed class WeaponFeedbackEmitter : MonoBehaviour, ISharedFeedbackReceiv
     /// <summary>현재 무기 위치에 FMOD one-shot을 붙여 재생합니다.</summary>
     private bool TryPlayFmod(FMODUnity.EventReference eventReference)
     {
-        if (eventReference.IsNull || !FMODUnity.RuntimeManager.IsInitialized)
+        if (eventReference.IsNull || !SoundManager.IsReady)
         {
             return false;
         }
 
         try
         {
-            FMOD.Studio.EventInstance instance = FMODUnity.RuntimeManager.CreateInstance(eventReference);
+            FMOD.Studio.EventInstance instance = SoundManager.Instance.CreateInstance(eventReference, gameObject);
             if (!instance.isValid())
             {
                 return false;
             }
 
-            FMODUnity.RuntimeManager.AttachInstanceToGameObject(instance, gameObject);
             instance.setVolume(m_volume);
             instance.setPitch(1.0f + Random.Range(-m_pitchVariation, m_pitchVariation));
-            instance.start();
-            instance.release();
-            return true;
+            return SoundManager.Instance.StartOneShot(instance);
         }
         catch (FMODUnity.EventNotFoundException exception)
         {

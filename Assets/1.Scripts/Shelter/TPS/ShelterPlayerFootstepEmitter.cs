@@ -84,22 +84,19 @@ public sealed class ShelterPlayerFootstepEmitter : MonoBehaviour
 
     private bool TryPlaySurfaceFmod(EventReference eventReference, SurfaceMaterialType surfaceType)
     {
-        if (eventReference.IsNull || !RuntimeManager.IsInitialized)
+        if (eventReference.IsNull || !SoundManager.IsReady)
             return false;
 
         try
         {
-            EventInstance instance = RuntimeManager.CreateInstance(eventReference);
+            EventInstance instance = SoundManager.Instance.CreateInstance(eventReference, gameObject);
             if (!instance.isValid())
                 return false;
 
-            RuntimeManager.AttachInstanceToGameObject(instance, gameObject);
             instance.setParameterByNameWithLabel(FootwearFmodParameter, m_footwearType.ToString());
             instance.setParameterByNameWithLabel(SurfaceFmodParameter, surfaceType.ToString());
             instance.setVolume(m_footstepAudioVolume);
-            instance.start();
-            instance.release();
-            return true;
+            return SoundManager.Instance.StartOneShot(instance);
         }
         catch (EventNotFoundException exception)
         {

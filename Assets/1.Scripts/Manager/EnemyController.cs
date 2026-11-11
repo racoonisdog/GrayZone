@@ -293,6 +293,39 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>방어전 접근 목적지가 이 거리(m) 넘게 바뀔 때만 경로를 다시 잡습니다.</summary>
     private const float DefenseDestinationRefreshDistance = 0.3f;
 
+    /// <summary>플레이어처럼 움직이는 방어전 목적지를 다시 지정할 수 있는 최소 간격(초)입니다.</summary>
+    private const float DefenseMovingDestinationRefreshInterval = 0.2f;
+
+    /// <summary>방어전 경로에서 이 시간(초) 동안 전진하지 못하면 경로 복구를 시도합니다.</summary>
+    private const float DefensePathStallTimeout = 2.5f;
+
+    /// <summary>방어전 경로 계산 대기가 이 시간(초)을 넘으면 계산이 굳은 것으로 봅니다.</summary>
+    private const float DefensePathPendingTimeout = 1.5f;
+
+    /// <summary>복구에 실패한 목적지를 다시 시도하는 간격(초)입니다.</summary>
+    private const float DefensePathRetryInterval = 0.75f;
+
+    /// <summary>원래 목적지 주변에서 도달 가능한 NavMesh 지점을 찾는 반경(m)입니다.</summary>
+    private const float DefensePathRecoverySampleRadius = 3.0f;
+
+    /// <summary>같은 목적지에서 경로를 다시 만든 뒤에도 정체되면 목적지별 실패 처리를 수행합니다.</summary>
+    private const int DefensePathRecoveryAttemptLimit = 2;
+
+    /// <summary>전진한 것으로 인정해 정체 타이머를 되돌리는 거리(m)입니다.</summary>
+    private const float DefensePathProgressDistance = 0.2f;
+
+    /// <summary>Player First가 현재 스쿼드 추적 대상을 다시 비교하는 간격(초)입니다.</summary>
+    private const float DefenseSquadTargetReevaluationInterval = 1.0f;
+
+    /// <summary>도달 실패한 스쿼드원을 다시 후보로 올리기까지 기다리는 시간(초)입니다.</summary>
+    private const float DefenseSquadTargetRetryCooldown = 2.0f;
+
+    /// <summary>스쿼드 추적 대상을 바꾼 뒤 다른 대상으로 다시 바꿀 수 없는 시간(초)입니다.</summary>
+    private const float DefenseSquadTargetSwitchCooldown = 2.0f;
+
+    /// <summary>현재 추적 대상을 바꿀 만큼 새 대상의 경로가 더 짧아야 하는 최소 차이(m)입니다.</summary>
+    private const float DefenseSquadTargetSwitchPathDistanceDelta = 2.0f;
+
     /// <summary>스포너의 목표 위치 또는 그 부모에 연결된 방어 목표 체력입니다. 좌표 전용 마커면 null입니다.</summary>
     public DefenseEventHealth DefenseObjective => m_defenseObjective;
 
@@ -355,6 +388,51 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>이번 생성에서 방어전 진입 경로와 목표 복귀 행동을 적용할지 여부입니다.</summary>
     private bool m_defenseNavigationActive;
+
+    private enum DefenseDestinationKind
+    {
+        None,
+        Waypoint,
+        SquadMember,
+        Objective,
+        AttackPoint,
+        WaitPoint,
+    }
+
+    /// <summary>현재 방어전 이동 명령이 향하는 목적지 종류입니다.</summary>
+    private DefenseDestinationKind m_defenseDestinationKind;
+
+    /// <summary>목적지 종류가 같아도 대상 교체를 구분하기 위한 원본 오브젝트입니다.</summary>
+    private UnityEngine.Object m_defenseDestinationSource;
+
+    /// <summary>방어전 판단이 마지막으로 요청한 원래 목적지입니다. NavMesh 복구 좌표와는 구분합니다.</summary>
+    private Vector3 m_defenseRequestedDestination;
+
+    /// <summary>현재 목적지의 정체 여부를 비교할 마지막 진행 위치입니다.</summary>
+    private Vector3 m_defenseLastProgressPosition;
+
+    private float m_defenseLastProgressTime;
+    private float m_defensePathIssuedTime;
+    private float m_defenseNextMovingDestinationRefreshTime;
+    private float m_defenseNextPathRecoveryTime;
+    private int m_defensePathRecoveryAttempts;
+    private bool m_hasDefenseDestination;
+
+    /// <summary>Player First가 현재 방어 이동으로 추적하는 플레이어 또는 AI 동료입니다.</summary>
+    private SquadMemberController m_defenseSquadPursuitTarget;
+
+    /// <summary>이번 생성에서 Player First의 최초 추적 대상을 한 번 정했는지 여부입니다.</summary>
+    private bool m_hasDefenseSquadTargetSelection;
+
+    /// <summary>스쿼드 경로 거리 후보를 다시 비교할 수 있는 시각입니다.</summary>
+    private float m_defenseNextSquadTargetEvaluationTime;
+
+    /// <summary>경로 실패 대상별 재선택 금지 종료 시각입니다.</summary>
+    private readonly Dictionary<SquadMemberController, float> m_defenseSquadTargetRetryTimes =
+        new Dictionary<SquadMemberController, float>();
+
+    /// <summary>스쿼드 후보 경로 길이 계산에 재사용하는 버퍼입니다.</summary>
+    private NavMeshPath m_defenseSquadTargetPath;
 
     /// <summary>Player First가 플레이어보다 Defense 웨이포인트를 우선할지 여부입니다.</summary>
     private bool m_prioritizeDefenseWaypointsForPlayerFirst = true;
@@ -894,6 +972,8 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_prioritizeDefenseWaypointsForPlayerFirst = false;
         m_defenseWaypointIndex = m_defenseWaypoints.Count;
         m_defenseNavigationActive = true;
+        ResetDefenseSquadTargetSelection();
+        ResetDefenseDestinationTracking();
     }
 
     /// <summary>프리팹 설정 또는 현재 생성 경로에 의해 Defense 전용 적으로 활성화됐는지 여부입니다.</summary>
@@ -1009,6 +1089,8 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_prioritizeDefenseWaypointsForPlayerFirst = true;
         m_hybridAggroActive = false;
         m_forcedPlayerPursuit = false;
+        ResetDefenseSquadTargetSelection();
+        ResetDefenseDestinationTracking(true);
     }
 
     /// <summary>현재 적용 대상으로 지정된 적 밸런스 데이터입니다.</summary>
@@ -1928,6 +2010,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_current?.Exit();
         if (next == Combat || next == Dead)
         {
+            ResetDefenseDestinationTracking();
             RestoreDefenseApproachSettings();
             // 교전으로 빠지거나 죽으면 공격 포인트를 놓아 다른 적이 고를 수 있게 합니다. 돌아오면 다시 고릅니다.
             ReleaseDefenseAttackPoint();
@@ -2047,6 +2130,8 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             && (m_defenseWaypoints.Count > 0
             || m_defenseTargetPosition != null
             || DefenseDisposition == EnemyDefenseDisposition.PlayerFirst);
+        ResetDefenseSquadTargetSelection();
+        ResetDefenseDestinationTracking();
 
         if (!m_defenseNavigationActive || agent == null || !agent.enabled || !agent.isOnNavMesh)
         {
@@ -2056,11 +2141,21 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         agent.speed = CurrentMoveSpeed;
         if (ShouldFollowDefenseWaypoints() && m_defenseWaypoints.Count > 0 && m_defenseWaypoints[0] != null)
         {
-            MoveTo(m_defenseWaypoints[0].position);
+            Transform waypoint = m_defenseWaypoints[0];
+            MoveToDefenseDestination(
+                waypoint.position,
+                DefenseDestinationKind.Waypoint,
+                waypoint,
+                false);
         }
-        else if (TryResolveDefenseDestination(out Vector3 destination, out _))
+        else if (TryResolveDefenseDestination(out Vector3 destination, out _, out Transform source))
         {
-            MoveTo(destination);
+            bool movingTarget = source != m_defenseTargetPosition;
+            MoveToDefenseDestination(
+                destination,
+                movingTarget ? DefenseDestinationKind.SquadMember : DefenseDestinationKind.Objective,
+                source,
+                movingTarget);
         }
     }
 
@@ -2078,7 +2173,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return false;
         }
 
-        if (agent == null || !agent.enabled || !agent.isOnNavMesh)
+        if (agent == null || !agent.enabled)
+        {
+            return true;
+        }
+
+        if (!agent.isOnNavMesh && !TryRecoverDefenseAgentToNavMesh())
         {
             return true;
         }
@@ -2097,10 +2197,15 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             if (HasReachedDefensePosition(waypoint.position))
             {
                 m_defenseWaypointIndex++;
+                ResetDefenseDestinationTracking(true);
                 continue;
             }
 
-            MoveTo(waypoint.position);
+            MoveToDefenseDestination(
+                waypoint.position,
+                DefenseDestinationKind.Waypoint,
+                waypoint,
+                false);
             return true;
         }
 
@@ -2113,14 +2218,21 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         if (DefenseDisposition == EnemyDefenseDisposition.PlayerFirst && targetSensor != null)
         {
             targetSensor.UpdatePerception();
-            if (targetSensor.HasAnyValidTarget)
+            targetSensor.ReevaluateTarget();
+            // 알고만 있지만 갈 수 없는 대상은 CurrentTarget으로 뽑히지 않습니다. HasAnyValidTarget만 보면
+            // Combat의 도달 불가 복구가 끝난 직후 다시 Combat에 들어가는 순환이 생깁니다.
+            SquadMemberController sensedTarget = targetSensor.CurrentTarget;
+            if (sensedTarget != null && CanPursueDefenseSquadTarget(sensedTarget))
             {
                 TransitionTo(Combat);
                 return true;
             }
         }
 
-        if (!TryResolveDefenseDestination(out Vector3 targetPosition, out bool usesObjective))
+        if (!TryResolveDefenseDestination(
+            out Vector3 targetPosition,
+            out bool usesObjective,
+            out Transform destinationSource))
         {
             StopMoving();
             return true;
@@ -2173,7 +2285,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
                 TransitionTo(m_defenseAttack);
                 return true;
             }
-            MoveToDefenseDestination(attackPoint);
+            MoveToDefenseDestination(
+                attackPoint,
+                DefenseDestinationKind.AttackPoint,
+                m_defenseAttackPoint != null ? m_defenseAttackPoint : m_defenseObjective,
+                false);
             UpdateDefenseAttackPointBlocked();
             return true;
         }
@@ -2186,7 +2302,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return true;
         }
 
-        MoveTo(targetPosition);
+        MoveToDefenseDestination(
+            targetPosition,
+            usesObjective ? DefenseDestinationKind.Objective : DefenseDestinationKind.SquadMember,
+            destinationSource,
+            !usesObjective);
         return true;
     }
 
@@ -2228,6 +2348,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
         m_hybridAggroActive = true;
         m_defenseWaypointIndex = m_defenseWaypoints.Count;
+        ResetDefenseDestinationTracking();
     }
 
     /// <summary>방어 목표에 공격 포인트가 있으면, 아직 고르지 않았을 때 하나 고릅니다.</summary>
@@ -2267,6 +2388,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     private void ReleaseDefenseAttackPoint()
     {
         EndDefenseWaitFlourish();
+        if (m_defenseDestinationKind == DefenseDestinationKind.AttackPoint
+            || m_defenseDestinationKind == DefenseDestinationKind.WaitPoint)
+        {
+            ResetDefenseDestinationTracking(true);
+        }
+
         if (m_defenseAttackPoint != null)
         {
             m_defenseAttackPoint.RemoveOccupant(this);
@@ -2357,29 +2484,246 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         }
 
         EndDefenseWaitFlourish();
-        MoveToDefenseDestination(waitPosition);
+        MoveToDefenseDestination(
+            waitPosition,
+            DefenseDestinationKind.WaitPoint,
+            m_defenseAttackPoint,
+            true);
     }
 
     /// <summary>
-    /// 방어전 접근 중 목적지를 정합니다. 목적지가 거의 그대로면 다시 지정하지 않습니다.
+    /// 방어전 목적지의 종류·원본·좌표 변화가 있을 때만 새 경로를 요청하고, 기존 경로의 실패와 정체를 감시합니다.
     /// </summary>
-    /// <remarks>
-    /// 매 프레임 같은 목적지를 다시 지정하면 밀릴 때마다 경로를 새로 계산하며 방향이 흔들립니다.
-    /// 멈춰 있던 에이전트는 다시 움직이게 하려고 항상 지정합니다.
-    /// </remarks>
-    private void MoveToDefenseDestination(Vector3 destination)
+    /// <param name="destination">현재 판단한 원래 목적지입니다.</param>
+    /// <param name="kind">웨이포인트, 플레이어, 공격 포인트 등 목적지 역할입니다.</param>
+    /// <param name="source">같은 역할 안에서 실제 대상이 교체됐는지 구분할 원본입니다.</param>
+    /// <param name="movingTarget">계속 움직이는 대상이면 좌표 변화에 갱신 간격을 적용합니다.</param>
+    private void MoveToDefenseDestination(
+        Vector3 destination,
+        DefenseDestinationKind kind,
+        UnityEngine.Object source,
+        bool movingTarget)
     {
-        if (agent != null && agent.isOnNavMesh && !agent.isStopped && (agent.hasPath || agent.pathPending))
+        if (agent == null || !agent.enabled || !agent.isOnNavMesh)
         {
-            Vector3 delta = agent.destination - destination;
-            delta.y = 0.0f;
-            if (delta.sqrMagnitude < DefenseDestinationRefreshDistance * DefenseDestinationRefreshDistance)
+            return;
+        }
+
+        bool identityChanged = !m_hasDefenseDestination
+            || m_defenseDestinationKind != kind
+            || m_defenseDestinationSource != source;
+        Vector3 requestedDelta = destination - m_defenseRequestedDestination;
+        requestedDelta.y = 0.0f;
+        bool positionChanged = !m_hasDefenseDestination
+            || requestedDelta.sqrMagnitude >= DefenseDestinationRefreshDistance * DefenseDestinationRefreshDistance;
+        bool refreshWindowOpen = !movingTarget || Time.time >= m_defenseNextMovingDestinationRefreshTime;
+        bool retryWindowOpen = Time.time >= m_defenseNextPathRecoveryTime;
+        bool shouldIssue = identityChanged
+            || (positionChanged && refreshWindowOpen)
+            || (retryWindowOpen && agent.isStopped);
+
+        if (shouldIssue)
+        {
+            if (identityChanged || positionChanged)
             {
-                return;
+                m_defensePathRecoveryAttempts = 0;
+            }
+
+            m_hasDefenseDestination = true;
+            m_defenseDestinationKind = kind;
+            m_defenseDestinationSource = source;
+            m_defenseRequestedDestination = destination;
+            m_defenseNextMovingDestinationRefreshTime = Time.time + DefenseMovingDestinationRefreshInterval;
+
+            if (!IssueDefenseDestination(destination, identityChanged))
+            {
+                m_defenseNextPathRecoveryTime = Time.time + DefensePathRetryInterval;
             }
         }
 
-        MoveTo(destination);
+        TickDefensePathRecovery();
+    }
+
+    /// <summary>실제 NavMeshAgent에 목적지를 한 번 전달하고 정체 관찰 기준을 갱신합니다.</summary>
+    private bool IssueDefenseDestination(Vector3 destination, bool resetProgressClock)
+    {
+        if (agent == null || !agent.enabled || !agent.isOnNavMesh)
+        {
+            return false;
+        }
+
+        agent.isStopped = false;
+        bool accepted = agent.SetDestination(destination);
+        m_defensePathIssuedTime = Time.time;
+        if (resetProgressClock || m_defenseLastProgressTime <= 0.0f)
+        {
+            m_defenseLastProgressPosition = transform.position;
+            m_defenseLastProgressTime = Time.time;
+        }
+        return accepted;
+    }
+
+    /// <summary>
+    /// 방어전 목적지의 경로 계산 실패·부분 경로 종단·무진행을 감시하고 도달 가능한 주변 지점으로 복구합니다.
+    /// </summary>
+    private void TickDefensePathRecovery()
+    {
+        if (!m_hasDefenseDestination || agent == null || !agent.enabled || !agent.isOnNavMesh)
+        {
+            return;
+        }
+
+        Vector3 progress = transform.position - m_defenseLastProgressPosition;
+        progress.y = 0.0f;
+        if (progress.sqrMagnitude >= DefensePathProgressDistance * DefensePathProgressDistance)
+        {
+            m_defenseLastProgressPosition = transform.position;
+            m_defenseLastProgressTime = Time.time;
+            m_defensePathRecoveryAttempts = 0;
+        }
+
+        bool pendingTimedOut = agent.pathPending
+            && Time.time - m_defensePathIssuedTime >= DefensePathPendingTimeout;
+        bool requestSettled = Time.time - m_defensePathIssuedTime >= 0.1f;
+        bool missingOrInvalid = requestSettled && !agent.pathPending
+            && (!agent.hasPath || agent.pathStatus == NavMeshPathStatus.PathInvalid);
+        bool partialAtEnd = !agent.pathPending && agent.hasPath
+            && agent.pathStatus == NavMeshPathStatus.PathPartial
+            && (agent.velocity.sqrMagnitude < 0.04f
+                || agent.remainingDistance <= agent.stoppingDistance + 0.2f);
+        bool stalled = !agent.pathPending
+            && !HasReachedDefensePosition(m_defenseRequestedDestination)
+            && Time.time - m_defenseLastProgressTime >= DefensePathStallTimeout;
+
+        if ((!pendingTimedOut && !missingOrInvalid && !partialAtEnd && !stalled)
+            || Time.time < m_defenseNextPathRecoveryTime)
+        {
+            return;
+        }
+
+        m_defenseNextPathRecoveryTime = Time.time + DefensePathRetryInterval;
+        m_defensePathRecoveryAttempts++;
+
+        if (m_defensePathRecoveryAttempts <= DefensePathRecoveryAttemptLimit
+            && TryFindReachableDefenseDestination(m_defenseRequestedDestination, out Vector3 recoveredDestination))
+        {
+            IssueDefenseDestination(recoveredDestination, true);
+            return;
+        }
+
+        if (m_defensePathRecoveryAttempts < DefensePathRecoveryAttemptLimit)
+        {
+            IssueDefenseDestination(m_defenseRequestedDestination, true);
+            return;
+        }
+
+        HandleUnreachableDefenseDestination();
+    }
+
+    /// <summary>원래 목적지 주변에서 현재 위치로 완전 경로가 이어지는 NavMesh 좌표를 찾습니다.</summary>
+    private bool TryFindReachableDefenseDestination(Vector3 destination, out Vector3 reachableDestination)
+    {
+        reachableDestination = destination;
+        if (agent == null || !agent.enabled || !agent.isOnNavMesh
+            || !NavMesh.SamplePosition(
+                destination,
+                out NavMeshHit hit,
+                DefensePathRecoverySampleRadius,
+                agent.areaMask))
+        {
+            return false;
+        }
+
+        NavMeshPath recoveryPath = new NavMeshPath();
+        if (!NavMesh.CalculatePath(transform.position, hit.position, agent.areaMask, recoveryPath)
+            || recoveryPath.status != NavMeshPathStatus.PathComplete)
+        {
+            return false;
+        }
+
+        reachableDestination = hit.position;
+        return true;
+    }
+
+    /// <summary>복구로도 도달하지 못한 목적지를 역할에 맞게 건너뛰거나 재선정합니다.</summary>
+    private void HandleUnreachableDefenseDestination()
+    {
+        switch (m_defenseDestinationKind)
+        {
+            case DefenseDestinationKind.Waypoint:
+                m_defenseWaypointIndex++;
+                ResetDefenseDestinationTracking(true);
+                return;
+
+            case DefenseDestinationKind.AttackPoint:
+            case DefenseDestinationKind.WaitPoint:
+                DefenseAttackPoint failedPoint = m_defenseAttackPoint;
+                AssignDefenseAttackPoint(failedPoint);
+                return;
+
+            case DefenseDestinationKind.SquadMember:
+                RejectUnreachableDefenseSquadTarget();
+                return;
+
+            default:
+                // 최종 방어 목표는 건너뛸 수 없습니다. 경로를 비우고 간격을 둬 재평가하되,
+                // 매 프레임 같은 실패 요청을 반복하지 않습니다.
+                if (agent != null && agent.enabled && agent.isOnNavMesh)
+                {
+                    agent.ResetPath();
+                    agent.isStopped = true;
+                }
+
+                m_defensePathRecoveryAttempts = 0;
+                m_defenseLastProgressPosition = transform.position;
+                m_defenseLastProgressTime = Time.time;
+                m_defenseNextPathRecoveryTime = Time.time + DefensePathRetryInterval;
+                return;
+        }
+    }
+
+    /// <summary>스폰·넉백 등으로 NavMesh 밖에 놓인 방어전 적을 가까운 NavMesh 위로 복구합니다.</summary>
+    private bool TryRecoverDefenseAgentToNavMesh()
+    {
+        if (agent == null || !agent.enabled || Time.time < m_defenseNextPathRecoveryTime)
+        {
+            return false;
+        }
+
+        m_defenseNextPathRecoveryTime = Time.time + DefensePathRetryInterval;
+        if (!NavMesh.SamplePosition(
+            transform.position,
+            out NavMeshHit recovery,
+            DefensePathRecoverySampleRadius,
+            agent.areaMask)
+            || !agent.Warp(recovery.position)
+            || !agent.isOnNavMesh)
+        {
+            return false;
+        }
+
+        ResetDefenseDestinationTracking();
+        return true;
+    }
+
+    /// <summary>방어전 목적지와 경로 복구 관찰 상태를 초기화합니다.</summary>
+    private void ResetDefenseDestinationTracking(bool resetAgentPath = false)
+    {
+        m_defenseDestinationKind = DefenseDestinationKind.None;
+        m_defenseDestinationSource = null;
+        m_defenseRequestedDestination = Vector3.zero;
+        m_defenseLastProgressPosition = transform.position;
+        m_defenseLastProgressTime = Time.time;
+        m_defensePathIssuedTime = 0.0f;
+        m_defenseNextMovingDestinationRefreshTime = 0.0f;
+        m_defenseNextPathRecoveryTime = 0.0f;
+        m_defensePathRecoveryAttempts = 0;
+        m_hasDefenseDestination = false;
+
+        if (resetAgentPath && agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.ResetPath();
+        }
     }
 
     /// <summary>
@@ -2448,33 +2792,288 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <param name="destination">이동할 월드 좌표입니다.</param>
     /// <returns>현재 사용할 수 있는 목적지가 있으면 true입니다.</returns>
     /// <remarks>
-    /// <see cref="EnemyDefenseDisposition.PlayerFirst"/>는 <see cref="SquadManager.PlayerSquadMember"/>를 통해
-    /// 현재 조작 캐릭터를 매번 다시 확인합니다. 캐릭터가 전환되어도 새 플레이어를 따라가며, 유효한 플레이어가
-    /// 없으면 스폰 포인트가 제공한 목표 위치를 대체 목적지로 사용합니다.
+    /// <see cref="EnemyDefenseDisposition.PlayerFirst"/>는 현재 조작 캐릭터를 먼저 추적합니다. 현재 대상까지 경로가
+    /// 계속 실패하면 도달 가능한 다른 생존 스쿼드원을 고르고, 그마저 없으면 방어 목표를 대체 목적지로 사용합니다.
+    /// 대상 비교는 매 프레임 하지 않고 재평가 주기와 전환 거리 차이, 실패 대상 쿨다운으로 안정화합니다.
     /// </remarks>
-    private bool TryResolveDefenseDestination(out Vector3 destination, out bool usesObjective)
+    private bool TryResolveDefenseDestination(
+        out Vector3 destination,
+        out bool usesObjective,
+        out Transform source)
     {
         usesObjective = false;
-        if (DefenseDisposition == EnemyDefenseDisposition.PlayerFirst)
+        source = null;
+        if (DefenseDisposition == EnemyDefenseDisposition.PlayerFirst
+            && TryResolvePlayerFirstSquadTarget(out SquadMemberController squadTarget))
         {
-            SquadManager squadManager = SquadManager.Instance;
-            SquadMemberController player = squadManager != null ? squadManager.PlayerSquadMember : null;
-            if (player != null && player.IsAlive && !player.IsDown)
-            {
-                destination = player.transform.position;
-                return true;
-            }
+            destination = squadTarget.transform.position;
+            source = squadTarget.transform;
+            return true;
         }
 
         if (m_defenseTargetPosition != null)
         {
             usesObjective = true;
+            source = m_defenseTargetPosition;
             destination = m_defenseTargetPosition.position;
             return true;
         }
 
         destination = Vector3.zero;
         return false;
+    }
+
+    /// <summary>
+    /// Player First의 현재 스쿼드 추적 대상을 유지하거나, 주기가 되었을 때 도달 가능한 후보로 바꿉니다.
+    /// </summary>
+    private bool TryResolvePlayerFirstSquadTarget(out SquadMemberController target)
+    {
+        target = null;
+        SquadManager squadManager = SquadManager.Instance;
+        if (squadManager == null)
+        {
+            m_defenseSquadPursuitTarget = null;
+            return false;
+        }
+
+        if (!m_hasDefenseSquadTargetSelection)
+        {
+            // 최초에는 Player First의 이름 그대로 현재 조작 캐릭터를 먼저 시도합니다. 순간적인 경로 계산 실패로
+            // 바로 포기하지 않고, 방어 경로 복구가 실제 실패를 확정했을 때 다른 동료로 넘어갑니다.
+            m_hasDefenseSquadTargetSelection = true;
+            SquadMemberController player = squadManager.PlayerSquadMember;
+            if (IsAvailableDefenseSquadTarget(player)
+                && !IsDefenseSquadTargetRetryBlocked(player)
+                && CanPursueDefenseSquadTarget(player))
+            {
+                SetDefenseSquadPursuitTarget(player, false);
+            }
+        }
+
+        if (!IsAvailableDefenseSquadTarget(m_defenseSquadPursuitTarget)
+            || !CanPursueDefenseSquadTarget(m_defenseSquadPursuitTarget))
+        {
+            m_defenseSquadPursuitTarget = null;
+            m_defenseNextSquadTargetEvaluationTime = 0.0f;
+        }
+
+        if (Time.time >= m_defenseNextSquadTargetEvaluationTime)
+        {
+            ReevaluateDefenseSquadPursuitTarget(squadManager);
+        }
+
+        target = m_defenseSquadPursuitTarget;
+        return target != null;
+    }
+
+    /// <summary>
+    /// 현재 대상을 함부로 뒤집지 않으면서, 충분히 더 가까운 도달 가능 스쿼드원만 새 대상으로 선택합니다.
+    /// </summary>
+    private void ReevaluateDefenseSquadPursuitTarget(SquadManager squadManager)
+    {
+        m_defenseNextSquadTargetEvaluationTime = Time.time + DefenseSquadTargetReevaluationInterval;
+        IReadOnlyList<SquadMemberController> members = squadManager != null ? squadManager.SquadMembers : null;
+        if (members == null || members.Count == 0 || agent == null || !agent.enabled || !agent.isOnNavMesh)
+        {
+            return;
+        }
+
+        SquadMemberController current = m_defenseSquadPursuitTarget;
+        bool currentUsable = IsAvailableDefenseSquadTarget(current)
+            && !IsDefenseSquadTargetRetryBlocked(current)
+            && CanPursueDefenseSquadTarget(current);
+        float currentDistance = float.PositiveInfinity;
+        bool currentReachable = currentUsable
+            && TryGetCompleteDefensePathDistance(current.transform.position, out currentDistance);
+
+        if (currentUsable && !currentReachable)
+        {
+            // 한 번의 경로 계산 실패만으로 대상을 뒤집지 않습니다. 실제 이동의 Partial/정체 복구가 실패를
+            // 확정하면 RejectUnreachableDefenseSquadTarget이 호출되어 즉시 대체 대상을 고릅니다.
+            return;
+        }
+
+        SquadMemberController player = squadManager.PlayerSquadMember;
+        SquadMemberController best = null;
+        float bestDistance = float.PositiveInfinity;
+        float playerDistance = float.PositiveInfinity;
+
+        for (int i = 0; i < members.Count; i++)
+        {
+            SquadMemberController candidate = members[i];
+            if (!IsAvailableDefenseSquadTarget(candidate)
+                || IsDefenseSquadTargetRetryBlocked(candidate)
+                || !CanPursueDefenseSquadTarget(candidate)
+                || !TryGetCompleteDefensePathDistance(candidate.transform.position, out float candidateDistance))
+            {
+                continue;
+            }
+
+            if (candidate == player)
+            {
+                playerDistance = candidateDistance;
+            }
+
+            if (candidateDistance < bestDistance)
+            {
+                best = candidate;
+                bestDistance = candidateDistance;
+            }
+        }
+
+        if (!currentReachable)
+        {
+            // 방어 목표를 치고 있거나 이전 스쿼드원이 무효가 된 경우에는, 도달 가능한 플레이어를 우선하고
+            // 플레이어가 불가능할 때 가장 가까운 동료를 고릅니다.
+            SquadMemberController replacement = !float.IsPositiveInfinity(playerDistance) ? player : best;
+            SetDefenseSquadPursuitTarget(replacement, replacement != null);
+            return;
+        }
+
+        if (best != null && best != current
+            && currentDistance - bestDistance >= DefenseSquadTargetSwitchPathDistanceDelta)
+        {
+            SetDefenseSquadPursuitTarget(best, true);
+        }
+    }
+
+    /// <summary>스쿼드 추적 대상을 바꾸고, 실제 변경에는 재전환 쿨다운을 적용합니다.</summary>
+    private void SetDefenseSquadPursuitTarget(SquadMemberController target, bool applySwitchCooldown)
+    {
+        if (m_defenseSquadPursuitTarget == target)
+        {
+            return;
+        }
+
+        m_defenseSquadPursuitTarget = target;
+        if (target != null)
+        {
+            m_defenseSquadTargetRetryTimes.Remove(target);
+        }
+
+        m_defenseNextSquadTargetEvaluationTime = Time.time + (applySwitchCooldown
+            ? DefenseSquadTargetSwitchCooldown
+            : DefenseSquadTargetReevaluationInterval);
+    }
+
+    /// <summary>방어 경로 복구로도 닿지 못한 스쿼드원을 잠시 후보에서 제외하고 즉시 대체 대상을 찾게 합니다.</summary>
+    private void RejectUnreachableDefenseSquadTarget()
+    {
+        SquadMemberController failedTarget = m_defenseSquadPursuitTarget;
+        if (failedTarget == null && m_defenseDestinationSource is Transform sourceTransform)
+        {
+            failedTarget = sourceTransform.GetComponentInParent<SquadMemberController>();
+        }
+
+        if (failedTarget != null)
+        {
+            m_defenseSquadTargetRetryTimes[failedTarget] = Time.time + DefenseSquadTargetRetryCooldown;
+        }
+
+        m_defenseSquadPursuitTarget = null;
+        m_defenseNextSquadTargetEvaluationTime = 0.0f;
+        ResetDefenseDestinationTracking(true);
+    }
+
+    /// <summary>현재 대상까지 완전한 NavMesh 경로 길이를 계산합니다. 후보 재평가 주기에서만 호출합니다.</summary>
+    private bool TryGetCompleteDefensePathDistance(Vector3 destination, out float distance)
+    {
+        distance = float.PositiveInfinity;
+        if (agent == null || !agent.enabled || !agent.isOnNavMesh)
+        {
+            return false;
+        }
+
+        if (m_defenseSquadTargetPath == null)
+        {
+            m_defenseSquadTargetPath = new NavMeshPath();
+        }
+
+        if (!NavMesh.CalculatePath(transform.position, destination, agent.areaMask, m_defenseSquadTargetPath)
+            || m_defenseSquadTargetPath.status != NavMeshPathStatus.PathComplete)
+        {
+            return false;
+        }
+
+        Vector3[] corners = m_defenseSquadTargetPath.corners;
+        distance = 0.0f;
+        for (int i = 1; i < corners.Length; i++)
+        {
+            distance += Vector3.Distance(corners[i - 1], corners[i]);
+        }
+
+        return true;
+    }
+
+    /// <summary>죽거나 다운되지 않아 방어전 추적 후보로 쓸 수 있는 스쿼드원인지 확인합니다.</summary>
+    private static bool IsAvailableDefenseSquadTarget(SquadMemberController target)
+    {
+        return target != null && target.IsAlive && !target.IsDown;
+    }
+
+    /// <summary>최근 경로 실패로 이 스쿼드원을 다시 고르면 안 되는지 확인합니다.</summary>
+    private bool IsDefenseSquadTargetRetryBlocked(SquadMemberController target)
+    {
+        if (target == null || !m_defenseSquadTargetRetryTimes.TryGetValue(target, out float retryTime))
+        {
+            return false;
+        }
+
+        if (Time.time < retryTime)
+        {
+            return true;
+        }
+
+        m_defenseSquadTargetRetryTimes.Remove(target);
+        return false;
+    }
+
+    /// <summary>
+    /// 방어 목표 구역 안의 적이 구역 밖 스쿼드원에게 끌려가면 안 되는지 확인합니다.
+    /// 정리 구간의 강제 플레이어 추적은 전투 종료 안전장치이므로 이 제한보다 우선합니다.
+    /// </summary>
+    public bool CanPursueDefenseSquadTarget(SquadMemberController target)
+    {
+        if (!IsAvailableDefenseSquadTarget(target))
+        {
+            return false;
+        }
+
+        return !IsDefenseEnemy
+            || m_forcedPlayerPursuit
+            || !DefenseTargetZone.ShouldIgnoreAttacker(transform.position, target.transform.position);
+    }
+
+    /// <summary>
+    /// 방어 목표를 공격 중인 Player First가 시야 밖의 도달 가능한 스쿼드원을 다시 추적하도록 목표 공격에서 빠져나옵니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어 목표를 바라보는 동안에는 뒤쪽 스쿼드원이 센서 시야에 잡히지 않을 수 있습니다. 이 경우에도 기존
+    /// Player First 선택 규칙(플레이어 우선, 도달 불가 시 동료, 모두 불가 시 방어 목표)을 그대로 재사용합니다.
+    /// 호출 주기는 <see cref="AttackState"/>가 제한하므로 여기서는 별도 프레임 타이머를 두지 않습니다.
+    /// </remarks>
+    /// <returns>스쿼드원 추적을 재개하도록 목표 공격 상태를 벗어났으면 true입니다.</returns>
+    public bool TryResumePlayerFirstSquadPursuitFromDefenseObjective()
+    {
+        if (!IsAttackingDefenseObjective
+            || DefenseDisposition != EnemyDefenseDisposition.PlayerFirst
+            || !TryResolvePlayerFirstSquadTarget(out SquadMemberController target)
+            || !CanPursueDefenseSquadTarget(target))
+        {
+            return false;
+        }
+
+        TransitionTo(Wander);
+        return true;
+    }
+
+    /// <summary>이번 생성의 Player First 대상 선택 기록과 실패 쿨다운을 초기화합니다.</summary>
+    private void ResetDefenseSquadTargetSelection()
+    {
+        m_defenseSquadPursuitTarget = null;
+        m_hasDefenseSquadTargetSelection = false;
+        m_defenseNextSquadTargetEvaluationTime = 0.0f;
+        m_defenseSquadTargetRetryTimes.Clear();
     }
 
     /// <summary>현재 위치가 방어전 경로 목적지에 충분히 도착했는지 X/Z 평면에서 확인합니다.</summary>
@@ -2492,6 +3091,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     private void FinishDefenseNavigation()
     {
         m_defenseNavigationActive = false;
+        ResetDefenseDestinationTracking(true);
 
         if (m_current == Wander)
         {
@@ -2713,19 +3313,35 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             return;
         }
 
+        SquadMemberController member = attacker != null
+            ? attacker.GetComponentInParent<SquadMemberController>()
+            : null;
+
+        // 방어 목표 구역 안에서는 구역 밖 공격자의 사격보다 목표 유지 규칙이 우선합니다.
+        // 정리 구간 강제 추적은 CanPursueDefenseSquadTarget 내부에서 예외 처리합니다.
+        if (IsDefenseEnemy
+            && DefenseDisposition != EnemyDefenseDisposition.Default
+            && member != null
+            && !CanPursueDefenseSquadTarget(member))
+        {
+            return;
+        }
+
         // 혼합형은 스쿼드원에게 맞으면 여기서 어그로를 켜고, 그 뒤로는 일반 피격 규칙을 따릅니다.
         TryBeginHybridAggro(attacker);
 
         // 피해/경직 자체는 체력 모듈이 처리합니다. 여기서는 경로 정책을 깨는 어그로 전환만 막습니다.
         if (ShouldDeferSquadCombat()) return;
 
-        if (attacker != null && targetSensor != null)
+        if (member != null)
         {
-            SquadMemberController member = attacker.GetComponentInParent<SquadMemberController>();
-            if (member != null)
+            if (DefenseDisposition == EnemyDefenseDisposition.PlayerFirst)
             {
-                targetSensor.NotifyDamagedBy(member);
+                m_hasDefenseSquadTargetSelection = true;
+                SetDefenseSquadPursuitTarget(member, true);
             }
+
+            targetSensor?.NotifyDamagedBy(member);
         }
 
         TransitionTo(Combat);

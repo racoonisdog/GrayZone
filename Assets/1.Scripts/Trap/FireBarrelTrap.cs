@@ -271,14 +271,14 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     /// <summary>드럼통이 터지는 지점에서 폭발음을 한 번 재생합니다.</summary>
     private void PlayBurstSound()
     {
-        if (!FMODUnity.RuntimeManager.IsInitialized)
+        if (!SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            FMODUnity.RuntimeManager.PlayOneShot(
+            SoundManager.Instance.PlayOneShot(
                 BurstSoundEventPath,
                 ResolveBarrelBase() + Vector3.up * 0.5f);
         }

@@ -304,6 +304,16 @@ public sealed class DefenseRuntimeData
     /// <summary>진행 중인 웨이브를 막아 낸 것으로 닫고 휴식 구간으로 넘어갑니다.</summary>
     public bool BeginRest(int currentKillCount)
     {
+        // 첫 웨이브 전 정비는 닫을 웨이브가 없습니다. Ready에서 곧바로 Rest로 바꿔
+        // 화면의 정비 카운트와 결과 데이터의 phase/elapsedTime이 같은 구간을 가리키게 합니다.
+        if (phase == DefensePhase.Ready)
+        {
+            waveStartKillCount = Mathf.Max(0, currentKillCount);
+            waveStartElapsedTime = elapsedTime;
+            phase = DefensePhase.Rest;
+            return true;
+        }
+
         if (phase != DefensePhase.Combat)
         {
             return false;

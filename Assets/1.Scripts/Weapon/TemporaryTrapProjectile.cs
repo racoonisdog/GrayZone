@@ -180,14 +180,14 @@ public sealed class TemporaryTrapProjectile : ProjectileBase
     /// <summary>화염병이 깨지고 점화되는 지점에서 3D 충돌음을 한 번 재생합니다.</summary>
     private void PlayMolotovImpactSound(Vector3 position)
     {
-        if (!FMODUnity.RuntimeManager.IsInitialized)
+        if (!SoundManager.IsReady)
         {
             return;
         }
 
         try
         {
-            FMODUnity.RuntimeManager.PlayOneShot(MolotovImpactSoundEventPath, position);
+            SoundManager.Instance.PlayOneShot(MolotovImpactSoundEventPath, position);
         }
         catch (FMODUnity.EventNotFoundException exception)
         {

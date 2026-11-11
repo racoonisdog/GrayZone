@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using FMOD.Studio;
 using FMODUnity;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// 옵션 슬라이더 단위의 볼륨 카테고리입니다.
@@ -86,8 +87,31 @@ public sealed class SoundManager : MonoBehaviour
         public bool HasOwner;
     }
 
-    /// <summary>씬에 하나만 존재하는 사운드 매니저입니다. 없으면 null입니다.</summary>
+    /// <summary>게임 전체에서 함께 쓰는 사운드 매니저입니다. 플레이 중에는 항상 있고, 종료 중에는 null일 수 있습니다.</summary>
     public static SoundManager Instance { get; private set; }
+
+    /// <summary>지금 소리를 재생할 수 있는지 여부입니다. 매니저와 FMOD 런타임이 모두 준비되어 있어야 합니다.</summary>
+    public static bool IsReady => Instance != null && RuntimeManager.IsInitialized;
+
+    /// <summary>
+    /// 첫 씬을 불러오기 전에 공용 매니저 오브젝트를 만들고, 씬이 바뀌어도 남게 합니다.
+    /// </summary>
+    /// <remarks>
+    /// 어느 씬에서 플레이를 시작해도(부트스트랩을 거치지 않은 테스트 포함) 같은 매니저를 쓰게 하기 위해서입니다.
+    /// 씬에 따로 놓인 SoundManager는 Awake에서 중복으로 판단되어 컴포넌트만 제거됩니다.
+    /// </remarks>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void CreateSharedInstance()
+    {
+        if (Instance != null)
+        {
+            return;
+        }
+
+        GameObject managerObject = new GameObject(nameof(SoundManager));
+        DontDestroyOnLoad(managerObject);
+        managerObject.AddComponent<SoundManager>();
+    }
 
     [Header("Volume Routes")]
     [Tooltip("볼륨 카테고리별 VCA/Bus 경로입니다. FMOD Studio에서 VCA 이름을 바꿨다면 여기만 고치면 됩니다.")]
@@ -145,6 +169,25 @@ public sealed class SoundManager : MonoBehaviour
         }
 
         Instance = this;
+        SceneManager.activeSceneChanged += OnActiveSceneChanged;
+    }
+
+    /// <summary>
+    /// 씬이 바뀌면 이전 씬에서 틀어 둔 루프·BGM·스냅샷을 정리하고 일시정지를 풉니다.
+    /// </summary>
+    /// <remarks>
+    /// 매니저가 씬마다 있던 때는 씬과 함께 파괴되면서 이 정리가 일어났습니다. 공용 매니저는 남아 있으므로 씬 전환 때 같은 정리를 합니다.
+    /// 볼륨은 FMOD 전체에 걸린 값이라 그대로 유지됩니다.
+    /// </remarks>
+    private void OnActiveSceneChanged(Scene previous, Scene next)
+    {
+        StopAllLoops(true);
+        StopMusic(true);
+        ClearSnapshots();
+        if (m_isPaused)
+        {
+            SetPaused(false);
+        }
     }
 
     /// <summary>
@@ -181,6 +224,7 @@ public sealed class SoundManager : MonoBehaviour
 
         // 매니저가 사라질 때 들고 있던 인스턴스를 즉시 정리합니다.
         // 정리하지 않으면 FMOD 쪽에 인스턴스가 남아 소리가 계속 나거나 메모리가 새게 됩니다.
+        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
         StopAllLoops(false);
         StopMusic(false);
         ClearSnapshots();
@@ -264,6 +308,60 @@ public sealed class SoundManager : MonoBehaviour
         }
 
         RuntimeManager.PlayOneShotAttached(eventReference, owner);
+    }
+
+    /// <summary>
+    /// 이벤트 경로 문자열로 지정한 위치에서 한 번 재생합니다. 위치를 생략하면 원점에서 재생하며, 2D 이벤트는 위치를 무시합니다.
+    /// </summary>
+    /// <param name="eventPath">재생할 FMOD 이벤트 경로입니다. 예: <c>event:/World/Trap/Install/Mine</c></param>
+    /// <param name="position">소리가 나는 월드 위치입니다.</param>
+    /// <exception cref="EventNotFoundException">뱅크에 해당 이벤트가 없을 때 던집니다.</exception>
+    public void PlayOneShot(string eventPath, Vector3 position = default)
+    {
+        RuntimeManager.PlayOneShot(eventPath, position);
+    }
+
+    /// <summary>
+    /// 재생 전에 파라미터·볼륨·피치 등을 설정해야 하는 소리의 인스턴스를 만듭니다. 아직 재생하지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 설정을 마친 뒤 한 번 울리고 끝나는 소리면 <see cref="StartOneShot"/>을 부릅니다.
+    /// 호출한 쪽이 직접 멈추고 해제하는 루프 소리면 받은 인스턴스를 그대로 <c>start</c>하고 보관합니다.
+    /// </remarks>
+    /// <param name="eventReference">만들 FMOD 이벤트입니다.</param>
+    /// <param name="owner">소리가 따라갈 오브젝트입니다. null이면 위치를 따라가지 않습니다.</param>
+    /// <exception cref="EventNotFoundException">뱅크에 해당 이벤트가 없을 때 던집니다.</exception>
+    public EventInstance CreateInstance(EventReference eventReference, GameObject owner = null)
+    {
+        EventInstance instance = RuntimeManager.CreateInstance(eventReference);
+        AttachToOwner(instance, owner);
+        return instance;
+    }
+
+    /// <summary>이벤트 경로 문자열로 인스턴스를 만듭니다. 동작은 <see cref="CreateInstance(EventReference, GameObject)"/>와 같습니다.</summary>
+    /// <exception cref="EventNotFoundException">뱅크에 해당 이벤트가 없을 때 던집니다.</exception>
+    public EventInstance CreateInstance(string eventPath, GameObject owner = null)
+    {
+        EventInstance instance = RuntimeManager.CreateInstance(eventPath);
+        AttachToOwner(instance, owner);
+        return instance;
+    }
+
+    /// <summary>
+    /// <see cref="CreateInstance(EventReference, GameObject)"/>로 만들고 설정을 마친 인스턴스를 한 번 재생합니다.
+    /// 재생이 끝나면 FMOD가 스스로 해제합니다. 이후 이 인스턴스를 다시 쓰면 안 됩니다.
+    /// </summary>
+    /// <returns>재생을 시작했으면 true입니다.</returns>
+    public bool StartOneShot(EventInstance instance)
+    {
+        if (!instance.isValid())
+        {
+            return false;
+        }
+
+        FMOD.RESULT result = instance.start();
+        instance.release();
+        return result == FMOD.RESULT.OK;
     }
 
     /// <summary>
@@ -562,7 +660,16 @@ public sealed class SoundManager : MonoBehaviour
         RuntimeManager.DetachInstanceFromGameObject(instance);
     }
 
-    /// <summary>켜져 있는 스냅샷을 모두 즉시 끕니다. 매니저 파괴 시 정리용입니다.</summary>
+    /// <summary>인스턴스가 오브젝트의 위치·속도를 매 프레임 따라가게 합니다. owner가 null이면 아무것도 하지 않습니다.</summary>
+    private static void AttachToOwner(EventInstance instance, GameObject owner)
+    {
+        if (owner != null && instance.isValid())
+        {
+            RuntimeManager.AttachInstanceToGameObject(instance, owner);
+        }
+    }
+
+    /// <summary>켜져 있는 스냅샷을 모두 즉시 끕니다. 씬 전환과 매니저 파괴 시 정리용입니다.</summary>
     private void ClearSnapshots()
     {
         foreach (EventInstance snapshot in m_activeSnapshots.Values)
