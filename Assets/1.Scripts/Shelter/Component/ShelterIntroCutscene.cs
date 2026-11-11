@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
@@ -47,12 +48,21 @@ public sealed class ShelterIntroCutscene : MonoBehaviour
     [Tooltip("영상 준비가 이 시간(실제 시간, 초) 안에 끝나지 않으면 컷신을 건너뜁니다.")]
     [SerializeField, Min(1f)] private float m_prepareTimeout = 5.0f;
 
+    [Header("Camera On Finish")]
+    [Tooltip("켜면 컷신이 끝날 때 카메라를 캐릭터 등 뒤에서 캐릭터가 바라보는 방향으로 맞춥니다. 스폰 포인트가 NPC를 향하면 카메라도 그 NPC를 봅니다.")]
+    [FormerlySerializedAs("m_faceCharacterOnFinish")]
+    [SerializeField] private bool m_alignCameraOnFinish = true;
+
+    [Tooltip("컷신이 끝날 때 맞출 카메라 상하 각도입니다. 0이면 수평, 양수면 위에서 내려다봅니다.")]
+    [SerializeField, Range(-35f, 70f)] private float m_finishViewPitch = 10f;
+
     private RenderTexture m_renderTexture;
     private Action m_onFinished;
     private Coroutine m_playRoutine;
     private readonly System.Collections.Generic.List<PlayerInputController> m_gatedInputs = new();
     private readonly System.Collections.Generic.List<GameplayPauseMenuController> m_disabledPauseMenus = new();
     private readonly System.Collections.Generic.List<(PlayerMove move, bool wasLocked)> m_lockedMoves = new();
+    private readonly System.Collections.Generic.List<CameraLook> m_suspendedLooks = new();
     private bool m_isPlaying;
     private bool m_finishRequested;
 
@@ -192,6 +202,13 @@ public sealed class ShelterIntroCutscene : MonoBehaviour
 
         SetSkipHintVisible(false);
         SetVisible(false);
+
+        // 입력을 풀기 전에 시점을 맞춰야 첫 프레임부터 정면 시점으로 보입니다.
+        if (invokeCallback && m_alignCameraOnFinish)
+        {
+            AlignCameraToCharacterFacing();
+        }
+
         EndBlockingGameplay();
         ReleaseRenderTexture();
         m_isPlaying = false;
@@ -300,6 +317,19 @@ public sealed class ShelterIntroCutscene : MonoBehaviour
             moves[i].SetMoveLocked(true);
         }
 
+        // CameraLook은 커서가 잠겨 있으면 영상이 가리고 있어도 마우스로 계속 회전합니다.
+        // 멈추지 않으면 재생 중 마우스 움직임이 쌓여 컷신이 끝났을 때 시점이 크게 틀어져 있습니다.
+        m_suspendedLooks.Clear();
+        CameraLook[] looks = FindObjectsByType<CameraLook>(FindObjectsSortMode.None);
+        for (int i = 0; i < looks.Length; i++)
+        {
+            if (looks[i] == null)
+                continue;
+
+            looks[i].SetInputSuspended(true);
+            m_suspendedLooks.Add(looks[i]);
+        }
+
         m_disabledPauseMenus.Clear();
         if (m_blockPauseMenuWhilePlaying)
         {
@@ -340,6 +370,36 @@ public sealed class ShelterIntroCutscene : MonoBehaviour
         }
 
         m_lockedMoves.Clear();
+
+        for (int i = 0; i < m_suspendedLooks.Count; i++)
+        {
+            if (m_suspendedLooks[i] != null)
+                m_suspendedLooks[i].SetInputSuspended(false);
+        }
+
+        m_suspendedLooks.Clear();
+    }
+
+    /// <summary>카메라를 캐릭터 등 뒤에서 캐릭터가 바라보는 방향으로 맞춥니다.</summary>
+    /// <remarks>캐릭터 방향은 체크포인트 스폰 포인트의 회전에서 오므로, 스폰 포인트가 NPC를 향하게 두면 카메라도 NPC를 봅니다.</remarks>
+    private void AlignCameraToCharacterFacing()
+    {
+        for (int i = 0; i < m_suspendedLooks.Count; i++)
+        {
+            CameraLook look = m_suspendedLooks[i];
+            if (look == null)
+                continue;
+
+            // CameraTarget은 플레이어 자식이므로 부모의 PlayerMove를 우선 사용합니다.
+            PlayerMove owner = look.GetComponentInParent<PlayerMove>();
+            if (owner == null && m_lockedMoves.Count > 0)
+                owner = m_lockedMoves[0].move;
+
+            if (owner == null)
+                continue;
+
+            look.SetView(owner.transform.eulerAngles.y, m_finishViewPitch);
+        }
     }
 
     private void SetVisible(bool visible)
