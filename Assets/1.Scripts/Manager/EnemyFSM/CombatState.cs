@@ -218,6 +218,15 @@ public class CombatState : EnemyStateBase
         sensor.UpdatePerception();
         sensor.ReevaluateTarget();
 
+        SquadMemberController currentTarget = sensor.CurrentTarget;
+        if (currentTarget != null && !Controller.CanPursueDefenseSquadTarget(currentTarget))
+        {
+            // 방어 목표 구역 안에서는 구역 밖 스쿼드원을 쫓던 기존 교전도 중단합니다.
+            // Wander로 빠지면 다음 프레임 방어 내비게이션이 방어 목표 또는 구역 안 후보를 다시 고릅니다.
+            Controller.TransitionTo(Controller.Wander);
+            return;
+        }
+
         if (!sensor.HasAnyValidTarget || IsStuckWithNoReachableTarget(sensor))
         {
             // 유효 대상이 없다고 곧바로 교전을 끝내지 않습니다. 마지막으로 본 곳까지는 찾아가야 하며,

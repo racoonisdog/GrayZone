@@ -36,6 +36,9 @@ public class AttackState : EnemyStateBase
 
     private readonly bool m_defenseObjective;
 
+    /// <summary>방어 목표 공격 중 PlayerFirst 대상을 다시 확인할 다음 시각입니다.</summary>
+    private float m_nextDefenseTargetCheckTime;
+
     /// <summary>
     /// 이번 공격이 능력이 요청한 선행 공격인지 여부입니다.
     /// </summary>
@@ -69,6 +72,7 @@ public class AttackState : EnemyStateBase
         m_startTime = Time.time;
         m_impactDone = false;
         m_impactTime = 0f;
+        m_nextDefenseTargetCheckTime = Time.time;
 
         // 공격 중에는 이동하지 않습니다. 애니메이션의 짧은 전진은 슬라이스 2에서 다룹니다.
         Controller.StopMoving();
@@ -101,13 +105,25 @@ public class AttackState : EnemyStateBase
     /// </remarks>
     public override void Tick()
     {
-        // PlayerFirst의 목표물 공격은 대체 행동입니다. 플레이어를 다시 찾으면 기존 교전으로 돌려줍니다.
-        if (m_defenseObjective && Controller.DefenseDisposition == EnemyDefenseDisposition.PlayerFirst)
+        // PlayerFirst의 목표물 공격은 대체 행동입니다. 추적 가능한 스쿼드원을 다시 찾으면 기존 교전/추적으로 돌려줍니다.
+        // 목표물을 바라보는 동안 뒤쪽 스쿼드원이 시야 센서에 잡히지 않을 수 있으므로, 센서 결과뿐 아니라
+        // PlayerFirst의 도달 가능 대상 선택도 같은 저빈도 주기로 확인합니다.
+        if (m_defenseObjective
+            && Controller.DefenseDisposition == EnemyDefenseDisposition.PlayerFirst
+            && Time.time >= m_nextDefenseTargetCheckTime)
         {
+            m_nextDefenseTargetCheckTime = Time.time + Mathf.Max(0.1f, Controller.TargetReevaluateInterval);
             Controller.Sensor?.UpdatePerception();
-            if (Controller.Sensor != null && Controller.Sensor.HasAnyValidTarget)
+            Controller.Sensor?.ReevaluateTarget();
+            SquadMemberController priorityTarget = Controller.Sensor != null ? Controller.Sensor.CurrentTarget : null;
+            if (priorityTarget != null && Controller.CanPursueDefenseSquadTarget(priorityTarget))
             {
                 Controller.TransitionTo(Controller.Combat);
+                return;
+            }
+
+            if (Controller.TryResumePlayerFirstSquadPursuitFromDefenseObjective())
+            {
                 return;
             }
         }
