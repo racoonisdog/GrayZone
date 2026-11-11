@@ -15,12 +15,39 @@ using UnityEngine.UI;
 ///
 /// 미리보기는 <see cref="CrosshairController"/>의 배치 계산(링 기준 지름, 바깥쪽 두께 확장, 팔 위치)을 따라 텍스처에 그립니다.
 /// 탄퍼짐에 따른 간격 변화는 반영하지 않고 기본 간격으로 그립니다.
+///
+/// 배치는 Figma 'Setting Scene Battle Character'·'Setting Scene Battle Throwable Items' 프레임(1920x1080) 좌표를 그대로 씁니다.
+/// 부모는 설정 화면 전체 크기여야 합니다.
 /// </remarks>
 public sealed class CrosshairSettingsPanel : MonoBehaviour
 {
-    private const float ControlsLeft = 430f;
-    private const float ControlsWidth = 650f;
-    private const float RowHeight = 50f;
+    // 편집 패널(Preferences_base_02)입니다. 캐릭터 조준선은 y 450, 투척물 조준선은 y 223에서 시작합니다.
+    private const float PanelLeft = 371f;
+    private const float PanelWidth = 775f;
+    private const float PanelMinHeight = 489f;
+    private const float CharacterPanelTop = 450f;
+    private const float ThrowablePanelTop = 223f;
+
+    /// <summary>편집 패널이 내려올 수 있는 가장 아래 y입니다. 아래 버튼 줄 구분선(y 977) 위에서 멈춥니다.</summary>
+    private const float PanelBottomLimit = 965f;
+
+    // 패널 안 줄 배치입니다. 이름은 x 48, 버튼·슬라이더·색 견본은 x 240, 값 글자는 x 654에서 시작합니다.
+    private const float RowLabelLeft = 48f;
+    private const float RowControlLeft = 240f;
+    private const float RowValueLeft = 654f;
+    private const float RowHeight = 44f;
+
+    /// <summary>첫 줄(모양)과 둘째 줄의 세로 가운데입니다. 그 아래 줄은 <see cref="RowPitch"/> 간격으로 이어집니다.</summary>
+    private const float FirstRowCenter = 123.5f;
+    private const float SecondRowCenter = 181f;
+    private const float RowPitch = 48f;
+
+    /// <summary>줄이 많아 패널이 아래 한계를 넘을 때 줄여 쓸 수 있는 가장 좁은 간격입니다. 색 견본(36px)이 겹치지 않는 값입니다.</summary>
+    private const float MinRowPitch = 36f;
+
+    private static readonly Vector2 SliderSize = new(408f, 26.65f);
+    private const float SwatchSize = 36f;
+    private const float SwatchPitch = 60f;
 
     private enum Layer { Main, Sub }
 
@@ -42,9 +69,12 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     };
 
     private static readonly Color[] StrokeSwatches = { Color.black, new Color(0.25f, 0.25f, 0.25f, 1f), Color.white };
-    // 전투 일반·오디오와 같은 어두운 카드 위에서 선택 상태만 붉은 포인트로 구분합니다.
-    private static readonly Color SelectedColor = new(0.95f, 0.08f, 0.08f, 0.92f);
-    private static readonly Color IdleColor = new(1f, 1f, 1f, 0.1f);
+    // 테마 이미지가 없을 때 고르는 버튼을 칠할 색입니다. Select_mark_02(올리브)·Select_mark_03(검정)과 같은 색입니다.
+    private static readonly Color SelectedColor = new(0.69f, 0.65f, 0.33f, 1f);
+    private static readonly Color IdleColor = Color.black;
+
+    /// <summary>고른 색 견본 테두리 색입니다. Figma 선택 칸과 같은 노란색입니다.</summary>
+    private static readonly Color AccentColor = new(0.97f, 0.78f, 0.18f, 1f);
 
     private readonly List<KeyValuePair<PlayerbleCharacterId, string>> m_characters = new();
     private readonly Dictionary<PlayerbleCharacterId, CrosshairStyle> m_workingStyles = new();
@@ -66,7 +96,7 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
 
     /// <summary>조준(ADS) 쪽을 편집하고 있는지 여부입니다. 거짓이면 비조준 쪽입니다. 동적 크로스헤어를 끈 경우에만 씁니다.</summary>
     private bool m_adsTab;
-    private float m_layerTop;
+    private float m_panelTop;
     private Image m_dynamicCheck;
     private RectTransform m_sideRow;
     private RectTransform m_layerRow;
@@ -86,6 +116,9 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     /// Build 전에 넣어야 하고, 비어 있으면 이 패널의 기본 슬라이더를 씁니다.
     /// </summary>
     public Func<string, Transform, Vector2, Vector2, float, float, bool, Slider> SliderFactory { get; set; }
+
+    /// <summary>설정 화면 이미지 묶음입니다. Build 전에 넣어야 하고, 비어 있으면 단색으로 그립니다.</summary>
+    public GameplaySettingsTheme Theme { get; set; }
 
     /// <summary>캐릭터별 조준선 편집 화면을 만듭니다.</summary>
     public void Build(RectTransform parent, TMP_FontAsset regularFont, TMP_FontAsset boldFont)
@@ -181,52 +214,90 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         m_regularFont = regularFont;
         m_boldFont = boldFont != null ? boldFont : regularFont;
 
-        string title = throwableMode ? "투척물 조준선" : "캐릭터 조준선";
-        string notice = throwableMode
-            ? "모든 캐릭터가 같이 쓰는 투척 모드 조준선입니다. 저장하면 바로 적용됩니다."
-            : "캐릭터마다 따로 저장되며, 조작 캐릭터를 바꾸면 그 캐릭터의 조준선으로 바뀝니다.";
-        CreateText("Page Title", parent, new Vector2(ControlsLeft, -34f), new Vector2(500f, 50f),
-            title, 32f, TextAlignmentOptions.Left, m_boldFont);
-        CreateText("Notice", parent, new Vector2(ControlsLeft, -82f), new Vector2(700f, 32f),
-            notice, 17f, TextAlignmentOptions.Left, m_regularFont, new Color(1f, 1f, 1f, 0.6f));
-
-        float layerTop = -126f;
         if (!throwableMode)
         {
-            CreateText("Character Label", parent, new Vector2(ControlsLeft, -126f), new Vector2(160f, 32f),
-                "캐릭터", 20f, TextAlignmentOptions.Left, m_boldFont);
-            m_characterRow = CreateTopLeftObject("Character Buttons", parent, new Vector2(ControlsLeft, -164f),
-                new Vector2(ControlsWidth, 42f)).GetComponent<RectTransform>();
-            layerTop = -220f;
+            CreateSectionTitle(parent, 371f, 160f, "캐릭터 조준선");
+            CreateText("Notice", parent, new Vector2(627f, -184f), new Vector2(600f, 15f),
+                "캐릭터마다 따로 저장되며, 조작 캐릭터를 바꾸면 그 캐릭터의 조준선으로 바뀝니다.", 15f,
+                TextAlignmentOptions.Left, m_regularFont);
+            CreateText("Character Label", parent, new Vector2(393f, -216f), new Vector2(200f, 30f),
+                "캐릭터", 30f, TextAlignmentOptions.Left, m_regularFont);
+            m_characterRow = CreateTopLeftObject("Character Buttons", parent, new Vector2(415f, -265f),
+                new Vector2(PanelWidth, 39f)).GetComponent<RectTransform>();
+
+            CreateSectionTitle(parent, 371f, 343f, "조준선 커스텀");
+
+            // 동적 크로스헤어: 켜면 탄퍼짐·반동·조준에 따라 벌어지고 줄어들며(양은 고정값) 비조준·조준을 나누지 않습니다.
+            // 끄면 미리보기 크기 그대로 고정되고, 패널 오른쪽 위 비조준/조준 버튼으로 두 쪽을 따로 정합니다.
+            // Figma Chack Box: 체크 칸(31x31)보다 큰 체크 표시(51x42)가 칸 왼쪽 위로 삐져나오게 겹칩니다.
+            Button box = CreateButton("Dynamic Checkbox", parent, new Vector2(394f, -390f), new Vector2(330f, 48f),
+                string.Empty, 15f, Color.clear);
+            box.onClick.AddListener(ToggleDynamic);
+            Image boxImage = CreateImage("Box", box.transform, new Vector2(4f, -16f), new Vector2(31f, 31f), new Color(1f, 1f, 1f, 0.16f));
+            boxImage.raycastTarget = false;
+            ApplySprite(boxImage, Theme != null ? Theme.checkBox : null);
+            m_dynamicCheck = CreateImage("Check", box.transform, Vector2.zero, new Vector2(51f, 42f), new Color(0f, 1f, 0.08f, 1f));
+            m_dynamicCheck.raycastTarget = false;
+            if (Theme != null && Theme.checkMark != null)
+            {
+                ApplySprite(m_dynamicCheck, Theme.checkMark);
+            }
+            else
+            {
+                SetTopLeftRect(m_dynamicCheck.rectTransform, new Vector2(10f, -22f), new Vector2(19f, 19f));
+            }
+
+            CreateText("Dynamic Label", box.transform, new Vector2(51f, -18f), new Vector2(280f, 30f),
+                "동적 크로스헤어 사용", 30f, TextAlignmentOptions.Left, m_regularFont);
+            CreateText("Dynamic Description", parent, new Vector2(738f, -422f), new Vector2(400f, 15f),
+                "반동·조준에 따라 벌어지고 줄어듭니다.", 15f, TextAlignmentOptions.Left, m_regularFont);
+        }
+        else
+        {
+            CreateSectionTitle(parent, 371f, 160f, "투척물 커스텀");
         }
 
-        CreateText("Layer Label", parent, new Vector2(ControlsLeft, layerTop), new Vector2(300f, 32f),
-            "편집할 조준선", 20f, TextAlignmentOptions.Left, m_boldFont);
-        m_layerTop = layerTop;
+        m_panelTop = throwableMode ? ThrowablePanelTop : CharacterPanelTop;
+        BuildControls(parent);
+        BuildPreview(parent);
 
-        if (!throwableMode)
+        m_selectedLayer = Layer.Main;
+        m_selectedCharacterIndex = 0;
+        RevertToCommittedValues();
+    }
+
+    private void BuildControls(Transform parent)
+    {
+        Image panel = CreateImage("Controls Panel", parent, new Vector2(PanelLeft, -m_panelTop), new Vector2(PanelWidth, PanelMinHeight),
+            new Color(0.13f, 0.16f, 0.2f, 0.75f));
+        ApplySprite(panel, Theme != null ? Theme.crosshairPanel : null);
+        m_controlsPanel = panel.rectTransform;
+        RectTransform panelRect = panel.rectTransform;
+
+        // Figma Select: 내부/외부 버튼은 패널 왼쪽 위(x 48, y 24)에 163x47로 놓입니다.
+        m_layerRow = CreateTopLeftObject("Layer Buttons", panelRect, new Vector2(RowLabelLeft, -24f),
+            new Vector2(360f, 47f)).GetComponent<RectTransform>();
+        string[] layerLabels = { "내부 (중앙)", "외부 (주변)" };
+        for (int i = 0; i < layerLabels.Length; i++)
         {
-            // 동적 크로스헤어: 켜면 탄퍼짐·반동·조준에 따라 벌어지고 줄어들며(양은 고정값) 비조준·조준을 나누지 않습니다.
-            // 끄면 미리보기 크기 그대로 고정되고, 아래 비조준/조준 버튼으로 두 쪽을 따로 정합니다.
-            GameObject dynamicRow = CreateTopLeftObject("Dynamic Row", parent, new Vector2(ControlsLeft, layerTop - 38f),
-                new Vector2(ControlsWidth, 36f));
-            Button box = CreateButton("Dynamic Checkbox", dynamicRow.transform, Vector2.zero, new Vector2(34f, 34f), string.Empty, 15f, IdleColor);
-            box.onClick.AddListener(ToggleDynamic);
-            m_dynamicCheck = CreateImage("Check", box.transform, new Vector2(7f, -7f), new Vector2(20f, 20f), SelectedColor);
-            m_dynamicCheck.raycastTarget = false;
-            CreateText("Dynamic Label", dynamicRow.transform, new Vector2(46f, -1f), new Vector2(180f, 32f),
-                "동적 크로스헤어", 18f, TextAlignmentOptions.Left, m_boldFont);
-            CreateText("Dynamic Description", dynamicRow.transform, new Vector2(220f, -2f), new Vector2(430f, 32f),
-                "반동·조준에 따라 벌어지고 줄어듭니다", 15f, TextAlignmentOptions.Left, m_regularFont, new Color(1f, 1f, 1f, 0.6f));
+            int index = i;
+            Button button = CreateButton($"Layer {i}", m_layerRow, new Vector2(187f * i, 0f),
+                new Vector2(163f, 47f), layerLabels[i], 25f, IdleColor);
+            button.onClick.AddListener(() => SelectLayer((Layer)index));
+            m_layerButtonImages[i] = button.GetComponent<Image>();
+        }
 
-            m_sideRow = CreateTopLeftObject("Side Buttons", parent, new Vector2(ControlsLeft, layerTop - 84f),
-                new Vector2(ControlsWidth, 42f)).GetComponent<RectTransform>();
+        if (!m_isThrowableMode)
+        {
+            // 비조준/조준 버튼은 Figma에 없어서, 동적 크로스헤어를 껐을 때 같은 줄 오른쪽에 같은 모양 버튼으로 둡니다.
+            m_sideRow = CreateTopLeftObject("Side Buttons", panelRect, new Vector2(PanelWidth - 24f - 312f, -24f),
+                new Vector2(312f, 47f)).GetComponent<RectTransform>();
             string[] sideLabels = { "비조준", "조준 (ADS)" };
             for (int i = 0; i < sideLabels.Length; i++)
             {
                 int index = i;
-                Button button = CreateButton($"Side {i}", m_sideRow, new Vector2(180f * i, 0f),
-                    new Vector2(164f, 42f), sideLabels[i], 18f, IdleColor);
+                Button button = CreateButton($"Side {i}", m_sideRow, new Vector2(162f * i, 0f),
+                    new Vector2(150f, 47f), sideLabels[i], 25f, IdleColor);
                 button.onClick.AddListener(() =>
                 {
                     m_adsTab = index == 1;
@@ -236,42 +307,8 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             }
         }
 
-        // 내부/외부 버튼은 비조준/조준 아래 단계입니다. 줄 위치는 RefreshAll이 동적 여부에 맞춰 옮깁니다.
-        m_layerRow = CreateTopLeftObject("Layer Buttons", parent, new Vector2(ControlsLeft, layerTop - 38f),
-            new Vector2(ControlsWidth, 42f)).GetComponent<RectTransform>();
-        string[] layerLabels = { "내부 (중앙)", "외부 (주변)" };
-        for (int i = 0; i < layerLabels.Length; i++)
-        {
-            int index = i;
-            Button button = CreateButton($"Layer {i}", m_layerRow, new Vector2(180f * i, 0f),
-                new Vector2(164f, 42f), layerLabels[i], 18f, IdleColor);
-            button.onClick.AddListener(() => SelectLayer((Layer)index));
-            m_layerButtonImages[i] = button.GetComponent<Image>();
-        }
-
-        BuildControls(parent, layerTop - 100f);
-        BuildPreview(parent);
-
-        m_selectedLayer = Layer.Main;
-        m_selectedCharacterIndex = 0;
-        RevertToCommittedValues();
-    }
-
-    private void BuildControls(Transform parent, float top)
-    {
-        // 캐릭터 조준선은 위에 동적 크로스헤어·비조준/조준 줄이 더 있어 편집 칸이 그만큼 아래에서 시작하므로 짧게 둡니다.
-        float height = m_isThrowableMode ? 700f : 600f;
-        Image panel = CreateImage("Controls Panel", parent, new Vector2(ControlsLeft, top), new Vector2(ControlsWidth, height),
-            new Color(0.045f, 0.052f, 0.06f, 0.96f));
-        m_controlsPanel = panel.rectTransform;
-        Outline outline = panel.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.2f);
-        outline.effectDistance = new Vector2(1f, -1f);
-        AddCardAccent(panel.rectTransform, ControlsWidth);
-        RectTransform panelRect = panel.rectTransform;
-
-        m_unavailableText = CreateText("Unavailable", panelRect, new Vector2(32f, -24f), new Vector2(586f, 60f),
-            "전투 씬에서만 조준선을 설정할 수 있습니다.", 18f, TextAlignmentOptions.Left, m_regularFont,
+        m_unavailableText = CreateText("Unavailable", panelRect, new Vector2(RowLabelLeft, -102f), new Vector2(680f, 30f),
+            "전투 씬에서만 조준선을 설정할 수 있습니다.", 22f, TextAlignmentOptions.Left, m_regularFont,
             new Color(1f, 1f, 1f, 0.6f));
 
         m_mainRowsRoot = CreateStretchObject("Main Rows", panelRect).GetComponent<RectTransform>();
@@ -279,9 +316,37 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         BuildMainRows(m_mainRowsRoot);
         BuildSubRows(m_subRowsRoot);
 
-        Button resetButton = CreateButton("Reset To Default", panelRect, new Vector2(ControlsWidth - 32f - 200f, -(height - 58f)),
-            new Vector2(200f, 42f), m_isThrowableMode ? "기본값으로" : "이 캐릭터 기본값으로", 15f, new Color(1f, 1f, 1f, 0.12f));
+        // Figma Set Character Button: 미리보기 아래 오른쪽, Preferences_button 바탕입니다.
+        Button resetButton = CreateButton("Reset To Default", parent,
+            new Vector2(1455.76f, m_isThrowableMode ? -842f : -835f), new Vector2(369.24f, 58f),
+            m_isThrowableMode ? "기본값으로 설정" : "이 캐릭터 기본값으로 설정", 25f, new Color(0.02f, 0.03f, 0.04f, 1f));
+        ApplySprite(resetButton.GetComponent<Image>(), Theme != null ? Theme.actionButton : null);
         resetButton.onClick.AddListener(ResetSelectedToDefault);
+    }
+
+    /// <summary>Figma 항목 제목(Table)입니다. 노란 세로 막대(Table_mark 8x38) 오른쪽에 36px 굵은 제목을 둡니다.</summary>
+    private void CreateSectionTitle(Transform parent, float left, float top, string title)
+    {
+        Image mark = CreateImage($"{title} Mark", parent, new Vector2(left, -top), new Vector2(8f, 38f), AccentColor);
+        mark.raycastTarget = false;
+        ApplySprite(mark, Theme != null ? Theme.titleMark : null);
+        CreateText($"{title} Title", parent, new Vector2(left + 22f, -(top + 2f)), new Vector2(400f, 36f),
+            title, 36f, TextAlignmentOptions.Left, m_boldFont);
+    }
+
+    /// <summary>하나를 고르는 버튼의 바탕을 고른 칸(Select_mark_02)·고르지 않은 칸(Select_mark_03)으로 바꿉니다.</summary>
+    private void SetChoiceSelected(Image image, bool selected)
+    {
+        Sprite sprite = Theme == null ? null : selected ? Theme.choiceSelected : Theme.choiceIdle;
+        if (sprite != null)
+        {
+            image.sprite = sprite;
+            image.color = Color.white;
+            return;
+        }
+
+        image.sprite = null;
+        image.color = selected ? SelectedColor : IdleColor;
     }
 
     private void BuildMainRows(RectTransform root)
@@ -334,16 +399,14 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private void AddChoiceRow(RectTransform root, List<Row> rows, string label, string[] labels,
         Action<int> onSelect, Func<CrosshairStyle, int> getIndex, Func<CrosshairStyle, bool> isVisible = null)
     {
-        GameObject rowObject = CreateTopLeftObject($"{label} Row", root, Vector2.zero, new Vector2(ControlsWidth, RowHeight));
-        CreateText("Label", rowObject.transform, new Vector2(32f, -8f), new Vector2(150f, 32f),
-            label, 18f, TextAlignmentOptions.Left, m_boldFont);
+        GameObject rowObject = CreateRowObject($"{label} Row", root, label);
         var buttonImages = new List<Image>();
-        float buttonWidth = labels.Length > 2 ? 108f : 200f;
+        float buttonWidth = labels.Length > 2 ? 85f : 163f;
         for (int i = 0; i < labels.Length; i++)
         {
             int index = i;
-            Button button = CreateButton($"Choice {i}", rowObject.transform, new Vector2(182f + (buttonWidth + 6f) * i, -6f),
-                new Vector2(buttonWidth, 36f), labels[i], 15f, IdleColor);
+            Button button = CreateButton($"Choice {i}", rowObject.transform, new Vector2(RowControlLeft + (buttonWidth + 28f) * i, -0.5f),
+                new Vector2(buttonWidth, 43f), labels[i], 22f, IdleColor);
             button.onClick.AddListener(() => onSelect(index));
             buttonImages.Add(button.GetComponent<Image>());
         }
@@ -357,10 +420,19 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
                 int selected = getIndex(style);
                 for (int i = 0; i < buttonImages.Count; i++)
                 {
-                    buttonImages[i].color = i == selected ? SelectedColor : IdleColor;
+                    SetChoiceSelected(buttonImages[i], i == selected);
                 }
             },
         });
+    }
+
+    /// <summary>편집 패널 한 줄을 만들고 왼쪽에 22px 이름을 둡니다. 줄 높이는 44px이고 내용은 세로 가운데에 맞춥니다.</summary>
+    private GameObject CreateRowObject(string name, RectTransform root, string label)
+    {
+        GameObject rowObject = CreateTopLeftObject(name, root, Vector2.zero, new Vector2(PanelWidth, RowHeight));
+        CreateText("Label", rowObject.transform, new Vector2(RowLabelLeft, -11f), new Vector2(190f, 22f),
+            label, 22f, TextAlignmentOptions.Left, m_regularFont);
+        return rowObject;
     }
 
     private static bool HasMain(CrosshairStyle s) => s.mainShape != CrosshairController.MainShape.None;
@@ -372,15 +444,18 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private void AddShapeRow(RectTransform root, List<Row> rows, List<Image> buttonImages, string[] labels,
         Action<int> onSelect, Func<CrosshairStyle, int> getIndex)
     {
-        GameObject rowObject = CreateTopLeftObject("Shape Row", root, Vector2.zero, new Vector2(ControlsWidth, RowHeight));
-        CreateText("Label", rowObject.transform, new Vector2(32f, -8f), new Vector2(150f, 32f),
-            "모양", 18f, TextAlignmentOptions.Left, m_boldFont);
-        float buttonWidth = labels.Length > 3 ? 82f : 108f;
+        GameObject rowObject = CreateRowObject("Shape Row", root, "모양");
+
+        // Figma Shape: 85x43 버튼을 113px 간격으로 놓습니다. 외부 모양은 이름이 길고 5개라 버튼을 넓히고 간격을 좁혀 패널 안에 맞춥니다.
+        bool wide = labels.Length > 3;
+        float buttonWidth = wide ? 96f : 85f;
+        float buttonPitch = wide ? 104f : 113f;
+        float fontSize = wide ? 20f : 22f;
         for (int i = 0; i < labels.Length; i++)
         {
             int index = i;
-            Button button = CreateButton($"Shape {i}", rowObject.transform, new Vector2(182f + (buttonWidth + 6f) * i, -6f),
-                new Vector2(buttonWidth, 36f), labels[i], 15f, IdleColor);
+            Button button = CreateButton($"Shape {i}", rowObject.transform, new Vector2(RowControlLeft + buttonPitch * i, -0.5f),
+                new Vector2(buttonWidth, 43f), labels[i], fontSize, IdleColor);
             button.onClick.AddListener(() => onSelect(index));
             buttonImages.Add(button.GetComponent<Image>());
         }
@@ -394,7 +469,7 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
                 int selected = getIndex(style);
                 for (int i = 0; i < buttonImages.Count; i++)
                 {
-                    buttonImages[i].color = i == selected ? SelectedColor : IdleColor;
+                    SetChoiceSelected(buttonImages[i], i == selected);
                 }
             },
         });
@@ -404,13 +479,10 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         Func<CrosshairStyle, float> getter, Action<CrosshairStyle, float> setter, Func<CrosshairStyle, bool> isVisible,
         Func<float, string> valueText = null)
     {
-        GameObject rowObject = CreateTopLeftObject($"{label} Row", root, Vector2.zero, new Vector2(ControlsWidth, RowHeight));
-        CreateText("Label", rowObject.transform, new Vector2(32f, -8f), new Vector2(150f, 32f),
-            label, 18f, TextAlignmentOptions.Left, m_regularFont);
-        TextMeshProUGUI value = CreateText("Value", rowObject.transform, new Vector2(518f, -8f), new Vector2(100f, 32f),
-            string.Empty, 18f, TextAlignmentOptions.Right, m_boldFont);
+        GameObject rowObject = CreateRowObject($"{label} Row", root, label);
+        TextMeshProUGUI value = CreateValueText(rowObject.transform);
         bool wholeNumbers = Mathf.Approximately(step, 1f) && Mathf.Approximately(min, Mathf.Round(min));
-        Slider slider = CreateSlider(rowObject.transform, new Vector2(182f, -12f), new Vector2(320f, 24f), min, max, wholeNumbers);
+        Slider slider = CreateRowSlider(rowObject.transform, min, max, wholeNumbers);
         slider.onValueChanged.AddListener(raw =>
         {
             if (m_isRefreshing) return;
@@ -438,17 +510,18 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private void AddColorRows(RectTransform root, List<Row> rows, string label, Color[] swatches,
         Func<CrosshairStyle, Color> getter, Action<CrosshairStyle, Color> setter, Func<CrosshairStyle, bool> isVisible)
     {
-        GameObject rowObject = CreateTopLeftObject($"{label} Row", root, Vector2.zero, new Vector2(ControlsWidth, RowHeight));
-        CreateText("Label", rowObject.transform, new Vector2(32f, -8f), new Vector2(150f, 32f),
-            label, 18f, TextAlignmentOptions.Left, m_regularFont);
+        GameObject rowObject = CreateRowObject($"{label} Row", root, label);
         var outlines = new List<Outline>();
         for (int i = 0; i < swatches.Length; i++)
         {
             Color swatch = swatches[i];
-            Button button = CreateButton($"Swatch {i}", rowObject.transform, new Vector2(182f + 48f * i, -7f),
-                new Vector2(36f, 36f), string.Empty, 1f, swatch);
+            Button button = CreateButton($"Swatch {i}", rowObject.transform,
+                new Vector2(RowControlLeft + 1f + SwatchPitch * i, -((RowHeight - SwatchSize) * 0.5f)),
+                new Vector2(SwatchSize, SwatchSize), string.Empty, 1f, swatch);
+
+            // Figma Color_.palette: 고른 색은 노란 테두리로 둘러쌉니다.
             Outline swatchOutline = button.gameObject.AddComponent<Outline>();
-            swatchOutline.effectColor = SelectedColor;
+            swatchOutline.effectColor = AccentColor;
             swatchOutline.effectDistance = new Vector2(3f, -3f);
             swatchOutline.useGraphicAlpha = false;
             outlines.Add(swatchOutline);
@@ -475,12 +548,9 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
             },
         });
 
-        GameObject alphaRow = CreateTopLeftObject($"{label} Alpha Row", root, Vector2.zero, new Vector2(ControlsWidth, RowHeight));
-        CreateText("Label", alphaRow.transform, new Vector2(32f, -8f), new Vector2(150f, 32f),
-            $"{label.Replace(" 색", string.Empty)} 불투명도", 18f, TextAlignmentOptions.Left, m_regularFont);
-        TextMeshProUGUI value = CreateText("Value", alphaRow.transform, new Vector2(518f, -8f), new Vector2(100f, 32f),
-            string.Empty, 18f, TextAlignmentOptions.Right, m_boldFont);
-        Slider slider = CreateSlider(alphaRow.transform, new Vector2(182f, -12f), new Vector2(320f, 24f), 0f, 1f, false);
+        GameObject alphaRow = CreateRowObject($"{label} Alpha Row", root, $"{label.Replace(" 색", string.Empty)} 불투명도");
+        TextMeshProUGUI value = CreateValueText(alphaRow.transform);
+        Slider slider = CreateRowSlider(alphaRow.transform, 0f, 1f, false);
         slider.onValueChanged.AddListener(raw =>
         {
             if (m_isRefreshing) return;
@@ -626,8 +696,9 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         for (int i = 0; i < m_characters.Count; i++)
         {
             int index = i;
-            Button button = CreateButton($"Character {m_characters[i].Key}", m_characterRow, new Vector2(180f * i, 0f),
-                new Vector2(164f, 42f), m_characters[i].Value, 19f, IdleColor);
+            // Figma Select Charcter: 115x39 버튼을 139px 간격으로 놓습니다.
+            Button button = CreateButton($"Character {m_characters[i].Key}", m_characterRow, new Vector2(139f * i, 0f),
+                new Vector2(115f, 39f), m_characters[i].Value, 25f, IdleColor);
             button.onClick.AddListener(() => SelectCharacter(index));
             m_characterButtonImages.Add(button.GetComponent<Image>());
         }
@@ -651,8 +722,7 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// 동적 크로스헤어 체크와 비조준/조준 버튼을 맞추고, 그 아래 내부/외부 버튼과 편집 칸을 위아래로 옮깁니다.
-    /// 동적을 켜면 비조준/조준 줄이 사라지고 그 자리만큼 위로 붙습니다.
+    /// 동적 크로스헤어 체크와 비조준/조준 버튼을 맞춥니다. 동적을 켜면 비조준/조준 버튼이 사라집니다.
     /// </summary>
     private void LayoutHeader(CrosshairStyle style)
     {
@@ -666,12 +736,8 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         m_sideRow.gameObject.SetActive(!dynamic);
         for (int i = 0; i < m_sideButtonImages.Length; i++)
         {
-            m_sideButtonImages[i].color = i == (m_adsTab ? 1 : 0) ? SelectedColor : IdleColor;
+            SetChoiceSelected(m_sideButtonImages[i], i == (m_adsTab ? 1 : 0));
         }
-
-        float layerY = m_layerTop - (dynamic ? 84f : 134f);
-        m_layerRow.anchoredPosition = new Vector2(m_layerRow.anchoredPosition.x, layerY);
-        m_controlsPanel.anchoredPosition = new Vector2(m_controlsPanel.anchoredPosition.x, layerY - 62f);
     }
 
     private void RefreshAll()
@@ -682,12 +748,12 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
 
         for (int i = 0; i < m_characterButtonImages.Count; i++)
         {
-            m_characterButtonImages[i].color = i == m_selectedCharacterIndex ? SelectedColor : IdleColor;
+            SetChoiceSelected(m_characterButtonImages[i], i == m_selectedCharacterIndex);
         }
 
         for (int i = 0; i < m_layerButtonImages.Length; i++)
         {
-            m_layerButtonImages[i].color = i == (int)m_selectedLayer ? SelectedColor : IdleColor;
+            SetChoiceSelected(m_layerButtonImages[i], i == (int)m_selectedLayer);
         }
 
         LayoutHeader(style);
@@ -707,45 +773,69 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         DrawPreview(display);
     }
 
-    /// <summary>현재 모양에 쓰이는 줄만 위에서부터 차례로 보이게 배치합니다.</summary>
-    private static void LayoutRows(List<Row> rows, CrosshairStyle style)
+    /// <summary>
+    /// 현재 모양에 쓰이는 줄만 위에서부터 차례로 보이게 배치하고, 줄 수에 맞춰 편집 패널 높이를 정합니다.
+    /// </summary>
+    /// <remarks>
+    /// Figma 간격(첫 줄 가운데 123.5, 둘째 줄 181, 그 뒤 48)을 쓰다가, 줄이 많아 패널이 아래 버튼 줄 구분선을 넘게 되면
+    /// 셋째 줄부터의 간격을 <see cref="MinRowPitch"/>까지 줄입니다.
+    /// </remarks>
+    private void LayoutRows(List<Row> rows, CrosshairStyle style)
     {
-        float y = -16f;
+        int visibleCount = 0;
+        foreach (Row row in rows)
+        {
+            if (row.IsVisible(style)) visibleCount++;
+        }
+
+        float maxHeight = PanelBottomLimit - m_panelTop;
+        float pitch = visibleCount > 2
+            ? Mathf.Clamp((maxHeight - 40f - SecondRowCenter) / (visibleCount - 2), MinRowPitch, RowPitch)
+            : RowPitch;
+
+        int index = 0;
+        float lastCenter = FirstRowCenter;
         foreach (Row row in rows)
         {
             bool visible = row.IsVisible(style);
             row.Root.SetActive(visible);
             if (!visible) continue;
 
-            ((RectTransform)row.Root.transform).anchoredPosition = new Vector2(0f, y);
+            float center = index == 0 ? FirstRowCenter : SecondRowCenter + pitch * (index - 1);
+            ((RectTransform)row.Root.transform).anchoredPosition = new Vector2(0f, -(center - RowHeight * 0.5f));
             row.Refresh(style);
-            y -= RowHeight;
+            lastCenter = center;
+            index++;
         }
+
+        // Figma 패널은 마지막 줄 아래로 여유가 68px 있습니다. 줄이 많으면 여유를 줄여 아래 한계 안에 둡니다.
+        float height = Mathf.Max(PanelMinHeight, Mathf.Min(lastCenter + 68f, Mathf.Max(maxHeight, lastCenter + 30f)));
+        m_controlsPanel.sizeDelta = new Vector2(PanelWidth, height);
     }
 
+    /// <summary>Figma Preview 묶음입니다. 틀(Preview 542x559) 안 회색 칸(x 50, y 70, 442x446)에 미리보기를 그립니다.</summary>
     private void BuildPreview(Transform parent)
     {
-        Image preview = CreateImage("Crosshair Preview", parent, new Vector2(1130f, -132f), new Vector2(650f, 684f),
-            new Color(0.045f, 0.052f, 0.06f, 0.96f));
-        Outline outline = preview.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.24f);
-        outline.effectDistance = new Vector2(1f, -1f);
+        Image preview = CreateImage("Crosshair Preview", parent, new Vector2(1259f, -225f), new Vector2(542f, 559f),
+            new Color(0.2f, 0.2f, 0.2f, 1f));
+        ApplySprite(preview, Theme != null ? Theme.crosshairPreview : null);
         RectTransform previewRect = preview.rectTransform;
-        AddCardAccent(previewRect, 650f);
-        CreateText("Preview Title", previewRect, new Vector2(28f, -24f), new Vector2(320f, 34f),
-            "조준선 미리보기", 20f, TextAlignmentOptions.Left, m_boldFont);
-        m_previewProfileLabel = CreateText("Preview Profile", previewRect, new Vector2(350f, -24f), new Vector2(270f, 34f),
-            string.Empty, 18f, TextAlignmentOptions.Right, m_regularFont, new Color(1f, 1f, 1f, 0.65f));
+        CreateText("Preview Title", previewRect, new Vector2(47f, -23f), new Vector2(300f, 19f),
+            "조준선 미리보기", 19f, TextAlignmentOptions.Left, m_boldFont);
+        m_previewProfileLabel = CreateText("Preview Profile", previewRect, new Vector2(291f, -23f), new Vector2(200f, 19f),
+            string.Empty, 19f, TextAlignmentOptions.Right, m_regularFont);
 
-        Image field = CreateImage("Preview Field", previewRect, new Vector2(25f, -78f), new Vector2(600f, 560f),
-            new Color(0.32f, 0.34f, 0.33f, 1f));
+        // 틀 이미지에 회색 칸이 그려져 있으면 칸은 비워 두고, 틀이 없을 때만 회색으로 칠합니다.
+        Image field = CreateImage("Preview Field", previewRect, new Vector2(50f, -70f), new Vector2(442f, 446f),
+            Theme != null && Theme.crosshairPreview != null ? Color.clear : new Color(0.56f, 0.56f, 0.56f, 1f));
+        field.raycastTarget = false;
         GameObject imageObject = CreateStretchObject("Preview Image", field.transform);
         m_previewImage = imageObject.AddComponent<RawImage>();
         m_previewImage.raycastTarget = false;
         m_previewImage.enabled = false;
 
-        m_previewZoomLabel = CreateText("Preview Zoom", previewRect, new Vector2(25f, -646f), new Vector2(600f, 24f),
-            string.Empty, 16f, TextAlignmentOptions.Center, m_regularFont, new Color(1f, 1f, 1f, 0.5f));
+        m_previewZoomLabel = CreateText("Preview Zoom", previewRect, new Vector2(0f, -534f), new Vector2(542f, 14f),
+            string.Empty, 14f, TextAlignmentOptions.Center, m_regularFont);
     }
 
     /// <summary>
@@ -804,6 +894,19 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
                         : "게임 화면과 같은 크기입니다. 비조준 중에는 항상 이 모습입니다.";
     }
 
+    /// <summary>편집 줄의 슬라이더입니다. Figma Setting Gauge(408x26.65)를 이름 오른쪽(x 240)에 세로 가운데로 둡니다.</summary>
+    private Slider CreateRowSlider(Transform parent, float min, float max, bool wholeNumbers)
+    {
+        return CreateSlider(parent, new Vector2(RowControlLeft, -((RowHeight - SliderSize.y) * 0.5f)), SliderSize, min, max, wholeNumbers);
+    }
+
+    /// <summary>편집 줄 슬라이더 오른쪽의 20px 값 글자입니다.</summary>
+    private TextMeshProUGUI CreateValueText(Transform parent)
+    {
+        return CreateText("Value", parent, new Vector2(RowValueLeft, -12f), new Vector2(110f, 20f),
+            string.Empty, 20f, TextAlignmentOptions.Left, m_regularFont);
+    }
+
     private Slider CreateSlider(Transform parent, Vector2 position, Vector2 size, float min, float max, bool wholeNumbers)
     {
         if (SliderFactory != null)
@@ -846,12 +949,26 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         return slider;
     }
 
-    /// <summary>조준선 편집·미리보기 카드 상단에 설정 화면 공통 붉은 구분선을 더합니다.</summary>
-    private static void AddCardAccent(RectTransform parent, float width)
+    /// <summary>아트 스프라이트를 원본 색 그대로 보이게 적용합니다. 스프라이트가 없으면 지금 색을 그대로 둡니다.</summary>
+    private static void ApplySprite(Image image, Sprite sprite)
     {
-        Image accent = CreateImage("Accent", parent, Vector2.zero, new Vector2(width, 3f),
-            new Color(0.95f, 0.08f, 0.08f, 0.95f));
-        accent.raycastTarget = false;
+        if (image == null || sprite == null)
+        {
+            return;
+        }
+
+        image.sprite = sprite;
+        image.color = Color.white;
+        image.type = sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
+    }
+
+    private static void SetTopLeftRect(RectTransform rect, Vector2 position, Vector2 size)
+    {
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
     }
 
     private Button CreateButton(string name, Transform parent, Vector2 position, Vector2 size, string label, float fontSize,
