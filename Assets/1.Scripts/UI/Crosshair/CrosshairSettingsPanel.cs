@@ -42,8 +42,9 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     };
 
     private static readonly Color[] StrokeSwatches = { Color.black, new Color(0.25f, 0.25f, 0.25f, 1f), Color.white };
-    private static readonly Color SelectedColor = new(0.95f, 0.08f, 0.08f, 0.88f);
-    private static readonly Color IdleColor = new(1f, 1f, 1f, 0.08f);
+    // 전투 일반·오디오와 같은 어두운 카드 위에서 선택 상태만 붉은 포인트로 구분합니다.
+    private static readonly Color SelectedColor = new(0.95f, 0.08f, 0.08f, 0.92f);
+    private static readonly Color IdleColor = new(1f, 1f, 1f, 0.1f);
 
     private readonly List<KeyValuePair<PlayerbleCharacterId, string>> m_characters = new();
     private readonly Dictionary<PlayerbleCharacterId, CrosshairStyle> m_workingStyles = new();
@@ -261,11 +262,12 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         // 캐릭터 조준선은 위에 동적 크로스헤어·비조준/조준 줄이 더 있어 편집 칸이 그만큼 아래에서 시작하므로 짧게 둡니다.
         float height = m_isThrowableMode ? 700f : 600f;
         Image panel = CreateImage("Controls Panel", parent, new Vector2(ControlsLeft, top), new Vector2(ControlsWidth, height),
-            new Color(0.035f, 0.035f, 0.035f, 0.92f));
+            new Color(0.045f, 0.052f, 0.06f, 0.96f));
         m_controlsPanel = panel.rectTransform;
         Outline outline = panel.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
+        outline.effectColor = new Color(1f, 1f, 1f, 0.2f);
         outline.effectDistance = new Vector2(1f, -1f);
+        AddCardAccent(panel.rectTransform, ControlsWidth);
         RectTransform panelRect = panel.rectTransform;
 
         m_unavailableText = CreateText("Unavailable", panelRect, new Vector2(32f, -24f), new Vector2(586f, 60f),
@@ -724,11 +726,12 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
     private void BuildPreview(Transform parent)
     {
         Image preview = CreateImage("Crosshair Preview", parent, new Vector2(1130f, -132f), new Vector2(650f, 684f),
-            new Color(0.015f, 0.018f, 0.02f, 0.96f));
+            new Color(0.045f, 0.052f, 0.06f, 0.96f));
         Outline outline = preview.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.2f);
+        outline.effectColor = new Color(1f, 1f, 1f, 0.24f);
         outline.effectDistance = new Vector2(1f, -1f);
         RectTransform previewRect = preview.rectTransform;
+        AddCardAccent(previewRect, 650f);
         CreateText("Preview Title", previewRect, new Vector2(28f, -24f), new Vector2(320f, 34f),
             "조준선 미리보기", 20f, TextAlignmentOptions.Left, m_boldFont);
         m_previewProfileLabel = CreateText("Preview Profile", previewRect, new Vector2(350f, -24f), new Vector2(270f, 34f),
@@ -841,6 +844,14 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         slider.targetGraphic = handle;
         slider.direction = Slider.Direction.LeftToRight;
         return slider;
+    }
+
+    /// <summary>조준선 편집·미리보기 카드 상단에 설정 화면 공통 붉은 구분선을 더합니다.</summary>
+    private static void AddCardAccent(RectTransform parent, float width)
+    {
+        Image accent = CreateImage("Accent", parent, Vector2.zero, new Vector2(width, 3f),
+            new Color(0.95f, 0.08f, 0.08f, 0.95f));
+        accent.raycastTarget = false;
     }
 
     private Button CreateButton(string name, Transform parent, Vector2 position, Vector2 size, string label, float fontSize,

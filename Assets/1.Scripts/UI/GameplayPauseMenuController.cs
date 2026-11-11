@@ -914,15 +914,12 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             TextAlignmentOptions.Left);
         notice.color = new Color(1f, 1f, 1f, 0.6f);
 
-        Image panel = CreateTopLeftImage(
-            "Video Controls",
+        // Setting Scene Video 1: 디스플레이 항목을 한 카드로 묶습니다.
+        Image panel = CreateSettingsCard(
+            "Video Display Card",
             parent,
             new Vector2(145f, -132f),
-            new Vector2(650f, 590f),
-            new Color(0.035f, 0.035f, 0.035f, 0.92f));
-        Outline outline = panel.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
-        outline.effectDistance = new Vector2(1f, -1f);
+            new Vector2(650f, 380f));
 
         CreateTopLeftText(
             "Monitor Label",
@@ -985,21 +982,27 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_screenModeDropdown.AddOptions(screenModeLabels);
         m_screenModeDropdown.onValueChanged.AddListener(OnScreenModeChanged);
 
-        m_vSyncToggle = CreateToggle("VSync Toggle", panel.transform, new Vector2(32f, -366f), "수직 동기화");
+        // Setting Scene Video 2: 표시 동기화와 프레임 제한은 별도 카드로 분리합니다.
+        Image performancePanel = CreateSettingsCard(
+            "Video Performance Card",
+            parent,
+            new Vector2(825f, -132f),
+            new Vector2(650f, 300f));
+        m_vSyncToggle = CreateToggle("VSync Toggle", performancePanel.transform, new Vector2(32f, -32f), "수직 동기화");
         m_vSyncToggle.onValueChanged.AddListener(OnVSyncChanged);
 
         CreateTopLeftText(
             "Frame Limit Label",
-            panel.transform,
-            new Vector2(32f, -426f),
+            performancePanel.transform,
+            new Vector2(32f, -100f),
             new Vector2(220f, 30f),
             "최대 프레임 제한",
             18f,
             TextAlignmentOptions.Left);
         m_frameLimitHelp = CreateTopLeftText(
             "Frame Limit Help",
-            panel.transform,
-            new Vector2(254f, -428f),
+            performancePanel.transform,
+            new Vector2(254f, -102f),
             new Vector2(360f, 26f),
             "수직 동기화가 켜져 있으면 모니터 주사율을 따릅니다.",
             15f,
@@ -1010,8 +1013,8 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         // 드롭다운에서 프리셋을 고르면 슬라이더가 그 값으로 옮겨 갑니다.
         m_frameLimitSlider = CreateHorizontalSlider(
             "Frame Limit Slider",
-            panel.transform,
-            new Vector2(32f, -470f),
+            performancePanel.transform,
+            new Vector2(32f, -144f),
             new Vector2(470f, 24f),
             MinFrameLimit,
             MaxFrameLimit,
@@ -1019,15 +1022,15 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_frameLimitSlider.onValueChanged.AddListener(OnFrameLimitSliderChanged);
         m_frameLimitValue = CreateTopLeftText(
             "Frame Limit Value",
-            panel.transform,
-            new Vector2(510f, -467f),
+            performancePanel.transform,
+            new Vector2(510f, -141f),
             new Vector2(104f, 30f),
             string.Empty,
             18f,
             TextAlignmentOptions.Right);
         m_frameLimitValue.font = m_boldFont != null ? m_boldFont : m_regularFont;
 
-        m_frameLimitDropdown = CreateDropdown("Frame Limit Dropdown", panel.transform, new Vector2(32f, -514f), new Vector2(582f, 44f));
+        m_frameLimitDropdown = CreateDropdown("Frame Limit Dropdown", performancePanel.transform, new Vector2(32f, -190f), new Vector2(582f, 44f));
         List<string> frameLabels = new(s_frameLimitPresets.Length + 2);
         for (int i = 0; i < s_frameLimitPresets.Length; i++)
         {
@@ -1533,15 +1536,11 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             TextAlignmentOptions.Left);
         notice.color = new Color(1f, 1f, 1f, 0.6f);
 
-        Image panel = CreateTopLeftImage(
+        Image panel = CreateSettingsCard(
             "Combat General Controls",
             parent,
             new Vector2(430f, -132f),
-            new Vector2(650f, 270f),
-            new Color(0.035f, 0.035f, 0.035f, 0.92f));
-        Outline outline = panel.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
-        outline.effectDistance = new Vector2(1f, -1f);
+            new Vector2(650f, 270f));
 
         CreateTopLeftText(
             "Mouse Sensitivity Label",
@@ -1622,21 +1621,14 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         const float rowHeight = 86f;
         string[] labels = { "전체 음량", "배경음", "효과음" };
 
-        Image panel = CreateTopLeftImage(
+        Image panel = CreateSettingsCard(
             "Audio Controls",
             parent,
             new Vector2(145f, -132f),
-            new Vector2(650f, 40f + (rowHeight * labels.Length)),
-            new Color(0.035f, 0.035f, 0.035f, 0.92f));
+            new Vector2(650f, 40f + (rowHeight * labels.Length)));
         if (m_audioPanelSprite != null)
         {
             ApplySprite(panel, m_audioPanelSprite);
-        }
-        else
-        {
-            Outline outline = panel.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
-            outline.effectDistance = new Vector2(1f, -1f);
         }
 
         TMP_FontAsset boldFont = m_boldFont != null ? m_boldFont : m_regularFont;
@@ -1804,6 +1796,30 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         image.sprite = sprite;
         image.color = Color.white;
         image.type = sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
+    }
+
+    /// <summary>설정의 비디오·오디오·전투 카드를 같은 어두운 패널과 붉은 상단 구분선으로 만듭니다.</summary>
+    /// <remarks>값 입력과 이벤트 연결은 호출자가 그대로 소유하므로 이 메서드는 시각 계층만 추가합니다.</remarks>
+    private static Image CreateSettingsCard(string name, Transform parent, Vector2 topLeftPosition, Vector2 size)
+    {
+        Image panel = CreateTopLeftImage(
+            name,
+            parent,
+            topLeftPosition,
+            size,
+            new Color(0.045f, 0.052f, 0.06f, 0.96f));
+        Outline outline = panel.gameObject.AddComponent<Outline>();
+        outline.effectColor = new Color(1f, 1f, 1f, 0.2f);
+        outline.effectDistance = new Vector2(1f, -1f);
+
+        Image accent = CreateTopLeftImage(
+            "Accent",
+            panel.transform,
+            Vector2.zero,
+            new Vector2(size.x, 3f),
+            new Color(0.95f, 0.08f, 0.08f, 0.95f));
+        accent.raycastTarget = false;
+        return panel;
     }
 
     private Toggle CreateToggle(string name, Transform parent, Vector2 position, string label)
