@@ -182,7 +182,7 @@ public sealed class ShelterAudio : MonoBehaviour
     /// <summary>카탈로그의 BGM과 환경음을 재생합니다. 이미 재생 중이면 다시 시작하지 않습니다.</summary>
     public void StartSceneAudio()
     {
-        if (m_catalog == null || !RuntimeManager.IsInitialized)
+        if (m_catalog == null || !SoundManager.IsReady)
         {
             return;
         }
@@ -316,7 +316,7 @@ public sealed class ShelterAudio : MonoBehaviour
     private bool TryResolve(ShelterSoundId id, out EventReference eventReference)
     {
         eventReference = default;
-        if (id == ShelterSoundId.None || !RuntimeManager.IsInitialized)
+        if (id == ShelterSoundId.None || !SoundManager.IsReady)
         {
             return false;
         }

@@ -32,6 +32,25 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private const float PauseSelectionTextGap = 12f;
     private const float PauseSelectionFadeDuration = 0.15f;
 
+    // Figma 'Setting Scene' 프레임(1920x1080) 값입니다.
+    /// <summary>위쪽 탭 글자의 가운데 x입니다(비디오·오디오·전투·고급설정 순서).</summary>
+    private static readonly float[] SettingsTabCenters = { 496f, 756f, 999f, 1258.5f };
+
+    /// <summary>위쪽 탭과 전투 왼쪽 메뉴의 선택 칸(Select_mark_01) 크기입니다.</summary>
+    private static readonly Vector2 MenuSelectSize = new(234f, 63f);
+
+    /// <summary>테마 이미지가 없을 때 선택 칸과 제목 막대를 칠할 노란색입니다.</summary>
+    private static readonly Color MenuSelectFallbackColor = new(0.97f, 0.78f, 0.18f, 1f);
+
+    private static readonly Vector2 DropdownSize = new(639f, 56f);
+    private const float DropdownTextInset = 23f;
+    private const float DropdownItemTextInset = 27f;
+
+    /// <summary>큰 슬라이더(Gauge) 크기입니다. 손잡이 높이와 같습니다.</summary>
+    private static readonly Vector2 GaugeSize = new(643f, 42f);
+    private static readonly Vector2 GaugeHandleSize = new(20f, 42f);
+    private const float GaugeTrackHeight = 11f;
+
     [Header("Figma UI Assets")]
     [Tooltip("메뉴와 설정 화면의 한글을 표시할 기본 TMP 폰트입니다.")]
     [SerializeField] private TMP_FontAsset m_regularFont;
@@ -39,11 +58,8 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     [Tooltip("큰 메뉴 버튼에 사용할 굵은 TMP 폰트입니다. 비어 있으면 기본 폰트를 사용합니다.")]
     [SerializeField] private TMP_FontAsset m_boldFont;
 
-    [Tooltip("Figma Setting Scene에서 내보낸 24x24 설정 아이콘입니다.")]
-    [SerializeField] private Sprite m_settingsIcon;
-
-    [Tooltip("Figma Setting Scene에서 내보낸 뒤로가기 버튼 프레임입니다.")]
-    [SerializeField] private Sprite m_backButtonFrame;
+    [Tooltip("설정 화면 이미지 묶음입니다. 비워 두면 Resources의 기본 에셋(" + GameplaySettingsTheme.ResourcesPath + ")을 씁니다.")]
+    [SerializeField] private GameplaySettingsTheme m_theme;
 
     [Tooltip("일시정지 메뉴 항목에 마우스를 올리거나 선택했을 때 글자 왼쪽에 띄울 장식입니다. 타이틀 메뉴와 같은 Select_Point_L을 씁니다. " +
              "비어 있으면 장식 없이 글자만 굵게 바뀝니다.")]
@@ -51,22 +67,6 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
     [Tooltip("일시정지 메뉴 항목 글자 오른쪽에 띄울 장식입니다. 타이틀 메뉴와 같은 Select_Point_R을 씁니다.")]
     [SerializeField] private Texture2D m_menuSelectionRightTexture;
-
-    [Header("Slider Art (선택)")]
-    [Tooltip("설정 슬라이더의 트랙(배경) 이미지입니다. 비워 두면 반투명 흰색 막대로 그립니다. 길이가 바뀌므로 9-slice Border 지정을 권장합니다.")]
-    [SerializeField] private Sprite m_sliderTrackSprite;
-
-    [Tooltip("설정 슬라이더의 채움(현재 값) 이미지입니다. 비워 두면 빨간 막대로 그립니다. 값에 따라 늘어나므로 9-slice Border 지정을 권장합니다.")]
-    [SerializeField] private Sprite m_sliderFillSprite;
-
-    [Tooltip("설정 슬라이더의 핸들(손잡이) 이미지입니다. 비워 두면 흰 사각형으로 그립니다.")]
-    [SerializeField] private Sprite m_sliderHandleSprite;
-
-    [Tooltip("핸들 크기(px)입니다. 핸들 이미지 비율에 맞춰 조정합니다.")]
-    [SerializeField] private Vector2 m_sliderHandleSize = new Vector2(18f, 18f);
-
-    [Tooltip("오디오 설정 패널의 배경 이미지입니다. 비워 두면 반투명 검정 패널과 외곽선으로 그립니다.")]
-    [SerializeField] private Sprite m_audioPanelSprite;
 
     [Header("Navigation")]
     [Tooltip("타이틀로 돌아가기 버튼이 불러올 Build Settings 씬 이름입니다.")]
@@ -80,6 +80,15 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
              "셸터처럼 전투 설정 화면을 쓰지 않는 씬에서 끕니다.")]
     [SerializeField] private bool m_showSettingsButton = true;
 
+    [Header("Settings Tabs")]
+    [Tooltip("설정 화면에 전투 탭(마우스 감도·조준선)을 둘지입니다. 셸터·타이틀처럼 전투가 없는 씬에서 끕니다. " +
+             "끄면 뒤에 있던 탭이 그 자리로 당겨집니다.")]
+    [SerializeField] private bool m_showCombatTab = true;
+
+    [Tooltip("켜면 일시정지 메뉴 없이 설정 화면만 씁니다. 타이틀처럼 다른 버튼이 OpenSettings를 불러 여는 씬에서 켭니다. " +
+             "ESC로 열리지 않고, ESC나 뒤로가기를 누르면 닫힙니다. 시간 정지와 입력 잠금도 하지 않습니다.")]
+    [SerializeField] private bool m_settingsOnly;
+
     /// <summary>셸터 이동 입력입니다. 스쿼드가 없는 셸터에서 메뉴가 열린 동안 잠급니다.</summary>
     private PlayerMove m_shelterMove;
 
@@ -89,11 +98,11 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private bool m_previousShelterLookLocked;
 
     private readonly List<PlayerInputController> m_fallbackInputControllers = new();
-    private readonly Image[] m_tabBackgrounds = new Image[4];
-    private readonly Outline[] m_tabOutlines = new Outline[4];
-    private readonly GameObject[] m_settingsContentPages = new GameObject[4];
+    private readonly List<Image> m_tabBackgrounds = new();
+    private readonly List<TextMeshProUGUI> m_tabLabels = new();
+    private readonly List<GameObject> m_settingsContentPages = new();
     private readonly Image[] m_combatSubTabBackgrounds = new Image[3];
-    private readonly Outline[] m_combatSubTabOutlines = new Outline[3];
+    private readonly TextMeshProUGUI[] m_combatSubTabLabels = new TextMeshProUGUI[3];
     private readonly GameObject[] m_combatSubPages = new GameObject[3];
 
     private GameObject m_viewRoot;
@@ -204,6 +213,16 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             return;
         }
 
+        if (m_settingsOnly)
+        {
+            if (m_isOpen)
+            {
+                CloseSettingsOnly();
+            }
+
+            return;
+        }
+
         if (m_isOpen)
         {
             if (m_settingsPage.activeSelf)
@@ -241,7 +260,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (m_isOpen)
+        if (m_isOpen && !m_settingsOnly)
         {
             RestoreGameplayState();
         }
@@ -257,6 +276,12 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         }
 
         SetViewActive(false);
+        if (m_settingsOnly)
+        {
+            m_isOpen = false;
+            return;
+        }
+
         RestoreGameplayState();
         m_restoreCursorInLateUpdate = false;
     }
@@ -330,6 +355,13 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_crosshairSettingsPanel?.RevertToCommittedValues();
         m_throwableCrosshairSettingsPanel?.RevertToCommittedValues();
 
+        // 설정 화면만 쓰는 씬(타이틀)은 일시정지 메뉴를 거치지 않고 여기서 바로 화면을 엽니다.
+        if (m_settingsOnly && !m_isOpen)
+        {
+            m_isOpen = true;
+            SetViewActive(true);
+        }
+
         m_pausePage.SetActive(false);
         m_settingsPage.SetActive(true);
         SelectSettingsTab(0);
@@ -339,7 +371,24 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     /// <summary>설정 화면에서 일시정지 메뉴로 돌아갑니다.</summary>
     public void ReturnToPauseMenu()
     {
+        if (m_settingsOnly)
+        {
+            CloseSettingsOnly();
+            return;
+        }
+
         ShowPausePage();
+    }
+
+    /// <summary>설정 화면만 쓰는 씬에서 설정 화면을 닫습니다. 바꾼 값은 저장하지 않았어도 이번 실행 동안 유지됩니다.</summary>
+    private void CloseSettingsOnly()
+    {
+        SetViewActive(false);
+        m_isOpen = false;
+        if (EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(null);
+        }
     }
 
     /// <summary>설정 화면을 열었을 때(또는 마지막으로 저장했을 때)의 값으로 되돌리고 바로 적용합니다.</summary>
@@ -528,13 +577,10 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
     private void SelectSettingsTab(int selectedIndex)
     {
-        for (int i = 0; i < m_tabBackgrounds.Length; i++)
+        for (int i = 0; i < m_tabBackgrounds.Count; i++)
         {
             bool selected = i == selectedIndex;
-            m_tabBackgrounds[i].color = selected
-                ? new Color(1f, 1f, 1f, 0.53f)
-                : Color.clear;
-            m_tabOutlines[i].enabled = selected;
+            ApplyMenuSelection(m_tabBackgrounds[i], m_tabLabels[i], selected);
 
             if (m_settingsContentPages[i] != null)
             {
@@ -605,6 +651,9 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_settingsPage = null;
         m_resumeButton = null;
         m_firstSettingsTab = null;
+        m_tabBackgrounds.Clear();
+        m_tabLabels.Clear();
+        m_settingsContentPages.Clear();
         m_pauseButtons.Clear();
         m_pauseSelectionIndicator = null;
         m_resolutionDropdown = null;
@@ -623,6 +672,11 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_cameraKickToggle = null;
 
         ResolveFonts();
+        if (m_theme == null)
+        {
+            m_theme = GameplaySettingsTheme.LoadFromResources();
+        }
+
         BuildView();
         SetViewActive(false);
     }
@@ -708,214 +762,211 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private void BuildSettingsPage()
     {
         m_settingsPage = CreateStretchObject("Setting Scene", m_viewRoot.transform);
-        CreateStretchImage("Dim Background", m_settingsPage.transform, new Color(74f / 255f, 74f / 255f, 74f / 255f, 0.86f));
 
-        Image header = CreateTopLeftImage(
-            "Setting Popup",
-            m_settingsPage.transform,
-            new Vector2(45f, 0f),
-            new Vector2(1920f, 48f),
-            new Color(217f / 255f, 217f / 255f, 217f / 255f, 0.46f));
-        header.raycastTarget = true;
+        // Preferences_base_01은 화면 전체를 덮는 반투명 배경이고, 위 탭 줄과 아래 버튼 줄의 구분선이 그려져 있습니다.
+        Image background = CreateStretchImage("Preferences Base", m_settingsPage.transform, new Color(0.25f, 0.25f, 0.25f, 0.92f));
+        ApplySprite(background, m_theme != null ? m_theme.pageBackground : null);
+        background.raycastTarget = true;
 
-        Image icon = CreateTopLeftImage(
-            "Settings Icon",
-            m_settingsPage.transform,
-            new Vector2(60f, -13f),
-            new Vector2(24f, 24f),
-            Color.white);
-        icon.sprite = m_settingsIcon;
-        icon.preserveAspect = true;
-        icon.raycastTarget = false;
+        CreateFigmaText("Settings Title", m_settingsPage.transform, 134f, 29f, 68f, 35f, "설정", 35f, TextAlignmentOptions.Center);
 
-        CreateTopLeftText(
-            "Settings Title",
-            m_settingsPage.transform,
-            new Vector2(145f, -8f),
-            new Vector2(110f, 32f),
-            "설정",
-            24f,
-            TextAlignmentOptions.Left);
+        // 탭은 이 목록 순서대로 왼쪽부터 놓입니다. 탭을 빼면 뒤 탭이 앞으로 당겨집니다.
+        var tabs = new List<(string Label, System.Action<Transform> BuildPage)>
+        {
+            ("비디오", BuildVideoSettingsPage),
+            ("오디오", BuildAudioSettingsPage),
+        };
 
-        CreateTopLeftImage(
-            "Tabs Background",
-            m_settingsPage.transform,
-            new Vector2(399f, 0f),
-            new Vector2(1566f, 48f),
-            new Color(217f / 255f, 217f / 255f, 217f / 255f, 0.56f));
+        if (m_showCombatTab)
+        {
+            tabs.Add(("전투", BuildCombatSettingsPage));
+        }
 
-        string[] tabLabels = { "비디오", "오디오", "전투", "고급 설정" };
-        for (int i = 0; i < tabLabels.Length; i++)
+        tabs.Add(("고급설정", parent => BuildPlaceholderPage(
+            parent,
+            "고급 설정",
+            "고급 그래픽 및 접근성 설정이 배치될 영역입니다.")));
+
+        for (int i = 0; i < tabs.Count; i++)
         {
             int tabIndex = i;
-            Button tab = CreateButton(
-                $"Tab {tabLabels[i]}",
-                m_settingsPage.transform,
-                new Vector2(399f + (200f * i), 0f),
-                new Vector2(200f, 48f),
-                tabLabels[i],
-                24f,
-                Color.clear);
+            string tabLabel = tabs[i].Label;
 
-            Image tabImage = tab.GetComponent<Image>();
-            Outline outline = tab.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(242f / 255f, 0f, 0f, 1f);
-            outline.effectDistance = new Vector2(1f, -1f);
-            outline.useGraphicAlpha = false;
+            // Figma 탭 글자 가운데 x입니다. 탭이 더 많으면 마지막 간격으로 이어 붙입니다.
+            float center = i < SettingsTabCenters.Length
+                ? SettingsTabCenters[i]
+                : SettingsTabCenters[^1] + (SettingsTabCenters[^1] - SettingsTabCenters[^2]) * (i - SettingsTabCenters.Length + 1);
+            Button tab = CreateMenuSelectButton(
+                $"Tab {tabLabel}",
+                m_settingsPage.transform,
+                center - (MenuSelectSize.x * 0.5f),
+                15f,
+                tabLabel,
+                35f,
+                out TextMeshProUGUI tabText);
             tab.onClick.AddListener(() => SelectSettingsTab(tabIndex));
 
-            m_tabBackgrounds[i] = tabImage;
-            m_tabOutlines[i] = outline;
+            m_tabBackgrounds.Add(tab.GetComponent<Image>());
+            m_tabLabels.Add(tabText);
             if (i == 0)
             {
                 m_firstSettingsTab = tab;
             }
         }
 
-        BuildSettingsContent();
+        // 각 탭 화면은 설정 화면 전체(1920x1080) 크기라 Figma 좌표를 그대로 씁니다.
+        for (int i = 0; i < tabs.Count; i++)
+        {
+            GameObject page = CreateStretchObject($"Settings Content {tabs[i].Label}", m_settingsPage.transform);
+            m_settingsContentPages.Add(page);
+            tabs[i].BuildPage(page.transform);
+        }
 
-        Button revertButton = CreateButton(
+        // Figma 하단 버튼: Reset Button / Save Button / Back Button.
+        Button revertButton = CreateActionButton(
             "Revert",
             m_settingsPage.transform,
-            new Vector2(1455f, -1019f),
-            new Vector2(102f, 32f),
+            new Rect(965f, 992f, 246f, 71f),
             "되돌리기",
-            16f,
-            new Color(147f / 255f, 147f / 255f, 147f / 255f, 0.85f));
+            1004.46f,
+            140.65f,
+            m_theme != null ? m_theme.resetIcon : null,
+            new Rect(1151f, 1008f, 32f, 38f));
         revertButton.onClick.AddListener(RevertSettings);
 
-        Button saveButton = CreateButton(
+        Button saveButton = CreateActionButton(
             "Save Changes",
             m_settingsPage.transform,
-            new Vector2(1627f, -1019f),
-            new Vector2(102f, 32f),
+            new Rect(1250f, 992f, 343f, 71f),
             "변경사항 저장",
-            16f,
-            new Color(147f / 255f, 147f / 255f, 147f / 255f, 0.85f));
+            1240f,
+            317f,
+            m_theme != null ? m_theme.saveIcon : null,
+            new Rect(1516f, 1009f, 38f, 37f));
         saveButton.onClick.AddListener(SaveSettings);
 
-        Button backButton = CreateButton(
+        Button backButton = CreateActionButton(
             "Back",
             m_settingsPage.transform,
-            new Vector2(1786f, -1019f),
-            new Vector2(102f, 32f),
+            new Rect(1622f, 992f, 246f, 71f),
             "뒤로가기",
-            24f,
-            Color.clear,
-            m_backButtonFrame);
+            1661.46f,
+            140.65f,
+            m_theme != null ? m_theme.backIcon : null,
+            new Rect(1806f, 1010f, 40f, 38f));
         backButton.onClick.AddListener(ReturnToPauseMenu);
 
         SelectSettingsTab(0);
     }
 
-    private void BuildSettingsContent()
+    /// <summary>
+    /// 위쪽 탭과 전투 왼쪽 메뉴처럼 고르면 노란 칸(Select_mark_01) 위에 검정 굵은 글자로 바뀌는 버튼을 만듭니다.
+    /// </summary>
+    /// <param name="left">Figma에서 칸의 왼쪽 x입니다.</param>
+    /// <param name="top">Figma에서 칸의 위쪽 y입니다.</param>
+    private Button CreateMenuSelectButton(
+        string name,
+        Transform parent,
+        float left,
+        float top,
+        string label,
+        float fontSize,
+        out TextMeshProUGUI labelText)
     {
-        for (int i = 0; i < m_settingsContentPages.Length; i++)
-        {
-            m_settingsContentPages[i] = CreateTopLeftObject(
-                $"Settings Content {i}",
-                m_settingsPage.transform,
-                new Vector2(0f, -48f),
-                new Vector2(ReferenceWidth, 971f));
-        }
-
-        BuildVideoSettingsPage(m_settingsContentPages[0].transform);
-        BuildAudioSettingsPage(m_settingsContentPages[1].transform);
-        BuildCombatSettingsPage(m_settingsContentPages[2].transform);
-        BuildPlaceholderPage(
-            m_settingsContentPages[3].transform,
-            "고급 설정",
-            "고급 그래픽 및 접근성 설정이 배치될 영역입니다.");
+        Button button = CreateButton(
+            name,
+            parent,
+            new Vector2(left, -top),
+            MenuSelectSize,
+            label,
+            fontSize,
+            Color.clear);
+        Image image = button.GetComponent<Image>();
+        image.sprite = m_theme != null ? m_theme.tabSelected : null;
+        labelText = button.GetComponentInChildren<TextMeshProUGUI>(true);
+        return button;
     }
 
-    /// <summary>비디오 탭입니다. 지금은 해상도 드롭다운만 있습니다.</summary>
+    /// <summary>고른 칸은 노란 바탕에 검정 굵은 글자, 나머지는 바탕 없이 흰 글자로 둡니다.</summary>
+    private void ApplyMenuSelection(Image background, TextMeshProUGUI label, bool selected)
+    {
+        if (background != null)
+        {
+            background.color = !selected ? Color.clear
+                : background.sprite != null ? Color.white
+                : MenuSelectFallbackColor;
+        }
+
+        if (label != null)
+        {
+            label.color = selected ? Color.black : Color.white;
+            label.font = selected && m_boldFont != null ? m_boldFont : m_regularFont;
+        }
+    }
+
+    /// <summary>
+    /// Figma 하단의 Preferences_button 버튼을 만듭니다. 글자 칸과 아이콘은 Figma 화면 좌표로 받습니다.
+    /// </summary>
+    private Button CreateActionButton(
+        string name,
+        Transform parent,
+        Rect frame,
+        string label,
+        float textLeft,
+        float textWidth,
+        Sprite icon,
+        Rect iconFrame)
+    {
+        Button button = CreateButton(
+            name,
+            parent,
+            new Vector2(frame.x, -frame.y),
+            frame.size,
+            label,
+            36f,
+            new Color(0.02f, 0.03f, 0.04f, 1f));
+        ApplySprite(button.GetComponent<Image>(), m_theme != null ? m_theme.actionButton : null);
+
+        // 글자와 아이콘은 버튼 안 좌표로 옮깁니다. Figma 글자 칸 높이(36)를 버튼 세로 가운데에 둡니다.
+        TextMeshProUGUI text = button.GetComponentInChildren<TextMeshProUGUI>(true);
+        text.font = m_boldFont != null ? m_boldFont : m_regularFont;
+        SetTopLeftRect(text.rectTransform, new Vector2(textLeft - frame.x, -((frame.height - 36f) * 0.5f)), new Vector2(textWidth, 36f));
+
+        if (icon != null)
+        {
+            Image iconImage = CreateTopLeftImage(
+                "Icon",
+                button.transform,
+                new Vector2(iconFrame.x - frame.x, -(iconFrame.y - frame.y)),
+                iconFrame.size,
+                Color.white);
+            iconImage.sprite = icon;
+            iconImage.preserveAspect = true;
+            iconImage.raycastTarget = false;
+        }
+
+        return button;
+    }
+
+    /// <summary>비디오 탭입니다. Figma Setting Scene Video 1(닫힌 드롭다운)·Video 2(열린 해상도 목록) 프레임을 따릅니다.</summary>
     /// <remarks>
     /// 값은 다른 설정과 같이 <see cref="GameSettingManager"/>가 가집니다. 고르면 바로 적용되고, '되돌리기'는 설정 화면을
     /// 열 때의 해상도로, '변경사항 저장'은 설정 파일에 남깁니다. 에디터 Game 뷰에서는 해상도가 바뀌지 않습니다.
     /// </remarks>
     private void BuildVideoSettingsPage(Transform parent)
     {
-        TextMeshProUGUI title = CreateTopLeftText(
-            "Video Title",
-            parent,
-            new Vector2(145f, -34f),
-            new Vector2(500f, 50f),
-            "비디오",
-            32f,
-            TextAlignmentOptions.Left);
-        title.font = m_boldFont != null ? m_boldFont : m_regularFont;
-
-        TextMeshProUGUI notice = CreateTopLeftText(
-            "Video Notice",
-            parent,
-            new Vector2(145f, -82f),
-            new Vector2(900f, 32f),
-            "고르면 바로 바뀌고, 변경사항 저장을 눌러야 다음 실행에도 유지됩니다.",
-            17f,
-            TextAlignmentOptions.Left);
-        notice.color = new Color(1f, 1f, 1f, 0.6f);
-
-        Image panel = CreateTopLeftImage(
-            "Video Controls",
-            parent,
-            new Vector2(145f, -132f),
-            new Vector2(650f, 590f),
-            new Color(0.035f, 0.035f, 0.035f, 0.92f));
-        Outline outline = panel.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
-        outline.effectDistance = new Vector2(1f, -1f);
-
-        CreateTopLeftText(
-            "Monitor Label",
-            panel.transform,
-            new Vector2(32f, -30f),
-            new Vector2(220f, 30f),
-            "모니터",
-            18f,
-            TextAlignmentOptions.Left);
-        m_monitorHelp = CreateTopLeftText(
-            "Monitor Help",
-            panel.transform,
-            new Vector2(254f, -32f),
-            new Vector2(360f, 26f),
-            "모니터가 하나뿐이면 바꿀 수 없습니다.",
-            15f,
-            TextAlignmentOptions.Right);
-        m_monitorHelp.color = new Color(1f, 1f, 1f, 0.5f);
-        m_monitorDropdown = CreateDropdown("Monitor Dropdown", panel.transform, new Vector2(32f, -76f), new Vector2(582f, 44f));
+        CreateSectionTitle(parent, 371f, 167f, "모니터");
+        m_monitorHelp = CreateHelpText("Monitor Help", parent, 546f, 190f, "모니터가 하나뿐이면 바꿀 수 없습니다.");
+        m_monitorDropdown = CreateDropdown("Monitor Dropdown", parent, 393f, 220f, true);
         m_monitorDropdown.onValueChanged.AddListener(OnMonitorChanged);
 
-        TextMeshProUGUI resolutionHelp = CreateTopLeftText(
-            "Resolution Help",
-            panel.transform,
-            new Vector2(254f, -142f),
-            new Vector2(360f, 26f),
-            "주사율은 전체 화면에서만 그대로 적용됩니다.",
-            15f,
-            TextAlignmentOptions.Right);
-        resolutionHelp.color = new Color(1f, 1f, 1f, 0.5f);
-
-        CreateTopLeftText(
-            "Resolution Label",
-            panel.transform,
-            new Vector2(32f, -140f),
-            new Vector2(220f, 30f),
-            "해상도",
-            18f,
-            TextAlignmentOptions.Left);
-
-        m_resolutionDropdown = CreateDropdown("Resolution Dropdown", panel.transform, new Vector2(32f, -186f), new Vector2(582f, 44f));
+        CreateSectionTitle(parent, 371f, 333f, "해상도");
+        CreateHelpText("Resolution Help", parent, 546f, 356f, "주사율은 전체 화면에서만 그대로 적용됩니다.");
+        m_resolutionDropdown = CreateDropdown("Resolution Dropdown", parent, 393f, 386f, true);
         m_resolutionDropdown.onValueChanged.AddListener(OnResolutionChanged);
 
-        CreateTopLeftText(
-            "Screen Mode Label",
-            panel.transform,
-            new Vector2(32f, -250f),
-            new Vector2(220f, 30f),
-            "화면 모드",
-            18f,
-            TextAlignmentOptions.Left);
-        m_screenModeDropdown = CreateDropdown("Screen Mode Dropdown", panel.transform, new Vector2(32f, -296f), new Vector2(582f, 44f));
+        CreateSectionTitle(parent, 371f, 499f, "화면 모드");
+        m_screenModeDropdown = CreateDropdown("Screen Mode Dropdown", parent, 393f, 552f, true);
         List<string> screenModeLabels = new(s_screenModes.Length);
         for (int i = 0; i < s_screenModes.Length; i++)
         {
@@ -926,49 +977,26 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_screenModeDropdown.AddOptions(screenModeLabels);
         m_screenModeDropdown.onValueChanged.AddListener(OnScreenModeChanged);
 
-        m_vSyncToggle = CreateToggle("VSync Toggle", panel.transform, new Vector2(32f, -366f), "수직 동기화");
+        m_vSyncToggle = CreateToggle("VSync Toggle", parent, 394f, 628f, "수직 동기화");
         m_vSyncToggle.onValueChanged.AddListener(OnVSyncChanged);
-
-        CreateTopLeftText(
-            "Frame Limit Label",
-            panel.transform,
-            new Vector2(32f, -426f),
-            new Vector2(220f, 30f),
-            "최대 프레임 제한",
-            18f,
-            TextAlignmentOptions.Left);
-        m_frameLimitHelp = CreateTopLeftText(
-            "Frame Limit Help",
-            panel.transform,
-            new Vector2(254f, -428f),
-            new Vector2(360f, 26f),
-            "수직 동기화가 켜져 있으면 모니터 주사율을 따릅니다.",
-            15f,
-            TextAlignmentOptions.Right);
-        m_frameLimitHelp.color = new Color(1f, 1f, 1f, 0.5f);
+        m_frameLimitHelp = CreateHelpText("Frame Limit Help", parent, 639f, 660f, "수직 동기화가 켜져 있으면 모니터 주사율을 따릅니다.");
 
         // 슬라이더가 우선입니다. 슬라이더를 움직이면 드롭다운은 '사용자 지정'으로 바뀌고,
         // 드롭다운에서 프리셋을 고르면 슬라이더가 그 값으로 옮겨 갑니다.
-        m_frameLimitSlider = CreateHorizontalSlider(
-            "Frame Limit Slider",
-            panel.transform,
-            new Vector2(32f, -470f),
-            new Vector2(470f, 24f),
+        m_frameLimitSlider = CreateGauge(
+            "Frame Limit",
+            parent,
+            393f,
+            718f,
+            "최대 프레임 제한",
             MinFrameLimit,
             MaxFrameLimit,
-            true);
+            true,
+            out m_frameLimitValue);
         m_frameLimitSlider.onValueChanged.AddListener(OnFrameLimitSliderChanged);
-        m_frameLimitValue = CreateTopLeftText(
-            "Frame Limit Value",
-            panel.transform,
-            new Vector2(510f, -467f),
-            new Vector2(104f, 30f),
-            string.Empty,
-            18f,
-            TextAlignmentOptions.Right);
-        m_frameLimitValue.font = m_boldFont != null ? m_boldFont : m_regularFont;
 
-        m_frameLimitDropdown = CreateDropdown("Frame Limit Dropdown", panel.transform, new Vector2(32f, -514f), new Vector2(582f, 44f));
+        // Figma에서 프레임 제한 칸은 회색(Drop_box_02) 바탕에 화살표가 없습니다.
+        m_frameLimitDropdown = CreateDropdown("Frame Limit Dropdown", parent, 397f, 810f, false);
         List<string> frameLabels = new(s_frameLimitPresets.Length + 2);
         for (int i = 0; i < s_frameLimitPresets.Length; i++)
         {
@@ -984,51 +1012,107 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         RefreshVideoControls();
     }
 
-    /// <summary>TMP 기본 드롭다운을 만들고 설정 화면 색과 폰트에 맞춥니다.</summary>
-    private TMP_Dropdown CreateDropdown(string name, Transform parent, Vector2 topLeftPosition, Vector2 size)
+    /// <summary>
+    /// TMP 기본 드롭다운을 Figma Drop Box 모양(639x56)으로 만듭니다.
+    /// </summary>
+    /// <remarks>
+    /// 닫힌 칸은 Drop_box_01(검정)에 오른쪽 화살표, 펼친 목록은 Drop_box_03(짙은 회색) 칸이고,
+    /// 지금 고른 칸과 마우스를 올린 칸은 Drop_box_02(회색)로 바뀝니다.
+    /// </remarks>
+    /// <param name="left">Figma에서 칸의 왼쪽 x입니다.</param>
+    /// <param name="top">Figma에서 칸의 위쪽 y입니다.</param>
+    /// <param name="primary">거짓이면 프레임 제한 칸처럼 회색 바탕에 화살표 없이 그립니다.</param>
+    private TMP_Dropdown CreateDropdown(string name, Transform parent, float left, float top, bool primary)
     {
         GameObject dropdownObject = TMP_DefaultControls.CreateDropdown(new TMP_DefaultControls.Resources());
         dropdownObject.name = name;
         RectTransform rect = (RectTransform)dropdownObject.transform;
         rect.SetParent(parent, false);
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = topLeftPosition;
-        rect.sizeDelta = size;
+        SetTopLeftRect(rect, new Vector2(left, -top), DropdownSize);
 
         TMP_Dropdown dropdown = dropdownObject.GetComponent<TMP_Dropdown>();
-        dropdownObject.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.13f);
+        Image background = dropdownObject.GetComponent<Image>();
+        background.color = primary ? Color.black : new Color(0.32f, 0.32f, 0.32f, 1f);
+        background.type = Image.Type.Simple;
+        ApplySprite(background, m_theme == null ? null : primary ? m_theme.dropdown : m_theme.dropdownSelectedItem);
         ColorBlock colors = dropdown.colors;
-        colors.highlightedColor = new Color(1f, 1f, 1f, 1.4f);
+        colors.highlightedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
         colors.selectedColor = Color.white;
         dropdown.colors = colors;
 
-        // 기본 화살표는 스프라이트가 없어 흰 네모로 보이므로 숨깁니다.
+        // Figma Drop_box_arrow(29x25)는 칸 오른쪽 끝에서 12px 안쪽, 세로 가운데입니다.
         Transform arrow = rect.Find("Arrow");
         if (arrow != null)
         {
-            arrow.gameObject.SetActive(false);
+            Image arrowImage = arrow.GetComponent<Image>();
+            Sprite arrowSprite = m_theme != null ? m_theme.dropdownArrow : null;
+            arrow.gameObject.SetActive(primary && arrowSprite != null);
+            if (arrowImage != null && arrowSprite != null)
+            {
+                arrowImage.sprite = arrowSprite;
+                arrowImage.color = Color.white;
+                arrowImage.raycastTarget = false;
+                SetTopLeftRect((RectTransform)arrow, new Vector2(598f, -19f), new Vector2(29f, 25f));
+            }
         }
 
+        RectTransform caption = (RectTransform)dropdown.captionText.transform;
+        caption.offsetMin = new Vector2(DropdownTextInset, 0f);
+        caption.offsetMax = new Vector2(-50f, 0f);
+
+        // 펼친 목록은 칸 바로 아래에 같은 폭으로 6칸까지 보이고, 더 많으면 스크롤합니다.
         RectTransform template = dropdown.template;
-        template.sizeDelta = new Vector2(template.sizeDelta.x, 240f);
-        template.GetComponent<Image>().color = new Color(0.06f, 0.06f, 0.06f, 0.98f);
+        template.sizeDelta = new Vector2(template.sizeDelta.x, DropdownSize.y * 6f);
+        Image templateImage = template.GetComponent<Image>();
+        templateImage.color = new Color(0.12f, 0.12f, 0.12f, 1f);
+        templateImage.type = Image.Type.Simple;
+        ApplySprite(templateImage, m_theme != null ? m_theme.dropdownItem : null);
 
         Toggle item = template.GetComponentInChildren<Toggle>(true);
         RectTransform itemRect = (RectTransform)item.transform;
-        itemRect.sizeDelta = new Vector2(itemRect.sizeDelta.x, 40f);
+        itemRect.sizeDelta = new Vector2(itemRect.sizeDelta.x, DropdownSize.y);
         RectTransform content = (RectTransform)itemRect.parent;
-        content.sizeDelta = new Vector2(content.sizeDelta.x, 40f);
-        item.targetGraphic.color = new Color(0.12f, 0.12f, 0.12f, 1f);
-        ColorBlock itemColors = item.colors;
-        itemColors.highlightedColor = new Color(0.95f, 0.08f, 0.08f, 1f);
-        itemColors.selectedColor = new Color(0.95f, 0.08f, 0.08f, 1f);
-        item.colors = itemColors;
-        if (item.graphic != null)
+        content.sizeDelta = new Vector2(content.sizeDelta.x, DropdownSize.y);
+
+        Image itemBackground = (Image)item.targetGraphic;
+        itemBackground.color = new Color(0.12f, 0.12f, 0.12f, 1f);
+        ApplySprite(itemBackground, m_theme != null ? m_theme.dropdownItem : null);
+        Sprite itemHighlight = m_theme != null ? m_theme.dropdownSelectedItem : null;
+        if (itemHighlight != null)
         {
-            item.graphic.color = new Color(0.95f, 0.08f, 0.08f, 1f);
+            // 마우스를 올린 칸은 Drop_box_02 이미지로 바꿉니다. 짙은 칸에 색을 곱해서는 밝아지지 않으므로 이미지 교체를 씁니다.
+            item.transition = Selectable.Transition.SpriteSwap;
+            SpriteState state = item.spriteState;
+            state.highlightedSprite = itemHighlight;
+            state.selectedSprite = itemHighlight;
+            state.pressedSprite = itemHighlight;
+            item.spriteState = state;
         }
+        else
+        {
+            ColorBlock itemColors = item.colors;
+            itemColors.highlightedColor = new Color(2.6f, 2.6f, 2.6f, 1f);
+            itemColors.selectedColor = new Color(2.6f, 2.6f, 2.6f, 1f);
+            itemColors.colorMultiplier = 3f;
+            item.colors = itemColors;
+        }
+
+        // 기본 체크 표시 자리를 칸 전체로 넓혀, 지금 고른 칸을 회색(Drop_box_02) 칸으로 보이게 합니다.
+        if (item.graphic is Image checkmark)
+        {
+            RectTransform checkRect = checkmark.rectTransform;
+            checkRect.anchorMin = Vector2.zero;
+            checkRect.anchorMax = Vector2.one;
+            checkRect.offsetMin = Vector2.zero;
+            checkRect.offsetMax = Vector2.zero;
+            checkmark.color = new Color(0.32f, 0.32f, 0.32f, 1f);
+            ApplySprite(checkmark, itemHighlight);
+            checkmark.raycastTarget = false;
+        }
+
+        RectTransform itemLabel = (RectTransform)dropdown.itemText.transform;
+        itemLabel.offsetMin = new Vector2(DropdownItemTextInset, 0f);
+        itemLabel.offsetMax = new Vector2(-20f, 0f);
 
         // 기본 스크롤바도 스프라이트가 없어 흰 막대로 보이므로 어두운 바탕에 회색 손잡이로 맞춥니다.
         Scrollbar scrollbar = template.GetComponentInChildren<Scrollbar>(true);
@@ -1047,8 +1131,9 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         foreach (TMP_Text text in dropdownObject.GetComponentsInChildren<TMP_Text>(true))
         {
             text.font = m_regularFont;
-            text.fontSize = 18f;
+            text.fontSize = 25f;
             text.color = Color.white;
+            text.alignment = TextAlignmentOptions.Left;
         }
 
         return dropdown;
@@ -1392,37 +1477,33 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         settingManager.SetDisplayMode(option.Size.x, option.Size.y, option.Rate);
     }
 
+    /// <summary>Figma Setting Scene Battle 프레임입니다. 왼쪽 메뉴(전투 일반·캐릭터 조준선·투척물 조준선)로 아래 화면을 바꿉니다.</summary>
     private void BuildCombatSettingsPage(Transform parent)
     {
-        CreateTopLeftText(
-            "Combat Section Label",
+        Image sideBar = CreateTopLeftImage(
+            "Side Menu Bar",
             parent,
-            new Vector2(145f, -38f),
-            new Vector2(220f, 38f),
-            "전투",
-            24f,
-            TextAlignmentOptions.Left).font = m_boldFont != null ? m_boldFont : m_regularFont;
+            new Vector2(300f, -160f),
+            new Vector2(2f, 740f),
+            Color.white);
+        sideBar.raycastTarget = false;
+        ApplySprite(sideBar, m_theme != null ? m_theme.sideMenuBar : null);
 
         string[] labels = { "전투 일반", "캐릭터 조준선", "투척물 조준선" };
         for (int i = 0; i < labels.Length; i++)
         {
             int subTabIndex = i;
-            Button button = CreateButton(
+            Button button = CreateMenuSelectButton(
                 $"Combat SubTab {labels[i]}",
                 parent,
-                new Vector2(145f, -96f - (58f * i)),
-                new Vector2(220f, 46f),
+                47f,
+                166f + (65f * i),
                 labels[i],
-                19f,
-                Color.clear);
-            Image background = button.GetComponent<Image>();
-            Outline outline = button.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(242f / 255f, 0f, 0f, 1f);
-            outline.effectDistance = new Vector2(1f, -1f);
-            outline.useGraphicAlpha = false;
+                30f,
+                out TextMeshProUGUI label);
             button.onClick.AddListener(() => SelectCombatSubTab(subTabIndex));
-            m_combatSubTabBackgrounds[i] = background;
-            m_combatSubTabOutlines[i] = outline;
+            m_combatSubTabBackgrounds[i] = button.GetComponent<Image>();
+            m_combatSubTabLabels[i] = label;
         }
 
         m_combatSubPages[0] = CreateStretchObject("Combat General Page", parent);
@@ -1434,13 +1515,18 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         BuildCombatGeneralSettings(m_combatSubPages[0].transform);
 
+        // 조준선 패널도 다른 탭과 같은 슬라이더(클릭 영역·아트·핸들 크기)와 이미지를 쓰게 합니다.
         m_crosshairSettingsPanel = m_combatSubPages[1].AddComponent<CrosshairSettingsPanel>();
+        m_crosshairSettingsPanel.SliderFactory = CreateHorizontalSlider;
+        m_crosshairSettingsPanel.Theme = m_theme;
         m_crosshairSettingsPanel.Build(
             m_combatSubPages[1].transform as RectTransform,
             m_regularFont,
             m_boldFont);
 
         m_throwableCrosshairSettingsPanel = m_combatSubPages[2].AddComponent<CrosshairSettingsPanel>();
+        m_throwableCrosshairSettingsPanel.SliderFactory = CreateHorizontalSlider;
+        m_throwableCrosshairSettingsPanel.Theme = m_theme;
         m_throwableCrosshairSettingsPanel.BuildSharedThrowable(
             m_combatSubPages[2].transform as RectTransform,
             m_regularFont,
@@ -1449,165 +1535,54 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         SelectCombatSubTab(0);
     }
 
+    /// <summary>Figma Setting Scene Battle Generel 프레임입니다.</summary>
     private void BuildCombatGeneralSettings(Transform parent)
     {
-        TextMeshProUGUI title = CreateTopLeftText(
-            "Combat General Title",
-            parent,
-            new Vector2(430f, -34f),
-            new Vector2(500f, 50f),
-            "전투 일반",
-            32f,
-            TextAlignmentOptions.Left);
-        title.font = m_boldFont != null ? m_boldFont : m_regularFont;
+        CreateSectionTitle(parent, 371f, 166f, "전투 일반");
 
-        TextMeshProUGUI notice = CreateTopLeftText(
-            "Combat General Notice",
+        m_mouseSensitivitySlider = CreateGauge(
+            "Mouse Sensitivity",
             parent,
-            new Vector2(430f, -82f),
-            new Vector2(760f, 32f),
-            "입력 감도와 전투 화면 효과 설정 초안입니다.",
-            17f,
-            TextAlignmentOptions.Left);
-        notice.color = new Color(1f, 1f, 1f, 0.6f);
-
-        Image panel = CreateTopLeftImage(
-            "Combat General Controls",
-            parent,
-            new Vector2(430f, -132f),
-            new Vector2(650f, 270f),
-            new Color(0.035f, 0.035f, 0.035f, 0.92f));
-        Outline outline = panel.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
-        outline.effectDistance = new Vector2(1f, -1f);
-
-        CreateTopLeftText(
-            "Mouse Sensitivity Label",
-            panel.transform,
-            new Vector2(32f, -30f),
-            new Vector2(220f, 30f),
+            393f,
+            248f,
             "마우스 감도",
-            18f,
-            TextAlignmentOptions.Left);
-        m_mouseSensitivityValue = CreateTopLeftText(
-            "Mouse Sensitivity Value",
-            panel.transform,
-            new Vector2(518f, -30f),
-            new Vector2(96f, 30f),
-            string.Empty,
-            18f,
-            TextAlignmentOptions.Right);
-        m_mouseSensitivityValue.font = m_boldFont != null ? m_boldFont : m_regularFont;
-
-        m_mouseSensitivitySlider = CreateHorizontalSlider(
-            "Mouse Sensitivity Slider",
-            panel.transform,
-            new Vector2(32f, -76f),
-            new Vector2(582f, 24f),
             0.01f,
             10f,
-            false);
+            false,
+            out m_mouseSensitivityValue);
         m_mouseSensitivitySlider.onValueChanged.AddListener(OnMouseSensitivityChanged);
 
-        m_cameraKickToggle = CreateToggle(
-            "Camera Kick Toggle",
-            panel.transform,
-            new Vector2(32f, -150f),
-            "카메라 킥 사용");
+        m_cameraKickToggle = CreateToggle("Camera Kick Toggle", parent, 394f, 383f, "카메라 킥 사용");
         m_cameraKickToggle.onValueChanged.AddListener(OnCameraKickChanged);
-        TextMeshProUGUI help = CreateTopLeftText(
-            "Camera Kick Help",
-            panel.transform,
-            new Vector2(80f, -192f),
-            new Vector2(520f, 26f),
-            "끄면 사격 시 카메라 롤·FOV 시각 효과를 표시하지 않습니다.",
-            15f,
-            TextAlignmentOptions.Left);
-        help.color = new Color(1f, 1f, 1f, 0.5f);
+        CreateHelpText("Camera Kick Help", parent, 668f, 415f, "끄면 사격 시 카메라 롤·FOV 시각 효과를 표시하지 않습니다.");
 
         RefreshCombatGeneralControls();
         CommitCombatGeneralSettings();
     }
 
     /// <summary>
-    /// 오디오 탭: 전체·배경음·효과음 볼륨을 0~100 가로 슬라이더로 조절하는 임시 화면입니다.
+    /// Figma Setting Scene Audio 프레임입니다. 전체·배경음·효과음 볼륨을 0~100 슬라이더로 조절합니다.
     /// </summary>
     /// <remarks>
     /// 값은 즉시 <see cref="GameSettingManager"/>에 반영되고, 저장·되돌리기는 다른 설정과 같은 흐름을 따릅니다.
     /// </remarks>
     private void BuildAudioSettingsPage(Transform parent)
     {
-        TextMeshProUGUI title = CreateTopLeftText(
-            "Audio Title",
-            parent,
-            new Vector2(145f, -34f),
-            new Vector2(500f, 50f),
-            "오디오",
-            32f,
-            TextAlignmentOptions.Left);
-        title.font = m_boldFont != null ? m_boldFont : m_regularFont;
+        CreateSectionTitle(parent, 372f, 167f, "오디오");
 
-        TextMeshProUGUI notice = CreateTopLeftText(
-            "Audio Notice",
-            parent,
-            new Vector2(145f, -82f),
-            new Vector2(900f, 32f),
-            "임시 오디오 설정입니다. 슬라이더를 드래그해 0~100 사이로 조절합니다.",
-            17f,
-            TextAlignmentOptions.Left);
-        notice.color = new Color(1f, 1f, 1f, 0.6f);
-
-        const float rowHeight = 86f;
         string[] labels = { "전체 음량", "배경음", "효과음" };
-
-        Image panel = CreateTopLeftImage(
-            "Audio Controls",
-            parent,
-            new Vector2(145f, -132f),
-            new Vector2(650f, 40f + (rowHeight * labels.Length)),
-            new Color(0.035f, 0.035f, 0.035f, 0.92f));
-        if (m_audioPanelSprite != null)
-        {
-            ApplySprite(panel, m_audioPanelSprite);
-        }
-        else
-        {
-            Outline outline = panel.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(1f, 1f, 1f, 0.16f);
-            outline.effectDistance = new Vector2(1f, -1f);
-        }
-
-        TMP_FontAsset boldFont = m_boldFont != null ? m_boldFont : m_regularFont;
         for (int i = 0; i < labels.Length; i++)
         {
-            float top = -30f - (rowHeight * i);
-            CreateTopLeftText(
-                $"{labels[i]} Label",
-                panel.transform,
-                new Vector2(32f, top),
-                new Vector2(220f, 30f),
+            Slider slider = CreateGauge(
                 labels[i],
-                18f,
-                TextAlignmentOptions.Left);
-
-            TextMeshProUGUI valueText = CreateTopLeftText(
-                $"{labels[i]} Value",
-                panel.transform,
-                new Vector2(518f, top),
-                new Vector2(96f, 30f),
-                string.Empty,
-                18f,
-                TextAlignmentOptions.Right);
-            valueText.font = boldFont;
-
-            Slider slider = CreateHorizontalSlider(
-                $"{labels[i]} Slider",
-                panel.transform,
-                new Vector2(32f, top - 46f),
-                new Vector2(582f, 24f),
+                parent,
+                394f,
+                265f + (114f * i),
+                labels[i],
                 0f,
                 100f,
-                true);
+                true,
+                out TextMeshProUGUI valueText);
 
             int channel = i;
             slider.onValueChanged.AddListener(value => OnVolumeSliderChanged(channel, value));
@@ -1658,10 +1633,12 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     }
 
     /// <summary>
-    /// 설정 화면 공통 가로 슬라이더를 만듭니다.
+    /// 설정 화면 공통 가로 슬라이더를 만듭니다. 조준선 패널도 이 함수로 만듭니다.
     /// </summary>
     /// <remarks>
-    /// Slider Art 칸에 스프라이트가 있으면 그 이미지로, 비어 있으면 기본 단색(회색 트랙·빨간 채움·흰 핸들)으로 그립니다.
+    /// Figma Gauge 비율대로 그립니다. 손잡이(Handle 20x42)는 슬라이더 높이에 맞추고, 바탕·채움 막대는 높이의 11/42 두께로
+    /// 세로 가운데에 둡니다. 큰 슬라이더(643x42)와 조준선 슬라이더(408x26.65)가 같은 비율입니다.
+    /// 채움 막대는 손잡이 가운데까지 옵니다. 테마 이미지가 없으면 단색(회색 바탕·초록 채움·흰 손잡이)으로 그립니다.
     /// </remarks>
     private Slider CreateHorizontalSlider(
         string name,
@@ -1678,54 +1655,48 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         slider.maxValue = maxValue;
         slider.wholeNumbers = wholeNumbers;
 
-        // 보이는 막대는 위아래를 깎아 얇게 그립니다. 슬라이더 높이 전체에서 클릭과 드래그를 받도록 투명한 영역을 깝니다.
+        // 보이는 막대는 얇게 그립니다. 슬라이더 높이 전체에서 클릭과 드래그를 받도록 투명한 영역을 깝니다.
         Image hitArea = sliderObject.AddComponent<Image>();
         hitArea.color = Color.clear;
 
-        Image sliderBackground = CreateStretchImage(
-            "Background",
-            sliderObject.transform,
-            new Color(1f, 1f, 1f, 0.13f));
-        sliderBackground.rectTransform.offsetMin = new Vector2(0f, 8f);
-        sliderBackground.rectTransform.offsetMax = new Vector2(0f, -8f);
+        float trackInset = size.y * (1f - (GaugeTrackHeight / GaugeHandleSize.y)) * 0.5f;
+        Vector2 handleSize = new(size.y * (GaugeHandleSize.x / GaugeHandleSize.y), size.y);
+        float halfHandle = handleSize.x * 0.5f;
 
+        Image sliderBackground = CreateStretchImage("Background", sliderObject.transform, new Color(0f, 0f, 0f, 1f));
+        sliderBackground.rectTransform.offsetMin = new Vector2(0f, trackInset);
+        sliderBackground.rectTransform.offsetMax = new Vector2(0f, -trackInset);
+        sliderBackground.raycastTarget = false;
+        ApplySprite(sliderBackground, m_theme != null ? m_theme.sliderTrack : null);
+
+        // 채움 영역을 손잡이 이동 범위와 같게 잡고, 채움 막대 왼쪽만 손잡이 반 폭만큼 늘려 막대 왼쪽 끝부터 손잡이 가운데까지 칠합니다.
         GameObject fillArea = CreateStretchObject("Fill Area", sliderObject.transform);
         RectTransform fillAreaRect = (RectTransform)fillArea.transform;
-        fillAreaRect.offsetMin = new Vector2(0f, 8f);
-        fillAreaRect.offsetMax = new Vector2(-12f, -8f);
-        Image fill = CreateStretchImage("Fill", fillArea.transform, new Color(0.95f, 0.08f, 0.08f, 1f));
+        fillAreaRect.offsetMin = new Vector2(halfHandle, trackInset);
+        fillAreaRect.offsetMax = new Vector2(-halfHandle, -trackInset);
+        Image fill = CreateStretchImage("Fill", fillArea.transform, new Color(0f, 1f, 0.08f, 1f));
+        fill.rectTransform.offsetMin = new Vector2(-halfHandle, 0f);
+        fill.raycastTarget = false;
+        ApplySprite(fill, m_theme != null ? m_theme.sliderFill : null);
 
         GameObject handleArea = CreateStretchObject("Handle Slide Area", sliderObject.transform);
         RectTransform handleAreaRect = (RectTransform)handleArea.transform;
-        handleAreaRect.offsetMin = new Vector2(8f, 0f);
-        handleAreaRect.offsetMax = new Vector2(-8f, 0f);
+        handleAreaRect.offsetMin = new Vector2(halfHandle, 0f);
+        handleAreaRect.offsetMax = new Vector2(-halfHandle, 0f);
         Image handle = CreateTopLeftImage(
             "Handle",
             handleArea.transform,
             Vector2.zero,
-            m_sliderHandleSize,
+            handleSize,
             Color.white);
+        // Slider는 손잡이 앵커를 세로 0~1로 바꿔 슬라이더 높이만큼 늘립니다. 그래서 세로 크기는 0으로 둬야 손잡이가 슬라이더 높이와 같아집니다.
         RectTransform handleRect = handle.rectTransform;
-        handleRect.anchorMin = new Vector2(0.5f, 0.5f);
-        handleRect.anchorMax = new Vector2(0.5f, 0.5f);
+        handleRect.anchorMin = new Vector2(0.5f, 0f);
+        handleRect.anchorMax = new Vector2(0.5f, 1f);
         handleRect.pivot = new Vector2(0.5f, 0.5f);
         handleRect.anchoredPosition = Vector2.zero;
-
-        if (m_sliderTrackSprite != null)
-        {
-            ApplySprite(sliderBackground, m_sliderTrackSprite);
-        }
-
-        if (m_sliderFillSprite != null)
-        {
-            ApplySprite(fill, m_sliderFillSprite);
-        }
-
-        if (m_sliderHandleSprite != null)
-        {
-            ApplySprite(handle, m_sliderHandleSprite);
-            handle.preserveAspect = true;
-        }
+        handleRect.sizeDelta = new Vector2(handleSize.x, 0f);
+        ApplySprite(handle, m_theme != null ? m_theme.sliderHandle : null);
 
         slider.fillRect = fill.rectTransform;
         slider.handleRect = handleRect;
@@ -1735,42 +1706,163 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     }
 
     /// <summary>
-    /// 아트 스프라이트를 원본 색 그대로 보이게 적용합니다. Border가 있으면 9-slice로 늘립니다.
+    /// Figma Gauge 묶음(이름·값·슬라이더)을 만듭니다. 이름은 위쪽 왼쪽, 값은 오른쪽 끝에 맞추고, 슬라이더는 이름 39px 아래에 둡니다.
+    /// </summary>
+    /// <param name="left">Figma에서 이름 글자의 왼쪽 x입니다.</param>
+    /// <param name="top">Figma에서 이름 글자의 위쪽 y입니다.</param>
+    private Slider CreateGauge(
+        string name,
+        Transform parent,
+        float left,
+        float top,
+        string label,
+        float minValue,
+        float maxValue,
+        bool wholeNumbers,
+        out TextMeshProUGUI valueText)
+    {
+        CreateFigmaText($"{name} Label", parent, left, top, 360f, 30f, label, 30f, TextAlignmentOptions.Left);
+
+        // 값 글자는 오른쪽 끝을 슬라이더 끝(left + 643)에 맞춥니다.
+        valueText = CreateFigmaText(
+            $"{name} Value",
+            parent,
+            left + GaugeSize.x - 200f,
+            top + 11f,
+            200f,
+            24f,
+            string.Empty,
+            24f,
+            TextAlignmentOptions.Right);
+
+        return CreateHorizontalSlider(
+            $"{name} Slider",
+            parent,
+            new Vector2(left, -(top + 39f)),
+            GaugeSize,
+            minValue,
+            maxValue,
+            wholeNumbers);
+    }
+
+    /// <summary>
+    /// 아트 스프라이트를 원본 색 그대로 보이게 적용합니다. Border가 있으면 9-slice로 늘립니다. 스프라이트가 없으면 지금 색을 그대로 둡니다.
     /// </summary>
     private static void ApplySprite(Image image, Sprite sprite)
     {
+        if (image == null || sprite == null)
+        {
+            return;
+        }
+
         image.sprite = sprite;
         image.color = Color.white;
         image.type = sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
     }
 
-    private Toggle CreateToggle(string name, Transform parent, Vector2 position, string label)
+    /// <summary>
+    /// Figma 항목 제목(Table)을 만듭니다. 왼쪽에 노란 세로 막대(Table_mark), 그 오른쪽에 36px 굵은 제목을 둡니다.
+    /// </summary>
+    /// <param name="left">Figma에서 세로 막대의 왼쪽 x입니다.</param>
+    /// <param name="top">Figma에서 세로 막대의 위쪽 y입니다.</param>
+    private void CreateSectionTitle(Transform parent, float left, float top, string title)
     {
-        GameObject toggleObject = CreateTopLeftObject(name, parent, position, new Vector2(582f, 38f));
+        Image mark = CreateTopLeftImage(
+            $"{title} Mark",
+            parent,
+            new Vector2(left, -top),
+            new Vector2(8f, 38f),
+            MenuSelectFallbackColor);
+        mark.raycastTarget = false;
+        ApplySprite(mark, m_theme != null ? m_theme.titleMark : null);
+
+        TextMeshProUGUI text = CreateFigmaText($"{title} Title", parent, left + 22f, top + 2f, 400f, 36f, title, 36f, TextAlignmentOptions.Left);
+        text.font = m_boldFont != null ? m_boldFont : m_regularFont;
+    }
+
+    /// <summary>제목이나 체크박스 옆에 붙는 15px 안내 글자를 만듭니다.</summary>
+    private TextMeshProUGUI CreateHelpText(string name, Transform parent, float left, float top, string value)
+    {
+        return CreateFigmaText(name, parent, left, top, 600f, 15f, value, 15f, TextAlignmentOptions.Left);
+    }
+
+    /// <summary>
+    /// Figma Chack Box 묶음을 만듭니다. 체크 칸(Chack_box 31x31)보다 큰 체크 표시(Chack 51x42)가 칸 왼쪽 위로 삐져나오게 겹칩니다.
+    /// </summary>
+    /// <param name="left">Figma 묶음의 왼쪽 x(체크 표시 왼쪽)입니다.</param>
+    /// <param name="top">Figma 묶음의 위쪽 y(체크 표시 위쪽)입니다.</param>
+    private Toggle CreateToggle(string name, Transform parent, float left, float top, string label)
+    {
+        GameObject toggleObject = CreateTopLeftObject(name, parent, new Vector2(left, -top), new Vector2(360f, 48f));
         Toggle toggle = toggleObject.AddComponent<Toggle>();
+
+        // 글자를 눌러도 켜고 끌 수 있게 줄 전체에서 클릭을 받습니다.
+        Image hitArea = toggleObject.AddComponent<Image>();
+        hitArea.color = Color.clear;
+
         Image background = CreateTopLeftImage(
             "Background",
             toggleObject.transform,
-            Vector2.zero,
-            new Vector2(30f, 30f),
+            new Vector2(4f, -16f),
+            new Vector2(31f, 31f),
             new Color(1f, 1f, 1f, 0.16f));
+        background.raycastTarget = false;
+        ApplySprite(background, m_theme != null ? m_theme.checkBox : null);
+
         Image checkmark = CreateTopLeftImage(
             "Checkmark",
-            background.transform,
-            new Vector2(6f, -6f),
-            new Vector2(18f, 18f),
-            new Color(0.95f, 0.08f, 0.08f, 1f));
-        CreateTopLeftText(
+            toggleObject.transform,
+            Vector2.zero,
+            new Vector2(51f, 42f),
+            new Color(0f, 1f, 0.08f, 1f));
+        checkmark.raycastTarget = false;
+        if (m_theme != null && m_theme.checkMark != null)
+        {
+            ApplySprite(checkmark, m_theme.checkMark);
+        }
+        else
+        {
+            SetTopLeftRect(checkmark.rectTransform, new Vector2(10f, -22f), new Vector2(19f, 19f));
+        }
+
+        TextMeshProUGUI text = CreateTopLeftText(
             "Label",
             toggleObject.transform,
-            new Vector2(48f, -1f),
-            new Vector2(360f, 32f),
+            new Vector2(51f, -18f),
+            new Vector2(300f, 30f),
             label,
-            18f,
+            30f,
             TextAlignmentOptions.Left);
+        text.ForceMeshUpdate();
+        ((RectTransform)toggleObject.transform).sizeDelta = new Vector2(51f + Mathf.Ceil(text.preferredWidth), 48f);
+
         toggle.targetGraphic = background;
         toggle.graphic = checkmark;
         return toggle;
+    }
+
+    /// <summary>Figma 좌표(왼쪽 위 x, y와 크기)로 글자를 만듭니다.</summary>
+    private TextMeshProUGUI CreateFigmaText(
+        string name,
+        Transform parent,
+        float left,
+        float top,
+        float width,
+        float height,
+        string value,
+        float fontSize,
+        TextAlignmentOptions alignment)
+    {
+        return CreateTopLeftText(name, parent, new Vector2(left, -top), new Vector2(width, height), value, fontSize, alignment);
+    }
+
+    private static void SetTopLeftRect(RectTransform rect, Vector2 topLeftPosition, Vector2 size)
+    {
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = topLeftPosition;
+        rect.sizeDelta = size;
     }
 
     private void OnMouseSensitivityChanged(float value)
@@ -1839,25 +1931,20 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         RefreshCombatGeneralControls();
     }
 
-    private void BuildPlaceholderPage(Transform parent, string title, string description, float left = 145f)
+    /// <summary>아직 내용이 없는 탭입니다. 다른 탭과 같은 항목 제목 아래에 안내 글자만 둡니다.</summary>
+    private void BuildPlaceholderPage(Transform parent, string title, string description)
     {
-        TextMeshProUGUI titleText = CreateTopLeftText(
-            $"{title} Placeholder Title",
-            parent,
-            new Vector2(left, -72f),
-            new Vector2(760f, 48f),
-            title,
-            32f,
-            TextAlignmentOptions.Left);
-        titleText.font = m_boldFont != null ? m_boldFont : m_regularFont;
+        CreateSectionTitle(parent, 371f, 167f, title);
 
-        TextMeshProUGUI descriptionText = CreateTopLeftText(
+        TextMeshProUGUI descriptionText = CreateFigmaText(
             $"{title} Placeholder Description",
             parent,
-            new Vector2(left, -132f),
-            new Vector2(900f, 36f),
+            393f,
+            232f,
+            900f,
+            30f,
             description,
-            18f,
+            25f,
             TextAlignmentOptions.Left);
         descriptionText.color = new Color(1f, 1f, 1f, 0.55f);
     }
@@ -1868,17 +1955,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         for (int i = 0; i < m_combatSubPages.Length; i++)
         {
             bool selected = i == m_selectedCombatSubTab;
-            if (m_combatSubTabBackgrounds[i] != null)
-            {
-                m_combatSubTabBackgrounds[i].color = selected
-                    ? new Color(1f, 1f, 1f, 0.16f)
-                    : Color.clear;
-            }
-
-            if (m_combatSubTabOutlines[i] != null)
-            {
-                m_combatSubTabOutlines[i].enabled = selected;
-            }
+            ApplyMenuSelection(m_combatSubTabBackgrounds[i], m_combatSubTabLabels[i], selected);
 
             if (m_combatSubPages[i] != null)
             {

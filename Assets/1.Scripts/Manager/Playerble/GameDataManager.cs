@@ -325,6 +325,35 @@ public class GameDataManager : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// 지정한 셸터 작업본의 자원 수량만 전역 정본에 반영합니다.
+    /// </summary>
+    /// <remarks>
+    /// 방어전 씬은 함정 설치·수리에 <see cref="ShelterSceneDataManager.Storage"/>를 쓰지만,
+    /// 캐릭터·시설·제조 상태까지 소유하지는 않습니다. 그래서 방어전 귀환 정산 직전에는
+    /// <see cref="SyncFromShelter(ShelterSceneDataManager)"/> 대신 이 경로로 소비한 자원만 반영합니다.
+    /// </remarks>
+    public bool SyncResourcesFromShelter(ShelterSceneDataManager shelterDataManager)
+    {
+        if (shelterDataManager == null)
+        {
+            Debug.LogWarning("[GameDataManager] 자원을 동기화할 ShelterSceneDataManager가 없습니다.");
+            return false;
+        }
+
+        ShelterRuntimeData snapshot = shelterDataManager.CreateRuntimeSnapshot();
+        snapshot.EnsureRuntimeContainers();
+
+        resourceAmounts = new List<ResourceAmountState>();
+        foreach (KeyValuePair<string, int> resource in snapshot.Resources.Amounts)
+        {
+            SetResourceAmount(resource.Key, resource.Value);
+        }
+
+        NormalizeResources();
+        return true;
+    }
+
     /// <summary>FieldEntryData와 동일한 역할의 셸터 씬 진입 패킷을 생성합니다.</summary>
     public ShelterEntryData CreateShelterEntryData()
     {

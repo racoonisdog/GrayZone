@@ -146,7 +146,7 @@ public sealed class EnemyFootstepEmitter : MonoBehaviour
 
     private void PlayFootstep(float moveSpeed)
     {
-        if (!FMODUnity.RuntimeManager.IsInitialized)
+        if (!SoundManager.IsReady)
         {
             return;
         }
@@ -163,18 +163,16 @@ public sealed class EnemyFootstepEmitter : MonoBehaviour
 
         try
         {
-            FMOD.Studio.EventInstance instance = FMODUnity.RuntimeManager.CreateInstance(eventPath);
+            FMOD.Studio.EventInstance instance = SoundManager.Instance.CreateInstance(eventPath, gameObject);
             if (!instance.isValid())
             {
                 return;
             }
 
-            FMODUnity.RuntimeManager.AttachInstanceToGameObject(instance, gameObject);
             instance.setParameterByNameWithLabel(FootwearParameter, FootwearType.Barefoot.ToString());
             instance.setParameterByNameWithLabel(SurfaceParameter, surface.ToString());
             instance.setVolume(m_volume);
-            instance.start();
-            instance.release();
+            SoundManager.Instance.StartOneShot(instance);
         }
         catch (FMODUnity.EventNotFoundException exception)
         {

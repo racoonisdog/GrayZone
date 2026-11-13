@@ -6,8 +6,8 @@ using UnityEngine.UI;
 /// 타이틀 메뉴 버튼(새 게임·불러오기·나가기)을 실제 동작에 연결합니다.
 /// </summary>
 /// <remarks>
-/// 버튼은 씬에 미리 배치돼 있고, 이 컴포넌트는 이름으로 찾아 onClick만 붙입니다. 설정은 아직 띄울 화면이 없어
-/// 연결하지 않고, 크레딧은 <see cref="TitleCreditsOverlay"/>가 맡습니다.
+/// 버튼은 씬에 미리 배치돼 있고, 이 컴포넌트는 이름으로 찾아 onClick만 붙입니다. 설정은 게임 중과 같은 설정 화면
+/// (<see cref="GameplayPauseMenuController"/>를 설정 화면만 쓰도록 둔 것)을 열고, 크레딧은 <see cref="TitleCreditsOverlay"/>가 맡습니다.
 ///
 /// 타이틀 씬에는 <see cref="GameSaveManager"/>가 없습니다. 그래서 불러오기는 셸터 씬을 먼저 연 뒤, 그 씬이
 /// 로드된 직후(<see cref="SceneManager.sceneLoaded"/>) 셸터 씬의 저장 관리자로 저장을 읽습니다.
@@ -18,6 +18,7 @@ public sealed class TitleMenuActions : MonoBehaviour
     private const string NewGameButtonName = "New Game";
     private const string LoadGameButtonName = "Load Game";
     private const string QuitButtonName = "Quit";
+    private const string SettingsButtonName = "Settings";
 
     [Header("Buttons (비워 두면 이름으로 찾습니다)")]
     [Tooltip("\"새 게임\" 버튼입니다. 비어 있으면 씬에서 'New Game'을 찾습니다.")]
@@ -28,6 +29,12 @@ public sealed class TitleMenuActions : MonoBehaviour
 
     [Tooltip("\"나가기\" 버튼입니다. 비어 있으면 씬에서 'Quit'을 찾습니다.")]
     [SerializeField] private Button m_quitButton;
+
+    [Tooltip("\"설정\" 버튼입니다. 비어 있으면 씬에서 'Settings'를 찾습니다.")]
+    [SerializeField] private Button m_settingsButton;
+
+    [Tooltip("설정 버튼이 열 설정 화면입니다. 비어 있으면 같은 씬에서 찾습니다. '설정 화면만 사용'을 켠 것이어야 합니다.")]
+    [SerializeField] private GameplayPauseMenuController m_settingsMenu;
 
     [Header("Scenes")]
     [Tooltip("새 게임을 시작할 씬 이름입니다. 빌드 설정에 있어야 합니다.")]
@@ -66,6 +73,7 @@ public sealed class TitleMenuActions : MonoBehaviour
 
         Bind(m_loadGameButton, LoadSavedGame);
         Bind(m_quitButton, QuitGame);
+        Bind(m_settingsButton, OpenSettings);
 
         if (m_loadGameButton != null && m_disableLoadWithoutSave)
         {
@@ -83,6 +91,18 @@ public sealed class TitleMenuActions : MonoBehaviour
     public void LoadSavedGame()
     {
         LeaveTo(m_loadGameSceneName, loadSave: true);
+    }
+
+    /// <summary>"설정": 설정 화면을 엽니다.</summary>
+    public void OpenSettings()
+    {
+        if (m_settingsMenu == null)
+        {
+            Debug.LogWarning("[TitleMenuActions] 설정 화면(GameplayPauseMenuController)을 찾지 못해 열지 않습니다.", this);
+            return;
+        }
+
+        m_settingsMenu.OpenSettings();
     }
 
     /// <summary>"나가기": 게임을 종료합니다. 에디터에서는 Play Mode를 끝냅니다.</summary>
@@ -171,6 +191,23 @@ public sealed class TitleMenuActions : MonoBehaviour
         if (m_quitButton == null)
         {
             m_quitButton = FindButton(QuitButtonName);
+        }
+
+        if (m_settingsButton == null)
+        {
+            m_settingsButton = FindButton(SettingsButtonName);
+        }
+
+        if (m_settingsMenu == null)
+        {
+            foreach (GameplayPauseMenuController menu in FindObjectsByType<GameplayPauseMenuController>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (menu.gameObject.scene == gameObject.scene)
+                {
+                    m_settingsMenu = menu;
+                    break;
+                }
+            }
         }
     }
 

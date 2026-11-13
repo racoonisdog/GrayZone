@@ -481,7 +481,7 @@ public abstract class CombatSceneDataManager : MonoBehaviour
     /// 현재 필드 값을 한 번만 최종 결과로 확정하고 GameDataManager에 반영합니다.
     /// 이후 호출은 최초 확정 결과의 복사본만 반환합니다.
     /// </summary>
-    public FieldResultData FinalizeField(FieldEndReason endReason)
+    public virtual FieldResultData FinalizeField(FieldEndReason endReason)
     {
         if (m_finalResult != null)
         {

@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d8263097a0dedd46aef9c248d673485, type: 3}
+  m_Name: GameplaySettingsTheme
+  m_EditorClassIdentifier: Assembly-CSharp::GameplaySettingsTheme
+  pageBackground: {fileID: 21300000, guid: 79be67f03a6e93a47a9abddfbd6fb7fa, type: 3}
+  tabSelected: {fileID: 21300000, guid: 277517076327ef341b994de241134311, type: 3}
+  titleMark: {fileID: 21300000, guid: 653fd5a763aa5024b9affa5a3ee1f953, type: 3}
+  sideMenuBar: {fileID: 21300000, guid: 46e27b9f31ea4644dbc185f7d9f0fa45, type: 3}
+  actionButton: {fileID: 21300000, guid: 749b12b6d9c36d34fa62e186e19b2e01, type: 3}
+  resetIcon: {fileID: 21300000, guid: 42d5fbc80bf1f074c8762e69f4cb7e8b, type: 3}
+  saveIcon: {fileID: 21300000, guid: 36b40739c3c5ad94989dd165e54c54e0, type: 3}
+  backIcon: {fileID: 21300000, guid: 0a1ac736a5d8d1c4890068a55b449146, type: 3}
+  choiceSelected: {fileID: 21300000, guid: 7002284e5f15914428273b55f04b0646, type: 3}
+  choiceIdle: {fileID: 21300000, guid: cb32d0b67015f444b91c9e8970104a85, type: 3}
+  dropdown: {fileID: 21300000, guid: 5866a8ec6b6f73d43aac37b46421c5f3, type: 3}
+  dropdownSelectedItem: {fileID: 21300000, guid: 9e8bd50f2bd3f084e90fb004bba62076, type: 3}
+  dropdownItem: {fileID: 21300000, guid: 3bf2c315ed6d2b5449a0dd663efff100, type: 3}
+  dropdownArrow: {fileID: 21300000, guid: 295bf6186a900294cbe4c779a7439aa4, type: 3}
+  checkBox: {fileID: 21300000, guid: c00ecca3dee23c843bfdba2b4b8a58fa, type: 3}
+  checkMark: {fileID: 21300000, guid: ac82ed23ee7ea874cb665711675c0ac6, type: 3}
+  sliderTrack: {fileID: 21300000, guid: 38e7dee7a3cc15e4d84e91fa695145eb, type: 3}
+  sliderFill: {fileID: 21300000, guid: b77f25fed9708f74fbef4b45d863859f, type: 3}
+  sliderHandle: {fileID: 21300000, guid: df41319f26e1f9b4fb1adcefdb45b527, type: 3}
+  crosshairPanel: {fileID: 21300000, guid: 5f6eada48b927c34e896e441f85ca8b5, type: 3}
+  crosshairPreview: {fileID: 21300000, guid: b7a5aa61663178c4c81c9dbcddaaa53a, type: 3}
