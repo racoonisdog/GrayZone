@@ -91,6 +91,11 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     [Tooltip("활성화하면 이동 상태에서 걷기 속도와 걷기 모션을 사용하지 않고 항상 달리기 속도와 달리기 모션을 사용합니다. 정지 상태의 Idle은 유지합니다. Spawn SO로 생성되면 SO 값이 우선합니다.")]
     [SerializeField] private bool m_alwaysRun;
 
+    [Tooltip("이동 애니메이션 값(MoveSpeed, MoveX, MoveZ)이 실제 속도를 따라가는 데 걸리는 시간(초)입니다. " +
+             "0이면 바로 바뀌어, 멈추는 순간 걷기에서 Idle로 자세가 튑니다. 블렌드 트리 사이를 부드럽게 넘기려고 둡니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_moveAnimDampTime = 0.15f;
+
     [Tooltip("대상을 향해 몸을 돌리는 최대 각속도(도/초)입니다. 200이면 180도 도는 데 약 0.9초가 걸립니다. 값이 클수록 고개가 튕기듯 돌아갑니다.")]
     [SerializeField] private float rotationSpeed = 200f;
 
@@ -483,6 +488,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>체력 컴포넌트입니다.</summary>
     public EnemyHealth Health => enemyHealth;
+
+    /// <summary>
+    /// 이 개체만의 시체 유지 시간(초)입니다. 0 이상이면 적 종류별 설정 대신 이 값을 씁니다. 음수면 설정을 따릅니다.
+    /// </summary>
+    /// <remarks>튜토리얼 연출처럼 시체를 평소보다 오래 보여 줘야 할 때 죽기 전에 정합니다.</remarks>
+    public float CorpseLifetimeOverride { get; set; } = -1.0f;
 
     /// <summary>대상 감지 센서입니다.</summary>
     public EnemyTargetSensor Sensor => targetSensor;
@@ -1300,6 +1311,13 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         // 판단은 이미 재개된 상태이므로 아래 Tick은 그대로 돌립니다.
         UpdateStaggerHandover();
 
+        // 튜토리얼 과녁은 감지·추적·공격 판단을 하지 않고 시킨 이동만 합니다. 피격 경직과 넉백은 위에서 그대로 처리합니다.
+        if (m_tutorialTargetMode)
+        {
+            UpdateTutorialTarget();
+            return;
+        }
+
         if (TickDefenseNavigation())
         {
             return;
@@ -1693,20 +1711,24 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             ? Mathf.Max(speed, ChaseSpeed)
             : speed;
 
-        animator.SetFloat(AnimMoveSpeed, animationSpeed);
+        // 값을 바로 넣지 않고 짧게 따라가게 합니다. 에이전트는 멈출 때 속도가 한 프레임에 0이 되므로,
+        // 그대로 넣으면 블렌드 트리가 걷기에서 Idle로 건너뛰어 자세가 튑니다.
+        float dampTime = m_moveAnimDampTime;
+        float deltaTime = Time.deltaTime;
+        animator.SetFloat(AnimMoveSpeed, animationSpeed, dampTime, deltaTime);
 
         // 이동 방향을 자기 기준으로 바꿔 2D 블렌드 축에 넣습니다.
         // 월드 방향을 그대로 쓰면 몸이 어디를 보든 같은 값이 되어 옆걸음과 앞걸음을 구분하지 못합니다.
         if (speed <= 0.01f)
         {
-            animator.SetFloat(AnimMoveX, 0f);
-            animator.SetFloat(AnimMoveZ, 0f);
+            animator.SetFloat(AnimMoveX, 0f, dampTime, deltaTime);
+            animator.SetFloat(AnimMoveZ, 0f, dampTime, deltaTime);
             return;
         }
 
         Vector3 local = transform.InverseTransformDirection(velocity / speed);
-        animator.SetFloat(AnimMoveX, local.x);
-        animator.SetFloat(AnimMoveZ, local.z);
+        animator.SetFloat(AnimMoveX, local.x, dampTime, deltaTime);
+        animator.SetFloat(AnimMoveZ, local.z, dampTime, deltaTime);
     }
 
     // =========================
@@ -1738,6 +1760,9 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
 
     /// <summary>대기 동작 혼합 비율입니다. 개체마다 한 번 뽑아 고정합니다.</summary>
     private static readonly int AnimIdleType = Animator.StringToHash("IdleType");
+
+    /// <summary>공격 외 동작의 좌우반전을 켜는 Bool 파라미터입니다. 개체마다 한 번 정합니다.</summary>
+    private static readonly int AnimMirror = Animator.StringToHash("Mirror");
 
     /// <summary>애니메이터를 기본 상태로 되돌리는 트리거입니다.</summary>
     private static readonly int AnimReset = Animator.StringToHash("DoReset");
@@ -2089,6 +2114,35 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     {
         IdleType = Random.Range(idleTypeMin, idleTypeMax);
         animator?.SetFloat(AnimIdleType, IdleType);
+        RollAnimationMirror();
+    }
+
+    /// <summary>이 개체가 공격 외 동작(이동·대기·경직·사망 등)을 좌우반전해서 쓰는지 여부입니다.</summary>
+    public bool IsAnimationMirrored { get; private set; }
+
+    /// <summary>
+    /// 공격 외 동작을 좌우반전할지 개체마다 한 번 뽑아 고정합니다. 같은 종류가 모여 있어도 몸짓이 서로 달라 보이게 하려는 것입니다.
+    /// </summary>
+    /// <remarks>
+    /// 애니메이터의 <c>Mirror</c> 파라미터가 공격 외 상태의 좌우반전을 켭니다. 공격은 <c>AttackSide</c>가 공격마다 좌우를 따로 고르므로 이 값과 겹치지 않습니다.
+    /// 좌우반전은 Humanoid 아바타에서만 적용되며, 파라미터가 없는 애니메이터에는 넣지 않습니다(없는 파라미터를 넣으면 경고가 쌓입니다).
+    /// </remarks>
+    private void RollAnimationMirror()
+    {
+        IsAnimationMirrored = Random.value < 0.5f;
+        if (animator == null)
+        {
+            return;
+        }
+
+        foreach (AnimatorControllerParameter parameter in animator.parameters)
+        {
+            if (parameter.nameHash == AnimMirror && parameter.type == AnimatorControllerParameterType.Bool)
+            {
+                animator.SetBool(AnimMirror, IsAnimationMirrored);
+                return;
+            }
+        }
     }
 
     /// <summary>Spawn SO 값이 있으면 그 값을, 없으면 Always Run 또는 상태별 Balance/Inspector 속도를 반환합니다.</summary>
@@ -3116,6 +3170,112 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         agent.isStopped = false;
         agent.SetDestination(worldPosition);
     }
+
+    /// <summary>
+    /// 튜토리얼용 과녁 모드입니다. 켜면 감지·추적·공격 판단을 하지 않고, <see cref="TargetMoveTo"/>로 시킨 이동만 한 뒤 제자리에 섭니다.
+    /// 맞으면 경직과 넉백은 그대로 받습니다. 끄면 평소 판단으로 돌아갑니다.
+    /// </summary>
+    public bool TutorialTargetMode
+    {
+        get => m_tutorialTargetMode;
+        set
+        {
+            // 과녁 이동은 정한 점까지 가야 하므로 켜 있는 동안 정지 거리를 0으로 둡니다.
+            // 평소 값(예: 1.2m)을 두면 그만큼 앞에서 멈춰 도착 판정(0.4m)에 닿지 못합니다.
+            if (agent != null && value != m_tutorialTargetMode)
+            {
+                if (value)
+                {
+                    m_savedStoppingDistance = agent.stoppingDistance;
+                    agent.stoppingDistance = 0.0f;
+                }
+                else
+                {
+                    agent.stoppingDistance = m_savedStoppingDistance;
+                }
+            }
+
+            m_tutorialTargetMode = value;
+            m_hasTargetMovePoint = false;
+            m_targetHome = transform.position;
+        }
+    }
+
+    /// <summary>과녁 모드를 켜기 전의 정지 거리입니다. 끌 때 되돌립니다.</summary>
+    private float m_savedStoppingDistance;
+
+    private bool m_tutorialTargetMode;
+    private bool m_hasTargetMovePoint;
+    private Vector3 m_targetMovePoint;
+
+    /// <summary>과녁이 돌아올 위치입니다. 과녁 모드를 켠 자리이고, 시킨 이동을 마치면 도착한 자리로 바뀝니다.</summary>
+    private Vector3 m_targetHome;
+
+    /// <summary>과녁이 돌아올 위치에서 이만큼(m, 평면 거리) 벗어나면 걸어서 되돌아옵니다. 0이면 되돌아오지 않습니다.</summary>
+    private float m_targetReturnRadius;
+
+    /// <summary>
+    /// 과녁 모드에서 넉백 등으로 돌아올 위치에서 정한 거리보다 멀어지면 걸어서 되돌아오게 합니다.
+    /// </summary>
+    /// <param name="radius">벗어났다고 볼 평면 거리(m)입니다. 0 이하면 되돌아오지 않습니다.</param>
+    /// <remarks>돌아올 위치는 과녁 모드를 켠 자리이고, <see cref="TargetMoveTo"/>로 시킨 이동을 마치면 도착한 자리로 바뀝니다.</remarks>
+    public void SetTargetReturnRadius(float radius)
+    {
+        m_targetReturnRadius = Mathf.Max(0.0f, radius);
+    }
+
+    /// <summary>과녁 모드에서 이 위치까지 걸어가게 합니다. 도착하면 그 자리에 섭니다. 과녁 모드가 꺼져 있으면 무시합니다.</summary>
+    public void TargetMoveTo(Vector3 worldPosition)
+    {
+        if (!m_tutorialTargetMode)
+        {
+            return;
+        }
+
+        m_hasTargetMovePoint = true;
+        m_targetMovePoint = worldPosition;
+    }
+
+    /// <summary>
+    /// 과녁 모드에서 시킨 위치가 있으면 그곳까지 걷고, 도착했거나 위치가 없으면 멈춰 섭니다.
+    /// 시킨 위치가 없을 때 돌아올 위치에서 정한 거리보다 멀어져 있으면 그곳으로 되돌아갑니다.
+    /// </summary>
+    private void UpdateTutorialTarget()
+    {
+        if (!m_hasTargetMovePoint && m_targetReturnRadius > 0.0f)
+        {
+            Vector3 fromHome = transform.position - m_targetHome;
+            fromHome.y = 0.0f;
+            if (fromHome.sqrMagnitude > m_targetReturnRadius * m_targetReturnRadius)
+            {
+                m_hasTargetMovePoint = true;
+                m_targetMovePoint = m_targetHome;
+            }
+        }
+
+        if (m_hasTargetMovePoint && agent != null && agent.isOnNavMesh)
+        {
+            Vector3 offset = m_targetMovePoint - transform.position;
+            offset.y = 0.0f;
+            if (offset.sqrMagnitude > TargetArriveDistance * TargetArriveDistance)
+            {
+                if (agent.isStopped || !agent.hasPath || (agent.destination - m_targetMovePoint).sqrMagnitude > 0.01f)
+                {
+                    MoveTo(m_targetMovePoint);
+                }
+
+                return;
+            }
+
+            m_hasTargetMovePoint = false;
+            m_targetHome = m_targetMovePoint;
+        }
+
+        StopMoving();
+    }
+
+    /// <summary>과녁 모드 이동에서 도착했다고 보는 평면 거리(m)입니다.</summary>
+    private const float TargetArriveDistance = 0.4f;
 
     /// <summary>이동을 멈춥니다.</summary>
     public void StopMoving()

@@ -55,6 +55,8 @@ public class SettingData
     {
         public float mouseSensitivity = 1f;
         public bool cameraKickEnabled = true;
+        // 조준(ADS)을 누를 때마다 켜고 끄면 true입니다. 이 값이 없던 설정 파일은 false(누르는 동안만 조준)로 읽습니다.
+        public bool aimToggleEnabled;
     }
 
     /// <summary>

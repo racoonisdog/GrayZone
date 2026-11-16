@@ -1493,7 +1493,7 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             return false;
         }
 
-        if (GetProjectileQuantity(selectedProjectile) <= 0)
+        if (!SquadInventoryManager.FreeUse && !SquadInventoryManager.UseWhenEmpty && GetProjectileQuantity(selectedProjectile) <= 0)
         {
             // 투척 시도마다 조준선 위에 경고를 다시 띄웁니다. 경고 문구가 없는 씬에서는 아무 일도 없습니다.
             AimWarningText.Show(m_outOfProjectileMessage);
@@ -1517,6 +1517,10 @@ public class ExplosiveProjectileShooter : MonoBehaviour
             : transform.rotation;
 
         ProjectileBase projectile = Instantiate(selectedProjectile, m_throwStart, rotation);
+
+        // 피해 정보에 던진 캐릭터가 남도록 체력 컴포넌트를 가진 부모(캐릭터)를 기록합니다. 없으면 이 오브젝트입니다.
+        HealthSystemBase thrower = GetComponentInParent<HealthSystemBase>();
+        projectile.SetThrower(thrower != null ? thrower.gameObject : gameObject);
         Collider[] projectileColliders = projectile.GetComponentsInChildren<Collider>(true);
         foreach (Collider projectileCollider in projectileColliders)
         {

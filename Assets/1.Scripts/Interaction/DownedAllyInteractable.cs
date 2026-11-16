@@ -73,6 +73,15 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
 
     public SquadMemberController TargetMember => m_memberController;
 
+    /// <summary>켜져 있으면 F 상호작용과 원격 구조(서하 스킬)로 구조할 수 없습니다. 튜토리얼이 구조 안내 창을 띄우기 전까지 켜 둡니다.</summary>
+    public static bool RescueBlocked { get; set; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        RescueBlocked = false;
+    }
+
     private void Reset()
     {
         AutoFindReferences();
@@ -108,7 +117,7 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
     {
         AutoFindReferences();
 
-        if (m_memberController == null || m_playerHealth == null)
+        if (m_memberController == null || m_playerHealth == null || RescueBlocked)
         {
             return false;
         }
@@ -149,7 +158,8 @@ public class DownedAllyInteractable : MonoBehaviour, IInteractable, IHoldInterac
     public bool CanReceiveRemoteRescue()
     {
         AutoFindReferences();
-        return m_memberController != null
+        return !RescueBlocked
+            && m_memberController != null
             && m_playerHealth != null
             && m_memberController.IsAlive
             && m_memberController.IsDown

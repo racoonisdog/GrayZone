@@ -48,6 +48,14 @@ public sealed class TutorialFlowDirector : MonoBehaviour
     [Tooltip("켜면 방어전 1회차(DefenseSceneDataManager.DefenseRound <= 1)에서만 시작합니다. 회차 정보가 없으면(씬 단독 실행 등) 시작합니다.")]
     [SerializeField] private bool m_onlyFirstDefenseRound = true;
 
+    [Header("Debug")]
+    [Tooltip("켜면 에디터와 개발 빌드에서 넘기기 키로 지금 기다리는 블록을 바로 넘깁니다. 대사, 엔드포인트(완료 조건 무시), 시네마틱, 기다리는 이벤트가 모두 해당합니다.\n" +
+             "넘기기 키가 상호작용 키와 같으면 상호작용할 때도 넘어가므로, 실제 완료 조건을 확인할 때는 끕니다.")]
+    [SerializeField] private bool m_debugAdvance = true;
+
+    [Tooltip("디버그 넘기기 키입니다. 상호작용(F)처럼 플레이 중 쓰는 키와 겹치면 설치·구조 중에 단계가 넘어가므로 겹치지 않는 키를 씁니다.")]
+    [SerializeField] private Key m_debugAdvanceKey = Key.F8;
+
     [Header("Current")]
     [Tooltip("현재 챕터 번호입니다. 진행 중이 아니면 -1입니다.")]
     [ReadOnly][SerializeField] private int m_stepIndex = NoIndex;
@@ -62,6 +70,40 @@ public sealed class TutorialFlowDirector : MonoBehaviour
 
     /// <summary>엔드포인트를 기다리는 동안 띄워 둔 대사가 있는지 여부입니다. 엔드포인트가 닫히면 내립니다.</summary>
     private bool m_isHoldingDialogue;
+
+    /// <summary>
+    /// 지금 블록을 시작한 프레임입니다. 같은 프레임에 디버그 넘기기가 두 블록을 한꺼번에 넘기지 않도록 이보다 뒤 프레임의 입력만 받습니다.
+    /// </summary>
+    private int m_blockStartFrame;
+
+    /// <summary>
+    /// 이번 챕터가 새로 여는 조작 중, 챕터의 첫 튜토리얼 창이 닫힐 때까지 계속 막아 두는 조작입니다.
+    /// 안내 창을 보고 넘긴 뒤에 조작이 열리게 하기 위해서입니다. 창이 없는 챕터는 바로 엽니다.
+    /// </summary>
+    private PlayerInputLock m_locksUntilWindow;
+
+    /// <summary>
+    /// 이번 챕터 도중 이벤트로 먼저 연 조작입니다. 챕터 잠금에 들어 있어도 열어 둡니다. 다음 챕터로 넘어가면 비웁니다.
+    /// </summary>
+    /// <remarks>챕터 잠금은 챕터 단위라, 챕터 중간(예: 안내 창을 닫은 뒤)에 하나만 여는 데 씁니다.</remarks>
+    private PlayerInputLock m_unlockedInStep;
+
+    /// <summary>이번 챕터가 끝날 때까지 정한 조작을 엽니다. 챕터 잠금보다 우선합니다.</summary>
+    /// <param name="inputs">열 조작입니다.</param>
+    public void UnlockInputsForStep(PlayerInputLock inputs)
+    {
+        m_unlockedInStep |= inputs;
+        if (m_stepIndex >= 0)
+        {
+            PlayerInputController.SetInputLock(CurrentLocks(m_sequence.Steps[m_stepIndex]));
+        }
+    }
+
+    /// <summary>지금 걸어야 할 잠금입니다. 챕터 잠금과 창이 닫힐 때까지의 잠금에서, 챕터 도중 연 조작을 뺍니다.</summary>
+    private PlayerInputLock CurrentLocks(TutorialStep step)
+    {
+        return (step.LockedInputs | m_locksUntilWindow) & ~m_unlockedInStep;
+    }
 
     /// <summary>씬에 있는 활성 튜토리얼 진행기입니다. 없으면 null입니다.</summary>
     public static TutorialFlowDirector Instance => s_instance;
@@ -113,7 +155,25 @@ public sealed class TutorialFlowDirector : MonoBehaviour
             return;
         }
 
+        Complete();
+    }
+
+    /// <summary>튜토리얼을 끝내고 분대·방어 목표 체력을 한 번 가득 채운 뒤, 완료 보상(1웨이브 클리어 보상만큼의 함정 재료)을 주고 <see cref="OnCompleted"/>를 보냅니다.</summary>
+    private void Complete()
+    {
         End();
+        TutorialEvents events = ResolveEvents();
+        if (events != null)
+        {
+            events.RestoreSquadAndDefenseFull();
+        }
+
+        DefenseManager defense = DefenseManager.Instance;
+        if (defense != null)
+        {
+            defense.GrantTutorialCompleteReward();
+        }
+
         OnCompleted?.Invoke();
     }
 
@@ -124,6 +184,8 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         m_stepIndex = NoIndex;
         m_blockIndex = NoIndex;
         m_isHoldingDialogue = false;
+        m_locksUntilWindow = PlayerInputLock.None;
+        m_unlockedInStep = PlayerInputLock.None;
         StopAllCoroutines();
         DisposeWatchers();
         // 씬이 내려갈 때도 불리므로 여기서는 찾거나 붙이지 않고, 이미 연결된 것만 되돌립니다.
@@ -192,7 +254,7 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         // 분대원이 늦게 준비되면 처음 건 잠금이 닿지 않을 수 있어 매 프레임 맞춥니다. 값이 같으면 아무것도 하지 않습니다.
         if (m_stepIndex >= 0)
         {
-            PlayerInputController.SetInputLock(m_sequence.Steps[m_stepIndex].LockedInputs);
+            PlayerInputController.SetInputLock(CurrentLocks(m_sequence.Steps[m_stepIndex]));
         }
     }
 
@@ -202,12 +264,18 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         for (int stepIndex = 0; stepIndex < steps.Count; stepIndex++)
         {
             m_stepIndex = stepIndex;
-            PlayerInputController.SetInputLock(steps[stepIndex].LockedInputs);
-            yield return RunStep(steps[stepIndex]);
+            TutorialStep step = steps[stepIndex];
+            // 첫 챕터는 앞 챕터가 없어 기본 조작을 그대로 엽니다.
+            // 앞 챕터 도중 이미 연 조작(m_unlockedInStep)은 다시 막지 않습니다.
+            m_locksUntilWindow = stepIndex > 0 && HasWindow(step)
+                ? steps[stepIndex - 1].LockedInputs & ~m_unlockedInStep & ~step.LockedInputs
+                : PlayerInputLock.None;
+            m_unlockedInStep = PlayerInputLock.None;
+            PlayerInputController.SetInputLock(CurrentLocks(step));
+            yield return RunStep(step);
         }
 
-        End();
-        OnCompleted?.Invoke();
+        Complete();
     }
 
     private IEnumerator RunStep(TutorialStep step)
@@ -224,6 +292,7 @@ public sealed class TutorialFlowDirector : MonoBehaviour
             }
 
             m_blockIndex = i;
+            m_blockStartFrame = Time.frameCount;
             OnBlockChanged?.Invoke(m_stepIndex, i);
 
             switch (block.Type)
@@ -254,7 +323,7 @@ public sealed class TutorialFlowDirector : MonoBehaviour
                     }
 
                     // 고른 트리거가 모두 완료돼야 닫힙니다. 먼저 완료된 트리거도 나머지를 기다립니다.
-                    while (!AreTriggersMet(closes))
+                    while (!AreTriggersMet(closes) && !ConsumeDebugAdvance())
                     {
                         yield return null;
                     }
@@ -274,7 +343,7 @@ public sealed class TutorialFlowDirector : MonoBehaviour
 
                 case TutorialBlockType.Cinematic:
                     ReleaseHeldDialogue();
-                    yield return ResolveEvents().PlayCinematic(block.CinematicId);
+                    yield return PlayCinematic(block.CinematicId);
                     break;
             }
         }
@@ -283,7 +352,8 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         if (m_watchers.Count > 0)
         {
             Debug.LogWarning($"튜토리얼 챕터 '{step.Label}'에 엔드포인트로 닫히지 않은 트리거가 {m_watchers.Count}개 있습니다. 완료될 때까지 기다린 뒤 다음 챕터로 넘어갑니다.", this);
-            while (!AreTriggersMet(new List<int>(m_watchers.Keys)))
+            m_blockStartFrame = Time.frameCount;
+            while (!AreTriggersMet(new List<int>(m_watchers.Keys)) && !ConsumeDebugAdvance())
             {
                 yield return null;
             }
@@ -309,6 +379,29 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         m_isHoldingDialogue = hold;
         while (!done)
         {
+            if (ConsumeDebugAdvance())
+            {
+                dialogue.Stop();
+                yield break;
+            }
+
+            yield return null;
+        }
+    }
+
+    /// <summary>시네마틱을 끝까지 재생합니다. 디버그 넘기기를 누르면 바로 끝내고 카메라 복귀만 기다립니다.</summary>
+    private IEnumerator PlayCinematic(string cinematicId)
+    {
+        TutorialEvents events = ResolveEvents();
+        bool done = false;
+        StartCoroutine(RunTracked(events.PlayCinematic(cinematicId), () => done = true));
+        while (!done)
+        {
+            if (ConsumeDebugAdvance())
+            {
+                events.SkipCinematic();
+            }
+
             yield return null;
         }
     }
@@ -338,14 +431,56 @@ public sealed class TutorialFlowDirector : MonoBehaviour
             if (actions[i] != null)
             {
                 running++;
-                StartCoroutine(RunTracked(events.Run(actions[i]), () => running--));
+                bool isWindow = IsWindowAction(actions[i]);
+                StartCoroutine(RunTracked(events.Run(actions[i]), () =>
+                {
+                    running--;
+                    if (isWindow)
+                    {
+                        m_locksUntilWindow = PlayerInputLock.None;
+                    }
+                }));
             }
         }
 
+        // 디버그 넘기기로 기다림만 끝냅니다. 이미 시작한 이벤트는 그대로 돌게 둡니다.
+        // 튜토리얼 창은 같은 키를 길게 눌러 닫으므로, 창이 떠 있는 동안에는 넘기지 않습니다. 넘기면 창과 멈춘 시간이 남습니다.
         while (running > 0)
         {
+            if (!events.IsWindowOpen && ConsumeDebugAdvance())
+            {
+                break;
+            }
+
             yield return null;
         }
+    }
+
+    private static bool IsWindowAction(TutorialAction action)
+    {
+        return action != null && action.Method == nameof(TutorialEvents.ShowWindow);
+    }
+
+    /// <summary>챕터 안에 튜토리얼 창을 띄우는 이벤트가 있는지 여부입니다.</summary>
+    private static bool HasWindow(TutorialStep step)
+    {
+        foreach (TutorialBlock block in step.Blocks)
+        {
+            if (block?.Actions == null)
+            {
+                continue;
+            }
+
+            foreach (TutorialAction action in block.Actions)
+            {
+                if (IsWindowAction(action))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static IEnumerator RunTracked(IEnumerator routine, Action onDone)
@@ -376,6 +511,29 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         }
 
         m_watchers.Clear();
+    }
+
+    /// <summary>
+    /// 이번 프레임에 디버그 넘기기 키를 눌렀으면 true를 돌려주고 받은 것으로 표시합니다. 에디터와 개발 빌드에서만 받습니다.
+    /// </summary>
+    /// <remarks>
+    /// 블록을 시작한 프레임의 입력은 받지 않습니다. 앞 블록을 넘긴 같은 누름으로 다음 블록까지 넘어가지 않게 하기 위해서입니다.
+    /// </remarks>
+    private bool ConsumeDebugAdvance()
+    {
+        if (!m_debugAdvance || !Debug.isDebugBuild || m_debugAdvanceKey == Key.None || Time.frameCount <= m_blockStartFrame)
+        {
+            return false;
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || !keyboard[m_debugAdvanceKey].wasPressedThisFrame)
+        {
+            return false;
+        }
+
+        m_blockStartFrame = Time.frameCount;
+        return true;
     }
 
     private bool WasSkipPressed()

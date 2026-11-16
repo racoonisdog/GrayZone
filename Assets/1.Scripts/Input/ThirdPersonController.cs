@@ -110,6 +110,13 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [Clamp(Min = 0)]
     [SerializeField] private float m_sprintSpeed = 5.335f;
 
+    [Tooltip("걷기 모드의 이동 속도입니다. 단위는 m/s입니다. 걷기 클립이 이 속도에서 발이 맞습니다(약 1.42).")]
+    [Clamp(Min = 0)]
+    [SerializeField] private float m_walkSpeed = 1.4f;
+
+    [Tooltip("켜면 평소 이동이 조깅 대신 걷기(속도와 애니메이션 모두)입니다. 기본은 꺼짐(조깅)입니다. 달리기·웅크림은 그대로입니다.")]
+    [SerializeField] private bool m_useWalk;
+
     [Tooltip("전력질주를 시작할 수 있는 전방 부채꼴의 반각입니다. 이 각을 벗어난 방향으로는 걷기 속도만 납니다.")]
     [Range(0.0f, 180.0f)]
     [Clamp(Min = 0, Max = 180)]
@@ -168,7 +175,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     [Min(0.0f)]
     [SerializeField] private float m_crouchLandingTransitionDuration = 0.08f;
 
-    [Tooltip("MoveState 한 단계(웅크림↔걷기, 걷기↔달리기) 전환에 걸리는 시간입니다. 웅크림 높이 전환 시간과 맞추면 자세와 콜라이더가 같이 움직입니다.")]
+    [Tooltip("MoveState 한 단계(웅크림↔조깅, 조깅↔달리기) 전환에 걸리는 시간입니다. 웅크림 높이 전환 시간과 맞추면 자세와 콜라이더가 같이 움직입니다.")]
     [Clamp(Min = 0)]
     [SerializeField] private float m_moveStateBlendDuration = 0.2f;
 
@@ -573,14 +580,17 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>MoveState 축의 웅크림 단계 값입니다.</summary>
     private const float MoveStateCrouch = 0.0f;
 
-    /// <summary>MoveState 축의 걷기 단계 값입니다.</summary>
+    /// <summary>MoveState 축의 걷기 단계 값입니다. 걷기 모드(<see cref="UseWalk"/>)와 대문 입장 컷신(SquadGateEntranceCinematic)이 씁니다.</summary>
     private const float MoveStateWalk = 1.0f;
 
+    /// <summary>MoveState 축의 조깅 단계 값입니다. 평소 이동은 이 단계입니다.</summary>
+    private const float MoveStateJog = 2.0f;
+
     /// <summary>MoveState 축의 달리기 단계 값입니다.</summary>
-    private const float MoveStateRun = 2.0f;
+    private const float MoveStateRun = 3.0f;
 
     /// <summary>현재 애니메이터에 넣고 있는 MoveState 값입니다. 목표 단계를 향해 보간합니다.</summary>
-    private float m_moveState = MoveStateWalk;
+    private float m_moveState = MoveStateJog;
 
     /// <summary>이번 프레임에 전력질주 방향 조건을 통과했는지입니다. 프레임당 한 번 판정해 캐싱합니다.</summary>
     private bool m_canSprintForward;
@@ -685,6 +695,22 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     public float MoveSpeed => m_moveSpeed * m_movementSpeedMultiplier;
     /// <summary>전력질주 이동 속도입니다.</summary>
     public float SprintSpeed => m_sprintSpeed * m_movementSpeedMultiplier;
+
+    /// <summary>걷기 모드의 이동 속도입니다.</summary>
+    public float WalkSpeed => m_walkSpeed * m_movementSpeedMultiplier;
+
+    /// <summary>평소 이동을 걷기로 할지 여부입니다. 끄면 조깅(기본)입니다. 속도와 애니메이션 단계를 함께 바꿉니다.</summary>
+    public bool UseWalk
+    {
+        get => m_useWalk;
+        set => m_useWalk = value;
+    }
+
+    /// <summary>달리기·웅크림이 아닐 때의 이동 속도입니다. 걷기 모드면 걷기 속도, 아니면 기본(조깅) 속도입니다.</summary>
+    private float StandingMoveSpeed => m_useWalk ? WalkSpeed : MoveSpeed;
+
+    /// <summary>달리기·웅크림이 아닐 때의 MoveState 단계입니다. 걷기 모드면 걷기, 아니면 조깅입니다.</summary>
+    private float StandingMoveState => m_useWalk ? MoveStateWalk : MoveStateJog;
     /// <summary>전진 입력에 적용하는 이동 속도 배율입니다.</summary>
     public float ForwardSpeedMultiplier => m_forwardSpeedMultiplier;
     /// <summary>후진 입력에 적용하는 이동 속도 배율입니다.</summary>
@@ -693,6 +719,13 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     public float StrafeSpeedMultiplier => m_strafeSpeedMultiplier;
     /// <summary>웅크린 상태의 이동 속도입니다.</summary>
     public float CrouchSpeed => m_crouchSpeed * m_movementSpeedMultiplier;
+
+    /// <summary>
+    /// 지금 적용할 웅크림 이동 속도입니다. 걷기 모드면 조깅 대비 걷기 비율(걷기 속도 / 기본 속도)만큼 웅크림 속도도 줄입니다.
+    /// </summary>
+    private float CrouchingMoveSpeed => m_useWalk && m_moveSpeed > 0.0f
+        ? CrouchSpeed * (m_walkSpeed / m_moveSpeed)
+        : CrouchSpeed;
     /// <summary>현재 앉기 정도입니다. 0이면 선 자세, 1이면 완전히 앉은 자세이고 그 사이는 전환 중입니다.</summary>
     /// <remarks>높이 보간에 쓰는 값을 그대로 내보냅니다. 탄퍼짐처럼 자세에 따라 달라지는 값이 같은 곡선을 타야 합니다.</remarks>
     public float CrouchBlend => m_crouchBlend;
@@ -1879,13 +1912,13 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         m_animationBlend = 0.0f;
 
         // 보간 중간값이 남아 있으면 다음 프레임에 그 값에서 이어져 리셋이 한 프레임만 보입니다.
-        m_moveState = MoveStateWalk;
+        m_moveState = StandingMoveState;
 
         m_animator.SetFloat(m_animIDSpeed, 0.0f);
         m_animator.SetFloat(m_animIDMotionSpeed, 1.0f);
         m_animator.SetFloat(m_animIDMoveX, 0.0f);
         m_animator.SetFloat(m_animIDMoveZ, 0.0f);
-        m_animator.SetFloat(m_animIDMoveState, MoveStateWalk);
+        m_animator.SetFloat(m_animIDMoveState, StandingMoveState);
         m_animator.SetFloat(m_animIDLookX, 0.0f);
         m_animator.SetFloat(m_animIDLookY, 0.0f);
 
@@ -2213,7 +2246,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         // 여러 번 부르면 같은 프레임 안에서 경계가 두 번 움직입니다.
         m_canSprintForward = EvaluateSprintForward();
 
-        float targetSpeed = m_input.sprint && m_canSprintForward ? SprintSpeed : MoveSpeed;
+        float targetSpeed = m_input.sprint && m_canSprintForward ? SprintSpeed : StandingMoveSpeed;
 
         // 속도 제약은 시점이 아니라 상태에 걸립니다. 비전투 백뷰에서는 전력질주가 그대로 살아 있습니다.
         //
@@ -2226,14 +2259,14 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
         // 문서 개정 전까지 이 편차를 문서 쪽 실수로 오해해 되돌리지 말 것.
         if (m_isCombatStance)
         {
-            targetSpeed = MoveSpeed;
+            targetSpeed = StandingMoveSpeed;
         }
 
         // 웅크리기는 전투 자세보다 뒤에서 덮습니다. 조준하며 웅크려도 웅크림 속도가 유지되어야 하고,
         // 이 순서 덕분에 웅크린 동안은 전력질주가 따로 막지 않아도 자연히 잠깁니다.
         if (IsCrouchActive)
         {
-            targetSpeed = CrouchSpeed;
+            targetSpeed = CrouchingMoveSpeed;
         }
 
         if (m_input.move == Vector2.zero)
@@ -2557,8 +2590,9 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// 값을 즉시 바꾸지 않고 보간하는 이유는 걷기와 달리기 사이가 한 단계 차이라 중간값이
     /// 두 동작을 섞은 자연스러운 자세가 되기 때문입니다. 즉시 바꾸면 발걸음이 튑니다.
     ///
-    /// 축의 순서를 웅크림 0, 걷기 1, 달리기 2로 잡은 것도 같은 이유입니다. 웅크림과 달리기를 양 끝에 두면
-    /// 그 둘이 직접 섞이는 일이 없고, 웅크린 채 달리기를 눌러도 걷기를 지나며 이어집니다.
+    /// 축의 순서를 웅크림 0, 걷기 1, 조깅 2, 달리기 3으로 잡은 것도 같은 이유입니다. 웅크림과 달리기를 양 끝에 두면
+    /// 그 둘이 직접 섞이는 일이 없고, 웅크린 채 달리기를 눌러도 조깅을 지나며 이어집니다.
+    /// 평소 이동은 조깅입니다. 걷기 모드(<see cref="UseWalk"/>)를 켜면 평소 이동이 걷기(1)가 됩니다.
     ///
     /// 전력질주 판정에 <see cref="CanSprintTowardInput"/>을 함께 보는 이유는 실제 속도와 자세를 맞추기
     /// 위해서입니다. 부채꼴을 벗어난 방향은 걷기 속도로 움직이므로 자세도 걷기여야 합니다.
@@ -2568,7 +2602,7 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private float UpdateMoveState()
     {
-        float target = MoveStateWalk;
+        float target = StandingMoveState;
 
         if (IsCrouchActive)
         {
@@ -2579,10 +2613,16 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
             target = MoveStateRun;
         }
 
+        // 웅크림과 조깅은 축에서 두 칸(가운데 1이 걷기) 떨어져 있지만 한 단계로 칩니다.
+        // 그 구간은 두 배 빠르게 움직여야 웅크림 높이 전환 시간과 계속 맞습니다.
+        float stepSize = m_moveState < MoveStateJog || target < MoveStateJog
+            ? MoveStateJog - MoveStateCrouch
+            : MoveStateRun - MoveStateJog;
+
         float moveStateBlendDuration = MoveStateBlendDuration;
         m_moveState = moveStateBlendDuration <= 0.0f
             ? target
-            : Mathf.MoveTowards(m_moveState, target, Time.deltaTime / moveStateBlendDuration);
+            : Mathf.MoveTowards(m_moveState, target, stepSize * Time.deltaTime / moveStateBlendDuration);
 
         return m_moveState;
     }
@@ -2603,6 +2643,14 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     private void UpdateLookAnimator()
     {
         float lookX = 0.0f;
+
+        // 컷신 중에는 Main Camera가 컷신 카메라라서 그 각도를 따라가면 상체가 엉뚱한 쪽으로 틀어집니다. 정면으로 둡니다.
+        if (InGameCutscene.IsPlaying)
+        {
+            m_animator.SetFloat(m_animIDLookX, 0.0f);
+            m_animator.SetFloat(m_animIDLookY, 0.0f);
+            return;
+        }
 
         if (m_mainCamera != null)
         {
@@ -2750,6 +2798,25 @@ public class ThirdPersonController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     private void ApplyBodyRotation()
     {
+        // 컷신 중에는 Main Camera가 컷신 카메라이고 입력도 기준이 아닙니다. 실제로 움직이는 방향을 정면으로 봅니다.
+        if (InGameCutscene.IsPlaying)
+        {
+            Vector3 velocity = m_controller.velocity;
+            velocity.y = 0.0f;
+            if (velocity.sqrMagnitude <= MoveDirectionThreshold * MoveDirectionThreshold)
+            {
+                return;
+            }
+
+            float travelRotation = Mathf.SmoothDampAngle(
+                transform.eulerAngles.y,
+                Mathf.Atan2(velocity.x, velocity.z) * Mathf.Rad2Deg,
+                ref m_rotationVelocity,
+                m_rotationSmoothTime);
+            transform.rotation = Quaternion.Euler(0.0f, travelRotation, 0.0f);
+            return;
+        }
+
         bool backView = m_viewMode == CameraViewMode.BackView;
 
         // 자유 시점은 이동 입력이 있을 때만 몸을 돌립니다. 백뷰는 제자리에서도 카메라를 따라갑니다.

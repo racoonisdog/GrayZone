@@ -27,11 +27,11 @@ public sealed class DefenseRepairInteractable : MonoBehaviour,
         ResourceIds.UpgradeMaterial,
         ResourceIds.CraftingMaterial,
         ResourceIds.TrapMaterial)]
-    [SerializeField] private string m_costResourceId = ResourceIds.CraftingMaterial;
+    [SerializeField] private string m_costResourceId = ResourceIds.TrapMaterial;
 
     [Tooltip("게이지가 한 바퀴 찰 때마다 소모할 자원 수량입니다. 0이면 자원 없이 수리합니다.")]
     [Min(0)]
-    [SerializeField] private int m_costAmount = 1;
+    [SerializeField] private int m_costAmount = 10;
 
     [Tooltip("안내 패널의 비용 아이콘으로 쓸 이미지입니다. 선택 항목이며, 비워 두면 HUD에 배치된 기본 아이콘(함정 재료)을 씁니다.")]
     [SerializeField] private Sprite m_costIcon;
@@ -54,7 +54,7 @@ public sealed class DefenseRepairInteractable : MonoBehaviour,
 
     [Tooltip("안내 패널 설명입니다. {0}에 한 바퀴당 회복 비율(%), {1}에 현재 내구도, {2}에 최대 내구도가 들어갑니다. 현재 내구도는 제목 옆에 자동으로 붙습니다.")]
     [TextArea(2, 4)]
-    [SerializeField] private string m_description = "F를 누르고 있으면 내구도를 {0}%씩 회복합니다.";
+    [SerializeField] private string m_description = "F를 누르고 있으면 함정 재료를 사용해 내구도를 {0}%씩 회복합니다.";
 
     [Tooltip("상호작용 프롬프트 문구입니다.")]
     [SerializeField] private string m_prompt = "수리";
@@ -111,6 +111,9 @@ public sealed class DefenseRepairInteractable : MonoBehaviour,
     /// <inheritdoc />
     public GameObject HudOutlineTarget => gameObject;
 
+    /// <summary>수리할 수 있는지 여부입니다. 끄면 대상으로 잡히지 않아 수리 안내도 뜨지 않습니다. 튜토리얼이 수리 안내 전까지 끕니다.</summary>
+    public bool RepairEnabled { get; set; } = true;
+
     private void Awake()
     {
         if (m_health == null)
@@ -125,10 +128,11 @@ public sealed class DefenseRepairInteractable : MonoBehaviour,
     }
 
     /// <inheritdoc />
-    /// <remarks>파괴됐으면 대상에서 빠집니다. 체력이 가득 찬 것과 자원이 모자란 것은 빼지 않습니다(안내를 보여 주기 위해).</remarks>
+    /// <remarks>파괴됐거나 수리를 꺼 두었으면 대상에서 빠집니다. 체력이 가득 찬 것과 자원이 모자란 것은 빼지 않습니다(안내를 보여 주기 위해).</remarks>
     public bool CanInteract(GameObject interactor)
     {
-        return m_health != null
+        return RepairEnabled
+            && m_health != null
             && m_health.isActiveAndEnabled
             && !m_health.IsDead;
     }

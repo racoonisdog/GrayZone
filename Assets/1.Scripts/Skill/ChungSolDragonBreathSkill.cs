@@ -81,8 +81,20 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
         set => m_debugInfiniteDragonBreathMagazine = value;
     }
 
+    /// <summary>
+    /// 켜면 특수탄이 남아 있는 동안 쏴도 특수탄 잔량과 실제 샷건 장탄이 줄지 않습니다. 튜토리얼의 특수탄 사격 파트에서만 켭니다.
+    /// </summary>
+    /// <remarks>스킬로 장전해 특수탄이 생긴 뒤부터 효과가 있습니다. 튜토리얼이 끝나면 끕니다.</remarks>
+    public static bool TutorialInfiniteRounds { get; set; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        TutorialInfiniteRounds = false;
+    }
+
     private bool IsInfiniteDragonBreathMagazineDebugActive =>
-        m_debugInfiniteDragonBreathMagazine && GameDevMode.DebugFeaturesEnabled;
+        TutorialInfiniteRounds || (m_debugInfiniteDragonBreathMagazine && GameDevMode.DebugFeaturesEnabled);
 
     protected override void Awake()
     {
@@ -210,7 +222,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             m_specialRoundsRemaining--;
         }
 
-        effect.Play(shot.Origin, shot.Direction.normalized, Faction.Player, gameObject);
+        effect.Play(shot.Origin, shot.Direction.normalized, Faction.Player, gameObject, m_gun);
         NotifyStateChanged();
         return true;
     }

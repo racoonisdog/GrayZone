@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d36e748e3e1737c4891e63ccfa1100f9, type: 3}
   m_Name: Tutorial_Narin
   m_EditorClassIdentifier: Assembly-CSharp::DialogueSpeaker
-  m_displayName: "나린"
+  m_displayName: "\uB098\uB9B0"
+  m_role: "\uD0D0\uC0AC\uB300\uC6D0"
   m_portrait: {fileID: 21300000, guid: f5795a49683eec64db372a379414d2d5, type: 3}
   m_character: 1

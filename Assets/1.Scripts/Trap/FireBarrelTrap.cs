@@ -28,7 +28,7 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     private static bool s_loggedMissingBurstSound;
 
     /// <inheritdoc />
-    protected override string DefaultDisplayName => "화염 드럼통";
+    protected override string DefaultDisplayName => "화염통";
 
     /// <inheritdoc />
     /// <remarks>사격 피해 고정 문구는 실제 규칙과 맞을 때(총기 피해량을 쓰지 않을 때)만 붙입니다.</remarks>
@@ -53,7 +53,7 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     [Min(0.01f)]
     [SerializeField] private float m_fireDuration = 5.0f;
 
-    [Tooltip("화염 지대를 놓을 바닥을 찾을 레이어입니다. 드럼통 아래로 내려 쏴서 찾고, 못 찾으면 드럼통 위치에 놓습니다.")]
+    [Tooltip("화염 지대를 놓을 바닥을 찾을 레이어입니다. 화염통 아래로 내려 쏴서 찾고, 못 찾으면 화염통 위치에 놓습니다.")]
     [SerializeField] private LayerMask m_groundLayers = 1 << 3;
 
     [Tooltip("끄면(기본) 총기와 관계없이 한 발당 체력 1을 깎습니다. 이때 체력(Max Health)은 터지기까지 맞아야 하는 발 수입니다. " +
@@ -63,17 +63,17 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     [Tooltip("탄을 받을 콜라이더입니다. 트리거가 아니어야 하고 Trap 레이어가 아니어야 합니다. 설치된 동안에만 켜집니다.")]
     [SerializeField] private Collider[] m_shotColliders;
 
-    [Tooltip("설치된 동안만 켜서 길을 막는 NavMesh 장애물입니다. 드럼통은 NavMesh 굽기에서 빠져 있어, 청사진일 때는 AI가 그 자리를 지나갑니다.")]
+    [Tooltip("설치된 동안만 켜서 길을 막는 NavMesh 장애물입니다. 화염통은 NavMesh 굽기에서 빠져 있어, 청사진일 때는 AI가 그 자리를 지나갑니다.")]
     [SerializeField] private NavMeshObstacle m_navObstacle;
 
     [Header("Explosion Effect")]
     [Tooltip("터지는 순간 생성할 이펙트 프리팹입니다. 비워 두면 이펙트 없이 화염만 남깁니다.")]
     [SerializeField] private GameObject m_explosionEffectPrefab;
 
-    [Tooltip("이펙트를 드럼통 위치에서 얼마나 띄울지입니다. 드럼통 기준 로컬이 아니라 월드 축입니다.")]
+    [Tooltip("이펙트를 화염통 위치에서 얼마나 띄울지입니다. 화염통 기준 로컬이 아니라 월드 축입니다.")]
     [SerializeField] private Vector3 m_explosionEffectOffset = new Vector3(0.0f, 0.5f, 0.0f);
 
-    [Tooltip("생성한 이펙트의 크기 배율입니다. 수류탄 이펙트(Explosion1)를 드럼통 크기로 줄여 쓰려고 둡니다. " +
+    [Tooltip("생성한 이펙트의 크기 배율입니다. 수류탄 이펙트(Explosion1)를 화염통 크기로 줄여 쓰려고 둡니다. " +
              "파티클의 Scaling Mode가 Hierarchy여야 자식 파티클까지 함께 줄어듭니다.")]
     [Min(0.01f)]
     [SerializeField] private float m_explosionEffectScale = 0.3f;
@@ -91,7 +91,7 @@ public sealed class FireBarrelTrap : Trap, IChainDetonatable, IShotReactive
     [Min(0.0f)]
     [SerializeField] private float m_chainFuseTime = 0.15f;
 
-    [Tooltip("터질 때 이 반경(m) 안의 다른 드럼통과 폭발 함정을 함께 터뜨립니다. 남기는 화염 지대(반경 약 1.2m)보다 멀리 떨어진 드럼통도 이어지게 합니다. 0이면 화염 지대로만 번집니다.")]
+    [Tooltip("터질 때 이 반경(m) 안의 다른 화염통과 폭발 함정을 함께 터뜨립니다. 남기는 화염 지대(반경 약 1.2m)보다 멀리 떨어진 화염통도 이어지게 합니다. 0이면 화염 지대로만 번집니다.")]
     [ShowIf(nameof(m_chainDetonationEnabled))]
     [Min(0.0f)]
     [SerializeField] private float m_chainRadius = 4.0f;

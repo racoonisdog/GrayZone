@@ -50,6 +50,22 @@ public sealed class SquadProfileHud : MonoBehaviour
         [Tooltip("다운 중 남은 구조 가능 시간(초)을 표시할 텍스트입니다. 선택 사항입니다.")]
         public TMP_Text reviveTimer;
 
+        [Tooltip("기본 초상화 Image(Character_Portrait/Basic)입니다. 비어 있으면 기본 초상화 묶음에서 찾습니다.")]
+        public Image basePortraitImage;
+
+        [Tooltip("구조 대기(다운) 중 초상화(Character_Portrait/Confused)입니다. 비어 있으면 바꾸지 않습니다.")]
+        public Texture2D confusedPortrait;
+
+        [Tooltip("구조 시간 초과(전투 이탈) 초상화(Character_Portrait/Injured)입니다. 비어 있으면 바꾸지 않습니다.")]
+        public Texture2D injuredPortrait;
+
+        /// <summary>씬에 놓인 기본·선택 초상화입니다. 상태가 정상으로 돌아오면 되돌립니다.</summary>
+        [System.NonSerialized] public Sprite basicSprite;
+        [System.NonSerialized] public Sprite selectedSprite;
+        [System.NonSerialized] public Sprite confusedSprite;
+        [System.NonSerialized] public Sprite injuredSprite;
+        [System.NonSerialized] public bool portraitsCaptured;
+
         /// <summary>현재 선택 보간 값입니다. 0은 기본 칸, 1은 선택 칸입니다.</summary>
         [System.NonSerialized] public float selection = -1.0f;
     }
@@ -394,6 +410,65 @@ public sealed class SquadProfileHud : MonoBehaviour
             {
                 slot.reviveTimer.text = Mathf.CeilToInt(member.DownTimeRemaining).ToString();
             }
+        }
+
+        ApplyPortrait(slot, isDead, isDowned);
+    }
+
+    /// <summary>
+    /// 상태에 맞는 초상화를 띄웁니다. 정상은 기본(Basic)·선택(Selected), 구조 대기는 Confused, 구조 시간 초과는 Injured입니다.
+    /// </summary>
+    /// <remarks>
+    /// 다운·이탈 중에는 기본 초상화와 선택 초상화를 같은 상태 그림으로 바꿔, 조작 중인 대원이 쓰러져도 상태 그림이 보이게 합니다.
+    /// Confused·Injured 그림은 Sprite가 아닌 텍스처로 가져와져 있어 처음 쓸 때 Sprite로 만듭니다.
+    /// </remarks>
+    private static void ApplyPortrait(ProfileSlot slot, bool isDead, bool isDowned)
+    {
+        CapturePortraits(slot);
+        Sprite stateSprite = isDead ? slot.injuredSprite : isDowned ? slot.confusedSprite : null;
+        SetSprite(slot.basePortraitImage, stateSprite != null ? stateSprite : slot.basicSprite);
+
+        Image selectedImage = slot.selectedPortrait != null ? slot.selectedPortrait.GetComponent<Image>() : null;
+        SetSprite(selectedImage, stateSprite != null ? stateSprite : slot.selectedSprite);
+    }
+
+    private static void CapturePortraits(ProfileSlot slot)
+    {
+        if (slot.portraitsCaptured)
+        {
+            return;
+        }
+
+        slot.portraitsCaptured = true;
+        if (slot.basePortraitImage == null && slot.baseRoot != null)
+        {
+            slot.basePortraitImage = slot.baseRoot.GetComponentInChildren<Image>(true);
+        }
+
+        slot.basicSprite = slot.basePortraitImage != null ? slot.basePortraitImage.sprite : null;
+        Image selectedImage = slot.selectedPortrait != null ? slot.selectedPortrait.GetComponent<Image>() : null;
+        slot.selectedSprite = selectedImage != null ? selectedImage.sprite : null;
+        slot.confusedSprite = CreateSprite(slot.confusedPortrait);
+        slot.injuredSprite = CreateSprite(slot.injuredPortrait);
+    }
+
+    private static Sprite CreateSprite(Texture2D texture)
+    {
+        if (texture == null)
+        {
+            return null;
+        }
+
+        Sprite sprite = Sprite.Create(texture, new Rect(0.0f, 0.0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100.0f);
+        sprite.name = texture.name;
+        return sprite;
+    }
+
+    private static void SetSprite(Image image, Sprite sprite)
+    {
+        if (image != null && sprite != null && image.sprite != sprite)
+        {
+            image.sprite = sprite;
         }
     }
 

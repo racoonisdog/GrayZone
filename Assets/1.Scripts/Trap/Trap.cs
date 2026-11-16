@@ -78,7 +78,7 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     [SerializeField] private string m_buildPrompt = "설치";
 
     [Tooltip("이미 설치된 함정을 수리할 때 소모할 자원 수량입니다. 자원 종류는 설치와 같습니다. 0이면 자원 없이 수리됩니다. " +
-             "함정 가격 표(Resources/Trap/TrapBuildCostTable)에 이 함정 종류가 있으면 표 값이 우선합니다. 수리할 수 있는 함정(철조망·스파이크)만 씁니다.")]
+             "함정 가격 표(Resources/Trap/TrapBuildCostTable)에 이 함정 종류가 있으면 표 값이 우선합니다. 수리할 수 있는 함정(철조망·가시 함정)만 씁니다.")]
     [Min(0)]
     [SerializeField] private int m_repairCostAmount = 1;
 
@@ -175,6 +175,21 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
 
     /// <summary>지금 남은 내구도입니다. 다시 설치하면 <see cref="MaxHealth"/>로 회복됩니다.</summary>
     public int Health => m_currentHealth;
+
+    /// <summary>
+    /// 남은 내구도를 최대 내구도의 비율로 맞춥니다. 설치된 함정에만 적용합니다.
+    /// </summary>
+    /// <param name="ratio">0~1 사이 비율입니다. 결과는 1 이상 최대 내구도 이하로 맞춥니다.</param>
+    /// <remarks>튜토리얼에서 수리할 거리를 만들 때 씁니다. 0이 되면 다 쓴 것으로 처리되므로 최소 1을 남깁니다.</remarks>
+    public void SetDurabilityRatio(float ratio)
+    {
+        if (!IsBuilt)
+        {
+            return;
+        }
+
+        m_currentHealth = Mathf.Clamp(Mathf.RoundToInt(MaxHealth * Mathf.Clamp01(ratio)), 1, MaxHealth);
+    }
 
     /// <summary>업그레이드로 최대 내구도에 더한 값입니다. <see cref="ApplyUpgrade"/>가 정합니다.</summary>
     private int m_upgradeBonusHealth;
@@ -277,7 +292,7 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     /// </remarks>
     private static DefenseManager s_sharedDefenseManager;
 
-    /// <summary>F9 디버그의 "트랩 전체 무료" 토글 값입니다. 켜면 자원을 내지 않고 설치합니다.</summary>
+    /// <summary>F9 디버그의 "함정 전체 무료" 토글 값입니다. 켜면 자원을 내지 않고 설치합니다.</summary>
     private static bool s_debugFreeBuild;
 
     /// <summary>
@@ -370,7 +385,7 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     }
 
     /// <summary>안내 HUD에서 이름 뒤에 붙일 문구입니다. 비어 있으면 이름만 표시합니다.</summary>
-    /// <remarks>기본은 설치된 함정에만 남은 내구도를 붙입니다(예: "윤형 철조망 (내구도 : 80/100)").</remarks>
+    /// <remarks>기본은 설치된 함정에만 남은 내구도를 붙입니다(예: "철조망 (내구도 : 80/100)").</remarks>
     protected virtual string HudNameSuffix => IsBuilt ? DurabilityLabel(m_currentHealth) : null;
 
     /// <summary>이름 뒤에 붙이는 내구도 문구를 "현재/최대" 형태로 만듭니다.</summary>
@@ -403,6 +418,28 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     /// <summary>함정 종류의 기본 이름입니다. 파생이 덮어쓰지 않으면 오브젝트 이름을 씁니다.</summary>
     /// <remarks>프리팹마다 문구를 넣지 않아도 HUD가 비지 않게 하려고 종류별 기본값을 둡니다.</remarks>
     protected virtual string DefaultDisplayName => gameObject.name;
+
+    /// <summary><see cref="SetDamageSource"/>로 바꾼 피해 정보 틀입니다. 바꾸지 않았으면 기본값입니다.</summary>
+    private DamageInfo m_damageSourceOverride;
+
+    /// <summary>
+    /// 이 함정이 주는 피해의 공격 방식과 공격자를 바꿉니다. 화염병처럼 투척물이 만든 함정이 자기 투척물 정보를 남길 때 씁니다.
+    /// </summary>
+    public void SetDamageSource(DamageInfo source)
+    {
+        m_damageSourceOverride = source;
+    }
+
+    /// <summary>
+    /// 이 함정이 주는 피해 정보입니다. 기본은 공격 방식 함정, 세부 종류는 함정 타입 이름(MineTrap 등), 공격자는 이 함정입니다.
+    /// </summary>
+    /// <param name="amount">피해량입니다. 폭발처럼 대상마다 피해량을 채우는 경로에는 0을 넘깁니다.</param>
+    protected DamageInfo CreateDamageInfo(float amount = 0.0f)
+    {
+        return m_damageSourceOverride.IsValid
+            ? m_damageSourceOverride.WithAmount(amount)
+            : new DamageInfo(amount, DamageCategory.Trap, GetType().Name, gameObject, DisplayName);
+    }
 
     /// <summary>함정 종류의 기본 설명입니다. 파생이 덮어쓰지 않으면 빈 문자열입니다.</summary>
     protected virtual string DefaultDescription => string.Empty;
@@ -590,6 +627,12 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     /// </remarks>
     public bool CanInteract(GameObject interactor)
     {
+        // 스크립트를 꺼 둔 함정은 외형만 보이는 상태라 상호작용하지 않습니다.
+        if (!isActiveAndEnabled)
+        {
+            return false;
+        }
+
         return IsBuildable || (IsRepairTarget && IsRepairWindowOpen);
     }
 
@@ -732,7 +775,7 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     /// </remarks>
     private bool CanPayCost(ResourceCost cost)
     {
-        if (!cost.IsValid || IsDebugFreeBuild)
+        if (!cost.IsValid || IsDebugFreeBuild || SquadInventoryManager.FreeUse)
         {
             return true;
         }
@@ -744,7 +787,7 @@ public abstract class Trap : MonoBehaviour, IInteractable, IInteractionRequireme
     /// <summary>설치·수리 비용을 차감합니다. 모자라면 아무것도 차감하지 않고 <c>false</c>를 돌려줍니다.</summary>
     private bool TryPayCost(ResourceCost cost)
     {
-        if (!cost.IsValid || IsDebugFreeBuild)
+        if (!cost.IsValid || IsDebugFreeBuild || SquadInventoryManager.FreeUse)
         {
             return true;
         }

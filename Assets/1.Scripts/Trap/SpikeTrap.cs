@@ -13,7 +13,7 @@ using UnityEngine;
 public sealed class SpikeTrap : WireTrap
 {
     /// <inheritdoc />
-    protected override string DefaultDisplayName => "스파이크";
+    protected override string DefaultDisplayName => "가시 함정";
 
     /// <inheritdoc />
     protected override string DefaultDescription => "밟은 적에게 경직과 함께 큰 피해를 줍니다.";

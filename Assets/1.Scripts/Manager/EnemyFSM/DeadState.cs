@@ -61,7 +61,11 @@ public class DeadState : EnemyStateBase
             EnemyManager.Entry entry = settings.Resolve(Controller.EnemyType);
 
             m_destroyCorpse = entry.DestroyCorpse;
-            m_destroyTime = Time.time + entry.CorpseLifetime;
+            // 연출용으로 개체마다 정한 유지 시간이 있으면 그것을 씁니다(예: 튜토리얼 사고 현장 시체).
+            float corpseLifetime = Controller.CorpseLifetimeOverride >= 0.0f
+                ? Controller.CorpseLifetimeOverride
+                : entry.CorpseLifetime;
+            m_destroyTime = Time.time + corpseLifetime;
             useRagdoll = entry.UseRagdoll;
 
             // 사망 연출 세기는 맞는 쪽 정책입니다. 임펄스는 쏜 쪽이 곧 보내므로 값만 먼저 넣어 둡니다.

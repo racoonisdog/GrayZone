@@ -17,6 +17,9 @@ public abstract class CharacterSkill : MonoBehaviour
     private float m_nextReadyTime;
     private SquadMemberController m_owner;
 
+    /// <summary>잠시 바꿔 쓰는 쿨타임(초)입니다. 음수면 바꾸지 않은 상태입니다. 튜토리얼이 씁니다.</summary>
+    private float m_cooldownOverride = -1.0f;
+
     /// <summary>UI와 외부 시스템이 구분할 스킬 종류입니다.</summary>
     public abstract CharacterSkillType SkillType { get; }
 
@@ -30,7 +33,7 @@ public abstract class CharacterSkill : MonoBehaviour
     public SquadMemberController Owner => m_owner;
 
     /// <summary>전체 쿨다운 시간입니다.</summary>
-    public float CooldownDuration => Mathf.Max(0.0f, m_cooldownDuration);
+    public float CooldownDuration => Mathf.Max(0.0f, m_cooldownOverride >= 0.0f ? m_cooldownOverride : m_cooldownDuration);
 
     /// <summary>남은 쿨다운 시간입니다.</summary>
     public float CooldownRemaining => Mathf.Max(0.0f, m_nextReadyTime - Time.time);
@@ -49,6 +52,23 @@ public abstract class CharacterSkill : MonoBehaviour
     public void DebugResetCooldown()
     {
         m_nextReadyTime = 0.0f;
+    }
+
+    /// <summary>
+    /// 쿨타임을 잠시 <paramref name="seconds"/>초로 바꿉니다. 이미 돌고 있는 쿨타임이 더 길면 새 값으로 줄입니다.
+    /// </summary>
+    public void SetCooldownOverride(float seconds)
+    {
+        m_cooldownOverride = Mathf.Max(0.0f, seconds);
+        m_nextReadyTime = Mathf.Min(m_nextReadyTime, Time.time + m_cooldownOverride);
+        NotifyStateChanged();
+    }
+
+    /// <summary>바꿔 둔 쿨타임을 원래 값으로 되돌립니다. 이미 돌고 있는 쿨타임은 그대로 둡니다.</summary>
+    public void ClearCooldownOverride()
+    {
+        m_cooldownOverride = -1.0f;
+        NotifyStateChanged();
     }
 
     /// <summary>지속 효과 또는 장전된 특수탄이 활성 상태인지 여부입니다.</summary>
@@ -81,6 +101,9 @@ public abstract class CharacterSkill : MonoBehaviour
 
     /// <summary>활성·종료 등 큰 상태가 변경될 때 발생합니다. 매 프레임 남은 시간은 속성으로 조회합니다.</summary>
     public event Action<CharacterSkill> OnStateChanged;
+
+    /// <summary>어느 캐릭터든 스킬 발동에 성공했을 때 발생합니다. 튜토리얼처럼 특정 캐릭터를 잡지 않고 스킬 사용을 셀 때 씁니다.</summary>
+    public static event Action<CharacterSkill> OnAnyActivated;
 
     /// <summary>이 스킬의 밸런스 수치 SO입니다. 비어 있으면 null이며, 인스펙터 값을 그대로 씁니다.</summary>
     protected abstract ScriptableObject BalanceSource { get; }
@@ -126,6 +149,7 @@ public abstract class CharacterSkill : MonoBehaviour
 
         m_nextReadyTime = Time.time + CooldownDuration;
         NotifyStateChanged();
+        OnAnyActivated?.Invoke(this);
         return true;
     }
 

@@ -2,6 +2,23 @@ using System;
 using UnityEngine;
 using VInspector;
 
+/// <summary>튜토리얼 과녁 모드에서 적을 죽일 수 있는 공격입니다. 그 밖의 공격은 피해는 주되 HP 1까지만 깎습니다.</summary>
+/// <remarks>값은 튜토리얼 시퀀스에 저장되므로 기존 항목의 번호를 바꾸지 말고 끝에 추가하세요.</remarks>
+public enum TutorialTargetKillRule
+{
+    /// <summary>총기(원거리 사격)로만 죽습니다.</summary>
+    GunOnly = 0,
+
+    /// <summary>스킬(청솔 특수탄과 그 화상 등)로만 죽습니다.</summary>
+    SkillOnly = 1,
+
+    /// <summary>투척물(수류탄, 화염병과 그 화상 등)로만 죽습니다.</summary>
+    ThrowableOnly = 2,
+
+    /// <summary>어떤 공격으로도 죽지 않습니다.</summary>
+    Never = 3,
+}
+
 /// <summary>
 /// Enemy 전용 체력 컴포넌트입니다. 피해 처리에 더해 경직력 누적과 경직 발동을 소유합니다.
 /// </summary>
@@ -40,8 +57,71 @@ public class EnemyHealth : HealthSystemBase, IStaggerable
     /// </remarks>
     protected override Faction DefaultFaction => Faction.Enemy;
 
+    /// <summary>켜면 <see cref="TargetKillRule"/>에 맞는 공격으로만 죽고, 그 밖의 공격으로는 HP 1까지만 깎입니다.</summary>
+    /// <remarks>튜토리얼 과녁 모드가 켭니다.</remarks>
+    public bool UseTargetKillRule { get; private set; }
+
+    /// <summary>과녁 모드에서 이 개체를 죽일 수 있는 공격입니다.</summary>
+    public TutorialTargetKillRule TargetKillRule { get; private set; }
+
+    /// <summary>과녁 처치 조건을 켜거나 끕니다.</summary>
+    /// <param name="enabled">켜면 처치 조건에 맞는 공격으로만 죽습니다.</param>
+    /// <param name="rule">죽을 수 있는 공격입니다.</param>
+    public void SetTargetKillRule(bool enabled, TutorialTargetKillRule rule)
+    {
+        UseTargetKillRule = enabled;
+        TargetKillRule = rule;
+    }
+
+    /// <summary>
+    /// 피해를 적용합니다. 과녁 처치 조건이 켜져 있고 이번 공격이 조건에 맞지 않으면 HP 1까지만 깎습니다.
+    /// </summary>
+    /// <remarks>
+    /// 상태이상 피해는 그 상태이상을 건 원래 공격(<see cref="DamageInfo.OriginCategory"/>)으로 판정합니다.
+    /// HP가 이미 1이라 깎을 것이 없어도 피격으로 보고 true를 돌려줍니다. false를 돌려주면 공격 쪽이 빗나간 것으로 보고
+    /// 히트마커·경직·넉백·피격 이펙트를 모두 건너뛰어, 과녁이 더는 맞지 않는 것처럼 보입니다.
+    /// </remarks>
+    public override bool TakeDamage(DamageInfo info)
+    {
+        if (UseTargetKillRule && !CanKill(TargetKillRule, info))
+        {
+            if (IsDead || info.Amount <= 0.0f)
+            {
+                return false;
+            }
+
+            float damage = Mathf.Min(info.Amount, m_currentHp - 1.0f);
+            if (damage <= 0.0f)
+            {
+                return true;
+            }
+
+            info = info.WithAmount(damage);
+        }
+
+        return base.TakeDamage(info);
+    }
+
+    /// <summary>처치 조건이 이 공격으로 죽는 것을 허용하는지 여부입니다.</summary>
+    private static bool CanKill(TutorialTargetKillRule rule, DamageInfo info)
+    {
+        return rule switch
+        {
+            TutorialTargetKillRule.GunOnly => info.OriginCategory == DamageCategory.Ranged,
+            TutorialTargetKillRule.SkillOnly => info.OriginCategory == DamageCategory.Skill,
+            TutorialTargetKillRule.ThrowableOnly => info.OriginCategory == DamageCategory.Throwable,
+            _ => false,
+        };
+    }
+
     /// <summary>적 체력 컴포넌트가 활성화되어 필드 집계 대상으로 진입했을 때 발생합니다.</summary>
     public static event Action<EnemyHealth> OnEnemyEnabled;
+
+    /// <summary>
+    /// 켜면 전투 결과 집계(처치 수·생성 수)에서 뺍니다. 튜토리얼 연출용 적처럼 플레이 기록에 남기지 않을 적에 씁니다.
+    /// </summary>
+    /// <remarks>집계는 활성화될 때 구독하므로, 오브젝트가 켜지기 전에 정해야 합니다.</remarks>
+    public bool ExcludeFromCombatStats { get; set; }
 
     /// <summary>경직력 누적치가 한계치에 닿아 경직이 발동했을 때 발생합니다.</summary>
     /// <remarks>

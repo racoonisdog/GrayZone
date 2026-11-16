@@ -1788,10 +1788,11 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
             return;
         }
 
-        // 투척 대기: 힙파이어 백뷰와 조준점 계산은 유지하지만 총기 발사는 입력 계층에서 차단합니다.
+        // 투척 대기: 투척도 조준을 포함하는 동작이므로 우클릭을 누르고 있으면 ADS를 이어갑니다.
+        // 우클릭이 없을 때는 힙파이어 백뷰를 유지하고, 총기 발사는 입력 계층에서 차단합니다.
         if (m_input.ThrowMode)
         {
-            EnterCombatStance(false);
+            EnterCombatStance(m_input.Aim);
             UpdateCombat();
             return;
         }
@@ -3395,26 +3396,31 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <param name="isAiming">전투 자세(조준/힙파이어)이면 true입니다.</param>
     private void SetAimState(bool isAiming)
     {
-        bool showAimImage = isAiming || m_showAimImageAlways;
-
-        if (m_aimCamera != null)
+        // 조준 카메라·조준선은 스쿼드가 공유하므로 현재 직접 조작 중인 대원만 변경합니다.
+        // AI 재장전/다운이 이 상태를 건드리면 플레이어의 ADS 입력은 유지된 채 공유 카메라만 꺼집니다.
+        if (m_isPlayerControlled)
         {
-            m_aimCamera.gameObject.SetActive(isAiming);
-        }
+            bool showAimImage = isAiming || m_showAimImageAlways;
 
-        if (m_aimImage != null)
-        {
-            m_aimImage.SetActive(showAimImage);
-        }
+            if (m_aimCamera != null)
+            {
+                m_aimCamera.gameObject.SetActive(isAiming);
+            }
 
-        if (m_crosshairController != null)
-        {
-            m_crosshairController.SetVisible(showAimImage);
-        }
+            if (m_aimImage != null)
+            {
+                m_aimImage.SetActive(showAimImage);
+            }
 
-        if (!isAiming)
-        {
-            ResetCrosshair();
+            if (m_crosshairController != null)
+            {
+                m_crosshairController.SetVisible(showAimImage);
+            }
+
+            if (!isAiming)
+            {
+                ResetCrosshair();
+            }
         }
 
         if (m_controller != null)

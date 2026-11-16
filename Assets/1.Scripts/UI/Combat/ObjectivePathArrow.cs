@@ -96,6 +96,10 @@ public sealed class ObjectivePathArrow : MonoBehaviour
     [Tooltip("텍스처가 목표 쪽으로 흐르는 속도(초당 장 수)입니다. 0이면 멈춰 있습니다.")]
     [SerializeField] private float m_pathLineScrollSpeed = 1.0f;
 
+    [Tooltip("경로 선이 나타나고 사라질 때 투명도가 바뀌는 시간(초)입니다. 목표를 바꾸면 기존 선이 이 시간 동안 사라진 뒤 새 선이 같은 시간 동안 나타납니다. 0이면 바로 바뀝니다.")]
+    [Min(0.0f)]
+    [SerializeField] private float m_pathLineFadeSeconds = 0.35f;
+
     [Tooltip("바닥 높이를 확인할 간격(m)입니다. 작을수록 굴곡을 잘 따라가지만 확인 횟수가 늘어납니다.")]
     [Min(0.1f)]
     [SerializeField] private float m_groundSampleSpacing = 0.5f;
@@ -174,6 +178,16 @@ public sealed class ObjectivePathArrow : MonoBehaviour
     private LineRenderer m_pathLine;
     private Material m_pathLineMaterial;
 
+    /// <summary>경로 선의 원래 색입니다(머티리얼을 쓰면 그 _BaseColor). 페이드할 때 알파에 곱합니다.</summary>
+    private Color m_pathLineBaseColor = Color.white;
+
+    /// <summary>경로 선의 현재 불투명 정도(0~1)입니다.</summary>
+    private float m_fade;
+
+    /// <summary>목표를 바꾸는 중인지 여부입니다. 기존 선이 다 사라지면 <see cref="m_pendingTarget"/>으로 바꿉니다.</summary>
+    private bool m_isSwitchingTarget;
+    private Transform m_pendingTarget;
+
     /// <summary>첫 꺾임점부터 목표까지를 바닥에 붙인 점입니다. 경로를 다시 계산할 때만 새로 만듭니다.</summary>
     private readonly System.Collections.Generic.List<Vector3> m_groundedTail = new System.Collections.Generic.List<Vector3>();
 
@@ -186,14 +200,38 @@ public sealed class ObjectivePathArrow : MonoBehaviour
     /// </summary>
     private Vector3 m_tailStart;
 
+    /// <summary>마지막으로 계산한 경로의 꺾임점입니다. 경로가 없으면 비어 있습니다.</summary>
+    /// <remarks>미니맵처럼 같은 경로를 다른 곳에 그릴 때 다시 계산하지 않고 이 값을 읽습니다. 첫 점은 계산할 때의 캐릭터 위치입니다.</remarks>
+    public System.Collections.Generic.IReadOnlyList<Vector3> PathCorners => m_corners;
+
+    /// <summary>경로가 계산되어 있는지 여부입니다.</summary>
+    public bool HasPath => m_hasPath;
+
+    /// <summary>경로 선의 현재 불투명 정도(0~1)입니다. 0이면 선이 보이지 않습니다.</summary>
+    public float PathFade => m_fade;
+
     /// <summary>표시할 목표를 바꿉니다. null이면 화살표를 숨깁니다.</summary>
+    /// <remarks>
+    /// 선이 보이는 중이면 기존 선을 페이드아웃한 뒤 새 목표로 바꿔 페이드인합니다. 같은 Transform의 위치만 옮겨 다시 넣어도
+    /// 목표가 바뀐 것으로 봅니다(튜토리얼은 기준점 하나를 옮겨 씁니다). 사라지는 동안에는 기존 경로를 다시 계산하지 않습니다.
+    /// </remarks>
     public void SetTarget(Transform target)
     {
+        if (m_fade > 0.0f && m_pathLineFadeSeconds > 0.0f && m_pathLine != null && m_pathLine.enabled)
+        {
+            m_isSwitchingTarget = true;
+            m_pendingTarget = target;
+            return;
+        }
+
+        m_isSwitchingTarget = false;
+        m_pendingTarget = null;
         m_target = target;
+        m_hasPath = false;
         RequestRepath();
     }
 
-    /// <summary>화살표 표시를 켜거나 끕니다.</summary>
+    /// <summary>화살표 표시를 켜거나 끕니다. 끄면 선은 페이드아웃한 뒤 숨깁니다.</summary>
     public void SetVisible(bool visible)
     {
         m_visibleRequested = visible;
@@ -203,7 +241,8 @@ public sealed class ObjectivePathArrow : MonoBehaviour
         }
         else
         {
-            HideAll();
+            SetArrowActive(false);
+            m_hasYaw = false;
         }
     }
 
@@ -232,6 +271,7 @@ public sealed class ObjectivePathArrow : MonoBehaviour
 
     private void OnDisable()
     {
+        m_fade = 0.0f;
         HideAll();
     }
 
@@ -247,29 +287,53 @@ public sealed class ObjectivePathArrow : MonoBehaviour
     private void LateUpdate()
     {
         Transform origin = ResolveOrigin();
-        if (!m_visibleRequested || m_target == null || origin == null)
+        if (origin == null)
         {
+            m_fade = 0.0f;
             HideAll();
             return;
         }
 
-        m_repathTimer -= Time.deltaTime;
-        if (m_repathTimer <= 0.0f)
+        // 목표를 바꾸는 중이면 기존 선이 다 사라진 뒤 새 목표로 넘깁니다.
+        if (m_isSwitchingTarget && m_fade <= 0.0f)
         {
-            m_repathTimer = m_repathInterval;
-            RecalculatePath(origin.position);
+            m_isSwitchingTarget = false;
+            m_target = m_pendingTarget;
+            m_pendingTarget = null;
+            m_hasPath = false;
+            m_repathTimer = 0.0f;
         }
 
-        if (!m_hasPath || m_remainingPathLength <= m_hideDistance ||
-            !TryGetLookAheadDirection(origin.position, out Vector3 direction))
+        bool wantVisible = m_visibleRequested && m_target != null && !m_isSwitchingTarget;
+
+        // 사라지는 중에는 마지막 경로를 그대로 그리도록 다시 계산하지 않습니다.
+        if (wantVisible)
         {
+            m_repathTimer -= Time.deltaTime;
+            if (m_repathTimer <= 0.0f)
+            {
+                m_repathTimer = m_repathInterval;
+                RecalculatePath(origin.position);
+            }
+        }
+
+        Vector3 direction = Vector3.zero;
+        bool hasLine = m_hasPath && TryGetLookAheadDirection(origin.position, out direction);
+        bool show = wantVisible && hasLine && m_remainingPathLength > m_hideDistance;
+        float fadeStep = m_pathLineFadeSeconds > 0.0f ? Time.unscaledDeltaTime / m_pathLineFadeSeconds : 1.0f;
+        m_fade = Mathf.MoveTowards(m_fade, show ? 1.0f : 0.0f, fadeStep);
+        if (!hasLine || m_fade <= 0.0f)
+        {
+            m_fade = hasLine ? m_fade : 0.0f;
             HideAll();
             return;
         }
 
         UpdatePathLine(origin.position);
-        if (m_arrowVisual == null)
+        ApplyPathLineFade();
+        if (m_arrowVisual == null || !show)
         {
+            SetArrowActive(false);
             return;
         }
 
@@ -441,8 +505,13 @@ public sealed class ObjectivePathArrow : MonoBehaviour
                 hideFlags = HideFlags.HideAndDontSave
             };
             m_pathLine.sharedMaterial = m_pathLineMaterial;
+            m_pathLineBaseColor = m_pathLineMaterial.HasProperty("_BaseColor")
+                ? m_pathLineMaterial.GetColor("_BaseColor")
+                : m_pathLineColor;
             return;
         }
+
+        m_pathLineBaseColor = m_pathLineColor;
 
         Shader lineShader = Shader.Find("Universal Render Pipeline/Unlit");
         if (lineShader != null)
@@ -967,6 +1036,23 @@ public sealed class ObjectivePathArrow : MonoBehaviour
         {
             m_pathLine.enabled = true;
         }
+    }
+
+    /// <summary>현재 페이드 값을 경로 선 알파에 반영합니다.</summary>
+    /// <remarks>URP Unlit은 정점 색을 쓰지 않으므로 머티리얼 복사본의 _BaseColor 알파를 바꿉니다. 머티리얼이 반투명(Transparent)이어야 보입니다.</remarks>
+    private void ApplyPathLineFade()
+    {
+        Color color = m_pathLineBaseColor;
+        color.a *= m_fade;
+        if (m_pathLineMaterial != null && m_pathLineMaterial.HasProperty("_BaseColor"))
+        {
+            m_pathLineMaterial.SetColor("_BaseColor", color);
+        }
+
+        Color vertexColor = m_pathLineColor;
+        vertexColor.a *= m_fade;
+        m_pathLine.startColor = vertexColor;
+        m_pathLine.endColor = vertexColor;
     }
 
     private void HideAll()

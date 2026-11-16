@@ -24,6 +24,8 @@ public class GameSettingManager : MonoBehaviour
         public float sfxVolume = 1f;
         public float mouseSensitivity = 1f;
         public bool cameraKickEnabled = true;
+        // 켜면 조준 키를 한 번 눌러 조준하고 다시 눌러 풀니다. 끄면 누르고 있는 동안만 조준합니다.
+        public bool aimToggleEnabled;
     }
 
     public static GameSettingManager Instance { get; private set; }
@@ -94,6 +96,8 @@ public class GameSettingManager : MonoBehaviour
     public RefreshRate RefreshRate => new RefreshRate { numerator = (uint)Mathf.Max(0, currentSettings.refreshRateNumerator), denominator = (uint)Mathf.Max(1, currentSettings.refreshRateDenominator) };
     public float MouseSensitivity => currentSettings.mouseSensitivity;
     public bool CameraKickEnabled => currentSettings.cameraKickEnabled;
+    /// <summary>조준(ADS)을 누를 때마다 켜고 끄는 방식이면 true, 누르고 있는 동안만 조준하면 false입니다.</summary>
+    public bool AimToggleEnabled => currentSettings.aimToggleEnabled;
 
     /// <summary>조준선 기본값 템플릿입니다. 씬에 지정하지 않았으면 Resources 기본 에셋을 읽습니다. 둘 다 없으면 null입니다.</summary>
     public DefaultCrosshairSettings DefaultCrosshairSettings
@@ -304,6 +308,12 @@ public class GameSettingManager : MonoBehaviour
         currentSettings.gameplaySettingsVersion = 1;
     }
 
+    public void SetAimToggleEnabled(bool enabled)
+    {
+        currentSettings.aimToggleEnabled = enabled;
+        currentSettings.gameplaySettingsVersion = 1;
+    }
+
     // Applies all currently cached display/audio values.
     public void ApplySettings()
     {
@@ -316,6 +326,7 @@ public class GameSettingManager : MonoBehaviour
         SetSfxVolume(currentSettings.sfxVolume);
         SetMouseSensitivity(currentSettings.mouseSensitivity);
         SetCameraKickEnabled(currentSettings.cameraKickEnabled);
+        SetAimToggleEnabled(currentSettings.aimToggleEnabled);
     }
 
     /// <summary>
@@ -423,7 +434,8 @@ public class GameSettingManager : MonoBehaviour
             bgmVolume = currentSettings.bgmVolume,
             sfxVolume = currentSettings.sfxVolume,
             mouseSensitivity = currentSettings.mouseSensitivity,
-            cameraKickEnabled = currentSettings.cameraKickEnabled
+            cameraKickEnabled = currentSettings.cameraKickEnabled,
+            aimToggleEnabled = currentSettings.aimToggleEnabled
         };
     }
 
@@ -443,6 +455,7 @@ public class GameSettingManager : MonoBehaviour
         data.audio.sfxVolume = currentSettings.sfxVolume;
         data.gameplay.mouseSensitivity = currentSettings.mouseSensitivity;
         data.gameplay.cameraKickEnabled = currentSettings.cameraKickEnabled;
+        data.gameplay.aimToggleEnabled = currentSettings.aimToggleEnabled;
         data.crosshair = m_crosshairSettings.Clone();
         data.MarkUpdatedNow();
         return data;
@@ -471,6 +484,7 @@ public class GameSettingManager : MonoBehaviour
         SetSfxVolume(snapshot.sfxVolume);
         SetMouseSensitivity(snapshot.mouseSensitivity);
         SetCameraKickEnabled(snapshot.cameraKickEnabled);
+        SetAimToggleEnabled(snapshot.aimToggleEnabled);
     }
 
     public void ApplySettingData(SettingData data)
@@ -512,7 +526,8 @@ public class GameSettingManager : MonoBehaviour
             bgmVolume = data.audio.bgmVolume,
             sfxVolume = data.audio.sfxVolume,
             mouseSensitivity = hasGameplaySettings ? data.gameplay.mouseSensitivity : 1f,
-            cameraKickEnabled = !hasGameplaySettings || data.gameplay.cameraKickEnabled
+            cameraKickEnabled = !hasGameplaySettings || data.gameplay.cameraKickEnabled,
+            aimToggleEnabled = hasGameplaySettings && data.gameplay.aimToggleEnabled
         };
 
         ApplySnapshot(snapshot);
@@ -531,6 +546,7 @@ public class GameSettingManager : MonoBehaviour
         snapshot.gameplaySettingsVersion = 1;
         snapshot.mouseSensitivity = 1f;
         snapshot.cameraKickEnabled = true;
+        snapshot.aimToggleEnabled = false;
     }
 
     private void ApplyMixerVolume(string parameterName, float normalizedVolume)

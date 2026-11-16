@@ -25,7 +25,7 @@ public enum TrapKind
 /// <remarks>
 /// 함정은 이 표에 자기 종류가 있으면 표 값을 쓰고, 없으면 프리팹에 적힌 값을 씁니다.
 /// 표는 <c>Resources/Trap/TrapBuildCostTable</c>에서 자동으로 불러옵니다. 씬마다 연결하지 않아도 셸터·방어전 어디서든 같은 값이 쓰입니다.
-/// 디버그로 무료 설치가 필요하면 표를 고치지 말고 F9 방어전 탭의 "트랩 전체 무료"를 씁니다.
+/// 디버그로 무료 설치가 필요하면 표를 고치지 말고 F9 방어전 탭의 "함정 전체 무료"를 씁니다.
 /// </remarks>
 [CreateAssetMenu(fileName = "TrapBuildCostTable", menuName = "GrayZone/Defense/Trap Build Cost Table")]
 public sealed class TrapBuildCostTableSO : ScriptableObject
@@ -51,7 +51,7 @@ public sealed class TrapBuildCostTableSO : ScriptableObject
         public int Amount;
 
         [Tooltip("이미 설치된 함정을 수리할 때 소모할 수량입니다. 자원 종류는 설치와 같습니다. 0이면 무료로 수리됩니다. " +
-                 "수리는 내구도를 최대치로 채우는 것으로, 새것으로 바꿔 설치하는 것과 같습니다. 수리할 수 있는 함정(철조망·스파이크)만 씁니다.")]
+                 "수리는 내구도를 최대치로 채우는 것으로, 새것으로 바꿔 설치하는 것과 같습니다. 수리할 수 있는 함정(철조망·가시 함정)만 씁니다.")]
         [Min(0)]
         public int RepairAmount;
     }

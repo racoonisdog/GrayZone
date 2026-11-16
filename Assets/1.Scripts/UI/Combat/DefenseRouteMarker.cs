@@ -146,10 +146,16 @@ public sealed class DefenseRouteMarker : MonoBehaviour
         }
     }
 
-    /// <summary>휴식(정비) 구간이고, 다음 공세에 이 공격로가 쓰이면 true입니다.</summary>
+    /// <summary>휴식(정비) 구간이고, 튜토리얼 중이 아니며, 다음 공세에 이 공격로가 쓰이면 true입니다.</summary>
     private bool ShouldShow()
     {
         if (m_defenseManager == null || !m_defenseManager.IsResting)
+        {
+            return false;
+        }
+
+        // 튜토리얼 동안에는 적이 공격로 스포너가 아니라 튜토리얼이 정한 곳에서 나오므로, 공격로 표시가 혼란만 줘서 숨깁니다.
+        if (TutorialFlowDirector.Instance != null && TutorialFlowDirector.Instance.IsRunning)
         {
             return false;
         }

@@ -50,9 +50,18 @@ public static class TutorialSequenceSceneGizmos
                 }
 
                 string group = links.Number[b] > 0 ? $" #{links.Number[b]}" : " 엔드포인트";
-                if (block.Type == TutorialBlockType.Trigger && block.Condition == TutorialConditionType.ReachArea)
+                if (block.Type == TutorialBlockType.Trigger && (block.Condition == TutorialConditionType.ReachArea || block.Condition == TutorialConditionType.AllyInArea))
                 {
-                    DrawArea(block.AreaCenter, block.AreaRadius, s_arriveColor, $"{chapter}{group} 도착 조건 ({block.AreaRadius:0.#}m)");
+                    // 범위 오브젝트가 있으면 판정도 그 콜라이더로 하므로, 표시도 그 위치·크기를 따릅니다.
+                    TutorialArriveArea area = TutorialArriveArea.Find(block.AreaObject);
+                    if (area != null)
+                    {
+                        DrawArea(area.GroundCenter, area.ApproxRadius, s_arriveColor, $"{chapter}{group} 도착 조건 ({area.name})");
+                    }
+                    else
+                    {
+                        DrawArea(block.AreaCenter, block.AreaRadius, s_arriveColor, $"{chapter}{group} 도착 조건 ({block.AreaRadius:0.#}m)");
+                    }
                 }
 
                 IReadOnlyList<TutorialAction> actions = block.Actions;

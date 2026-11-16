@@ -21,4 +21,22 @@ public enum PlayerInputLock
     Crouch = 1 << 8,
     Interact = 1 << 9,
     Inventory = 1 << 10,
+
+    /// <summary>캐릭터 변경(1·2·3, Tab)입니다. <see cref="SquadManager"/>가 읽습니다.</summary>
+    SwitchMember = 1 << 11,
+
+    /// <summary>스킬(C)입니다. <see cref="SquadManager"/>가 읽습니다.</summary>
+    Skill = 1 << 12,
+
+    /// <summary>팀원 위치 사수 명령(Q/E)입니다. <see cref="SquadManager"/>가 읽습니다.</summary>
+    SquadOrder = 1 << 13,
+
+    /// <summary>팀원 전체 복귀(CapsLock)입니다. <see cref="SquadManager"/>가 읽습니다.</summary>
+    Recall = 1 << 14,
+
+    /// <summary>회복약(X)입니다. <see cref="PotionManager"/>가 읽습니다.</summary>
+    Potion = 1 << 15,
+
+    /// <summary>AI 팀원의 사격입니다. 키 입력은 아니지만 튜토리얼 챕터 잠금으로 함께 막으려고 둡니다. <see cref="SquadAIController"/>가 읽습니다.</summary>
+    SquadAiFire = 1 << 16,
 }

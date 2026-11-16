@@ -250,7 +250,8 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
         m_downTimeRemaining = Mathf.Max(0.0f, m_downTimeRemaining - Time.deltaTime);
         NotifyDownTimerChanged();
 
-        if (m_downTimeRemaining <= 0.0f)
+        // 튜토리얼이 구조 유지를 켜 두면 타이머가 0이 돼도 이탈하지 않고 다운 상태로 남습니다.
+        if (m_downTimeRemaining <= 0.0f && !KeepDownedOnTimeout)
         {
             ExpireDownTimer();
         }
@@ -358,14 +359,13 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
         AddInjuryGaugeFromDamage(actualDamage);
     }
 
-    /// <summary>피해를 적용하고 그 결과 다운으로 넘어갔는지 판단합니다.</summary>
-    /// <param name="damage">적용할 피해량입니다.</param>
-    /// <param name="attacker">피해를 준 주체입니다. 없으면 <c>null</c>입니다.</param>
-    /// <returns>피해가 실제로 들어갔으면 <c>true</c>입니다.</returns>
-    /// <remarks>HP가 0이 되어도 사망이 아니라 다운으로 갑니다. 사망은 별도 조건에서만 처리합니다.</remarks>
     protected override DamageNumberDebug.TargetKind DamageNumberKind => DamageNumberDebug.TargetKind.Player;
 
-    public override bool TakeDamage(float damage, GameObject attacker = null)
+    /// <summary>피해를 적용하고 그 결과 다운으로 넘어갔는지 판단합니다.</summary>
+    /// <param name="info">피해량과 공격 방식, 공격자를 담은 정보입니다.</param>
+    /// <returns>피해가 실제로 들어갔으면 <c>true</c>입니다.</returns>
+    /// <remarks>HP가 0이 되어도 사망이 아니라 다운으로 갑니다. 사망은 별도 조건에서만 처리합니다.</remarks>
+    public override bool TakeDamage(DamageInfo info)
     {
         // 무한 체력 디버그는 런타임 트레이너가 활성화된 Editor/Development Build에서만 효과가 있습니다.
         if (m_debugInfiniteHealth && GameDevMode.DebugFeaturesEnabled)
@@ -373,7 +373,59 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
             return false;
         }
 
-        return base.TakeDamage(damage, attacker);
+        // 반무적 중에는 HP 1까지만 깎습니다. 이미 1 이하이면 피해를 무시합니다.
+        if (KeepMinimumHp)
+        {
+            float damage = Mathf.Min(info.Amount, m_currentHp - 1.0f);
+            if (damage <= 0.0f)
+            {
+                return false;
+            }
+
+            info = info.WithAmount(damage);
+        }
+
+        return base.TakeDamage(info);
+    }
+
+    /// <summary>
+    /// 켜면 모든 대원의 HP가 1 아래로 내려가지 않습니다(반무적). 튜토리얼의 "반무적" 이벤트가 켜고 끕니다.
+    /// </summary>
+    public static bool KeepMinimumHp { get; set; }
+
+    /// <summary>Play를 다시 시작할 때 반무적을 끕니다. 도메인 리로드를 끈 설정에서도 이전 값이 남지 않게 합니다.</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetKeepMinimumHp()
+    {
+        KeepMinimumHp = false;
+        KeepDownedOnTimeout = false;
+    }
+
+    /// <summary>
+    /// 켜면 다운 타이머가 다 닳아도 전투 이탈(사망)로 넘어가지 않고 다운 상태를 유지합니다. 튜토리얼의 "구조 유지" 이벤트가 켜고 끕니다.
+    /// </summary>
+    public static bool KeepDownedOnTimeout { get; set; }
+
+    /// <summary>
+    /// 연출용으로 HP를 0으로 만들고 바로 다운 상태로 넣습니다. 반무적과 부활 횟수 소진 판정은 보지 않습니다.
+    /// </summary>
+    /// <returns>다운시켰으면 true입니다. 이미 다운됐거나 이탈했으면 false입니다.</returns>
+    /// <remarks>다운 진입 처리(타이머·이벤트)는 <see cref="OnHpDepleted"/>와 같습니다. 튜토리얼의 "대원 다운" 이벤트가 씁니다.</remarks>
+    public bool ForceDown()
+    {
+        if (m_isDead || m_isDowned)
+        {
+            return false;
+        }
+
+        m_currentHp = 0;
+        m_isDowned = true;
+        m_downTimerPaused = false;
+        m_downTimeRemaining = DownDuration;
+        NotifyHPChanged();
+        OnDown?.Invoke();
+        NotifyDownTimerChanged();
+        return true;
     }
 
     /// <summary>

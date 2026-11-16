@@ -64,4 +64,19 @@ public struct DialogueLine
 
     /// <summary>Auto 줄의 표시 시간(초)입니다. 0이면 글자 수로 계산합니다.</summary>
     public float AutoSeconds => m_autoSeconds;
+
+    /// <summary>코드에서 줄 하나를 만듭니다. 초상화와 말풍선 문구는 비워 둡니다(화자 초상화, 대화창 대사를 씀).</summary>
+    /// <param name="speaker">말하는 인물입니다. 비우면 이름 없이 띄웁니다.</param>
+    /// <param name="text">대화창 대사입니다.</param>
+    /// <param name="advanceMode">다음 줄로 넘기는 방식입니다.</param>
+    /// <param name="autoSeconds">Auto 줄의 표시 시간(초)입니다. 0이면 글자 수로 계산합니다.</param>
+    public DialogueLine(DialogueSpeaker speaker, string text, DialogueAdvanceMode advanceMode, float autoSeconds)
+    {
+        m_speaker = speaker;
+        m_portrait = null;
+        m_text = text;
+        m_bubbleText = null;
+        m_advanceMode = advanceMode;
+        m_autoSeconds = autoSeconds;
+    }
 }

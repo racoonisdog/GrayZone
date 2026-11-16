@@ -270,7 +270,7 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
         }
 
         // 가격 값은 그대로 두고 차감만 건너뜁니다. 끄면 원래 가격으로 바로 돌아옵니다.
-        Trap.DebugFreeBuild = GUILayout.Toggle(Trap.DebugFreeBuild, " 트랩 전체 무료 (자원 차감 없이 설치)");
+        Trap.DebugFreeBuild = GUILayout.Toggle(Trap.DebugFreeBuild, " 함정 전체 무료 (자원 차감 없이 설치)");
 
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("전부 다시 설치 가능하게"))
@@ -333,7 +333,7 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
         }
 
         float current = first.ChainRadius;
-        float next = SliderRow("드럼통 연쇄 반경(m)", current, 0f, 15f, "0.0");
+        float next = SliderRow("화염통 연쇄 반경(m)", current, 0f, 15f, "0.0");
         if (!Mathf.Approximately(next, current))
         {
             for (int i = 0; i < traps.Length; i++)
@@ -344,7 +344,7 @@ public sealed class DefenseDebugTrainer : RuntimeDebugTrainer
 
         FireBarrelTrap.DebugShowChainRadius = GUILayout.Toggle(
             FireBarrelTrap.DebugShowChainRadius,
-            " 드럼통 연쇄 반경 표시 (Scene 뷰, Gizmos 켠 Game 뷰)");
+            " 화염통 연쇄 반경 표시 (Scene 뷰, Gizmos 켠 Game 뷰)");
     }
 
     private void DrawSkillSection()

@@ -21,7 +21,7 @@ public class WireTrap : Trap
     private static bool s_loggedMissingActiveSound;
 
     /// <inheritdoc />
-    protected override string DefaultDisplayName => "윤형 철조망";
+    protected override string DefaultDisplayName => "철조망";
 
     /// <inheritdoc />
     protected override string DefaultDescription => "적의 진입속도를 늦추고 소량의 데미지를 줍니다";
@@ -170,7 +170,8 @@ public class WireTrap : Trap
     {
         // 청사진 상태에서는 효과가 없습니다. 콜라이더는 끄지 않습니다.
         // InteractionController가 이 콜라이더로 상호작용 대상을 찾기 때문에, 끄면 설치할 수가 없습니다.
-        if (IsBlueprint || !IsTarget(other))
+        // 스크립트가 꺼져 있어도 Unity는 트리거 이벤트를 보내므로, 꺼 둔 함정(외형만 보이는 상태)도 여기서 거릅니다.
+        if (!enabled || IsBlueprint || !IsTarget(other))
         {
             return;
         }
@@ -228,7 +229,7 @@ public class WireTrap : Trap
         int damage = Damage;
         if (damageable != null && !damageable.IsDead && damage > 0)
         {
-            damageable.TakeDamage(damage, gameObject);
+            damageable.TakeDamage(CreateDamageInfo(damage));
         }
 
         // 내구도는 머무는 시간이 아니라 걸린 적 수로 깎습니다. 시간으로 깎으면 한 마리가 오래 갇혀
@@ -333,7 +334,7 @@ public class WireTrap : Trap
             {
                 if (damage > 0)
                 {
-                    occupant.Damageable.TakeDamage(damage, gameObject);
+                    occupant.Damageable.TakeDamage(CreateDamageInfo(damage));
                 }
 
                 occupant.TickTimer = interval;

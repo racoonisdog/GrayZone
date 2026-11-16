@@ -55,7 +55,7 @@ public sealed class TrapUpgradeTableSO : ScriptableObject
         [Min(0.0f)]
         public float DamageMultiplier;
 
-        [Tooltip("최대 내구도에 더할 값입니다. 스파이크는 적 한 마리가 밟을 때마다 내구도가 깎입니다.")]
+        [Tooltip("최대 내구도에 더할 값입니다. 가시 함정은 적 한 마리가 밟을 때마다 내구도가 깎입니다.")]
         [Min(0)]
         public int BonusDurability;
     }
@@ -84,21 +84,21 @@ public sealed class TrapUpgradeTableSO : ScriptableObject
         new ExplosiveLevel { RangeMultiplier = 1.25f },
     };
 
-    [Header("Wire (윤형 철조망)")]
+    [Header("Wire (철조망)")]
     [Tooltip("Wire 업그레이드 레벨 1, 2, ... 순서입니다.")]
     [SerializeField] private WireLevel[] m_wireLevels =
     {
         new WireLevel { MoveSpeedScale = 0.5f, BonusDurability = 50 },
     };
 
-    [Header("Spike (스파이크)")]
+    [Header("Spike (가시 함정)")]
     [Tooltip("Spike 업그레이드 레벨 1, 2, ... 순서입니다.")]
     [SerializeField] private SpikeLevel[] m_spikeLevels =
     {
         new SpikeLevel { DamageMultiplier = 1.25f, BonusDurability = 10 },
     };
 
-    [Header("Trap (화염 드럼통)")]
+    [Header("Trap (화염통)")]
     [Tooltip("Trap 업그레이드 레벨 1, 2, ... 순서입니다.")]
     [SerializeField] private FireBarrelLevel[] m_fireBarrelLevels =
     {
