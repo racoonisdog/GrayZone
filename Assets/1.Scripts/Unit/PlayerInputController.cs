@@ -244,6 +244,11 @@ public class PlayerInputController : MonoBehaviour
     /// <summary>웅크리기를 토글로 쓰는지 여부입니다.</summary>
     public bool CrouchToggle => m_crouchToggle;
 
+    /// <summary>
+    /// 조준(ADS)을 누를 때마다 켜고 끄는지 여부입니다. 설정 화면 전투 일반의 조준 토글 값(<see cref="GameSettingManager.AimToggleEnabled"/>)을 따릅니다.
+    /// </summary>
+    public static bool IsAimToggleMode => GameSettingManager.Instance != null && GameSettingManager.Instance.AimToggleEnabled;
+
     /// <summary>상호작용 입력이 눌린 상태(홀드 포함)입니다. 탭/홀드 판정은 소비 측(InteractionController)에서 처리합니다.</summary>
     public bool Interact
     {
@@ -467,7 +472,20 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        SprintInput(!IsLocked(PlayerInputLock.Sprint) && value.isPressed);
+        HandleSprintButton(value.isPressed);
+    }
+
+    /// <summary>달리기 버튼이 눌리거나 떼어졌을 때의 처리입니다. 입력 콜백에서 장치 값을 읽어 넘깁니다.</summary>
+    private void HandleSprintButton(bool pressed)
+    {
+        SprintInput(!IsLocked(PlayerInputLock.Sprint) && pressed);
+
+        // 조준 토글 중 달리기를 누르면 조준을 끕니다. 누르는 방식은 달리기를 놓을 때 아직 누르고 있는 조준이 이어받지만(AimController),
+        // 토글은 손을 뗀 상태라 그대로 두면 달리기를 마치는 순간 의도하지 않은 조준으로 돌아갑니다.
+        if (pressed && m_sprint && IsAimToggleMode)
+        {
+            m_aim = false;
+        }
     }
 
     /// <summary>
@@ -481,7 +499,32 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        AimInput(!IsLocked(PlayerInputLock.Aim) && value.isPressed);
+        HandleAimButton(value.isPressed);
+    }
+
+    /// <summary>
+    /// 조준 버튼이 눌리거나 떼어졌을 때의 처리입니다. 설정에 따라 누르는 동안만 조준하거나, 누를 때마다 켜고 끕니다.
+    /// </summary>
+    private void HandleAimButton(bool pressed)
+    {
+        if (IsLocked(PlayerInputLock.Aim))
+        {
+            AimInput(false);
+            return;
+        }
+
+        // 토글은 누른 순간에만 뒤집습니다. 떼는 콜백까지 반영하면 한 번 누를 때 두 번 뒤집혀 제자리로 돌아옵니다.
+        if (IsAimToggleMode)
+        {
+            if (pressed)
+            {
+                AimInput(!m_aim);
+            }
+
+            return;
+        }
+
+        AimInput(pressed);
     }
 
     /// <summary>
@@ -925,7 +968,12 @@ public class PlayerInputController : MonoBehaviour
 
         m_jump = IsActionPressed("Jump");
         m_sprint = IsActionPressed("Sprint");
-        m_aim = IsActionPressed("Aim");
+        // 조준 토글이면 유지 상태라 장치에서 다시 읽지 않습니다. 읽으면 키를 떼고 있는 것만으로 풀립니다.
+        if (!IsAimToggleMode)
+        {
+            m_aim = IsActionPressed("Aim");
+        }
+
         m_shoot = IsActionPressed("Shoot");
         m_reload = IsActionPressed("Reload");
 

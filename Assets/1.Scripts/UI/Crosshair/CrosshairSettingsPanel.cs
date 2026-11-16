@@ -316,11 +316,18 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
         BuildMainRows(m_mainRowsRoot);
         BuildSubRows(m_subRowsRoot);
 
-        // Figma Set Character Button: 미리보기 아래 오른쪽, Preferences_button 바탕입니다.
+        // Figma Set Character Button: 미리보기 아래, 설정 버튼 바탕입니다.
+        // Figma에는 왼쪽에 '이전 값으로'(Return Button, x 1234, 폭 207)가 있지만 하단 '되돌리기'와 같은 기능이라 두지 않고,
+        // 그 자리까지 이 버튼을 늘립니다. 오른쪽 끝(1825)은 Figma와 같습니다.
         Button resetButton = CreateButton("Reset To Default", parent,
-            new Vector2(1455.76f, m_isThrowableMode ? -842f : -835f), new Vector2(369.24f, 58f),
+            new Vector2(1234f, m_isThrowableMode ? -842f : -835f), new Vector2(591f, 58f),
             m_isThrowableMode ? "기본값으로 설정" : "이 캐릭터 기본값으로 설정", 25f, new Color(0.02f, 0.03f, 0.04f, 1f));
         ApplySprite(resetButton.GetComponent<Image>(), Theme != null ? Theme.actionButton : null);
+        if (Theme != null)
+        {
+            Theme.ApplyActionButtonStates(resetButton);
+        }
+
         resetButton.onClick.AddListener(ResetSelectedToDefault);
     }
 

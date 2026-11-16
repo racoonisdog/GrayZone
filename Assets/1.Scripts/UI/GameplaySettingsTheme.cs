@@ -28,8 +28,18 @@ public sealed class GameplaySettingsTheme : ScriptableObject
     public Sprite sideMenuBar;
 
     [Header("Buttons")]
-    [Tooltip("되돌리기·변경사항 저장·뒤로가기와 조준선 기본값 버튼 배경입니다. (Preferences_button)")]
+    [Tooltip("되돌리기·변경사항 저장·뒤로가기와 조준선 기본값 버튼 배경입니다. (Setting Scene Battle Throwable Items의 button 3)")]
     public Sprite actionButton;
+
+    [Tooltip("위 버튼에 마우스를 올렸을 때 배경입니다. (mouse_popdup_button 1)")]
+    public Sprite actionButtonHover;
+
+    [Tooltip("위 버튼을 누르고 있는 동안 배경입니다. (Upgrade_Button_Click의 click_button)")]
+    public Sprite actionButtonPressed;
+
+    [Tooltip("누르고 있는 동안 배경의 불투명도입니다. Figma Upgrade_Button_Click에서 click_button 레이어 불투명도가 70%입니다.")]
+    [Range(0f, 1f)]
+    public float actionButtonPressedAlpha = 0.7f;
 
     [Tooltip("되돌리기 버튼 아이콘입니다. (Reset_icon)")]
     public Sprite resetIcon;
@@ -82,6 +92,27 @@ public sealed class GameplaySettingsTheme : ScriptableObject
 
     [Tooltip("조준선 미리보기 틀입니다. 가운데 회색 칸에 미리보기가 그려집니다. (Preview)")]
     public Sprite crosshairPreview;
+
+    /// <summary>
+    /// 하단 버튼 모양(actionButton)을 쓰는 버튼에 마우스 올림·누름 배경을 붙입니다.
+    /// Button의 색 변화는 끄고 <see cref="ButtonStateSprites"/>가 배경을 바꿉니다.
+    /// </summary>
+    public void ApplyActionButtonStates(UnityEngine.UI.Button button)
+    {
+        if (button == null || (actionButtonHover == null && actionButtonPressed == null))
+        {
+            return;
+        }
+
+        button.transition = UnityEngine.UI.Selectable.Transition.None;
+        ButtonStateSprites states = button.GetComponent<ButtonStateSprites>();
+        if (states == null)
+        {
+            states = button.gameObject.AddComponent<ButtonStateSprites>();
+        }
+
+        states.Configure(button.targetGraphic as UnityEngine.UI.Image, actionButtonHover, actionButtonPressed, actionButtonPressedAlpha);
+    }
 
     /// <summary>Resources 기본 에셋을 읽습니다. 없으면 null입니다.</summary>
     public static GameplaySettingsTheme LoadFromResources()

@@ -182,9 +182,12 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private Slider m_mouseSensitivitySlider;
     private TextMeshProUGUI m_mouseSensitivityValue;
     private Toggle m_cameraKickToggle;
+    private Toggle m_aimToggleToggle;
     private float m_mouseSensitivity = 1f;
     private float m_committedMouseSensitivity = 1f;
     private bool m_cameraKickEnabled = true;
+    private bool m_aimToggleEnabled;
+    private bool m_committedAimToggleEnabled;
     private bool m_committedCameraKickEnabled = true;
     private bool m_isRefreshingCombatGeneral;
     private readonly Slider[] m_volumeSliders = new Slider[3];
@@ -670,6 +673,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_mouseSensitivitySlider = null;
         m_mouseSensitivityValue = null;
         m_cameraKickToggle = null;
+        m_aimToggleToggle = null;
 
         ResolveFonts();
         if (m_theme == null)
@@ -926,6 +930,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             36f,
             new Color(0.02f, 0.03f, 0.04f, 1f));
         ApplySprite(button.GetComponent<Image>(), m_theme != null ? m_theme.actionButton : null);
+        m_theme?.ApplyActionButtonStates(button);
 
         // 글자와 아이콘은 버튼 안 좌표로 옮깁니다. Figma 글자 칸 높이(36)를 버튼 세로 가운데에 둡니다.
         TextMeshProUGUI text = button.GetComponentInChildren<TextMeshProUGUI>(true);
@@ -1556,6 +1561,12 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_cameraKickToggle.onValueChanged.AddListener(OnCameraKickChanged);
         CreateHelpText("Camera Kick Help", parent, 668f, 415f, "끄면 사격 시 카메라 롤·FOV 시각 효과를 표시하지 않습니다.");
 
+        // Figma 전투 일반 프레임에는 없는 항목이라, 카메라 킥 줄과 같은 모양·간격(70px 아래)으로 둡니다.
+        m_aimToggleToggle = CreateToggle("Aim Toggle Toggle", parent, 394f, 453f, "조준(ADS) 토글");
+        m_aimToggleToggle.onValueChanged.AddListener(OnAimToggleChanged);
+        float aimHelpLeft = 394f + ((RectTransform)m_aimToggleToggle.transform).sizeDelta.x + 33f;
+        CreateHelpText("Aim Toggle Help", parent, aimHelpLeft, 485f, "켜면 우클릭을 한 번 눌러 조준하고, 다시 누르면 풉니다. 끄면 누르고 있는 동안만 조준합니다.");
+
         RefreshCombatGeneralControls();
         CommitCombatGeneralSettings();
     }
@@ -1887,9 +1898,18 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         }
     }
 
+    private void OnAimToggleChanged(bool enabled)
+    {
+        if (!m_isRefreshingCombatGeneral)
+        {
+            m_aimToggleEnabled = enabled;
+            GameSettingManager.Instance?.SetAimToggleEnabled(enabled);
+        }
+    }
+
     private void RefreshCombatGeneralControls()
     {
-        if (m_mouseSensitivitySlider == null || m_cameraKickToggle == null)
+        if (m_mouseSensitivitySlider == null || m_cameraKickToggle == null || m_aimToggleToggle == null)
         {
             return;
         }
@@ -1897,6 +1917,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_isRefreshingCombatGeneral = true;
         m_mouseSensitivitySlider.SetValueWithoutNotify(m_mouseSensitivity);
         m_cameraKickToggle.SetIsOnWithoutNotify(m_cameraKickEnabled);
+        m_aimToggleToggle.SetIsOnWithoutNotify(m_aimToggleEnabled);
         m_mouseSensitivityValue.text = m_mouseSensitivity.ToString("0.00");
         m_isRefreshingCombatGeneral = false;
     }
@@ -1905,6 +1926,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     {
         m_committedMouseSensitivity = m_mouseSensitivity;
         m_committedCameraKickEnabled = m_cameraKickEnabled;
+        m_committedAimToggleEnabled = m_aimToggleEnabled;
     }
 
     private void SyncCombatGeneralSettings(GameSettingManager settingManager, bool commit)
@@ -1916,6 +1938,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
 
         m_mouseSensitivity = settingManager.MouseSensitivity;
         m_cameraKickEnabled = settingManager.CameraKickEnabled;
+        m_aimToggleEnabled = settingManager.AimToggleEnabled;
         RefreshCombatGeneralControls();
 
         if (commit)
@@ -1928,6 +1951,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     {
         m_mouseSensitivity = m_committedMouseSensitivity;
         m_cameraKickEnabled = m_committedCameraKickEnabled;
+        m_aimToggleEnabled = m_committedAimToggleEnabled;
         RefreshCombatGeneralControls();
     }
 
