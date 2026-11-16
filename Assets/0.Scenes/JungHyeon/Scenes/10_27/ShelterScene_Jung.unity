@@ -897921,6 +897921,7 @@ MonoBehaviour:
   m_upgradeRoot: {fileID: 4501284415129091774}
   m_createView: {fileID: 3861570982068616701}
   m_noticeText: {fileID: 0}
+  m_levelText: {fileID: 0}
   m_backButton: {fileID: 4025154232745292005}
 --- !u!1 &3361704345803920068
 GameObject:
@@ -1178534,6 +1178535,7 @@ MonoBehaviour:
   - {fileID: 7108481592775749800}
   - {fileID: 5231878624305898292}
   m_healButton: {fileID: 548481888743718557}
+  m_levelText: {fileID: 0}
   m_characterManager: {fileID: 766322780}
 --- !u!205 &6246567154760096549
 LODGroup:
@@ -1265257,6 +1265259,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FacilityUpgradeUI
   m_nameText: {fileID: 928196482}
   m_currentLevelText: {fileID: 0}
+  m_maxLevelObject: {fileID: 0}
   m_arrowText: {fileID: 1344253232}
   m_nextLevelText: {fileID: 109164884}
   m_effectText: {fileID: 369618988}
@@ -1265271,8 +1265274,6 @@ MonoBehaviour:
   m_upgradeButton: {fileID: 818864987}
   m_closeButton: {fileID: 1445932800}
   m_backButton: {fileID: 216833698}
-  m_medicalBackReference: {fileID: 516647281908653392}
-  m_manufacturingBackReference: {fileID: 8700562057353793845}
   m_maxLevelNotice: {fileID: 1449504515920098295}
   m_uiManager: {fileID: 1751716468}
 --- !u!4 &7170044078408817312
