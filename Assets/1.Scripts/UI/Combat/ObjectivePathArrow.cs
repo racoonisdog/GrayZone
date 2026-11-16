@@ -200,6 +200,16 @@ public sealed class ObjectivePathArrow : MonoBehaviour
     /// </summary>
     private Vector3 m_tailStart;
 
+    /// <summary>마지막으로 계산한 경로의 꺾임점입니다. 경로가 없으면 비어 있습니다.</summary>
+    /// <remarks>미니맵처럼 같은 경로를 다른 곳에 그릴 때 다시 계산하지 않고 이 값을 읽습니다. 첫 점은 계산할 때의 캐릭터 위치입니다.</remarks>
+    public System.Collections.Generic.IReadOnlyList<Vector3> PathCorners => m_corners;
+
+    /// <summary>경로가 계산되어 있는지 여부입니다.</summary>
+    public bool HasPath => m_hasPath;
+
+    /// <summary>경로 선의 현재 불투명 정도(0~1)입니다. 0이면 선이 보이지 않습니다.</summary>
+    public float PathFade => m_fade;
+
     /// <summary>표시할 목표를 바꿉니다. null이면 화살표를 숨깁니다.</summary>
     /// <remarks>
     /// 선이 보이는 중이면 기존 선을 페이드아웃한 뒤 새 목표로 바꿔 페이드인합니다. 같은 Transform의 위치만 옮겨 다시 넣어도
