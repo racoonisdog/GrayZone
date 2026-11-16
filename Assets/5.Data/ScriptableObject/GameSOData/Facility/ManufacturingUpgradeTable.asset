@@ -24,4 +24,4 @@ MonoBehaviour:
   - Level: 4
     ResourceId: upgrade_material
     Amount: 3
-    Effect: "\uCE90\uB9AD\uD130 \uAE30\uBCF8 \uCD1D\uAE30\uB370\uBBF8\uC9C0 \uC99D\uAC00"
+    Effect: "\uAE30\uBCF8 \uCD1D\uAE30\uB370\uBBF8\uC9C0 \uC99D\uAC00"
