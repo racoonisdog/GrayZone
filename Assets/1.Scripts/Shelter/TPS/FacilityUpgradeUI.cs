@@ -18,10 +18,13 @@ public class FacilityUpgradeUI : MonoBehaviour
 {
     [Header("Upgrade Effect")]
     [SerializeField] private TMP_Text m_nameText;
-    [Tooltip("현재 레벨입니다. 최대 레벨이면 MAX로 표시합니다.")]
+    [Tooltip("현재 레벨 숫자(Lv_int)입니다. 최대 레벨이면 숨기고 Lv_Max를 켭니다.")]
     [FormerlySerializedAs("m_levelText")]
     [SerializeField] private TMP_Text m_currentLevelText;
+    [Tooltip("최대 레벨일 때만 켜지는 오브젝트(Lv_Max)입니다. 비워 두면 Lv_int와 같은 부모에서 찾습니다.")]
+    [SerializeField] private GameObject m_maxLevelObject;
     [SerializeField] private TMP_Text m_arrowText;
+    [Tooltip("다음 레벨 숫자(Next)입니다. 최대 레벨이면 숨깁니다.")]
     [SerializeField] private TMP_Text m_nextLevelText;
     [Tooltip("다음 레벨의 업그레이드 효과 문구입니다(시설 업그레이드 표의 Effect).")]
     [SerializeField] private TMP_Text m_effectText;
@@ -45,10 +48,6 @@ public class FacilityUpgradeUI : MonoBehaviour
     [SerializeField] private Button m_closeButton;
     [Tooltip("시설 UI의 돌아가기 표시와 같은 위치에서 업그레이드 창을 닫는 투명 버튼입니다.")]
     [SerializeField] private Button m_backButton;
-    [Tooltip("의료실 화면에 보이는 돌아가기 버튼의 실제 영역입니다.")]
-    [SerializeField] private RectTransform m_medicalBackReference;
-    [Tooltip("제조실 화면에 보이는 돌아가기 버튼의 실제 영역입니다.")]
-    [SerializeField] private RectTransform m_manufacturingBackReference;
     [Tooltip("최대 레벨일 때 자원·질문 줄 대신 표시합니다.")]
     [SerializeField] private GameObject m_maxLevelNotice;
 
@@ -86,7 +85,6 @@ public class FacilityUpgradeUI : MonoBehaviour
     {
         m_facilityId = facilityId;
         gameObject.SetActive(true);
-        AlignBackButtonToVisibleFacility();
         Refresh();
     }
 
@@ -115,7 +113,11 @@ public class FacilityUpgradeUI : MonoBehaviour
 
         // 이름 / 레벨 / 효과
         SetText(m_nameText, facilityName);
-        SetText(m_currentLevelText, isMaxLevel ? "Lv. MAX" : $"Lv. {level + 1}");
+        // Lv_int = 현재 레벨, Next = 다음 레벨 (표시 레벨은 내부 0 기반 + 1). "Lv" 문구는 씬에 고정합니다.
+        // 최대 레벨이면 Lv_int 대신 Lv_Max를 켭니다.
+        SetText(m_currentLevelText, (level + 1).ToString());
+        SetActive(m_currentLevelText, !isMaxLevel);
+        SetActive(CacheMaxLevelObject(), isMaxLevel);
         SetText(m_nextLevelText, isMaxLevel ? string.Empty : (level + 2).ToString());
         SetActive(m_arrowText, !isMaxLevel);
         SetActive(m_nextLevelText, !isMaxLevel);
@@ -165,47 +167,12 @@ public class FacilityUpgradeUI : MonoBehaviour
             Refresh(); // 성공 → 새 레벨 기준으로 다시 그림 (슬롯/건물은 매니저 이벤트로 자동 갱신)
     }
 
-    /// <summary>
-    /// 실행 해상도와 각 시설 UI의 부모 스케일을 반영해 투명 돌아가기 버튼을 실제 표시 영역에 맞춥니다.
-    /// </summary>
-    private void AlignBackButtonToVisibleFacility()
+    private GameObject CacheMaxLevelObject()
     {
-        RectTransform hitRect = m_backButton != null ? m_backButton.transform as RectTransform : null;
-        RectTransform parentRect = hitRect != null ? hitRect.parent as RectTransform : null;
-        RectTransform referenceRect = GetVisibleBackReference();
-        if (hitRect == null || parentRect == null || referenceRect == null)
-            return;
+        if (m_maxLevelObject == null && m_currentLevelText != null && m_currentLevelText.transform.parent != null)
+            m_maxLevelObject = m_currentLevelText.transform.parent.Find("Lv_Max")?.gameObject;
 
-        Canvas.ForceUpdateCanvases();
-        Vector3[] corners = new Vector3[4];
-        referenceRect.GetWorldCorners(corners);
-        Vector3 localBottomLeft = parentRect.InverseTransformPoint(corners[0]);
-        Vector3 localTopRight = parentRect.InverseTransformPoint(corners[2]);
-
-        hitRect.anchorMin = Vector2.zero;
-        hitRect.anchorMax = Vector2.zero;
-        hitRect.pivot = Vector2.zero;
-        hitRect.anchoredPosition = new Vector2(
-            localBottomLeft.x - parentRect.rect.xMin,
-            localBottomLeft.y - parentRect.rect.yMin);
-        hitRect.sizeDelta = new Vector2(
-            localTopRight.x - localBottomLeft.x,
-            localTopRight.y - localBottomLeft.y);
-        hitRect.localRotation = Quaternion.identity;
-        hitRect.localScale = Vector3.one;
-        hitRect.SetAsLastSibling();
-    }
-
-    private RectTransform GetVisibleBackReference()
-    {
-        if (m_medicalBackReference != null && m_medicalBackReference.gameObject.activeInHierarchy)
-            return m_medicalBackReference;
-        if (m_manufacturingBackReference != null && m_manufacturingBackReference.gameObject.activeInHierarchy)
-            return m_manufacturingBackReference;
-
-        return m_medicalBackReference != null
-            ? m_medicalBackReference
-            : m_manufacturingBackReference;
+        return m_maxLevelObject;
     }
 
     private static void SetText(TMP_Text text, string value)

@@ -26,6 +26,10 @@ public sealed class ManufacturingUI : MonoBehaviour, IFacilityStageSource
     [SerializeField] private ManufacturingCreateView m_createView;
     [SerializeField] private TMP_Text m_noticeText;
 
+    [Header("Level")]
+    [Tooltip("현재 시설 레벨을 표시할 텍스트(Name/Level_int). 비워 두면 자식에서 자동으로 찾습니다.")]
+    [SerializeField] private TMP_Text m_levelText;
+
     [Header("Back")]
     [Tooltip("제조 UI가 열려 있는 동안 항상 표시되며, 누를 때마다 Esc처럼 한 단계 뒤로 돌아갑니다.")]
     [SerializeField] private Button m_backButton;
@@ -133,6 +137,7 @@ public sealed class ManufacturingUI : MonoBehaviour, IFacilityStageSource
         BindBackButton();
         BindCreateView();
         ClearNotice();
+        RefreshLevelText();
         SetUpgradeViewOpen(false);
         if (m_menuRoot != null)
         {
@@ -172,6 +177,7 @@ public sealed class ManufacturingUI : MonoBehaviour, IFacilityStageSource
     public void Refresh()
     {
         CacheChildViews();
+        RefreshLevelText();
         if (m_createView != null && m_createView.IsOpen)
             m_createView.Refresh();
     }
@@ -424,6 +430,36 @@ public sealed class ManufacturingUI : MonoBehaviour, IFacilityStageSource
     {
         if (m_createView != null && m_createView.IsOpen)
             m_createView.Cancel();
+    }
+
+    // 인스펙터 연결이 비어 있으면 자식 중 Name/Level_int 오브젝트를 찾아 씁니다.
+    private void CacheLevelText()
+    {
+        if (m_levelText != null)
+            return;
+
+        TMP_Text[] texts = GetComponentsInChildren<TMP_Text>(true);
+        for (int i = 0; i < texts.Length; i++)
+        {
+            Transform t = texts[i].transform;
+            if (t.name == "Level_int" && t.parent != null && t.parent.name == "Name")
+            {
+                m_levelText = texts[i];
+                return;
+            }
+        }
+    }
+
+    // 표시 레벨은 내부 0 기반 레벨 + 1. 레벨업 시 매니저 이벤트 -> Refresh 경로로 다시 호출됩니다.
+    private void RefreshLevelText()
+    {
+        CacheLevelText();
+        if (m_levelText == null)
+            return;
+
+        m_levelText.text = m_currentManager != null
+            ? (m_currentManager.UpgradeLevel + 1).ToString()
+            : string.Empty;
     }
 
     private void CacheChildViews()
