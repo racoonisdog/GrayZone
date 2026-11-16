@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 시설 업그레이드 연출. 검은 화면 → 시설 뷰(이전 레벨 카메라) → 검은 화면(업그레이드 적용) → 시설 뷰(새 레벨 카메라)
@@ -15,7 +16,7 @@ using UnityEngine;
 /// 입력 잠금과 UI 숨김은 <see cref="Started"/>/<see cref="Finished"/>를 받는 쪽에서 처리.
 /// </remarks>
 [DisallowMultipleComponent]
-public sealed class FacilityUpgradeCutscene : MonoBehaviour
+public sealed class FacilityUpgradeCutscene : MonoBehaviour, ISerializationCallbackReceiver
 {
     [Header("References")]
     [Tooltip("업그레이드할 시설 ID입니다. FacilityManager에 등록된 ID와 같아야 합니다.")]
@@ -32,17 +33,43 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
     [Tooltip("플레이어 카메라보다 높아야 전용 카메라가 화면을 가져옵니다.")]
     [SerializeField] private int m_cameraPriority = 100;
 
+    /// <summary>
+    /// 검은 화면 전환 한 번(페이드 아웃 → 검은 화면 유지 → 페이드 인)의 시간 설정
+    /// </summary>
+    [Serializable]
+    private struct FadeStep
+    {
+        [Tooltip("화면을 가리는 시간입니다. 0이면 바로 가립니다.")]
+        [Min(0f)] public float fadeOut;
+        [Tooltip("검은 화면을 유지하는 시간입니다. 카메라 전환과 업그레이드는 이 구간에 적용됩니다.")]
+        [Min(0f)] public float blackHold;
+        [Tooltip("가린 화면을 다시 보여주는 시간입니다. 0이면 바로 보여줍니다.")]
+        [Min(0f)] public float fadeIn;
+
+        public FadeStep(float fadeOut, float blackHold, float fadeIn)
+        {
+            this.fadeOut = fadeOut;
+            this.blackHold = blackHold;
+            this.fadeIn = fadeIn;
+        }
+    }
+
     [Header("Timing (unscaled seconds)")]
-    [Tooltip("화면을 가리는 시간입니다. 세 번의 검은 화면 전환에 모두 사용합니다. 0이면 바로 가립니다.")]
-    [SerializeField, Min(0f)] private float m_fadeOutDuration = 0.4f;
-    [Tooltip("검은 화면을 유지하는 시간입니다. 카메라 전환과 업그레이드는 이 구간에 적용됩니다.")]
-    [SerializeField, Min(0f)] private float m_blackHold = 0.3f;
-    [Tooltip("가린 화면을 다시 보여주는 시간입니다.")]
-    [SerializeField, Min(0f)] private float m_fadeInDuration = 0.4f;
+    [Tooltip("1) 플레이어 카메라 → 이전 레벨 시설 뷰로 넘어가는 검은 화면 전환입니다.")]
+    [SerializeField] private FadeStep m_toBeforeView = new FadeStep(0.4f, 0.3f, 0.4f);
+    [Tooltip("2) 이전 레벨 → 새 레벨 시설 뷰로 넘어가는 검은 화면 전환입니다. 업그레이드는 이 검은 화면 동안 적용됩니다.")]
+    [SerializeField] private FadeStep m_toAfterView = new FadeStep(0.4f, 0.3f, 0.4f);
+    [Tooltip("3) 새 레벨 시설 뷰 → 플레이어 카메라로 돌아가는 검은 화면 전환입니다.")]
+    [SerializeField] private FadeStep m_toPlayerView = new FadeStep(0.4f, 0.3f, 0.4f);
     [Tooltip("시설 뷰에서 이전 레벨 건물을 보여주는 시간입니다.")]
     [SerializeField, Min(0f)] private float m_beforeHold = 1.5f;
     [Tooltip("시설 뷰에서 새 레벨 건물을 보여주는 시간입니다.")]
     [SerializeField, Min(0f)] private float m_afterHold = 1.5f;
+
+    // 이전 버전의 공통 타이밍 값. 기존 씬 값을 단계별 설정으로 옮긴 뒤에는 -1로 비워 둠
+    [SerializeField, HideInInspector, FormerlySerializedAs("m_fadeOutDuration")] private float m_legacyFadeOut = -1f;
+    [SerializeField, HideInInspector, FormerlySerializedAs("m_blackHold")] private float m_legacyBlackHold = -1f;
+    [SerializeField, HideInInspector, FormerlySerializedAs("m_fadeInDuration")] private float m_legacyFadeIn = -1f;
 
     // 활성화된 연출을 시설 ID로 찾기 위한 등록부
     private static readonly Dictionary<string, FacilityUpgradeCutscene> s_byFacilityId = new();
@@ -143,15 +170,15 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
         CinemachineCamera afterCamera = GetUpgradeCamera(currentLevel);
 
         // 1) 검은 화면 뒤에서 이전 레벨 카메라로 즉시 전환 → 이전 레벨 건물 보여주기
-        yield return FadeOut();
+        yield return FadeOut(m_toBeforeView);
         SwitchCamera(beforeCamera);
         yield return null; // Brain이 LateUpdate에서 새 카메라로 전환할 한 프레임
-        yield return Wait(m_blackHold);
-        yield return FadeIn();
+        yield return Wait(m_toBeforeView.blackHold);
+        yield return FadeIn(m_toBeforeView);
         yield return Wait(m_beforeHold);
 
         // 2) 검은 화면 뒤에서 비용 차감 + 레벨 증가 + LevelVisuals 교체 + 새 레벨 카메라 전환 → 새 레벨 건물 보여주기
-        yield return FadeOut();
+        yield return FadeOut(m_toAfterView);
         bool upgraded = FacilityManager.Instance != null && FacilityManager.Instance.TryUpgrade(m_facilityId);
         if (upgraded)
             ShelterAudio.Play(ShelterSoundId.FacilityUpgradeBuild); // 건축 진행음: 새 건물 장면까지 이어서 재생
@@ -162,32 +189,57 @@ public sealed class FacilityUpgradeCutscene : MonoBehaviour
             SwitchCamera(afterCamera);
             yield return null;
         }
-        yield return Wait(m_blackHold);
-        yield return FadeIn();
+        yield return Wait(m_toAfterView.blackHold);
+        yield return FadeIn(m_toAfterView);
         yield return Wait(m_afterHold);
 
         // 3) 검은 화면 뒤에서 원래 카메라로 즉시 복귀
-        yield return FadeOut();
+        yield return FadeOut(m_toPlayerView);
         DeactivateAllCameras();
         yield return null;
         RestoreBrainBlend();
-        yield return Wait(m_blackHold);
-        yield return FadeIn();
+        yield return Wait(m_toPlayerView.blackHold);
+        yield return FadeIn(m_toPlayerView);
 
         m_routine = null;
         Finished?.Invoke(upgraded);
     }
 
-    private IEnumerator FadeOut()
+    private IEnumerator FadeOut(FadeStep step)
     {
         if (m_fader != null)
-            yield return m_fader.FadeOut(m_fadeOutDuration);
+            yield return m_fader.FadeOut(step.fadeOut);
     }
 
-    private IEnumerator FadeIn()
+    private IEnumerator FadeIn(FadeStep step)
     {
         if (m_fader != null)
-            yield return m_fader.FadeIn(m_fadeInDuration);
+            yield return m_fader.FadeIn(step.fadeIn);
+    }
+
+    void ISerializationCallbackReceiver.OnBeforeSerialize()
+    {
+    }
+
+    // 공통 타이밍 값만 저장된 기존 씬을 불러오면, 그 값을 세 단계에 똑같이 옮기기
+    void ISerializationCallbackReceiver.OnAfterDeserialize()
+    {
+        if (m_legacyFadeOut < 0f && m_legacyBlackHold < 0f && m_legacyFadeIn < 0f)
+            return;
+
+        var defaults = new FadeStep(0.4f, 0.3f, 0.4f);
+        var migrated = new FadeStep(
+            m_legacyFadeOut >= 0f ? m_legacyFadeOut : defaults.fadeOut,
+            m_legacyBlackHold >= 0f ? m_legacyBlackHold : defaults.blackHold,
+            m_legacyFadeIn >= 0f ? m_legacyFadeIn : defaults.fadeIn);
+
+        m_toBeforeView = migrated;
+        m_toAfterView = migrated;
+        m_toPlayerView = migrated;
+
+        m_legacyFadeOut = -1f;
+        m_legacyBlackHold = -1f;
+        m_legacyFadeIn = -1f;
     }
 
     // 연출 동안 카메라 전환이 날아가지 않도록 Brain 기본 블렌드를 Cut으로 바꾸기
