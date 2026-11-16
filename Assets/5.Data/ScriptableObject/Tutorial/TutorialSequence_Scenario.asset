@@ -201,6 +201,72 @@ MonoBehaviour:
       m_memberNumber: 1
       m_orderKey: 0
       m_cinematicId: 
+    - m_type: 1
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 1
+        m_autoSeconds: 0
+      m_triggerId: 17301136
+      m_closeTriggerIds: []
+      m_actions:
+      - m_method: SetObjective
+        m_args:
+        - m_string: "\uC774\uACF3\uC740 \uBBF8\uC158 \uC624\uBE0C\uC81D\uD2B8\uC785\uB2C8\uB2E4."
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: "\uD0A4 \uC0AC\uC6A9\uBC95\uC774 \uD45C\uC2DC\uB429\uB2C8\uB2E4."
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: "\uC6B0\uCE21 \uC0C1\uB2E8 \uBBF8\uC158 \uC624\uBE0C\uC81D\uD2B8\uB97C
+            \uD655\uC778\uD558\uC138\uC694."
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+      m_condition: 0
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
+    - m_type: 2
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 1
+        m_autoSeconds: 0
+      m_triggerId: 
+      m_closeTriggerIds:
+      - 17301136
+      m_actions: []
+      m_condition: 0
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
     - m_type: 3
       m_dialogue:
         m_speaker: {fileID: 0}
@@ -456,8 +522,7 @@ MonoBehaviour:
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
-        - m_string: "\uC6B0\uCE21 \uC0C1\uB2E8 \uBBF8\uC158 \uC624\uBE0C\uC81D\uD2B8\uB97C
-            \uD655\uC778\uD558\uC138\uC694."
+        - m_string: "\uBAA9\uD45C \uC704\uCE58\uB85C \uC774\uB3D9\uD558\uC138\uC694."
           m_float: 0
           m_int: 0
           m_bool: 0
@@ -540,36 +605,13 @@ MonoBehaviour:
         m_bubbleText: 
         m_advanceMode: 0
         m_autoSeconds: 0
-      m_triggerId: ca4f4483
+      m_triggerId: 94727f0a
       m_closeTriggerIds: []
       m_actions: []
-      m_condition: 0
+      m_condition: 2
       m_seconds: 2
-      m_enemyPrefab: {fileID: 0}
-      m_killCount: 1
-      m_areaCenter: {x: 0, y: 0, z: 0}
-      m_areaRadius: 2
-      m_areaObject: 
-      m_targetId: 
-      m_memberNumber: 1
-      m_orderKey: 0
-      m_cinematicId: 
-    - m_type: 2
-      m_dialogue:
-        m_speaker: {fileID: 0}
-        m_portrait: {fileID: 0}
-        m_text: 
-        m_bubbleText: 
-        m_advanceMode: 0
-        m_autoSeconds: 0
-      m_triggerId: 
-      m_closeTriggerIds:
-      - ca4f4483
-      m_actions: []
-      m_condition: 0
-      m_seconds: 2
-      m_enemyPrefab: {fileID: 0}
-      m_killCount: 1
+      m_enemyPrefab: {fileID: 2990036820463330610, guid: eda57c1f100ad23449048090ceed8a7f, type: 3}
+      m_killCount: 3
       m_areaCenter: {x: 0, y: 0, z: 0}
       m_areaRadius: 2
       m_areaObject: 
@@ -666,7 +708,27 @@ MonoBehaviour:
       m_triggerId: 
       m_closeTriggerIds:
       - 0f36ec1d
-      m_actions: []
+      m_actions:
+      - m_method: SetObjective
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: "\uBCC0\uC774\uCCB4\uB97C \uBAA8\uB450 \uCC98\uCE58\uD558\uC138\uC694."
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
       m_condition: 0
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
@@ -708,13 +770,36 @@ MonoBehaviour:
         m_bubbleText: 
         m_advanceMode: 0
         m_autoSeconds: 0
-      m_triggerId: 94727f0a
+      m_triggerId: ca4f4483
       m_closeTriggerIds: []
       m_actions: []
-      m_condition: 2
+      m_condition: 0
       m_seconds: 2
-      m_enemyPrefab: {fileID: 2990036820463330610, guid: eda57c1f100ad23449048090ceed8a7f, type: 3}
-      m_killCount: 3
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
+    - m_type: 2
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 0
+        m_autoSeconds: 0
+      m_triggerId: 
+      m_closeTriggerIds:
+      - ca4f4483
+      m_actions: []
+      m_condition: 0
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
       m_areaCenter: {x: 0, y: 0, z: 0}
       m_areaRadius: 2
       m_areaObject: 
@@ -895,6 +980,28 @@ MonoBehaviour:
       m_memberNumber: 1
       m_orderKey: 0
       m_cinematicId: 
+    - m_type: 1
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 0
+        m_autoSeconds: 0
+      m_triggerId: 1ed6e9b6
+      m_closeTriggerIds: []
+      m_actions: []
+      m_condition: 2
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 2990036820463330610, guid: eda57c1f100ad23449048090ceed8a7f, type: 3}
+      m_killCount: 10
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
     - m_type: 0
       m_dialogue:
         m_speaker: {fileID: 11400000, guid: c9ee43f5e45ae0949ad3d51a84a0994c, type: 2}
@@ -1041,28 +1148,6 @@ MonoBehaviour:
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
       m_killCount: 1
-      m_areaCenter: {x: 0, y: 0, z: 0}
-      m_areaRadius: 2
-      m_areaObject: 
-      m_targetId: 
-      m_memberNumber: 1
-      m_orderKey: 0
-      m_cinematicId: 
-    - m_type: 1
-      m_dialogue:
-        m_speaker: {fileID: 0}
-        m_portrait: {fileID: 0}
-        m_text: 
-        m_bubbleText: 
-        m_advanceMode: 0
-        m_autoSeconds: 0
-      m_triggerId: 1ed6e9b6
-      m_closeTriggerIds: []
-      m_actions: []
-      m_condition: 2
-      m_seconds: 2
-      m_enemyPrefab: {fileID: 2990036820463330610, guid: eda57c1f100ad23449048090ceed8a7f, type: 3}
-      m_killCount: 10
       m_areaCenter: {x: 0, y: 0, z: 0}
       m_areaRadius: 2
       m_areaObject: 
@@ -1496,6 +1581,54 @@ MonoBehaviour:
         m_bubbleText: 
         m_advanceMode: 0
         m_autoSeconds: 0
+      m_triggerId: f7875cf0
+      m_closeTriggerIds: []
+      m_actions:
+      - m_method: SetEnemyTargetMode
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 2990036820463330610, guid: 1f91419dc740b5b4b9e7a0492c84ced0, type: 3}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 1
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 1
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: 
+          m_float: 2
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+      m_condition: 2
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 2990036820463330610, guid: 1f91419dc740b5b4b9e7a0492c84ced0, type: 3}
+      m_killCount: 3
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
+    - m_type: 1
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 0
+        m_autoSeconds: 0
       m_triggerId: 2edeb009
       m_closeTriggerIds: []
       m_actions:
@@ -1810,39 +1943,36 @@ MonoBehaviour:
         m_bubbleText: 
         m_advanceMode: 0
         m_autoSeconds: 0
-      m_triggerId: f7875cf0
+      m_triggerId: 83eca92b
       m_closeTriggerIds: []
-      m_actions:
-      - m_method: SetEnemyTargetMode
-        m_args:
-        - m_string: 
-          m_float: 0
-          m_int: 0
-          m_bool: 0
-          m_vector: {x: 0, y: 0, z: 0}
-          m_object: {fileID: 2990036820463330610, guid: 1f91419dc740b5b4b9e7a0492c84ced0, type: 3}
-        - m_string: 
-          m_float: 0
-          m_int: 0
-          m_bool: 1
-          m_vector: {x: 0, y: 0, z: 0}
-          m_object: {fileID: 0}
-        - m_string: 
-          m_float: 0
-          m_int: 1
-          m_bool: 0
-          m_vector: {x: 0, y: 0, z: 0}
-          m_object: {fileID: 0}
-        - m_string: 
-          m_float: 2
-          m_int: 0
-          m_bool: 0
-          m_vector: {x: 0, y: 0, z: 0}
-          m_object: {fileID: 0}
-      m_condition: 2
+      m_actions: []
+      m_condition: 0
       m_seconds: 2
-      m_enemyPrefab: {fileID: 2990036820463330610, guid: 1f91419dc740b5b4b9e7a0492c84ced0, type: 3}
-      m_killCount: 3
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
+    - m_type: 2
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 0
+        m_autoSeconds: 0
+      m_triggerId: 
+      m_closeTriggerIds:
+      - 83eca92b
+      m_actions: []
+      m_condition: 0
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
       m_areaCenter: {x: 0, y: 0, z: 0}
       m_areaRadius: 2
       m_areaObject: 
@@ -2338,21 +2468,15 @@ MonoBehaviour:
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
-        - m_string: "- \uC6E8\uC774\uBE0C \uC0AC\uC774\uC758 \uC815\uBE44 \uC2DC\uAC04\uC5D0
-            \uD568\uC815\uC744 \uC124\uCE58\uD558\uACE0 \uC218\uB9AC\uD560 \uC218
-            \uC788\uC2B5\uB2C8\uB2E4.\n- \uD568\uC815 \uCCAD\uC0AC\uC9C4\uC774\uB098
-            \uC190\uC0C1\uB41C \uD568\uC815\uC5D0 \uB2E4\uAC00\uAC00 F\uD0A4\uB85C
-            \uC124\uCE58\xB7\uC218\uB9AC\uD569\uB2C8\uB2E4.\n- \uC124\uCE58\uC640
-            \uC218\uB9AC\uC5D0\uB294 \uD568\uC815 \uC7AC\uB8CC\uB97C \uC0AC\uC6A9\uD569\uB2C8\uB2E4.\n-
-            \uD568\uC815\uC740 \uC18C\uBAA8\uC131\uC774\uBA70, \uB2E4\uC74C \uACF5\uC138\uAC00
-            \uC2DC\uC791\uB3FC\uB3C4 \uB0A8\uC740 \uB0B4\uAD6C\uB3C4\uB294 \uC720\uC9C0\uB429\uB2C8\uB2E4.\n-
-            \uCCA0\uC870\uB9DD: \uC801\uC758 \uC9C4\uC785 \uC18D\uB3C4\uB97C \uB2A6\uCD94\uACE0
-            \uC18C\uB7C9\uC758 \uD53C\uD574\uB97C \uC90D\uB2C8\uB2E4.\n- \uC9C0\uB8B0:
-            \uBC1F\uC740 \uC801 \uC8FC\uBCC0\uC744 \uD3ED\uBC1C\uC2DC\uCF1C \uD070
-            \uD53C\uD574\uB97C \uC90D\uB2C8\uB2E4.\n- \uD654\uC5FC\uD1B5: \uC3D8\uAC70\uB098
-            \uD3ED\uBC1C\uC5D0 \uD718\uB9D0\uB9AC\uBA74 \uBD88\uAE38\uC744 \uB0A8\uAE41\uB2C8\uB2E4.\n-
-            \uAC00\uC2DC \uD568\uC815: \uBC1F\uC740 \uC801\uC5D0\uAC8C \uACBD\uC9C1\uACFC
-            \uD568\uAED8 \uD070 \uD53C\uD574\uB97C \uC90D\uB2C8\uB2E4."
+        - m_string: "- \uCCAD\uC0AC\uC9C4\uC774\uB098 \uC190\uC0C1\uB41C \uD568\uC815\uC5D0
+            \uB2E4\uAC00\uAC00 F\uD0A4\uB85C \uC124\uCE58\xB7\uC218\uB9AC\uD569\uB2C8\uB2E4(\uD568\uC815
+            \uC7AC\uB8CC \uC0AC\uC6A9).\n- \uCCA0\uC870\uB9DD: \uC801\uC744 \uB290\uB9AC\uAC8C
+            \uD569\uB2C8\uB2E4.\n- \uC9C0\uB8B0: \uBC1F\uC740 \uC801 \uC8FC\uBCC0\uC5D0
+            \uD070 \uD3ED\uBC1C \uD53C\uD574\uB97C \uC90D\uB2C8\uB2E4.\n- \uD654\uC5FC\uD1B5:
+            \uC3D8\uAC70\uB098 \uD3ED\uBC1C\uC5D0 \uD718\uB9D0\uB9AC\uBA74 \uBD88\uAE38\uC744
+            \uB0A8\uAE41\uB2C8\uB2E4.\n- \uAC00\uC2DC \uD568\uC815: \uBC1F\uC740
+            \uC801\uC744 \uACBD\uC9C1\uC2DC\uD0A4\uACE0 \uD070 \uD53C\uD574\uB97C
+            \uC90D\uB2C8\uB2E4."
           m_float: 0
           m_int: 0
           m_bool: 0
@@ -2418,7 +2542,28 @@ MonoBehaviour:
       m_triggerId: 
       m_closeTriggerIds:
       - 1d694eac
-      m_actions: []
+      m_actions:
+      - m_method: SetObjective
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: "\uD45C\uC2DC\uB97C \uB530\uB77C \uD568\uC815\uC744 \uC124\uCE58
+            \uBC0F \uC218\uB9AC\uD558\uC138\uC694."
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
       m_condition: 0
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
@@ -2550,10 +2695,10 @@ MonoBehaviour:
       m_cinematicId: 
     - m_type: 0
       m_dialogue:
-        m_speaker: {fileID: 11400000, guid: 5a79809b359003b458c6c3cec59db0cb, type: 2}
+        m_speaker: {fileID: 11400000, guid: 83c1000525abcd94eba7494290f44033, type: 2}
         m_portrait: {fileID: 0}
-        m_text: "\uD568\uC815 \uC124\uCE58 \uB05D! \uAC00\uC2DC \uD568\uC815\uB3C4
-          \uACE0\uCCE4\uC5B4."
+        m_text: "\uD568\uC815 \uC124\uCE58\uB294 \uB05D\uB09C \uAC83 \uAC19\uB124.
+          \uC774\uB3D9\uD558\uC790."
         m_bubbleText: 
         m_advanceMode: 1
         m_autoSeconds: 0
@@ -2776,28 +2921,6 @@ MonoBehaviour:
       m_memberNumber: 1
       m_orderKey: 0
       m_cinematicId: 
-    - m_type: 0
-      m_dialogue:
-        m_speaker: {fileID: 11400000, guid: c9ee43f5e45ae0949ad3d51a84a0994c, type: 2}
-        m_portrait: {fileID: 0}
-        m_text: "\uBE68\uB9AC \uAC00\uBCF4\uC8E0!"
-        m_bubbleText: 
-        m_advanceMode: 1
-        m_autoSeconds: 0
-      m_triggerId: 
-      m_closeTriggerIds: []
-      m_actions: []
-      m_condition: 0
-      m_seconds: 2
-      m_enemyPrefab: {fileID: 0}
-      m_killCount: 1
-      m_areaCenter: {x: 0, y: 0, z: 0}
-      m_areaRadius: 2
-      m_areaObject: 
-      m_targetId: 
-      m_memberNumber: 1
-      m_orderKey: 0
-      m_cinematicId: 
     - m_type: 1
       m_dialogue:
         m_speaker: {fileID: 0}
@@ -2848,6 +2971,73 @@ MonoBehaviour:
       m_areaCenter: {x: 60.35, y: 199.97, z: 77.7}
       m_areaRadius: 3
       m_areaObject: ----- Event -----/TutorialArriveAreas/Arrive_CheongSolRescue
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
+    - m_type: 0
+      m_dialogue:
+        m_speaker: {fileID: 11400000, guid: c9ee43f5e45ae0949ad3d51a84a0994c, type: 2}
+        m_portrait: {fileID: 0}
+        m_text: "\uBE68\uB9AC \uAC00\uBCF4\uC8E0!"
+        m_bubbleText: 
+        m_advanceMode: 1
+        m_autoSeconds: 0
+      m_triggerId: 
+      m_closeTriggerIds: []
+      m_actions: []
+      m_condition: 0
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
+    - m_type: 1
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 0
+        m_autoSeconds: 0
+      m_triggerId: aea080bd
+      m_closeTriggerIds: []
+      m_actions: []
+      m_condition: 0
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
+      m_targetId: 
+      m_memberNumber: 1
+      m_orderKey: 0
+      m_cinematicId: 
+    - m_type: 2
+      m_dialogue:
+        m_speaker: {fileID: 0}
+        m_portrait: {fileID: 0}
+        m_text: 
+        m_bubbleText: 
+        m_advanceMode: 0
+        m_autoSeconds: 0
+      m_triggerId: 
+      m_closeTriggerIds:
+      - aea080bd
+      m_actions: []
+      m_condition: 0
+      m_seconds: 2
+      m_enemyPrefab: {fileID: 0}
+      m_killCount: 1
+      m_areaCenter: {x: 0, y: 0, z: 0}
+      m_areaRadius: 2
+      m_areaObject: 
       m_targetId: 
       m_memberNumber: 1
       m_orderKey: 0
@@ -3200,7 +3390,7 @@ MonoBehaviour:
           m_float: 0
           m_int: 0
           m_bool: 0
-          m_vector: {x: 49.13, y: 199.82, z: 32.47}
+          m_vector: {x: 32.35, y: 200.09, z: 19.43}
           m_object: {fileID: 0}
         - m_string: 
           m_float: 6
@@ -3214,7 +3404,7 @@ MonoBehaviour:
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
-        - m_string: ----- Event -----/TutorialArriveAreas/Arrive_DefenseLine
+        - m_string: ----- Event -----/TutorialArriveAreas/Arrive_Gate
           m_float: 0
           m_int: 0
           m_bool: 0
@@ -3238,9 +3428,9 @@ MonoBehaviour:
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
       m_killCount: 1
-      m_areaCenter: {x: 49.13, y: 199.82, z: 32.47}
+      m_areaCenter: {x: 32.35, y: 200.09, z: 19.43}
       m_areaRadius: 6
-      m_areaObject: ----- Event -----/TutorialArriveAreas/Arrive_DefenseLine
+      m_areaObject: ----- Event -----/TutorialArriveAreas/Arrive_Gate
       m_targetId: 
       m_memberNumber: 1
       m_orderKey: 0
@@ -3354,14 +3544,6 @@ MonoBehaviour:
         - m_string: 
           m_float: 0
           m_int: 0
-          m_bool: 0
-          m_vector: {x: 0, y: 0, z: 0}
-          m_object: {fileID: 0}
-      - m_method: SwitchToSquadMember
-        m_args:
-        - m_string: 
-          m_float: 0
-          m_int: 2
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
@@ -3671,6 +3853,8 @@ MonoBehaviour:
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+      - m_method: HidePathLine
+        m_args: []
       m_condition: 0
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
@@ -4265,7 +4449,28 @@ MonoBehaviour:
         m_autoSeconds: 0
       m_triggerId: 59dfcc3b
       m_closeTriggerIds: []
-      m_actions: []
+      m_actions:
+      - m_method: SetObjective
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+        - m_string: "Q/E(\uAFB9) \uB610\uB294 CapsLock\uC73C\uB85C \uB3D9\uB8CC\uB97C
+            \uBCF5\uADC0\uC2DC\uD0A4\uC138\uC694."
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
       m_condition: 8
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}

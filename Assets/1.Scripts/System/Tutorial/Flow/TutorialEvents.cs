@@ -116,6 +116,10 @@ public sealed class TutorialEvents : MonoBehaviour
     [Tooltip("창이 뜬 직후 닫기 입력을 무시하는 시간(초)입니다. 앞 대사를 넘긴 입력으로 창이 바로 닫히지 않게 합니다.")]
     [SerializeField] private float m_closeGuardSeconds = 0.3f;
 
+    [Min(0.0f)]
+    [Tooltip("튜토리얼 창이 뜰 때 화면 가운데 알림이 떠 있으면, 이 시간(초) 동안 페이드아웃해 내립니다. 창과 알림이 겹쳐 남지 않게 합니다.")]
+    [SerializeField] private float m_windowBannerFadeSeconds = 0.25f;
+
     private static readonly Dictionary<string, MethodInfo> s_methods = new();
 
     private bool m_isHoldingPause;
@@ -433,6 +437,10 @@ public sealed class TutorialEvents : MonoBehaviour
         window.Show(TutorialPage.CreateWindowPage(title, body, image, hint));
         window.SetGaugeProgress(0.0f);
         s_isWindowOpen = true;
+        if (DefenseManager.Instance != null)
+        {
+            DefenseManager.Instance.FadeOutBannerMessage(m_windowBannerFadeSeconds);
+        }
         if (pauseTime)
         {
             PauseTime();

@@ -299,6 +299,12 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>웨이브 시작 알림의 남은 표시 시간(초)입니다.</summary>
     private float m_waveStartMessageRemaining;
 
+    /// <summary>알림을 서둘러 내리는 중일 때의 페이드아웃 시간(초)입니다. 0이면 평소 흐름(페이드인·유지·페이드아웃)입니다.</summary>
+    private float m_bannerQuickFadeDuration;
+
+    /// <summary>서둘러 내리기 시작할 때의 알림 투명도입니다. 이 값에서 0까지 줄입니다.</summary>
+    private float m_bannerQuickFadeStartAlpha;
+
     /// <summary>웨이브 시작 알림의 페이드인 시간(초)입니다. 페이드아웃 시간의 1/3로, 나타날 때는 사라질 때보다 빠르게 보이게 합니다.</summary>
     private float WaveStartMessageFadeInDuration => m_waveStartMessageFadeDuration / 3.0f;
 
@@ -1909,6 +1915,37 @@ public sealed class DefenseManager : CombatSceneManager
         }
     }
 
+    /// <summary>
+    /// 떠 있는 화면 가운데 알림을 지금 투명도에서 <paramref name="seconds"/>초 동안 페이드아웃해 내립니다. 떠 있지 않으면 아무것도 하지 않습니다.
+    /// </summary>
+    /// <remarks>튜토리얼 안내 창이 뜰 때 알림이 창과 겹쳐 남지 않게 씁니다. 시간은 실제 시간으로 세서 창이 게임 시간을 멈춰도 사라집니다.</remarks>
+    public void FadeOutBannerMessage(float seconds)
+    {
+        if (m_waveStartMessageRemaining <= 0.0f)
+        {
+            return;
+        }
+
+        if (seconds <= 0.0f)
+        {
+            HideWaveStartMessage();
+            return;
+        }
+
+        float alpha = m_waveStartMessageCanvasGroup != null ? m_waveStartMessageCanvasGroup.alpha
+            : m_waveStartMessageText != null ? m_waveStartMessageText.color.a : 1.0f;
+        // 이미 그보다 빨리 사라지는 중이면(서둘러 내리는 중이거나 평소 페이드아웃 막바지) 그대로 둡니다.
+        bool alreadyFading = m_bannerQuickFadeDuration > 0.0f || m_waveStartMessageRemaining <= m_waveStartMessageFadeDuration;
+        if (alreadyFading && m_waveStartMessageRemaining <= seconds)
+        {
+            return;
+        }
+
+        m_bannerQuickFadeDuration = seconds;
+        m_bannerQuickFadeStartAlpha = alpha;
+        m_waveStartMessageRemaining = seconds;
+    }
+
     /// <summary>구간 시작 알림을 표시하고 설정된 페이드인·유지·페이드아웃 시간을 시작합니다.</summary>
     private void ShowPhaseStartMessage(string message)
     {
@@ -1918,6 +1955,7 @@ public sealed class DefenseManager : CombatSceneManager
         }
 
         m_waveStartMessageText.text = message;
+        m_bannerQuickFadeDuration = 0.0f;
         SetWaveStartMessageVisible(true);
         SetWaveStartMessageAlpha(WaveStartMessageFadeInDuration > 0.0f ? 0.0f : 1.0f);
 
@@ -1944,6 +1982,12 @@ public sealed class DefenseManager : CombatSceneManager
             return;
         }
 
+        if (m_bannerQuickFadeDuration > 0.0f)
+        {
+            SetWaveStartMessageAlpha(m_bannerQuickFadeStartAlpha * m_waveStartMessageRemaining / m_bannerQuickFadeDuration);
+            return;
+        }
+
         float fadeIn = WaveStartMessageFadeInDuration;
         float elapsed = fadeIn + m_waveStartMessageHoldDuration + m_waveStartMessageFadeDuration - m_waveStartMessageRemaining;
         if (fadeIn > 0.0f && elapsed < fadeIn)
@@ -1965,6 +2009,7 @@ public sealed class DefenseManager : CombatSceneManager
     private void HideWaveStartMessage()
     {
         m_waveStartMessageRemaining = 0.0f;
+        m_bannerQuickFadeDuration = 0.0f;
         SetWaveStartMessageAlpha(0.0f);
         SetWaveStartMessageVisible(false);
     }
