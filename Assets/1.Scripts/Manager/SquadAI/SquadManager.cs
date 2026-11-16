@@ -504,13 +504,37 @@ public class SquadManager : MonoBehaviour
 
         bool inputAllowed = IsOrderInputAllowed(allowInThrowMode: true);
         bool orderAllowed = inputAllowed && !PlayerInputController.IsInputLocked(PlayerInputLock.SquadOrder);
-        UpdateOrderKey(keyboard, m_orderMember1Key, 0, orderAllowed, ref m_orderMember1State);
-        UpdateOrderKey(keyboard, m_orderMember2Key, 1, orderAllowed, ref m_orderMember2State);
+        UpdateOrderKey(keyboard, m_orderMember1Key, 0, orderAllowed && !IsOrderLocked(ResolveAiMemberByOrder(0)), ref m_orderMember1State);
+        UpdateOrderKey(keyboard, m_orderMember2Key, 1, orderAllowed && !IsOrderLocked(ResolveAiMemberByOrder(1)), ref m_orderMember2State);
 
         if (inputAllowed && !PlayerInputController.IsInputLocked(PlayerInputLock.Recall) && m_recallAllKey != Key.None && keyboard[m_recallAllKey].wasPressedThisFrame)
         {
             RecallAllAiMembers();
         }
+    }
+
+    /// <summary>Q/E 명령 키를 막아 둔 팀원입니다. 튜토리얼이 위치 사수 지점에 도착한 팀원을 다시 옮기지 못하게 막을 때 씁니다.</summary>
+    private readonly HashSet<SquadMemberController> m_orderLockedMembers = new HashSet<SquadMemberController>();
+
+    /// <summary>이 팀원의 Q/E 명령(이동·사수와 복귀)을 막습니다. 캐릭터를 바꿔 키 순번이 달라져도 팀원 기준으로 막습니다.</summary>
+    public void LockOrders(SquadMemberController member)
+    {
+        if (member != null)
+        {
+            m_orderLockedMembers.Add(member);
+        }
+    }
+
+    /// <summary><see cref="LockOrders"/>로 막은 Q/E 명령을 모두 풉니다.</summary>
+    public void ClearOrderLocks()
+    {
+        m_orderLockedMembers.Clear();
+    }
+
+    /// <summary>이 팀원의 Q/E 명령이 막혀 있는지 여부입니다.</summary>
+    public bool IsOrderLocked(SquadMemberController member)
+    {
+        return member != null && m_orderLockedMembers.Contains(member);
     }
 
     /// <summary>
@@ -1116,12 +1140,19 @@ public class SquadManager : MonoBehaviour
             return;
         }
 
+        // 투척 모드에서는 캐릭터 순환 키(Tab)가 투척물을 휠과 같은 순서로 한 칸 넘깁니다. 캐릭터 변경 잠금과 상관없이 동작합니다.
+        bool nextPressed = Keyboard.current[m_nextMemberKey].wasPressedThisFrame;
+        if (nextPressed && TryStepPlayerThrowSelection())
+        {
+            nextPressed = false;
+        }
+
         if (Time.time < m_nextSwitchInputTime || PlayerInputController.IsInputLocked(PlayerInputLock.SwitchMember))
         {
             return;
         }
 
-        if (Keyboard.current[m_nextMemberKey].wasPressedThisFrame)
+        if (nextPressed)
         {
             RequestSwitchByInput(-1);
         }
@@ -1140,6 +1171,15 @@ public class SquadManager : MonoBehaviour
         {
             RequestSwitchByInput(2);
         }
+    }
+
+    /// <summary>조작 캐릭터가 투척 모드면 투척물 선택을 다음 칸으로 넘깁니다.</summary>
+    /// <returns>투척 모드라서 투척물 선택으로 처리했으면 true입니다. false면 평소처럼 캐릭터를 순환합니다.</returns>
+    private bool TryStepPlayerThrowSelection()
+    {
+        SquadMemberController player = PlayerSquadMember;
+        PlayerInputController input = player != null ? player.GetComponent<PlayerInputController>() : null;
+        return input != null && input.RequestThrowSelectionStep(1);
     }
 
     /// <summary>
@@ -1528,6 +1568,18 @@ public class SquadManager : MonoBehaviour
     public SquadMemberController AutoRescuer => m_autoRescuer;
 
     /// <summary>
+    /// 켜면 AI 동료가 다운된 동료를 자동 구조하지 않습니다. 튜토리얼이 플레이어에게 직접 구조를 시킬 때 켭니다.
+    /// </summary>
+    public static bool AutoRescueBlocked { get; set; }
+
+    /// <summary>Play를 다시 시작할 때 자동 구조 막기를 끕니다. 도메인 리로드를 끈 설정에서도 이전 값이 남지 않게 합니다.</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetAutoRescueBlocked()
+    {
+        AutoRescueBlocked = false;
+    }
+
+    /// <summary>
     /// 자동 구조 대상을 선점합니다(§16).
     /// </summary>
     /// <param name="claimant">구조를 맡겠다는 AI 멤버입니다.</param>
@@ -1539,7 +1591,7 @@ public class SquadManager : MonoBehaviour
     /// </remarks>
     public bool TryClaimAutoRescue(SquadMemberController claimant, SquadMemberController target)
     {
-        if (claimant == null || target == null)
+        if (claimant == null || target == null || AutoRescueBlocked)
         {
             return false;
         }

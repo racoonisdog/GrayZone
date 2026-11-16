@@ -120,8 +120,8 @@ public class PlayerInputController : MonoBehaviour
     /// <summary>조준 입력 상태입니다.</summary>
     public bool Aim => m_aim;
 
-    /// <summary>발사 입력 상태입니다. 투척 모드에서는 총기 발사로 전달하지 않습니다.</summary>
-    public bool Shoot => !m_throwMode && m_shoot;
+    /// <summary>발사 입력 상태입니다. 투척 모드에서는 총기 발사로 전달하지 않습니다. 사격 잠금(<see cref="PlayerInputLock.Shoot"/>)은 총기 발사만 막고 투척은 막지 않습니다.</summary>
+    public bool Shoot => !m_throwMode && m_shoot && !IsLocked(PlayerInputLock.Shoot);
 
     /// <summary>폭발탄 투척 모드 활성 상태입니다.</summary>
     public bool ThrowMode => m_throwMode;
@@ -206,7 +206,7 @@ public class PlayerInputController : MonoBehaviour
         if (IsLocked(PlayerInputLock.Jump)) m_jump = false;
         if (IsLocked(PlayerInputLock.Sprint)) m_sprint = false;
         if (IsLocked(PlayerInputLock.Aim)) m_aim = false;
-        if (IsLocked(PlayerInputLock.Shoot)) m_shoot = false;
+        if (IsLocked(PlayerInputLock.Shoot) && !m_throwMode) m_shoot = false;
         if (IsLocked(PlayerInputLock.Reload)) m_reload = false;
         if (IsLocked(PlayerInputLock.Interact)) m_interact = false;
         if (IsLocked(PlayerInputLock.Inventory)) m_inventory = false;
@@ -495,7 +495,8 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        ShootInput(!IsLocked(PlayerInputLock.Shoot) && value.isPressed);
+        // 좌클릭은 투척 모드에서 투척에도 쓰므로, 사격 잠금은 투척 모드가 아닐 때만 막습니다.
+        ShootInput(value.isPressed && (m_throwMode || !IsLocked(PlayerInputLock.Shoot)));
     }
 
     /// <summary>
@@ -516,6 +517,23 @@ public class PlayerInputController : MonoBehaviour
         m_shoot = false;
         m_interact = false;
         SuppressInteractUntilRelease();
+    }
+
+    /// <summary>
+    /// 투척 모드에서 투척물 선택을 정한 칸만큼 넘깁니다. 마우스 휠과 같은 순서로 돌고, 끝에서 처음으로 돌아갑니다.
+    /// </summary>
+    /// <param name="step">양수면 다음, 음수면 이전 투척물입니다.</param>
+    /// <returns>투척 모드라서 선택을 넘겼으면 true입니다. 투척 모드가 아니거나 입력이 꺼져 있으면 false입니다.</returns>
+    /// <remarks>캐릭터 순환 키(Tab)를 투척 모드에서는 투척물 순환으로 쓰려고 <see cref="SquadManager"/>가 부릅니다.</remarks>
+    public bool RequestThrowSelectionStep(int step)
+    {
+        if (!m_isInputEnabled || !m_throwMode || IsLocked(PlayerInputLock.ThrowMode))
+        {
+            return false;
+        }
+
+        m_throwSelectionDelta += step;
+        return true;
     }
 
     /// <summary>

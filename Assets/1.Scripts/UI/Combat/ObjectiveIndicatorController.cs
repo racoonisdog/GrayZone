@@ -30,6 +30,9 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
     [Tooltip("화면 안에 있지만 거리 밖인 목표의 화면 위치에 표시할 Image의 RectTransform입니다.")]
     [SerializeField] private RectTransform m_onscreenMarker;
 
+    [Tooltip("아이콘을 바꿀 때(SetOnscreenMarkerSprite) 바꿀 Image입니다. 비워 두면 화면 안 마커 자신의 Image, 없으면 자식 'Battle_icon'을 씁니다.")]
+    [SerializeField] private Image m_onscreenIconImage;
+
     [Header("Settings")]
     [Tooltip("비워 두면 Main Camera를 사용합니다.")]
     [SerializeField] private Camera m_worldCamera;
@@ -53,9 +56,13 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
     [Tooltip("테스트용 초기 표시 상태입니다. 실제 기능에서는 SetVisible로 제어합니다.")]
     [SerializeField] private bool m_visibleOnStart;
 
+    /// <summary>아이콘 Image를 따로 지정하지 않았을 때 화면 안 마커 아래에서 찾을 아이콘 자식 이름입니다.</summary>
+    private const string DefaultIconChildName = "Battle_icon";
+
     private bool m_visibleRequested;
     private Image m_onscreenMarkerImage;
     private Sprite m_defaultOnscreenMarkerSprite;
+    private Vector2 m_defaultIconPosition;
 
     private void Reset()
     {
@@ -101,6 +108,38 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
         UpdateIndicator();
     }
 
+    /// <summary>화면 안 마커의 크기 배율을 바꿉니다. 1이면 씬에 놓은 크기입니다.</summary>
+    /// <param name="scale">곱할 배율입니다. 0 이하면 1로 봅니다.</param>
+    public void SetOnscreenMarkerScale(float scale)
+    {
+        if (m_onscreenMarker != null)
+        {
+            m_onscreenMarker.localScale = Vector3.one * (scale > 0.0f ? scale : 1.0f);
+        }
+    }
+
+    /// <summary>화면 안 마커의 테두리는 두고 아이콘만 크기를 바꿉니다. 아이콘이 테두리 밖으로 나갈 때 줄입니다.</summary>
+    /// <param name="scale">곱할 배율입니다. 0 이하면 1로 봅니다.</param>
+    public void SetOnscreenIconScale(float scale)
+    {
+        Image markerImage = ResolveOnscreenMarkerImage();
+        if (markerImage != null)
+        {
+            markerImage.rectTransform.localScale = Vector3.one * (scale > 0.0f ? scale : 1.0f);
+        }
+    }
+
+    /// <summary>테두리는 두고 아이콘만 옮깁니다. 씬에 놓은 자리에서 더할 거리(마커 UI 단위)입니다.</summary>
+    /// <remarks>마커 테두리는 아래에 화살표가 붙어 있어 안쪽 마름모의 중심이 마커 가운데보다 위에 있습니다. 아이콘을 그 중심에 맞출 때 씁니다.</remarks>
+    public void SetOnscreenIconOffset(Vector2 offset)
+    {
+        Image markerImage = ResolveOnscreenMarkerImage();
+        if (markerImage != null)
+        {
+            markerImage.rectTransform.anchoredPosition = m_defaultIconPosition + offset;
+        }
+    }
+
     /// <summary>화면 안 마커 스프라이트를 변경합니다. null이면 씬에 설정된 기본 스프라이트로 되돌립니다.</summary>
     public void SetOnscreenMarkerSprite(Sprite sprite)
     {
@@ -117,10 +156,18 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
     {
         if (m_onscreenMarkerImage == null && m_onscreenMarker != null)
         {
-            m_onscreenMarkerImage = m_onscreenMarker.GetComponent<Image>();
+            // 전투 마커 UI는 바탕·색 마스크·아이콘이 자식으로 나뉘어 있어, 루트에 Image가 없으면 아이콘 자식을 찾습니다.
+            m_onscreenMarkerImage = m_onscreenIconImage != null ? m_onscreenIconImage : m_onscreenMarker.GetComponent<Image>();
+            if (m_onscreenMarkerImage == null)
+            {
+                Transform icon = m_onscreenMarker.Find(DefaultIconChildName);
+                m_onscreenMarkerImage = icon != null ? icon.GetComponent<Image>() : null;
+            }
+
             if (m_onscreenMarkerImage != null)
             {
                 m_defaultOnscreenMarkerSprite = m_onscreenMarkerImage.sprite;
+                m_defaultIconPosition = m_onscreenMarkerImage.rectTransform.anchoredPosition;
             }
         }
 

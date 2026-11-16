@@ -250,7 +250,8 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
         m_downTimeRemaining = Mathf.Max(0.0f, m_downTimeRemaining - Time.deltaTime);
         NotifyDownTimerChanged();
 
-        if (m_downTimeRemaining <= 0.0f)
+        // 튜토리얼이 구조 유지를 켜 두면 타이머가 0이 돼도 이탈하지 않고 다운 상태로 남습니다.
+        if (m_downTimeRemaining <= 0.0f && !KeepDownedOnTimeout)
         {
             ExpireDownTimer();
         }
@@ -397,6 +398,34 @@ public class PlayerHealth : HealthSystemBase, IBalancePostProcess, ISharedBalanc
     private static void ResetKeepMinimumHp()
     {
         KeepMinimumHp = false;
+        KeepDownedOnTimeout = false;
+    }
+
+    /// <summary>
+    /// 켜면 다운 타이머가 다 닳아도 전투 이탈(사망)로 넘어가지 않고 다운 상태를 유지합니다. 튜토리얼의 "구조 유지" 이벤트가 켜고 끕니다.
+    /// </summary>
+    public static bool KeepDownedOnTimeout { get; set; }
+
+    /// <summary>
+    /// 연출용으로 HP를 0으로 만들고 바로 다운 상태로 넣습니다. 반무적과 부활 횟수 소진 판정은 보지 않습니다.
+    /// </summary>
+    /// <returns>다운시켰으면 true입니다. 이미 다운됐거나 이탈했으면 false입니다.</returns>
+    /// <remarks>다운 진입 처리(타이머·이벤트)는 <see cref="OnHpDepleted"/>와 같습니다. 튜토리얼의 "대원 다운" 이벤트가 씁니다.</remarks>
+    public bool ForceDown()
+    {
+        if (m_isDead || m_isDowned)
+        {
+            return false;
+        }
+
+        m_currentHp = 0;
+        m_isDowned = true;
+        m_downTimerPaused = false;
+        m_downTimeRemaining = DownDuration;
+        NotifyHPChanged();
+        OnDown?.Invoke();
+        NotifyDownTimerChanged();
+        return true;
     }
 
     /// <summary>

@@ -184,8 +184,9 @@ public class InteractionController : MonoBehaviour
             return;
         }
 
-        // 튜토리얼이 상호작용 입력을 쓰는 동안에는 대상을 잡지 않습니다. 진행 중이던 홀드도 취소됩니다.
-        if (s_targetingSuppressed)
+        // 튜토리얼이 상호작용 입력을 쓰는 동안, 튜토리얼 창이 떠 있는 동안, 인게임 컷신 중에는 대상을 잡지 않습니다(함정 안내 패널·프롬프트도 뜨지 않음).
+        // 진행 중이던 홀드도 취소됩니다.
+        if (s_targetingSuppressed || InGameCutscene.IsPlaying || TutorialEvents.IsAnyWindowOpen)
         {
             if (m_current != null || m_holdTimer > 0.0f)
             {

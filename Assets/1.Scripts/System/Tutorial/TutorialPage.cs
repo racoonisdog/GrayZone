@@ -62,7 +62,7 @@ public struct TutorialPage
 
     [Tooltip("페이지를 넘길 입력입니다. 이벤트 대기도 켜져 있으면 이벤트가 온 뒤부터 입력을 셉니다.\n" +
              "None: 입력으로 넘기지 않음\n" +
-             "InteractTap: 상호작용 액션 단일 탭(키 바인딩을 따라감). 길게 누르면 탭으로 보지 않아, 트랩 설치 홀드와 겹치지 않습니다.\n" +
+             "InteractTap: 상호작용 액션 단일 탭(키 바인딩을 따라감). 길게 누르면 탭으로 보지 않아, 함정 설치 홀드와 겹치지 않습니다.\n" +
              "KeyHold: 아래 키를 지정 시간 유지")]
     [SerializeField] private TutorialAdvanceInput m_advanceInput;
 

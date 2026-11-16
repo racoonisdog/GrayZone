@@ -14,7 +14,7 @@ public sealed class DialogueSpeaker : ScriptableObject
     [Tooltip("대화창 이름 칸에 쓸 이름입니다. 비우면 연결한 캐릭터의 표시 이름을 씁니다.")]
     [SerializeField] private string m_displayName;
 
-    [Tooltip("이름 위에 작게 쓰는 보직입니다(예: 쉘터 리더). 선택 항목입니다.")]
+    [Tooltip("이름 위에 작게 쓰는 직함입니다(예: 쉘터 리더, 탐사대원). 대화창에서 직함과 이름 사이에 노란 선이 함께 나옵니다. 비우면 직함과 노란 선을 숨깁니다.")]
     [SerializeField] private string m_role;
 
     [Tooltip("대화창 초상화입니다. 비우면 연결한 캐릭터의 HUD 초상화를 씁니다.")]

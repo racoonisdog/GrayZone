@@ -96,6 +96,18 @@ public class DefenseObjectiveHud : MonoBehaviour
     [Min(0.05f)]
     [SerializeField] private float m_warningBlinkPeriod = 1.0f;
 
+    [Tooltip("켜면 양옆 경고 아이콘의 빨간 부분도 경고 문구와 같은 색으로 바뀝니다. 아이콘 안의 흰 부분(느낌표)은 흰색 그대로 둡니다.")]
+    [SerializeField] private bool m_tintWarningIcons = true;
+
+    /// <summary>경고 아이콘 색을 바꿀 RawImage입니다. 실행 시작 때 색을 받는 모양으로 바꿔 둡니다.</summary>
+    private RawImage m_warningIconLeftImage;
+    private RawImage m_warningIconRightImage;
+
+    /// <summary>원본 경고 아이콘 그림 → (색을 받는 모양, 흰 부분) 캐시입니다. 같은 그림을 두 번 나누지 않습니다.</summary>
+    private static Texture s_splitSource;
+    private static Texture2D s_splitShape;
+    private static Texture2D s_splitMark;
+
     [Header("Behaviour")]
     [Tooltip("Defense가 시작될 때 자동으로 표시할지 여부입니다. 끄면 Show()를 직접 불러야 합니다.")]
     [SerializeField] private bool m_showOnDefenseStart = true;
@@ -127,6 +139,12 @@ public class DefenseObjectiveHud : MonoBehaviour
     {
         AutoFindReferences();
         ApplyLabel();
+        if (m_tintWarningIcons)
+        {
+            m_warningIconLeftImage = PrepareTintableIcon(m_warningIconLeft);
+            m_warningIconRightImage = PrepareTintableIcon(m_warningIconRight);
+        }
+
         ClearWarning();
         SetVisible(false);
     }
@@ -296,15 +314,125 @@ public class DefenseObjectiveHud : MonoBehaviour
             return;
         }
 
-        if (!m_warningBlink)
+        Color color = m_warningColor;
+        if (m_warningBlink)
         {
-            m_warningText.color = m_warningColor;
-            return;
+            float phase = (Time.time - m_warningShownTime) / m_warningBlinkPeriod;
+            float blend = 0.5f - (0.5f * Mathf.Cos(phase * Mathf.PI * 2.0f));
+            color = Color.Lerp(m_warningColor, m_warningBlinkColor, blend);
         }
 
-        float phase = (Time.time - m_warningShownTime) / m_warningBlinkPeriod;
-        float blend = 0.5f - (0.5f * Mathf.Cos(phase * Mathf.PI * 2.0f));
-        m_warningText.color = Color.Lerp(m_warningColor, m_warningBlinkColor, blend);
+        m_warningText.color = color;
+        if (m_warningIconLeftImage != null)
+        {
+            m_warningIconLeftImage.color = color;
+        }
+
+        if (m_warningIconRightImage != null)
+        {
+            m_warningIconRightImage.color = color;
+        }
+    }
+
+    /// <summary>
+    /// 경고 아이콘을 색을 받는 모양과 흰 부분 두 장으로 나눕니다. 아이콘 그림은 색을 받는 모양으로 바꾸고, 흰 부분은 자식으로 위에 얹습니다.
+    /// </summary>
+    /// <remarks>
+    /// 원본은 빨간 삼각형 안에 흰 느낌표가 있는 그림이라, 그대로 색을 곱하면 점멸 색(밝은 분홍)으로 밝아지지 않고 느낌표까지 물듭니다.
+    /// 그래서 실행 중에만 그림을 나눕니다. 씬과 원본 그림 파일은 바꾸지 않습니다.
+    /// </remarks>
+    /// <returns>색을 바꿀 RawImage입니다. 나눌 수 없으면 null입니다.</returns>
+    private static RawImage PrepareTintableIcon(RectTransform icon)
+    {
+        RawImage image = icon != null ? icon.GetComponent<RawImage>() : null;
+        if (image == null || image.texture == null)
+        {
+            return null;
+        }
+
+        if (s_splitSource != image.texture || s_splitShape == null || s_splitMark == null)
+        {
+            if (!TrySplitIcon(image.texture, out Texture2D shape, out Texture2D mark))
+            {
+                return null;
+            }
+
+            s_splitSource = image.texture;
+            s_splitShape = shape;
+            s_splitMark = mark;
+        }
+
+        GameObject markObject = new GameObject("WarningMark", typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
+        markObject.layer = icon.gameObject.layer;
+        RectTransform markRect = (RectTransform)markObject.transform;
+        markRect.SetParent(icon, false);
+        markRect.anchorMin = Vector2.zero;
+        markRect.anchorMax = Vector2.one;
+        markRect.offsetMin = Vector2.zero;
+        markRect.offsetMax = Vector2.zero;
+        RawImage markImage = markObject.GetComponent<RawImage>();
+        markImage.texture = s_splitMark;
+        markImage.uvRect = image.uvRect;
+        markImage.raycastTarget = false;
+
+        image.texture = s_splitShape;
+        return image;
+    }
+
+    /// <summary>
+    /// 그림을 흰 부분과 나머지(색을 받을 부분)로 나눕니다. 픽셀의 흰 정도(초록·파랑 중 작은 값)만큼 흰 부분으로 보냅니다.
+    /// </summary>
+    /// <remarks>원본 그림이 읽기 불가로 가져와져 있어도 되도록 렌더 텍스처에 그려서 읽습니다.</remarks>
+    private static bool TrySplitIcon(Texture source, out Texture2D shape, out Texture2D mark)
+    {
+        shape = null;
+        mark = null;
+        int width = source.width;
+        int height = source.height;
+        if (width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        RenderTexture temp = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+        RenderTexture previous = RenderTexture.active;
+        Texture2D read = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        try
+        {
+            Graphics.Blit(source, temp);
+            RenderTexture.active = temp;
+            read.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            read.Apply();
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(temp);
+        }
+
+        Color32[] pixels = read.GetPixels32();
+        Destroy(read);
+        Color32[] shapePixels = new Color32[pixels.Length];
+        Color32[] markPixels = new Color32[pixels.Length];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            Color32 p = pixels[i];
+            float white = Mathf.Min(p.g, p.b) / 255.0f;
+            float rest = 1.0f - white;
+            // 흰 부분을 뺀 나머지의 밝기입니다. 순수한 빨강이면 1이 되어 받는 색이 그대로 나옵니다.
+            float brightness = rest > 0.0001f ? Mathf.Clamp01(((p.r / 255.0f) - white) / rest) : 0.0f;
+            byte level = (byte)Mathf.RoundToInt(brightness * 255.0f);
+            shapePixels[i] = new Color32(level, level, level, (byte)Mathf.RoundToInt(p.a * rest));
+            markPixels[i] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(p.a * white));
+        }
+
+        shape = new Texture2D(width, height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = source.name + "_TintShape" };
+        shape.SetPixels32(shapePixels);
+        shape.Apply();
+        mark = new Texture2D(width, height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = source.name + "_WhiteMark" };
+        mark.SetPixels32(markPixels);
+        mark.Apply();
+        return true;
     }
 
     private void SubscribeAudioWarning()

@@ -80,6 +80,10 @@ public sealed class TutorialBlockDrawer : PropertyDrawer
             {
                 TutorialActionDrawer.DrawPositionField(row, field, GetFieldLabel(property, field));
             }
+            else if (field.name == "m_areaObject")
+            {
+                TutorialActionDrawer.DrawScenePathField(row, field, GetFieldLabel(property, field));
+            }
             else if (field.name == "m_cinematicId")
             {
                 TutorialCinematicPopup.Draw(row, field, GetFieldLabel(property, field));
@@ -207,6 +211,8 @@ public sealed class TutorialBlockDrawer : PropertyDrawer
                         break;
 
                     case TutorialConditionType.ReachArea:
+                    case TutorialConditionType.AllyInArea:
+                        yield return property.FindPropertyRelative("m_areaObject");
                         yield return property.FindPropertyRelative("m_areaCenter");
                         yield return property.FindPropertyRelative("m_areaRadius");
                         break;
@@ -217,6 +223,7 @@ public sealed class TutorialBlockDrawer : PropertyDrawer
 
                     case TutorialConditionType.SwitchCharacter:
                     case TutorialConditionType.UseSkill:
+                    case TutorialConditionType.RescueMember:
                         yield return property.FindPropertyRelative("m_memberNumber");
                         break;
 
@@ -244,6 +251,15 @@ public sealed class TutorialBlockDrawer : PropertyDrawer
         return field.name == "m_areaCenter" ? EditorGUIUtility.singleLineHeight : EditorGUI.GetPropertyHeight(field, true);
     }
 
+    /// <summary>도착 조건 요약입니다. 범위 오브젝트가 있으면 그 이름, 없으면 반경입니다.</summary>
+    private static string DescribeArea(SerializedProperty property)
+    {
+        string path = property.FindPropertyRelative("m_areaObject").stringValue;
+        return string.IsNullOrEmpty(path)
+            ? $"반경 {property.FindPropertyRelative("m_areaRadius").floatValue:0.#}m"
+            : path.Substring(path.LastIndexOf('/') + 1);
+    }
+
     private static GUIContent GetFieldLabel(SerializedProperty block, SerializedProperty field)
     {
         string text = field.name switch
@@ -255,6 +271,7 @@ public sealed class TutorialBlockDrawer : PropertyDrawer
             "m_killCount" => "처치 수",
             "m_areaCenter" => "도착 위치",
             "m_areaRadius" => "도착 반경(m)",
+            "m_areaObject" => "도착 범위 오브젝트",
             "m_targetId" => "대상 ID",
             "m_memberNumber" => "캐릭터 번호",
             "m_orderKey" => "명령 키 팀원",
@@ -356,7 +373,7 @@ public sealed class TutorialBlockDrawer : PropertyDrawer
                 return prefab != null ? $"{prefab.name} {kills}마리 처치" : $"적 {kills}마리 처치";
 
             case TutorialConditionType.ReachArea:
-                return $"도착 (반경 {property.FindPropertyRelative("m_areaRadius").floatValue:0.#}m)";
+                return $"도착 ({DescribeArea(property)})";
 
             case TutorialConditionType.Interact:
                 string id = property.FindPropertyRelative("m_targetId").stringValue;
@@ -369,6 +386,12 @@ public sealed class TutorialBlockDrawer : PropertyDrawer
             case TutorialConditionType.UseSkill:
                 int skillNumber = property.FindPropertyRelative("m_memberNumber").intValue;
                 return skillNumber > 0 ? $"{skillNumber}번 캐릭터 스킬 사용" : "스킬 사용";
+
+            case TutorialConditionType.RescueMember:
+                return $"{property.FindPropertyRelative("m_memberNumber").intValue}번 캐릭터 구조";
+
+            case TutorialConditionType.AllyInArea:
+                return $"동료 도착 ({DescribeArea(property)})";
 
             case TutorialConditionType.HoldOrder:
                 return $"{DescribeOrderKey(property)} 위치 사수";

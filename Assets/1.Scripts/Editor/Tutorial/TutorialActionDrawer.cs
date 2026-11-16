@@ -93,6 +93,10 @@ public sealed class TutorialActionDrawer : PropertyDrawer
         {
             TutorialTrapPopup.Draw(rect, arg.FindPropertyRelative("m_string"), label);
         }
+        else if (type == typeof(string) && parameter.GetCustomAttribute<TutorialScenePathAttribute>() != null)
+        {
+            DrawScenePathField(rect, arg.FindPropertyRelative("m_string"), label);
+        }
         else if (type == typeof(string))
         {
             SerializedProperty p = arg.FindPropertyRelative("m_string");
@@ -164,6 +168,29 @@ public sealed class TutorialActionDrawer : PropertyDrawer
         if (picked != null)
         {
             vector.vector3Value = picked.transform.position;
+        }
+    }
+
+    /// <summary>
+    /// 씬 오브젝트 경로 칸입니다. 오른쪽 칸에 씬 오브젝트를 끌어 놓으면 그 하이어라키 경로를 가져옵니다.
+    /// </summary>
+    /// <remarks>시퀀스는 에셋이라 씬 오브젝트를 저장할 수 없어서 경로 문자열로 저장합니다. 오브젝트 이름이나 부모를 바꾸면 다시 끌어 놓습니다.</remarks>
+    public static void DrawScenePathField(Rect rect, SerializedProperty path, GUIContent label)
+    {
+        const float pickWidth = 80.0f;
+        Rect fieldRect = new(rect.x, rect.y, rect.width - pickWidth - Spacing, rect.height);
+        Rect pickRect = new(fieldRect.xMax + Spacing, rect.y, pickWidth, rect.height);
+
+        path.stringValue = EditorGUI.TextField(fieldRect, label, path.stringValue);
+
+        int indent = EditorGUI.indentLevel;
+        EditorGUI.indentLevel = 0;
+        GameObject picked = (GameObject)EditorGUI.ObjectField(pickRect, GUIContent.none, null, typeof(GameObject), true);
+        EditorGUI.indentLevel = indent;
+        GUI.Label(pickRect, new GUIContent(string.Empty, "씬 오브젝트를 끌어 놓으면 그 경로를 가져옵니다."));
+        if (picked != null && picked.scene.IsValid())
+        {
+            path.stringValue = TutorialEvents.GetHierarchyPath(picked.transform);
         }
     }
 

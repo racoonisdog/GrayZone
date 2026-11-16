@@ -911,7 +911,7 @@ public abstract class CombatSceneDataManager : MonoBehaviour
     /// <summary>적 사망 이벤트를 중복 없이 구독하고 새 구독 여부를 반환합니다.</summary>
     private bool SubscribeEnemy(EnemyHealth enemy)
     {
-        if (enemy == null || !m_subscribedEnemies.Add(enemy))
+        if (enemy == null || enemy.ExcludeFromCombatStats || !m_subscribedEnemies.Add(enemy))
         {
             return false;
         }
@@ -930,7 +930,7 @@ public abstract class CombatSceneDataManager : MonoBehaviour
     /// <summary>아직 집계하지 않은 적 활성화만 새 적 생성으로 런타임 데이터에 반영합니다.</summary>
     private void RecordEnemyActivationIfNew(EnemyHealth enemy)
     {
-        if (enemy != null && m_countedEnemyActivations.Add(enemy))
+        if (enemy != null && !enemy.ExcludeFromCombatStats && m_countedEnemyActivations.Add(enemy))
         {
             m_runtimeData?.RecordEnemySpawned();
         }

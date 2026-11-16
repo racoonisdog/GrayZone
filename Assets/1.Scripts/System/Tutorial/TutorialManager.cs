@@ -49,7 +49,7 @@ public sealed class TutorialManager : MonoBehaviour
     [SerializeField] private List<TutorialPage> m_pages = new();
 
     [Tooltip("InteractTap 넘김에서 탭으로 인정하는 최대 누름 시간(초)입니다. 이보다 길게 누르면 넘어가지 않습니다. " +
-             "트랩 설치 홀드(기본 1초)보다 짧아야 두 입력이 겹치지 않습니다.")]
+             "함정 설치 홀드(기본 1초)보다 짧아야 두 입력이 겹치지 않습니다.")]
     [Range(0.05f, 0.9f)]
     [SerializeField] private float m_tapMaxSeconds = 0.3f;
 

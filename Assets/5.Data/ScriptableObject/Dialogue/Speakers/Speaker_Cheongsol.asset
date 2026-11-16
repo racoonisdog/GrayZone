@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: Speaker_Cheongsol
   m_EditorClassIdentifier: Assembly-CSharp::DialogueSpeaker
   m_displayName: 
-  m_role: 
+  m_role: "\uD0D0\uC0AC\uB300\uC6D0"
   m_portrait: {fileID: 0}
   m_character: 2

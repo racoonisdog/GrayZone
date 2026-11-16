@@ -29,6 +29,15 @@ public sealed class TutorialCinematic
     [Tooltip("켜면 재생하는 동안 분대 조작을 막습니다.")]
     [SerializeField] private bool m_lockInput = true;
 
+    [Tooltip("끝난 뒤 조작할 캐릭터 번호입니다(캐릭터 변경 키 1~3과 같은 번호). 0이면 그대로 둡니다. " +
+             "화면에 보이지 않을 때 바꿉니다: 끝 페이드를 켜면 검은 화면 동안, 아니면 시네마틱 카메라가 비추는 마지막 순간에 바꿉니다.")]
+    [Min(0)]
+    [SerializeField] private int m_switchToMemberNumber;
+
+    [Header("Start Transition")]
+    [Tooltip("켜면 시작할 때 화면을 검게 덮은 뒤 시네마틱 카메라로 바로 바꾸고 페이드인합니다. 시간 값은 아래 End Transition 값을 같이 씁니다.")]
+    [SerializeField] private bool m_fadeFromPlayer;
+
     [Header("End Transition")]
     [Tooltip("켜면 끝날 때 카메라를 플레이어 쪽으로 옮기지 않고, 화면을 검게 덮은 뒤 플레이어 시점으로 바로 바꾸고 페이드인합니다. " +
              "Timeline이면 마지막 카메라 클립의 Ease Out(플레이어 카메라로 옮겨 가는 구간)이 시작되기 전에 검게 덮습니다.")]
@@ -45,6 +54,9 @@ public sealed class TutorialCinematic
     [Tooltip("플레이어 시점으로 밝아지는 시간(초)입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_fadeInSeconds = 0.8f;
+
+    /// <summary>시작할 때 검은 화면을 거쳐 시네마틱 카메라로 바꿀지 여부입니다.</summary>
+    public bool FadeFromPlayer => m_fadeFromPlayer;
 
     /// <summary>끝날 때 검은 화면을 거쳐 플레이어 시점으로 바꿀지 여부입니다.</summary>
     public bool FadeToPlayer => m_fadeToPlayer;
@@ -75,6 +87,9 @@ public sealed class TutorialCinematic
 
     /// <summary>재생하는 동안 분대 조작을 막을지 여부입니다.</summary>
     public bool LockInput => m_lockInput;
+
+    /// <summary>끝난 뒤 조작할 캐릭터 번호입니다. 0이면 바꾸지 않습니다.</summary>
+    public int SwitchToMemberNumber => m_switchToMemberNumber;
 
     /// <summary>ID가 비었으면 새로 붙입니다. 반환값은 바꿨는지 여부입니다.</summary>
     public bool EnsureId(HashSet<string> used)

@@ -489,6 +489,12 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
     /// <summary>체력 컴포넌트입니다.</summary>
     public EnemyHealth Health => enemyHealth;
 
+    /// <summary>
+    /// 이 개체만의 시체 유지 시간(초)입니다. 0 이상이면 적 종류별 설정 대신 이 값을 씁니다. 음수면 설정을 따릅니다.
+    /// </summary>
+    /// <remarks>튜토리얼 연출처럼 시체를 평소보다 오래 보여 줘야 할 때 죽기 전에 정합니다.</remarks>
+    public float CorpseLifetimeOverride { get; set; } = -1.0f;
+
     /// <summary>대상 감지 센서입니다.</summary>
     public EnemyTargetSensor Sensor => targetSensor;
 
@@ -3174,14 +3180,49 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         get => m_tutorialTargetMode;
         set
         {
+            // 과녁 이동은 정한 점까지 가야 하므로 켜 있는 동안 정지 거리를 0으로 둡니다.
+            // 평소 값(예: 1.2m)을 두면 그만큼 앞에서 멈춰 도착 판정(0.4m)에 닿지 못합니다.
+            if (agent != null && value != m_tutorialTargetMode)
+            {
+                if (value)
+                {
+                    m_savedStoppingDistance = agent.stoppingDistance;
+                    agent.stoppingDistance = 0.0f;
+                }
+                else
+                {
+                    agent.stoppingDistance = m_savedStoppingDistance;
+                }
+            }
+
             m_tutorialTargetMode = value;
             m_hasTargetMovePoint = false;
+            m_targetHome = transform.position;
         }
     }
+
+    /// <summary>과녁 모드를 켜기 전의 정지 거리입니다. 끌 때 되돌립니다.</summary>
+    private float m_savedStoppingDistance;
 
     private bool m_tutorialTargetMode;
     private bool m_hasTargetMovePoint;
     private Vector3 m_targetMovePoint;
+
+    /// <summary>과녁이 돌아올 위치입니다. 과녁 모드를 켠 자리이고, 시킨 이동을 마치면 도착한 자리로 바뀝니다.</summary>
+    private Vector3 m_targetHome;
+
+    /// <summary>과녁이 돌아올 위치에서 이만큼(m, 평면 거리) 벗어나면 걸어서 되돌아옵니다. 0이면 되돌아오지 않습니다.</summary>
+    private float m_targetReturnRadius;
+
+    /// <summary>
+    /// 과녁 모드에서 넉백 등으로 돌아올 위치에서 정한 거리보다 멀어지면 걸어서 되돌아오게 합니다.
+    /// </summary>
+    /// <param name="radius">벗어났다고 볼 평면 거리(m)입니다. 0 이하면 되돌아오지 않습니다.</param>
+    /// <remarks>돌아올 위치는 과녁 모드를 켠 자리이고, <see cref="TargetMoveTo"/>로 시킨 이동을 마치면 도착한 자리로 바뀝니다.</remarks>
+    public void SetTargetReturnRadius(float radius)
+    {
+        m_targetReturnRadius = Mathf.Max(0.0f, radius);
+    }
 
     /// <summary>과녁 모드에서 이 위치까지 걸어가게 합니다. 도착하면 그 자리에 섭니다. 과녁 모드가 꺼져 있으면 무시합니다.</summary>
     public void TargetMoveTo(Vector3 worldPosition)
@@ -3195,9 +3236,23 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
         m_targetMovePoint = worldPosition;
     }
 
-    /// <summary>과녁 모드에서 시킨 위치가 있으면 그곳까지 걷고, 도착했거나 위치가 없으면 멈춰 섭니다.</summary>
+    /// <summary>
+    /// 과녁 모드에서 시킨 위치가 있으면 그곳까지 걷고, 도착했거나 위치가 없으면 멈춰 섭니다.
+    /// 시킨 위치가 없을 때 돌아올 위치에서 정한 거리보다 멀어져 있으면 그곳으로 되돌아갑니다.
+    /// </summary>
     private void UpdateTutorialTarget()
     {
+        if (!m_hasTargetMovePoint && m_targetReturnRadius > 0.0f)
+        {
+            Vector3 fromHome = transform.position - m_targetHome;
+            fromHome.y = 0.0f;
+            if (fromHome.sqrMagnitude > m_targetReturnRadius * m_targetReturnRadius)
+            {
+                m_hasTargetMovePoint = true;
+                m_targetMovePoint = m_targetHome;
+            }
+        }
+
         if (m_hasTargetMovePoint && agent != null && agent.isOnNavMesh)
         {
             Vector3 offset = m_targetMovePoint - transform.position;
@@ -3213,6 +3268,7 @@ public class EnemyController : MonoBehaviour, IKnockbackReceiver
             }
 
             m_hasTargetMovePoint = false;
+            m_targetHome = m_targetMovePoint;
         }
 
         StopMoving();

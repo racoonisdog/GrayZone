@@ -34,12 +34,16 @@ public sealed class DialoguePlayer : MonoBehaviour
 
     [Header("Auto Advance")]
     [Min(0.0f)]
-    [Tooltip("자동 줄의 기본 표시 시간(초)입니다. 줄의 시간이 0일 때 여기에 글자 수 시간을 더합니다.")]
-    [SerializeField] private float m_autoBaseSeconds = 1.5f;
+    [Tooltip("줄의 시간이 0인 자동 줄이, 대사가 다 보인 뒤(페이드·글자 찍기 끝) 머무는 기본 시간(초)입니다. 여기에 글자 수 시간을 더합니다.")]
+    [SerializeField] private float m_autoBaseSeconds = 1.0f;
 
     [Min(0.0f)]
-    [Tooltip("자동 줄에서 글자 하나당 더하는 표시 시간(초)입니다.")]
-    [SerializeField] private float m_autoSecondsPerCharacter = 0.08f;
+    [Tooltip("줄의 시간이 0인 자동 줄에서, 다 보인 뒤 글자 하나당 더 머무는 시간(초)입니다. 긴 대사를 읽을 시간입니다.")]
+    [SerializeField] private float m_autoSecondsPerCharacter = 0.03f;
+
+    [Min(0.0f)]
+    [Tooltip("줄에 시간을 적은 자동 줄도, 대사가 다 보인 뒤 적어도 이만큼(초)은 머뭅니다.")]
+    [SerializeField] private float m_minReadSeconds = 1.0f;
 
     [Header("Input Advance")]
     [Min(0.0f)]
@@ -199,15 +203,24 @@ public sealed class DialoguePlayer : MonoBehaviour
         callback?.Invoke();
     }
 
+    /// <summary>
+    /// 자동 줄을 띄워 둘 시간입니다. 대화창이 대사를 다 보이는 데 걸리는 시간(페이드, 글자 찍기) 뒤에 읽을 시간을 더합니다.
+    /// </summary>
+    /// <remarks>
+    /// 줄에 시간을 적었어도 다 보인 뒤 <see cref="m_minReadSeconds"/>보다 짧게 머물지 않게 합니다.
+    /// 긴 대사가 글자를 다 찍기 전에, 또는 다 찍자마자 넘어가 잘려 보이지 않게 하기 위해서입니다.
+    /// </remarks>
     private float ResolveAutoSeconds(DialogueLine line)
     {
+        DialogueWindow window = ResolveWindow();
+        float reveal = window != null ? window.GetRevealSeconds(line.Text) : 0.0f;
         if (line.AutoSeconds > 0.0f)
         {
-            return line.AutoSeconds;
+            return Mathf.Max(line.AutoSeconds, reveal + m_minReadSeconds);
         }
 
         int length = string.IsNullOrEmpty(line.Text) ? 0 : line.Text.Length;
-        return m_autoBaseSeconds + length * m_autoSecondsPerCharacter;
+        return reveal + m_autoBaseSeconds + length * m_autoSecondsPerCharacter;
     }
 
     private bool WasAdvancePressed()

@@ -177,6 +177,14 @@ public sealed class TrapInfoHud : MonoBehaviour
     {
         m_panelRect = m_panelRoot != null ? m_panelRoot.transform as RectTransform : null;
         m_descriptionRect = m_descriptionText != null ? m_descriptionText.rectTransform : null;
+
+        // 설명이 칸 너비를 넘으면 오른쪽으로 삐져나가지 않고 줄을 바꿔 아래로 늘어나야 하므로, 씬 설정과 상관없이 줄바꿈과 위쪽 정렬을 씁니다.
+        if (m_descriptionText != null)
+        {
+            m_descriptionText.textWrappingMode = TextWrappingModes.Normal;
+            m_descriptionText.alignment = TextAlignmentOptions.TopLeft;
+        }
+
         m_panelBaseHeight = m_panelRect != null ? m_panelRect.sizeDelta.y : 0.0f;
         m_descriptionBaseHeight = m_descriptionRect != null ? m_descriptionRect.sizeDelta.y : 0.0f;
 
@@ -262,6 +270,14 @@ public sealed class TrapInfoHud : MonoBehaviour
     {
         InteractionController interaction = ResolveInteraction();
         IInteractionHudInfo info = interaction != null ? interaction.Current as IInteractionHudInfo : null;
+
+        // 튜토리얼 창이나 컷신이 떠 있으면 숨깁니다. 창이 시간을 멈추며 조작을 끄면 상호작용 대상이 갱신되지 않고
+        // 창이 뜨기 전 대상이 남아 있을 수 있어서, 대상과 상관없이 여기서도 막습니다.
+        if (TutorialEvents.IsAnyWindowOpen || InGameCutscene.IsPlaying)
+        {
+            info = null;
+        }
+
         if (info == null)
         {
             m_shownInfo = null;

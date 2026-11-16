@@ -70,6 +70,8 @@ public class DefenseTutorialOverlay : MonoBehaviour
     /// <summary>원래 레이아웃을 기억했는지 여부입니다. 압축 표시에서 되돌릴 때 씁니다.</summary>
     private bool m_hasFullLayout;
     private Vector2 m_fullPanelSize;
+    private Vector2 m_fullPanelPosition;
+    private float m_fullBodyHeight;
     private Rect m_fullPanelUv;
     private Vector2 m_fullHintPosition;
     private Vector2 m_fullGaugePosition;
@@ -120,6 +122,7 @@ public class DefenseTutorialOverlay : MonoBehaviour
         }
 
         ApplyPage(m_titleText, m_bodyText, m_hintText, m_image, m_keyIcon, page);
+        FitPanelToBody(true);
         SetPanelVisible(true);
     }
 
@@ -136,6 +139,7 @@ public class DefenseTutorialOverlay : MonoBehaviour
         m_showRequested = true;
         AutoFindReferences();
         ClearOverride();
+        FitPanelToBody(false);
         ApplyCompactLayout(true);
         ApplyPage(m_titleText, m_bodyText, m_hintText, m_image, m_keyIcon, page);
         SetPanelVisible(true);
@@ -184,14 +188,7 @@ public class DefenseTutorialOverlay : MonoBehaviour
         RectTransform hint = m_hintText != null ? m_hintText.rectTransform : null;
         RectTransform gauge = m_keyGaugeFill != null ? m_keyGaugeFill.rectTransform.parent as RectTransform : null;
 
-        if (!m_hasFullLayout)
-        {
-            m_hasFullLayout = true;
-            m_fullPanelSize = panel.sizeDelta;
-            m_fullPanelUv = background != null ? background.uvRect : new Rect(0.0f, 0.0f, 1.0f, 1.0f);
-            m_fullHintPosition = hint != null ? hint.anchoredPosition : Vector2.zero;
-            m_fullGaugePosition = gauge != null ? gauge.anchoredPosition : Vector2.zero;
-        }
+        CaptureFullLayout(panel, background, hint, gauge);
 
         if (m_isCompact == compact)
         {
@@ -223,6 +220,75 @@ public class DefenseTutorialOverlay : MonoBehaviour
         if (gauge != null)
         {
             gauge.anchoredPosition = m_fullGaugePosition + new Vector2(0.0f, cut);
+        }
+    }
+
+    /// <summary>씬에 배치된 원래 레이아웃(패널 크기·위치, 배경 UV, 본문 높이, 하단 안내 위치)을 처음 한 번 기억합니다.</summary>
+    private void CaptureFullLayout(RectTransform panel, RawImage background, RectTransform hint, RectTransform gauge)
+    {
+        if (m_hasFullLayout)
+        {
+            return;
+        }
+
+        m_hasFullLayout = true;
+        m_fullPanelSize = panel.sizeDelta;
+        m_fullPanelPosition = panel.anchoredPosition;
+        m_fullPanelUv = background != null ? background.uvRect : new Rect(0.0f, 0.0f, 1.0f, 1.0f);
+        m_fullHintPosition = hint != null ? hint.anchoredPosition : Vector2.zero;
+        m_fullGaugePosition = gauge != null ? gauge.anchoredPosition : Vector2.zero;
+        m_fullBodyHeight = m_bodyText != null ? m_bodyText.rectTransform.sizeDelta.y : 0.0f;
+    }
+
+    /// <summary>
+    /// 본문이 배치된 높이를 넘으면 넘친 만큼 창을 아래로 늘립니다. 넘지 않으면 원래 크기로 되돌립니다.
+    /// </summary>
+    /// <param name="grow">false면 늘리지 않고 원래 크기로만 되돌립니다(압축 표시 전).</param>
+    /// <remarks>
+    /// 창 위쪽은 제자리에 두고 아래로만 늘립니다. 본문 칸은 위쪽 정렬로 늘리고, 하단 안내 문구와 키 게이지는 늘어난 만큼 내립니다.
+    /// 배경 RawImage는 늘린 만큼 텍스처 아래쪽을 더 보여 주도록 UV를 넓혀, 그림이 세로로 늘어나 보이지 않게 합니다
+    /// (텍스처 아래가 모자라면 그만큼은 늘어납니다).
+    /// </remarks>
+    private void FitPanelToBody(bool grow)
+    {
+        if (m_panelRoot == null || !(m_panelRoot.transform is RectTransform panel) || m_bodyText == null)
+        {
+            return;
+        }
+
+        RawImage background = m_panelRoot.GetComponent<RawImage>();
+        RectTransform hint = m_hintText != null ? m_hintText.rectTransform : null;
+        RectTransform gauge = m_keyGaugeFill != null ? m_keyGaugeFill.rectTransform.parent as RectTransform : null;
+        CaptureFullLayout(panel, background, hint, gauge);
+
+        RectTransform body = m_bodyText.rectTransform;
+        float extra = 0.0f;
+        if (grow)
+        {
+            m_bodyText.alignment = TextAlignmentOptions.TopLeft;
+            float preferred = m_bodyText.GetPreferredValues(m_bodyText.text, body.rect.width, 0.0f).y;
+            extra = Mathf.Max(0.0f, Mathf.Ceil(preferred - m_fullBodyHeight));
+        }
+
+        body.sizeDelta = new Vector2(body.sizeDelta.x, m_fullBodyHeight + extra);
+        panel.sizeDelta = new Vector2(m_fullPanelSize.x, m_fullPanelSize.y + extra);
+        panel.anchoredPosition = m_fullPanelPosition - new Vector2(0.0f, (1.0f - panel.pivot.y) * extra);
+
+        if (background != null)
+        {
+            float extraUv = m_fullPanelSize.y > 0.0f ? m_fullPanelUv.height * extra / m_fullPanelSize.y : 0.0f;
+            float uvY = Mathf.Max(0.0f, m_fullPanelUv.y - extraUv);
+            background.uvRect = new Rect(m_fullPanelUv.x, uvY, m_fullPanelUv.width, m_fullPanelUv.height + (m_fullPanelUv.y - uvY));
+        }
+
+        if (hint != null)
+        {
+            hint.anchoredPosition = m_fullHintPosition - new Vector2(0.0f, extra);
+        }
+
+        if (gauge != null)
+        {
+            gauge.anchoredPosition = m_fullGaugePosition - new Vector2(0.0f, extra);
         }
     }
 

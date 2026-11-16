@@ -18,4 +18,13 @@ public abstract class DialogueWindow : MonoBehaviour
 
     /// <summary>대화창을 내립니다.</summary>
     public abstract void Hide();
+
+    /// <summary>
+    /// 대사가 다 보일 때까지 걸리는 시간(초)입니다. 앞 줄이 사라지는 페이드, 새 줄이 나타나는 페이드, 글자가 찍히는 시간을 더합니다.
+    /// </summary>
+    /// <remarks><see cref="DialoguePlayer"/>가 자동 줄을 다 보인 뒤 일정 시간 머물게 할 때 씁니다. 연출이 없는 창은 0입니다.</remarks>
+    public virtual float GetRevealSeconds(string text)
+    {
+        return 0.0f;
+    }
 }

@@ -636,6 +636,19 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     public event System.Action<CombatDamage.HitFeedback> OnHitFeedback;
 
     /// <summary>
+    /// 총이 직접 판정하지 않은 명중(특수탄 등)을 일반 명중과 같은 <see cref="OnHitFeedback"/>로 알립니다.
+    /// </summary>
+    /// <remarks>히트마커·명중 사운드·처치 집계가 이 이벤트를 듣기 때문에, 대체 사격도 이 경로로 알려야 같은 반응이 납니다.</remarks>
+    /// <param name="feedback">명중 결과입니다. 피해가 들어가지 않았으면 무시합니다.</param>
+    public void ReportHitFeedback(CombatDamage.HitFeedback feedback)
+    {
+        if (feedback.Applied)
+        {
+            OnHitFeedback?.Invoke(feedback);
+        }
+    }
+
+    /// <summary>
     /// 재장전이 끝났을 때 발생합니다. 예비 탄약이 부족하면 최대치보다 적게 채워진 상태에서도 발생할 수 있습니다.
     /// </summary>
     /// <remarks>

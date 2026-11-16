@@ -24,11 +24,11 @@ MonoBehaviour:
   - UpgradeId: 1
     Level: 1
     Cost: 1
-    Info: "\uC2A4\uD30C\uC774\uD06C \uB370\uBBF8\uC9C0 \uC99D\uAC00"
+    Info: "\uAC00\uC2DC \uD568\uC815 \uB370\uBBF8\uC9C0 \uC99D\uAC00"
   - UpgradeId: 1
     Level: 2
     Cost: 1
-    Info: "\uC2A4\uD30C\uC774\uD06C \uB370\uBBF8\uC9C0 \uC99D\uAC00"
+    Info: "\uAC00\uC2DC \uD568\uC815 \uB370\uBBF8\uC9C0 \uC99D\uAC00"
   - UpgradeId: 2
     Level: 1
     Cost: 1

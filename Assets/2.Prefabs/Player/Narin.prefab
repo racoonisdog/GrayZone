@@ -679,10 +679,6 @@ PrefabInstance:
       value: 5.5
       objectReference: {fileID: 0}
     - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
-      propertyPath: m_crouchSpeed
-      value: 3.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 6619302410003073894, guid: 0701b3fcc8aebb94d8053c9ba86d132a, type: 3}
       propertyPath: m_sprintSpeed
       value: 9
       objectReference: {fileID: 0}

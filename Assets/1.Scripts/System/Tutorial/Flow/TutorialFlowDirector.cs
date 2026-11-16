@@ -53,8 +53,8 @@ public sealed class TutorialFlowDirector : MonoBehaviour
              "넘기기 키가 상호작용 키와 같으면 상호작용할 때도 넘어가므로, 실제 완료 조건을 확인할 때는 끕니다.")]
     [SerializeField] private bool m_debugAdvance = true;
 
-    [Tooltip("디버그 넘기기 키입니다.")]
-    [SerializeField] private Key m_debugAdvanceKey = Key.F;
+    [Tooltip("디버그 넘기기 키입니다. 상호작용(F)처럼 플레이 중 쓰는 키와 겹치면 설치·구조 중에 단계가 넘어가므로 겹치지 않는 키를 씁니다.")]
+    [SerializeField] private Key m_debugAdvanceKey = Key.F8;
 
     [Header("Current")]
     [Tooltip("현재 챕터 번호입니다. 진행 중이 아니면 -1입니다.")]
@@ -81,6 +81,29 @@ public sealed class TutorialFlowDirector : MonoBehaviour
     /// 안내 창을 보고 넘긴 뒤에 조작이 열리게 하기 위해서입니다. 창이 없는 챕터는 바로 엽니다.
     /// </summary>
     private PlayerInputLock m_locksUntilWindow;
+
+    /// <summary>
+    /// 이번 챕터 도중 이벤트로 먼저 연 조작입니다. 챕터 잠금에 들어 있어도 열어 둡니다. 다음 챕터로 넘어가면 비웁니다.
+    /// </summary>
+    /// <remarks>챕터 잠금은 챕터 단위라, 챕터 중간(예: 안내 창을 닫은 뒤)에 하나만 여는 데 씁니다.</remarks>
+    private PlayerInputLock m_unlockedInStep;
+
+    /// <summary>이번 챕터가 끝날 때까지 정한 조작을 엽니다. 챕터 잠금보다 우선합니다.</summary>
+    /// <param name="inputs">열 조작입니다.</param>
+    public void UnlockInputsForStep(PlayerInputLock inputs)
+    {
+        m_unlockedInStep |= inputs;
+        if (m_stepIndex >= 0)
+        {
+            PlayerInputController.SetInputLock(CurrentLocks(m_sequence.Steps[m_stepIndex]));
+        }
+    }
+
+    /// <summary>지금 걸어야 할 잠금입니다. 챕터 잠금과 창이 닫힐 때까지의 잠금에서, 챕터 도중 연 조작을 뺍니다.</summary>
+    private PlayerInputLock CurrentLocks(TutorialStep step)
+    {
+        return (step.LockedInputs | m_locksUntilWindow) & ~m_unlockedInStep;
+    }
 
     /// <summary>씬에 있는 활성 튜토리얼 진행기입니다. 없으면 null입니다.</summary>
     public static TutorialFlowDirector Instance => s_instance;
@@ -132,7 +155,25 @@ public sealed class TutorialFlowDirector : MonoBehaviour
             return;
         }
 
+        Complete();
+    }
+
+    /// <summary>튜토리얼을 끝내고 분대·방어 목표 체력을 한 번 가득 채운 뒤, 완료 보상(1웨이브 클리어 보상만큼의 함정 재료)을 주고 <see cref="OnCompleted"/>를 보냅니다.</summary>
+    private void Complete()
+    {
         End();
+        TutorialEvents events = ResolveEvents();
+        if (events != null)
+        {
+            events.RestoreSquadAndDefenseFull();
+        }
+
+        DefenseManager defense = DefenseManager.Instance;
+        if (defense != null)
+        {
+            defense.GrantTutorialCompleteReward();
+        }
+
         OnCompleted?.Invoke();
     }
 
@@ -144,6 +185,7 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         m_blockIndex = NoIndex;
         m_isHoldingDialogue = false;
         m_locksUntilWindow = PlayerInputLock.None;
+        m_unlockedInStep = PlayerInputLock.None;
         StopAllCoroutines();
         DisposeWatchers();
         // 씬이 내려갈 때도 불리므로 여기서는 찾거나 붙이지 않고, 이미 연결된 것만 되돌립니다.
@@ -212,7 +254,7 @@ public sealed class TutorialFlowDirector : MonoBehaviour
         // 분대원이 늦게 준비되면 처음 건 잠금이 닿지 않을 수 있어 매 프레임 맞춥니다. 값이 같으면 아무것도 하지 않습니다.
         if (m_stepIndex >= 0)
         {
-            PlayerInputController.SetInputLock(m_sequence.Steps[m_stepIndex].LockedInputs | m_locksUntilWindow);
+            PlayerInputController.SetInputLock(CurrentLocks(m_sequence.Steps[m_stepIndex]));
         }
     }
 
@@ -224,15 +266,16 @@ public sealed class TutorialFlowDirector : MonoBehaviour
             m_stepIndex = stepIndex;
             TutorialStep step = steps[stepIndex];
             // 첫 챕터는 앞 챕터가 없어 기본 조작을 그대로 엽니다.
+            // 앞 챕터 도중 이미 연 조작(m_unlockedInStep)은 다시 막지 않습니다.
             m_locksUntilWindow = stepIndex > 0 && HasWindow(step)
-                ? steps[stepIndex - 1].LockedInputs & ~step.LockedInputs
+                ? steps[stepIndex - 1].LockedInputs & ~m_unlockedInStep & ~step.LockedInputs
                 : PlayerInputLock.None;
-            PlayerInputController.SetInputLock(step.LockedInputs | m_locksUntilWindow);
+            m_unlockedInStep = PlayerInputLock.None;
+            PlayerInputController.SetInputLock(CurrentLocks(step));
             yield return RunStep(step);
         }
 
-        End();
-        OnCompleted?.Invoke();
+        Complete();
     }
 
     private IEnumerator RunStep(TutorialStep step)

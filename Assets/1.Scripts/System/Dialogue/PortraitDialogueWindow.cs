@@ -164,6 +164,14 @@ public sealed class PortraitDialogueWindow : DialogueWindow
         FadeTo(0.0f);
     }
 
+    /// <inheritdoc/>
+    public override float GetRevealSeconds(string text)
+    {
+        int length = string.IsNullOrEmpty(text) ? 0 : text.Length;
+        float typing = m_charactersPerSecond > 0.0f ? length / m_charactersPerSecond : 0.0f;
+        return m_fadeSeconds * 2.0f + typing;
+    }
+
     /// <summary>
     /// 대사 줄 수에 맞춰 박스와 대사 칸의 높이를 바꾸고, 박스 가운데가 제자리에 있도록 박스를 옮깁니다.
     /// 한 줄이면 씬에 배치한 크기와 위치 그대로입니다.

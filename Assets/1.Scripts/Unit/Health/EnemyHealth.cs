@@ -76,15 +76,24 @@ public class EnemyHealth : HealthSystemBase, IStaggerable
     /// <summary>
     /// 피해를 적용합니다. 과녁 처치 조건이 켜져 있고 이번 공격이 조건에 맞지 않으면 HP 1까지만 깎습니다.
     /// </summary>
-    /// <remarks>상태이상 피해는 그 상태이상을 건 원래 공격(<see cref="DamageInfo.OriginCategory"/>)으로 판정합니다.</remarks>
+    /// <remarks>
+    /// 상태이상 피해는 그 상태이상을 건 원래 공격(<see cref="DamageInfo.OriginCategory"/>)으로 판정합니다.
+    /// HP가 이미 1이라 깎을 것이 없어도 피격으로 보고 true를 돌려줍니다. false를 돌려주면 공격 쪽이 빗나간 것으로 보고
+    /// 히트마커·경직·넉백·피격 이펙트를 모두 건너뛰어, 과녁이 더는 맞지 않는 것처럼 보입니다.
+    /// </remarks>
     public override bool TakeDamage(DamageInfo info)
     {
         if (UseTargetKillRule && !CanKill(TargetKillRule, info))
         {
+            if (IsDead || info.Amount <= 0.0f)
+            {
+                return false;
+            }
+
             float damage = Mathf.Min(info.Amount, m_currentHp - 1.0f);
             if (damage <= 0.0f)
             {
-                return false;
+                return true;
             }
 
             info = info.WithAmount(damage);
@@ -107,6 +116,12 @@ public class EnemyHealth : HealthSystemBase, IStaggerable
 
     /// <summary>적 체력 컴포넌트가 활성화되어 필드 집계 대상으로 진입했을 때 발생합니다.</summary>
     public static event Action<EnemyHealth> OnEnemyEnabled;
+
+    /// <summary>
+    /// 켜면 전투 결과 집계(처치 수·생성 수)에서 뺍니다. 튜토리얼 연출용 적처럼 플레이 기록에 남기지 않을 적에 씁니다.
+    /// </summary>
+    /// <remarks>집계는 활성화될 때 구독하므로, 오브젝트가 켜지기 전에 정해야 합니다.</remarks>
+    public bool ExcludeFromCombatStats { get; set; }
 
     /// <summary>경직력 누적치가 한계치에 닿아 경직이 발동했을 때 발생합니다.</summary>
     /// <remarks>

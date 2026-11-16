@@ -119,11 +119,17 @@ public sealed class DefenseManager : CombatSceneManager
     [Tooltip("정비 구간 시작 때 표시할 알림 문구입니다.")]
     [SerializeField] private string m_restStartMessage = "정비 시간이 시작됩니다";
 
+    [Tooltip("마지막 웨이브를 막아 귀환 구역이 열릴 때 표시할 알림 문구입니다. 웨이브 시작 알림과 같은 자리·방식으로 띄웁니다.")]
+    [SerializeField] private string m_victoryMessage = "방어전이 종료되었습니다. 귀환하십시오.";
+
+    [Tooltip("마지막 웨이브를 막으면 귀환 구역까지 길을 안내할 발밑 경로선입니다. 비어 있으면 씬에서 찾고, 없으면 안내를 생략합니다.")]
+    [SerializeField] private ObjectivePathArrow m_returnPathArrow;
+
     [Tooltip("웨이브 시작 알림이 불투명하게 유지되는 시간(초)입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_waveStartMessageHoldDuration = 0.5f;
 
-    [Tooltip("웨이브 시작 알림이 완전히 사라질 때까지 페이드아웃하는 시간(초)입니다.")]
+    [Tooltip("웨이브 시작 알림이 완전히 사라질 때까지 페이드아웃하는 시간(초)입니다. 나타날 때의 페이드인은 이 시간의 1/3입니다.")]
     [Min(0.0f)]
     [SerializeField] private float m_waveStartMessageFadeDuration = 1.0f;
 
@@ -293,6 +299,9 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>웨이브 시작 알림의 남은 표시 시간(초)입니다.</summary>
     private float m_waveStartMessageRemaining;
 
+    /// <summary>웨이브 시작 알림의 페이드인 시간(초)입니다. 페이드아웃 시간의 1/3로, 나타날 때는 사라질 때보다 빠르게 보이게 합니다.</summary>
+    private float WaveStartMessageFadeInDuration => m_waveStartMessageFadeDuration / 3.0f;
+
     /// <summary>허공 상호작용키를 연속해서 누른 시간(초)입니다.</summary>
     private float m_emptySpaceHoldStartTimer;
 
@@ -317,6 +326,9 @@ public sealed class DefenseManager : CombatSceneManager
     /// <summary>함정 재료 클리어 보상을 마지막으로 지급한 웨이브 번호입니다.</summary>
     /// <remarks>정리 완료가 디버그 경로로 중복 호출되어도 같은 웨이브 보상을 두 번 주지 않기 위해 씁니다.</remarks>
     private int m_lastRewardedWave;
+
+    /// <summary>이번 판에 튜토리얼 완료 보상을 이미 지급했는지 여부입니다.</summary>
+    private bool m_tutorialRewardGranted;
 
 
     /// <summary>Defense 게임이 시작되었는지 여부입니다.</summary>
@@ -1135,6 +1147,28 @@ public sealed class DefenseManager : CombatSceneManager
         int amount = m_activeStage != null
             ? m_activeStage.GetWaveClearTrapMaterialReward(m_currentWave - 1)
             : 0;
+        GrantTrapMaterial(amount, $"{m_currentWave}웨이브 클리어 보상");
+    }
+
+    /// <summary>
+    /// 튜토리얼을 마쳤을 때 1웨이브 클리어 보상과 같은 양의 함정 재료를 지급합니다. 한 판에 한 번만 지급합니다.
+    /// </summary>
+    /// <remarks>튜토리얼에서 함정을 설치하느라 쓴 재료를 첫 웨이브 전에 채워 주기 위한 것입니다.</remarks>
+    public void GrantTutorialCompleteReward()
+    {
+        if (m_tutorialRewardGranted)
+        {
+            return;
+        }
+
+        m_tutorialRewardGranted = true;
+        int amount = m_activeStage != null ? m_activeStage.GetWaveClearTrapMaterialReward(0) : 0;
+        GrantTrapMaterial(amount, "튜토리얼 완료 보상");
+    }
+
+    /// <summary>보관소에 함정 재료를 더합니다. 0 이하면 아무것도 하지 않습니다.</summary>
+    private void GrantTrapMaterial(int amount, string label)
+    {
         if (amount <= 0)
         {
             return;
@@ -1143,22 +1177,18 @@ public sealed class DefenseManager : CombatSceneManager
         StorageFacility storage = ShelterSceneDataManager.Instance?.Storage;
         if (storage == null)
         {
-            Debug.LogWarning(
-                $"[DefenseManager] {m_currentWave}웨이브 클리어 보상(함정 재료 {amount})을 지급할 보관소를 찾지 못했습니다.",
-                this);
+            Debug.LogWarning($"[DefenseManager] {label}(함정 재료 {amount})을 지급할 보관소를 찾지 못했습니다.", this);
             return;
         }
 
         if (!storage.TryAddResource(ResourceIds.TrapMaterial, amount))
         {
-            Debug.LogWarning(
-                $"[DefenseManager] {m_currentWave}웨이브 클리어 보상(함정 재료 {amount}) 지급에 실패했습니다.",
-                this);
+            Debug.LogWarning($"[DefenseManager] {label}(함정 재료 {amount}) 지급에 실패했습니다.", this);
             return;
         }
 
         Debug.Log(
-            $"[DefenseManager] {m_currentWave}웨이브 클리어: 함정 재료 {amount}개를 지급했습니다. " +
+            $"[DefenseManager] {label}: 함정 재료 {amount}개를 지급했습니다. " +
             $"현재 {storage.GetResourceAmount(ResourceIds.TrapMaterial)}개입니다.",
             this);
     }
@@ -1233,7 +1263,7 @@ public sealed class DefenseManager : CombatSceneManager
         m_roundTimer = 0.0f;
         m_restTimer = 0.0f;
         RefreshTimerText();
-        HideWaveStartMessage();
+        ShowPhaseStartMessage(m_victoryMessage);
 
         SetReturnPointActive(true);
         RefreshTrapBuildWindow();
@@ -1733,6 +1763,34 @@ public sealed class DefenseManager : CombatSceneManager
         {
             m_returnPoint.SetActive(isActive);
         }
+
+        SetReturnPathVisible(isActive);
+    }
+
+    /// <summary>귀환 구역까지의 발밑 경로선을 켜거나 끕니다. 귀환 구역이 열릴 때 켜고 닫힐 때 끕니다.</summary>
+    /// <remarks>경로선은 튜토리얼 안내와 같은 컴포넌트를 씁니다. 귀환 구역이 열리는 시점에는 튜토리얼이 끝나 있으므로 겹치지 않습니다.</remarks>
+    private void SetReturnPathVisible(bool visible)
+    {
+        if (m_returnPathArrow == null)
+        {
+            if (!visible)
+            {
+                return;
+            }
+
+            m_returnPathArrow = FindFirstObjectByType<ObjectivePathArrow>(FindObjectsInactive.Include);
+            if (m_returnPathArrow == null)
+            {
+                return;
+            }
+        }
+
+        if (visible)
+        {
+            m_returnPathArrow.SetTarget(m_returnPoint.transform);
+        }
+
+        m_returnPathArrow.SetVisible(visible);
     }
 
     /// <summary>현재 전투 또는 휴식의 남은 시간을 분:초 형식으로 HUD에 반영합니다.</summary>
@@ -1839,7 +1897,19 @@ public sealed class DefenseManager : CombatSceneManager
         m_remainingWaveText.text = string.Format(m_remainingWaveFormat, remaining, totalWaveCount);
     }
 
-    /// <summary>구간 시작 알림을 표시하고 설정된 유지·페이드 시간을 시작합니다.</summary>
+    /// <summary>
+    /// "전투가 시작됩니다"와 같은 자리·방식(페이드인 → 유지 → 페이드아웃)으로 화면 가운데 알림을 띄웁니다. 튜토리얼 등 바깥에서 쓰는 입구입니다.
+    /// </summary>
+    /// <param name="message">띄울 문구입니다. 비어 있으면 아무것도 하지 않습니다.</param>
+    public void ShowBannerMessage(string message)
+    {
+        if (!string.IsNullOrEmpty(message))
+        {
+            ShowPhaseStartMessage(message);
+        }
+    }
+
+    /// <summary>구간 시작 알림을 표시하고 설정된 페이드인·유지·페이드아웃 시간을 시작합니다.</summary>
     private void ShowPhaseStartMessage(string message)
     {
         if (m_waveStartMessageText == null)
@@ -1849,9 +1919,9 @@ public sealed class DefenseManager : CombatSceneManager
 
         m_waveStartMessageText.text = message;
         SetWaveStartMessageVisible(true);
-        SetWaveStartMessageAlpha(1.0f);
+        SetWaveStartMessageAlpha(WaveStartMessageFadeInDuration > 0.0f ? 0.0f : 1.0f);
 
-        m_waveStartMessageRemaining = m_waveStartMessageHoldDuration + m_waveStartMessageFadeDuration;
+        m_waveStartMessageRemaining = WaveStartMessageFadeInDuration + m_waveStartMessageHoldDuration + m_waveStartMessageFadeDuration;
         if (m_waveStartMessageRemaining <= 0.0f)
         {
             HideWaveStartMessage();
@@ -1874,10 +1944,20 @@ public sealed class DefenseManager : CombatSceneManager
             return;
         }
 
-        if (m_waveStartMessageRemaining <= m_waveStartMessageFadeDuration
+        float fadeIn = WaveStartMessageFadeInDuration;
+        float elapsed = fadeIn + m_waveStartMessageHoldDuration + m_waveStartMessageFadeDuration - m_waveStartMessageRemaining;
+        if (fadeIn > 0.0f && elapsed < fadeIn)
+        {
+            SetWaveStartMessageAlpha(elapsed / fadeIn);
+        }
+        else if (m_waveStartMessageRemaining <= m_waveStartMessageFadeDuration
             && m_waveStartMessageFadeDuration > 0.0f)
         {
             SetWaveStartMessageAlpha(m_waveStartMessageRemaining / m_waveStartMessageFadeDuration);
+        }
+        else
+        {
+            SetWaveStartMessageAlpha(1.0f);
         }
     }
 

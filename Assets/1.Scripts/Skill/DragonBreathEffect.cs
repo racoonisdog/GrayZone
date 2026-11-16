@@ -107,6 +107,9 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
     private Material m_runtimeParticleMaterial;
     private Faction m_ownerFaction;
     private GameObject m_attacker;
+
+    /// <summary>이 불길을 쏜 총입니다. 명중을 일반탄과 같은 피드백 경로(히트마커·처치 집계)로 알릴 때 씁니다.</summary>
+    private Gun m_sourceGun;
     private float m_disableTime;
 
     public int Damage => Mathf.Max(1, m_damage);
@@ -163,8 +166,11 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
     /// 피해는 발사 프레임에 한 번에 끝납니다. 착탄 시각 효과만 불길이 날아가는 시간만큼 늦게 나옵니다.
     /// 같은 대상은 원뿔과 착탄 범위에 모두 걸려도 한 번만 피해를 받습니다.
     /// </remarks>
-    public void Play(Vector3 origin, Vector3 direction, Faction ownerFaction, GameObject attacker)
+    /// <param name="sourceGun">이 불길을 쏜 총입니다. 있으면 명중마다 총의 명중 피드백(히트마커·처치 집계)을 냅니다.</param>
+    public void Play(Vector3 origin, Vector3 direction, Faction ownerFaction, GameObject attacker, Gun sourceGun = null)
     {
+        m_sourceGun = sourceGun;
+
         if (direction.sqrMagnitude <= 0.0f)
         {
             return;
@@ -314,7 +320,7 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
                 continue;
             }
 
-            TryDamage(candidate, axial);
+            TryDamage(candidate, axial, origin + direction * axial);
 
             // 착탄 지점 후보는 피해를 받을 수 있는 몸(적 등)만 봅니다. 쏜 사람과 아군은 일반 총탄처럼 통과합니다.
             if (axial < nearestHitDistance
@@ -354,7 +360,7 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
         {
             if (overlaps[i] != null)
             {
-                TryDamage(overlaps[i], impactDistance);
+                TryDamage(overlaps[i], impactDistance, point);
             }
         }
 
@@ -412,7 +418,8 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
     /// 같은 대상이 원뿔과 착탄 범위에 모두 걸리면 먼저 처리되는 원뿔 쪽 거리로 피해가 정해집니다.
     /// 구간 피해가 0이면 피해와 화상을 모두 주지 않습니다.
     /// </remarks>
-    private void TryDamage(Collider other, float distance)
+    /// <param name="sourcePoint">불길이 닿아 온 지점입니다. 피격 이펙트 위치(대상 표면에서 이 지점에 가장 가까운 곳)를 정합니다.</param>
+    private void TryDamage(Collider other, float distance, Vector3 sourcePoint)
     {
         IDamageable target = other != null ? other.GetComponentInParent<IDamageable>() : null;
         if (target == null || !m_damagedTargets.Add(target))
@@ -422,7 +429,13 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
 
         int damage = ResolveDamage(distance);
         DamageInfo hit = new DamageInfo(damage, DamageCategory.Skill, nameof(CharacterSkillType.ChungSolDragonBreath), m_attacker);
-        if (!CombatDamage.TryApplyDamage(target, m_ownerFaction, hit) || target.IsDead)
+        if (!CombatDamage.TryApplyDamage(target, m_ownerFaction, hit))
+        {
+            return;
+        }
+
+        PlayHitFeedback(other, target, damage, sourcePoint);
+        if (target.IsDead)
         {
             return;
         }
@@ -437,6 +450,28 @@ public sealed class DragonBreathEffect : MonoBehaviour, IBalancePostProcess
         {
             StatusEffectContainer.GetOrAdd(target)?.Apply(burning, m_ownerFaction, m_attacker, hit);
         }
+    }
+
+    /// <summary>
+    /// 일반탄 명중과 같은 반응을 냅니다. 쏜 총의 명중 피드백(히트마커·명중 사운드·처치 집계)과 적의 피격 이펙트·사운드입니다.
+    /// </summary>
+    /// <remarks>특수탄은 총의 히트스캔 판정을 거치지 않아서, 여기서 따로 알리지 않으면 이 반응이 모두 빠집니다.</remarks>
+    private void PlayHitFeedback(Collider other, IDamageable target, int damage, Vector3 sourcePoint)
+    {
+        if (m_sourceGun != null)
+        {
+            m_sourceGun.ReportHitFeedback(new CombatDamage.HitFeedback(true, false, target.IsDead, damage));
+        }
+
+        EnemyController enemy = other.GetComponentInParent<EnemyController>();
+        if (enemy == null)
+        {
+            return;
+        }
+
+        Vector3 point = other.ClosestPoint(sourcePoint);
+        Vector3 normal = sourcePoint - point;
+        enemy.PlayHitFeedback(point, normal.sqrMagnitude > 0.0001f ? normal.normalized : -transform.forward, other.transform);
     }
 
     /// <summary>총구로부터의 거리에 해당하는 피해입니다. 구간 표가 비어 있으면 기본 피해입니다.</summary>

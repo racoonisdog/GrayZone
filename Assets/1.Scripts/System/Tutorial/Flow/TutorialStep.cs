@@ -75,6 +75,17 @@ public enum TutorialConditionType
     /// 고른 명령 키(Q/E)의 AI 팀원이 위치 사수 명령 없이 복귀한 상태면 완료입니다. 길게 눌러 취소하든 전원 복귀 키(CapsLock)를 쓰든 같습니다.
     /// </summary>
     RecallOrder = 8,
+
+    /// <summary>
+    /// 정한 번호(캐릭터 변경 키 1~3과 같은 번호)의 캐릭터가 다운에서 구조돼 일어난 상태면 완료입니다. F 상호작용과 서하 스킬 구조 모두 셉니다.
+    /// </summary>
+    RescueMember = 9,
+
+    /// <summary>
+    /// 조작 중이 아닌 동료(AI) 중 한 명이 정한 위치의 반경 안에 있으면 완료입니다. 위치 사수 지점마다 트리거를 하나씩 두고
+    /// 엔드포인트 하나로 함께 닫으면, 지점마다 동료가 한 명씩 서 있어야 넘어갑니다. 상태를 보므로 지점을 벗어나면 다시 미완료입니다.
+    /// </summary>
+    AllyInArea = 10,
 }
 
 /// <summary>
@@ -174,7 +185,8 @@ public sealed class TutorialBlock
 
     [Tooltip("트리거: 이 트리거가 완료로 취급되는 조건입니다. 트리거가 실행된 순간부터 셉니다.\n" +
              "None: 바로 완료 / Time: 시간 / KillEnemy: 적 처치 / ReachArea: 위치 도착 / Interact: 상호작용 완료\n" +
-             "SwitchCharacter: 캐릭터 변경 / UseSkill: 스킬 사용 / HoldOrder: 위치 사수 명령 / RecallOrder: 위치 사수 복귀")]
+             "SwitchCharacter: 캐릭터 변경 / UseSkill: 스킬 사용 / HoldOrder: 위치 사수 명령 / RecallOrder: 위치 사수 복귀\n" +
+             "RescueMember: 다운된 캐릭터 구조 완료")]
     [SerializeField] private TutorialConditionType m_condition;
 
     [Tooltip("Time: 트리거가 실행된 뒤 기다릴 시간(초)입니다.")]
@@ -195,11 +207,15 @@ public sealed class TutorialBlock
     [Min(0.1f)]
     [SerializeField] private float m_areaRadius = 2.0f;
 
+    [Tooltip("ReachArea / AllyInArea: 도착 범위 오브젝트(TutorialArriveArea)의 하이어라키 경로입니다. 채우면 위치·반경 대신 그 오브젝트의 콜라이더 범위로 판정합니다.")]
+    [SerializeField] private string m_areaObject;
+
     [Tooltip("Interact: 대상 ID입니다. 씬 오브젝트에 붙인 TutorialTarget의 ID와 같게 적습니다. 비우면 아무 대상이나 셉니다.")]
     [SerializeField] private string m_targetId;
 
     [Tooltip("SwitchCharacter: 바꿔야 하는 캐릭터 번호(캐릭터 변경 키 1~3)입니다. 0이면 아무 캐릭터로든 바꾸면 완료입니다.\n" +
-             "UseSkill: 스킬을 쓸 캐릭터 번호(1~3)입니다. 0이면 아무 캐릭터나 셉니다.")]
+             "UseSkill: 스킬을 쓸 캐릭터 번호(1~3)입니다. 0이면 아무 캐릭터나 셉니다.\n" +
+             "RescueMember: 구조해야 하는 캐릭터 번호(1~3)입니다.")]
     [Range(0, 3)]
     [SerializeField] private int m_memberNumber = 1;
 
@@ -241,6 +257,9 @@ public sealed class TutorialBlock
 
     /// <summary>ReachArea 조건의 반경(m)입니다.</summary>
     public float AreaRadius => m_areaRadius;
+
+    /// <summary>ReachArea·AllyInArea 조건의 도착 범위 오브젝트 경로입니다. 비어 있으면 위치·반경으로 판정합니다.</summary>
+    public string AreaObject => m_areaObject;
 
     /// <summary>Interact 조건의 대상 ID입니다. 비어 있으면 아무 대상이나입니다.</summary>
     public string TargetId => m_targetId;
