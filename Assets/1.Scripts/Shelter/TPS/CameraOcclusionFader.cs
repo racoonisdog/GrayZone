@@ -36,7 +36,9 @@ public sealed class CameraOcclusionFader : MonoBehaviour
     [SerializeField, Min(0.01f)] private float m_fadeDuration = 0.15f;
     [SerializeField, Min(0.01f)] private float m_restoreDuration = 0.25f;
 
-    private readonly HashSet<RoofOcclusionTarget> m_currentTargets = new HashSet<RoofOcclusionTarget>();
+    // 이번 프레임에 가린 대상과 가림 정도(0~1)입니다. 지붕(AnyHit)은 1, 전봇대 등은 각도에 따른 값입니다.
+    private readonly Dictionary<RoofOcclusionTarget, float> m_currentTargets =
+        new Dictionary<RoofOcclusionTarget, float>();
     private readonly Dictionary<RoofOcclusionTarget, FadeState> m_fadeStates =
         new Dictionary<RoofOcclusionTarget, FadeState>();
     private readonly List<RoofOcclusionTarget> m_removalBuffer = new List<RoofOcclusionTarget>();
@@ -150,20 +152,33 @@ public sealed class CameraOcclusionFader : MonoBehaviour
             RoofOcclusionTarget target =
                 hitCollider.GetComponentInParent<RoofOcclusionTarget>();
 
-            // SphereCast는 넓게 후보를 모으고, 최종 판정은 대상별 Detection Mode가 정합니다.
+            // 각도 기반 대상은 아래에서 별도로 계산하므로 SphereCast 결과에서는 제외합니다.
             if (target != null &&
                 target.isActiveAndEnabled &&
-                target.OwnsCollider(hitCollider) &&
-                target.ConfirmOcclusion(hitCollider, origin, targetPosition))
+                !target.UsesProximityDetection &&
+                target.OwnsCollider(hitCollider))
             {
-                m_currentTargets.Add(target);
+                m_currentTargets[target] = 1f;
             }
+        }
+
+        // 전봇대 등은 겹치기 전부터 서서히 디더링해야 하므로 SphereCast에 닿지 않아도 각도로 직접 계산합니다.
+        IReadOnlyList<RoofOcclusionTarget> proximityTargets = RoofOcclusionTarget.ProximityTargets;
+        for (int i = 0; i < proximityTargets.Count; i++)
+        {
+            RoofOcclusionTarget target = proximityTargets[i];
+            if (target == null)
+                continue;
+
+            float amount = target.EvaluateProximityOcclusion(origin, targetPosition);
+            if (amount > 0f)
+                m_currentTargets[target] = amount;
         }
     }
 
     private void RegisterCurrentTargets()
     {
-        foreach (RoofOcclusionTarget target in m_currentTargets)
+        foreach (RoofOcclusionTarget target in m_currentTargets.Keys)
         {
             if (target == null || m_fadeStates.ContainsKey(target))
                 continue;
@@ -193,8 +208,9 @@ public sealed class CameraOcclusionFader : MonoBehaviour
                 continue;
             }
 
-            bool isOccluded = m_currentTargets.Contains(target);
-            float desiredAmount = isOccluded ? m_occludedFade : 0f;
+            bool isOccluded = m_currentTargets.TryGetValue(target, out float occlusion);
+            // 가림 정도(0~1)에 Occluded Fade를 곱해, 완전히 겹쳐도 기존 디더 정도까지만 진해지게 합니다.
+            float desiredAmount = isOccluded ? occlusion * m_occludedFade : 0f;
             float duration = desiredAmount > state.Amount
                 ? m_fadeDuration
                 : m_restoreDuration;
