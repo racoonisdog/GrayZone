@@ -87,9 +87,13 @@ public sealed class TutorialEvents : MonoBehaviour
     [Tooltip("경로선 안내가 쓸 발밑 경로 화살표입니다. 비어 있으면 씬에서 찾습니다.")]
     [SerializeField] private ObjectivePathArrow m_pathArrow;
 
-    [Tooltip("목표 대상 위 마커 띄우기가 대상마다 복제할 마커입니다(공격로 마커를 복제해 아이콘만 바꾼 것). 씬에서는 꺼 둡니다. " +
-             "비어 있으면 대상 마커 이벤트는 경고만 남깁니다.")]
-    [SerializeField] private ObjectiveIndicatorController m_targetMarkerTemplate;
+    [Tooltip("목표 대상 위 마커 띄우기가 대상마다 만들 마커 프리팹입니다(Assets/2.Prefabs/UI/Marker/Marker_TutorialTarget). " +
+             "아이콘·크기·모양은 프리팹에서 고칩니다. 비어 있으면 대상 마커 이벤트는 경고만 남깁니다.")]
+    [UnityEngine.Serialization.FormerlySerializedAs("m_targetMarkerTemplate")]
+    [SerializeField] private ObjectiveIndicatorController m_targetMarkerPrefab;
+
+    [Tooltip("만든 목표 마커를 둘 부모입니다. 비우면 씬 맨 위에 둡니다. 마커는 자체 화면 캔버스를 가져 다른 캔버스 아래에 두지 않습니다.")]
+    [SerializeField] private Transform m_targetMarkerParent;
 
     [Min(0.0f)]
     [Tooltip("대상 마커를 대상의 보이는 모습 맨 위에서 이만큼(m) 더 띄웁니다.")]
@@ -521,9 +525,9 @@ public sealed class TutorialEvents : MonoBehaviour
     /// 튜토리얼 대상 위에 목표 마커(함정 재료 아이콘)를 띄웁니다. 대상마다 한 번씩 부릅니다.
     /// </summary>
     /// <param name="targetId">마커를 띄울 대상의 ID입니다(씬 오브젝트의 <see cref="TutorialTarget"/>). 꺼져 있는 대상도 찾습니다.</param>
-    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 템플릿의 기본 이미지(함정 재료 아이콘)를 씁니다.</param>
-    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 템플릿 크기 그대로입니다.</param>
-    /// <param name="iconScale">테두리 안 아이콘만 줄이거나 키우는 배율입니다. 0이나 1이면 그대로입니다. 아이콘이 테두리 밖으로 나가면 1보다 작게 둡니다.</param>
+    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 프리팹의 이미지(함정 재료 아이콘)를 씁니다.</param>
+    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 프리팹 크기 그대로입니다.</param>
+    /// <param name="iconScale">테두리 안 아이콘만 줄이거나 키우는 배율입니다. 0이나 1이면 프리팹 그대로입니다. 아이콘이 테두리 밖으로 나가면 1보다 작게 둡니다.</param>
     /// <remarks>
     /// 마커는 대상의 보이는 모습(켜진 렌더러) 맨 위를 따라갑니다. 청사진과 설치된 모습의 높이가 달라도 맞춰 움직입니다.
     /// 대상이 함정이면 설치하거나 수리해 내구도를 가득 채우는 순간 그 마커만 내립니다. 나머지는 목표 대상 마커 모두 내리기나 튜토리얼 종료 때 내립니다.
@@ -545,8 +549,8 @@ public sealed class TutorialEvents : MonoBehaviour
     /// 분대원 머리 위에 목표 마커를 띄웁니다(함정 마커와 같은 모양). 다운된 동료를 구조할 때처럼 찾아갈 대원을 표시합니다.
     /// </summary>
     /// <param name="memberNumber">마커를 띄울 캐릭터 번호입니다(캐릭터 변경 키 1~3과 같은 번호).</param>
-    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 템플릿의 기본 이미지를 씁니다.</param>
-    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 템플릿 크기 그대로입니다.</param>
+    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 프리팹의 이미지를 씁니다.</param>
+    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 프리팹 크기 그대로입니다.</param>
     /// <remarks>그 대원이 다운된 상태였다가 구조돼 일어나면 마커를 내립니다. 그 밖에는 목표 대상 마커 모두 내리기나 튜토리얼 종료 때 내립니다.</remarks>
     [TutorialEvent("대원 머리 위 마커 띄우기 (구조되면 내림)")]
     public void ShowSquadMemberMarker(int memberNumber, Sprite icon, float sizeMultiplier)
@@ -566,9 +570,9 @@ public sealed class TutorialEvents : MonoBehaviour
     /// <summary>대상 위에 마커를 하나 만듭니다. 같은 대상에 이미 있으면 만들지 않습니다.</summary>
     private void CreateTargetMarker(Transform root, string label, Sprite icon, float sizeMultiplier, float iconScale, Trap trap, PlayerHealth member)
     {
-        if (m_targetMarkerTemplate == null)
+        if (m_targetMarkerPrefab == null)
         {
-            Debug.LogWarning($"목표 대상 위 마커 띄우기: {nameof(TutorialEvents)}에 대상 마커 템플릿이 비어 있습니다.", this);
+            Debug.LogWarning($"목표 대상 위 마커 띄우기: {nameof(TutorialEvents)}에 대상 마커 프리팹이 비어 있습니다.", this);
             return;
         }
 
@@ -581,13 +585,27 @@ public sealed class TutorialEvents : MonoBehaviour
         }
 
         Transform anchor = new GameObject($"TutorialTargetMarkerAnchor_{label}").transform;
-        ObjectiveIndicatorController view = Instantiate(m_targetMarkerTemplate, m_targetMarkerTemplate.transform.parent);
+        ObjectiveIndicatorController view = Instantiate(m_targetMarkerPrefab, m_targetMarkerParent);
         view.name = $"TutorialTargetMarker_{label}";
         view.gameObject.SetActive(true);
         view.SetTarget(anchor);
-        view.SetOnscreenMarkerSprite(icon);
-        view.SetOnscreenMarkerScale(sizeMultiplier);
-        view.SetOnscreenIconScale(iconScale);
+
+        // 생김새는 프리팹 그대로 씁니다. 이벤트 인자로 따로 정한 값(이미지, 0·1이 아닌 배율)만 덮어씁니다.
+        if (icon != null)
+        {
+            view.SetOnscreenMarkerSprite(icon);
+        }
+
+        if (sizeMultiplier > 0.0f && !Mathf.Approximately(sizeMultiplier, 1.0f))
+        {
+            view.SetOnscreenMarkerScale(sizeMultiplier);
+        }
+
+        if (iconScale > 0.0f && !Mathf.Approximately(iconScale, 1.0f))
+        {
+            view.SetOnscreenIconScale(iconScale);
+        }
+
         view.SetVisible(true);
 
         TargetMarker marker = new()
