@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 나린 전술 가속 스킬(<see cref="NarinTeamHasteSkill"/>)에 주입할 순수 수치 밸런스 데이터를 보관합니다.
+/// 나린 신속 기동 스킬(<see cref="NarinTeamHasteSkill"/>)에 주입할 순수 수치 밸런스 데이터를 보관합니다.
 /// </summary>
 /// <remarks>
 /// 필드 이름은 "{스크립트 이름}_{필드 이름}" 규칙을 따르며 BindManager가 같은 규칙으로 짝을 찾습니다.
