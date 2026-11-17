@@ -96,7 +96,7 @@ MonoBehaviour:
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
-      - m_method: SetItemCount
+      - m_method: GiveItem
         m_args:
         - m_string: 
           m_float: 0
@@ -106,11 +106,11 @@ MonoBehaviour:
           m_object: {fileID: 11400000, guid: cd395eb2c76518a41a62dcd75d3bf4f6, type: 2}
         - m_string: 
           m_float: 0
-          m_int: 10
+          m_int: 2
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
-      - m_method: SetItemCount
+      - m_method: GiveItem
         m_args:
         - m_string: 
           m_float: 0
@@ -120,16 +120,8 @@ MonoBehaviour:
           m_object: {fileID: 11400000, guid: 58c48ca6feb615845976ffb3b8d4e44d, type: 2}
         - m_string: 
           m_float: 0
-          m_int: 10
+          m_int: 2
           m_bool: 0
-          m_vector: {x: 0, y: 0, z: 0}
-          m_object: {fileID: 0}
-      - m_method: SetUseWhenEmpty
-        m_args:
-        - m_string: 
-          m_float: 0
-          m_int: 0
-          m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
       - m_method: GiveResource
@@ -946,6 +938,14 @@ MonoBehaviour:
           m_bool: 0
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+      - m_method: SetFreeUse
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 1
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
       m_condition: 0
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
@@ -1166,7 +1166,43 @@ MonoBehaviour:
       m_triggerId: 
       m_closeTriggerIds:
       - 1ed6e9b6
-      m_actions: []
+      m_actions:
+      - m_method: SetFreeUse
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+      - m_method: GiveItemIfEmpty
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 11400000, guid: cd395eb2c76518a41a62dcd75d3bf4f6, type: 2}
+        - m_string: 
+          m_float: 0
+          m_int: 2
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
+      - m_method: GiveItemIfEmpty
+        m_args:
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 11400000, guid: 58c48ca6feb615845976ffb3b8d4e44d, type: 2}
+        - m_string: 
+          m_float: 0
+          m_int: 2
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 0}
       m_condition: 0
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
