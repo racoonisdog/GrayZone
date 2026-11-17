@@ -4,7 +4,7 @@ using System.Collections.Generic;
 [Serializable]
 public class SaveData
 {
-    public const int CurrentSchemaVersion = 14;
+    public const int CurrentSchemaVersion = 15;
 
     public int schemaVersion = CurrentSchemaVersion;
     public ShelterCheckpointId shelterCheckpointId = ShelterCheckpointId.BeforeDefense1;
@@ -26,6 +26,12 @@ public class SaveData
 
     public List<ResourceAmountData> resources = new List<ResourceAmountData>();
     public List<CharacterStateSaveData> characters = new List<CharacterStateSaveData>();
+
+    /// <summary>셸터 창고의 제작 아이템(수류탄 등) 보유 수량입니다. 게임오버 복구 때 자원과 함께 되돌립니다.</summary>
+    public List<ItemStorageEntry> items = new List<ItemStorageEntry>();
+
+    /// <summary>진행 중인 제조 작업입니다. 복구 후 이전 판의 작업이 남아 자원 없이 완성되지 않도록 함께 저장합니다.</summary>
+    public ManufacturingRuntimeData manufacturing = new ManufacturingRuntimeData();
 
     [Serializable]
     public class ResourceAmountData
