@@ -31,6 +31,40 @@ public static class SaveFilePaths
         return Path.Combine(SaveDirectoryPath, SettingsFileName);
     }
 
+    /// <summary>게임 저장 파일을 지운 뒤 알립니다. 타이틀의 불러오기 버튼이 이 때 다시 상태를 맞춥니다.</summary>
+    public static event System.Action GameSavesDeleted;
+
+    /// <summary>
+    /// 게임 저장 파일(game_save_*.json, 자동 저장 포함)을 모두 지워 처음 게임을 시작하는 상태로 만듭니다. 설정 파일은 지우지 않습니다.
+    /// </summary>
+    /// <returns>지운 파일 수입니다.</returns>
+    public static int DeleteAllGameSaves()
+    {
+        int deleted = 0;
+        if (Directory.Exists(SaveDirectoryPath))
+        {
+            foreach (string path in Directory.GetFiles(SaveDirectoryPath, "game_save_*.json"))
+            {
+                try
+                {
+                    File.Delete(path);
+                    deleted++;
+                }
+                catch (IOException exception)
+                {
+                    Debug.LogWarning($"[SaveFilePaths] 저장 파일을 지우지 못했습니다: {path}\n{exception.Message}");
+                }
+                catch (System.UnauthorizedAccessException exception)
+                {
+                    Debug.LogWarning($"[SaveFilePaths] 저장 파일을 지우지 못했습니다: {path}\n{exception.Message}");
+                }
+            }
+        }
+
+        GameSavesDeleted?.Invoke();
+        return deleted;
+    }
+
     private static string SanitizeFileName(string fileName)
     {
         char[] invalidChars = Path.GetInvalidFileNameChars();

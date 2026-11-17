@@ -33,7 +33,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private const float PauseSelectionFadeDuration = 0.15f;
 
     // Figma 'Setting Scene' 프레임(1920x1080) 값입니다.
-    /// <summary>위쪽 탭 글자의 가운데 x입니다(비디오·오디오·전투·고급설정 순서).</summary>
+    /// <summary>위쪽 탭 글자의 가운데 x입니다(비디오·오디오·전투·기타 순서).</summary>
     private static readonly float[] SettingsTabCenters = { 496f, 756f, 999f, 1258.5f };
 
     /// <summary>위쪽 탭과 전투 왼쪽 메뉴의 선택 칸(Select_mark_01) 크기입니다.</summary>
@@ -81,10 +81,6 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     [SerializeField] private bool m_showSettingsButton = true;
 
     [Header("Settings Tabs")]
-    [Tooltip("설정 화면에 전투 탭(마우스 감도·조준선)을 둘지입니다. 셸터·타이틀처럼 전투가 없는 씬에서 끕니다. " +
-             "끄면 뒤에 있던 탭이 그 자리로 당겨집니다.")]
-    [SerializeField] private bool m_showCombatTab = true;
-
     [Tooltip("켜면 일시정지 메뉴 없이 설정 화면만 씁니다. 타이틀처럼 다른 버튼이 OpenSettings를 불러 여는 씬에서 켭니다. " +
              "ESC로 열리지 않고, ESC나 뒤로가기를 누르면 닫힙니다. 시간 정지와 입력 잠금도 하지 않습니다.")]
     [SerializeField] private bool m_settingsOnly;
@@ -110,6 +106,16 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private GameObject m_settingsPage;
     private Button m_resumeButton;
     private Button m_firstSettingsTab;
+    private GameObject m_unsavedPopup;
+    private Button m_popupSaveButton;
+    private GameObject m_resetPopup;
+    private Button m_resetPopupBackButton;
+    private TextMeshProUGUI m_resetPopupMessage;
+    private System.Action m_pendingResetAction;
+    private GameObject m_demoResetPopup;
+    private Button m_demoResetPopupBackButton;
+    private System.Action<bool> m_demoResetDecision;
+    private bool m_demoResetPopupStandalone;
     private readonly List<Button> m_pauseButtons = new();
     private MenuSelectionIndicator m_pauseSelectionIndicator;
     private TMP_Dropdown m_resolutionDropdown;
@@ -183,6 +189,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
     private TextMeshProUGUI m_mouseSensitivityValue;
     private Toggle m_cameraKickToggle;
     private Toggle m_aimToggleToggle;
+    private Toggle m_demoResetToggle;
     private float m_mouseSensitivity = 1f;
     private float m_committedMouseSensitivity = 1f;
     private bool m_cameraKickEnabled = true;
@@ -216,11 +223,25 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             return;
         }
 
+        // 확인 팝업이 떠 있으면 ESC는 팝업의 뒤로가기(돌아가기)와 같습니다. 데모 초기화 팝업은 메뉴가 닫힌 채로도 뜹니다.
+        if (IsDemoResetPopupOpen)
+        {
+            CancelDemoResetPopup();
+            return;
+        }
+
+        if (m_isOpen && (IsUnsavedPopupOpen || IsResetPopupOpen))
+        {
+            CloseUnsavedChangesPopup();
+            CloseResetConfirmPopup();
+            return;
+        }
+
         if (m_settingsOnly)
         {
             if (m_isOpen)
             {
-                CloseSettingsOnly();
+                RequestLeaveSettings();
             }
 
             return;
@@ -230,7 +251,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         {
             if (m_settingsPage.activeSelf)
             {
-                ShowPausePage();
+                RequestLeaveSettings();
             }
             else
             {
@@ -352,6 +373,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_hasDisplayBaseline = true;
         SyncCombatGeneralSettings(settingManager, true);
         SyncAudioSettings(settingManager);
+        SyncDemoResetToggle(settingManager);
         RefreshVideoControls();
 
         // 메뉴는 Awake에서 만들어져 저장값을 읽기 전일 수 있으므로 열 때마다 지금 적용된 값을 다시 읽습니다.
@@ -365,22 +387,20 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             SetViewActive(true);
         }
 
+        CloseUnsavedChangesPopup();
+        CloseResetConfirmPopup();
         m_pausePage.SetActive(false);
         m_settingsPage.SetActive(true);
         SelectSettingsTab(0);
         SelectUiObject(m_firstSettingsTab);
     }
 
-    /// <summary>설정 화면에서 일시정지 메뉴로 돌아갑니다.</summary>
+    /// <summary>
+    /// 설정 화면에서 일시정지 메뉴로 돌아갑니다(설정 화면만 쓰는 씬은 닫습니다). 저장하지 않은 변경이 있으면 확인 팝업을 먼저 띄웁니다.
+    /// </summary>
     public void ReturnToPauseMenu()
     {
-        if (m_settingsOnly)
-        {
-            CloseSettingsOnly();
-            return;
-        }
-
-        ShowPausePage();
+        RequestLeaveSettings();
     }
 
     /// <summary>설정 화면만 쓰는 씬에서 설정 화면을 닫습니다. 바꾼 값은 저장하지 않았어도 이번 실행 동안 유지됩니다.</summary>
@@ -419,6 +439,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         settingManager.ApplySnapshot(m_settingsBaseline);
         SyncCombatGeneralSettings(settingManager, true);
         SyncAudioSettings(settingManager);
+        SyncDemoResetToggle(settingManager);
         RefreshVideoControls();
 
         // 모니터를 옮겼으면 기준 모니터로 다시 옮깁니다. 해상도는 위에서 기준값으로 되돌렸습니다.
@@ -467,11 +488,26 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             return;
         }
 
+        // 설정 기타 탭의 데모용 초기화가 켜져 있으면 초기화할지 먼저 묻습니다.
+        if (DemoTitleReset.IsEnabled)
+        {
+            ShowDemoResetConfirm(LeaveToTitle);
+            return;
+        }
+
+        LeaveToTitle(false);
+    }
+
+    /// <summary>타이틀로 갑니다. <paramref name="demoReset"/>이면 전체 초기화 뒤 부트스트랩부터 다시 시작합니다.</summary>
+    private void LeaveToTitle(bool demoReset)
+    {
         SetViewActive(false);
         RestoreGameplayState();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        SceneTransitionController.LoadScene(m_titleSceneName);
+        SceneTransitionController.LoadScene(demoReset
+            ? DemoTitleReset.ResetAndGetNextScene(m_titleSceneName)
+            : m_titleSceneName);
     }
 
     private void RestoreGameplayState()
@@ -627,6 +663,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_viewRoot = CreateStretchObject("RuntimeView", transform);
         BuildPausePage();
         BuildSettingsPage();
+        BuildDemoResetPopup();
     }
 
     private void EnsureViewBuilt()
@@ -654,6 +691,16 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_settingsPage = null;
         m_resumeButton = null;
         m_firstSettingsTab = null;
+        m_unsavedPopup = null;
+        m_popupSaveButton = null;
+        m_resetPopup = null;
+        m_resetPopupBackButton = null;
+        m_resetPopupMessage = null;
+        m_pendingResetAction = null;
+        m_demoResetPopup = null;
+        m_demoResetPopupBackButton = null;
+        m_demoResetDecision = null;
+        m_demoResetPopupStandalone = false;
         m_tabBackgrounds.Clear();
         m_tabLabels.Clear();
         m_settingsContentPages.Clear();
@@ -674,6 +721,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         m_mouseSensitivityValue = null;
         m_cameraKickToggle = null;
         m_aimToggleToggle = null;
+        m_demoResetToggle = null;
 
         ResolveFonts();
         if (m_theme == null)
@@ -779,17 +827,12 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         {
             ("비디오", BuildVideoSettingsPage),
             ("오디오", BuildAudioSettingsPage),
+
+            // 전투 설정은 타이틀·셸터에서도 바꾸고 저장할 수 있습니다. 조준선 미리보기도 씬과 관계없이 그립니다.
+            ("전투", BuildCombatSettingsPage),
         };
 
-        if (m_showCombatTab)
-        {
-            tabs.Add(("전투", BuildCombatSettingsPage));
-        }
-
-        tabs.Add(("고급설정", parent => BuildPlaceholderPage(
-            parent,
-            "고급 설정",
-            "고급 그래픽 및 접근성 설정이 배치될 영역입니다.")));
+        tabs.Add(("기타", BuildEtcSettingsPage));
 
         for (int i = 0; i < tabs.Count; i++)
         {
@@ -860,7 +903,404 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
             new Rect(1806f, 1010f, 40f, 38f));
         backButton.onClick.AddListener(ReturnToPauseMenu);
 
+        BuildUnsavedChangesPopup();
+        BuildResetConfirmPopup();
         SelectSettingsTab(0);
+    }
+
+    /// <summary>기타 탭입니다. 데모용 초기화 토글과 모든 설정을 처음 값으로 되돌리는 버튼을 둡니다.</summary>
+    private void BuildEtcSettingsPage(Transform parent)
+    {
+        CreateSectionTitle(parent, 371f, 167f, "기타");
+
+        // 전투 일반 탭의 토글 줄과 같은 모양입니다. 값은 다른 설정처럼 바로 바뀌고 '변경사항 저장'으로 파일에 남습니다.
+        m_demoResetToggle = CreateToggle("Demo Reset Toggle", parent, 394f, 248f, "데모용 초기화");
+        m_demoResetToggle.onValueChanged.AddListener(OnDemoResetChanged);
+        float demoHelpLeft = 394f + ((RectTransform)m_demoResetToggle.transform).sizeDelta.x + 33f;
+        CreateHelpText("Demo Reset Help", parent, demoHelpLeft, 280f,
+            "켜면 '타이틀로 돌아가기'를 할 때마다 설정과 진행을 처음 켠 상태로 되돌립니다. 시연용입니다.");
+
+        // 하단 '변경사항 저장' 버튼과 같은 크기·모양의 버튼 셋을 한 줄로 둡니다. 누르면 같은 확인 팝업이 문구만 바꿔 뜹니다.
+        CreateResetButton(parent, "Reset Settings", 393f, "설정 초기화",
+            "모든 설정을 초기화하시겠습니까?", ResetSettingsOnly);
+        CreateResetButton(parent, "Reset Saves", 766f, "저장 초기화",
+            "모든 저장내역을 초기화하시겠습니까?", ResetSavesOnly);
+        CreateResetButton(parent, "Reset Everything", 1139f, "전체 초기화",
+            "모든 설정과 저장내역을 초기화하시겠습니까?", ResetEverything);
+
+        CreateHelpText("Reset Settings Help", parent, 393f, 451f,
+            "설정 초기화: 비디오·오디오·전투·조준선 설정을 처음 값으로 되돌리고 바로 저장합니다. 데모용 초기화 값은 유지됩니다.");
+        CreateHelpText("Reset Saves Help", parent, 393f, 486f,
+            "저장 초기화: 게임 저장 내역(자동 저장 포함)을 지워 처음 게임을 시작하는 상태로 만듭니다. 설정은 그대로입니다.");
+        CreateHelpText("Reset Everything Help", parent, 393f, 521f,
+            "전체 초기화: 설정 초기화와 저장 초기화를 함께 진행합니다.");
+    }
+
+    /// <summary>기타 탭의 초기화 버튼입니다. 누르면 <paramref name="confirmMessage"/>로 확인 팝업을 띄우고, 초기화를 고르면 <paramref name="action"/>을 실행합니다.</summary>
+    private void CreateResetButton(Transform parent, string name, float left, string label, string confirmMessage, System.Action action)
+    {
+        Button button = CreateButton(
+            name,
+            parent,
+            new Vector2(left, -360f),
+            new Vector2(343f, 71f),
+            label,
+            36f,
+            new Color(0.02f, 0.03f, 0.04f, 1f));
+        ApplySprite(button.GetComponent<Image>(), m_theme != null ? m_theme.actionButton : null);
+        m_theme?.ApplyActionButtonStates(button);
+        TextMeshProUGUI buttonLabel = button.GetComponentInChildren<TextMeshProUGUI>(true);
+        buttonLabel.font = m_boldFont != null ? m_boldFont : m_regularFont;
+        button.onClick.AddListener(() => OpenResetConfirmPopup(confirmMessage, action));
+    }
+
+    /// <summary>기타 탭 초기화 확인 팝업을 문구와 실행할 동작을 바꿔 띄웁니다.</summary>
+    private void OpenResetConfirmPopup(string message, System.Action action)
+    {
+        if (m_resetPopup == null)
+        {
+            return;
+        }
+
+        m_resetPopupMessage.text = message;
+        m_pendingResetAction = action;
+        m_resetPopup.SetActive(true);
+        m_resetPopup.transform.SetAsLastSibling();
+        SelectUiObject(m_resetPopupBackButton);
+    }
+
+    private void ConfirmPendingReset()
+    {
+        System.Action action = m_pendingResetAction;
+        m_pendingResetAction = null;
+        CloseResetConfirmPopup();
+        action?.Invoke();
+    }
+
+    private void CloseResetConfirmPopup()
+    {
+        if (m_resetPopup != null)
+        {
+            m_resetPopup.SetActive(false);
+        }
+    }
+
+    private bool IsResetPopupOpen => m_resetPopup != null && m_resetPopup.activeSelf;
+
+    private void OnDemoResetChanged(bool enabled)
+    {
+        GameSettingManager.Instance?.SetDemoResetOnTitle(enabled);
+    }
+
+    /// <summary>데모용 초기화 토글 표시를 <see cref="GameSettingManager"/>의 현재 값으로 맞춥니다.</summary>
+    private void SyncDemoResetToggle(GameSettingManager settingManager)
+    {
+        if (settingManager != null && m_demoResetToggle != null)
+        {
+            m_demoResetToggle.SetIsOnWithoutNotify(settingManager.DemoResetOnTitle);
+        }
+    }
+
+    /// <summary>설정 초기화: 설정만 처음 값으로 되돌려 저장합니다.</summary>
+    private void ResetSettingsOnly()
+    {
+        ResetSettingsAndRefresh();
+    }
+
+    /// <summary>저장 초기화: 게임 저장 내역(자동 저장 포함)만 지웁니다. 설정은 그대로입니다.</summary>
+    private void ResetSavesOnly()
+    {
+        SaveFilePaths.DeleteAllGameSaves();
+    }
+
+    /// <summary>전체 초기화: 설정 초기화와 저장 초기화를 함께 진행합니다. 데모용 초기화와 같은 작업입니다.</summary>
+    private void ResetEverything()
+    {
+        ResetSettingsAndRefresh();
+        SaveFilePaths.DeleteAllGameSaves();
+    }
+
+    /// <summary>
+    /// 모든 설정을 처음 값으로 되돌려 저장하고, 화면과 조준선 HUD를 그 값으로 다시 맞춥니다. 되돌리기 기준점도 이 값으로 옮깁니다.
+    /// </summary>
+    private void ResetSettingsAndRefresh()
+    {
+        GameSettingManager settingManager = GameSettingManager.Instance;
+        if (settingManager == null)
+        {
+            Debug.LogWarning("[GameplayPauseMenu] GameSettingManager를 찾지 못해 설정을 초기화할 수 없습니다.", this);
+            return;
+        }
+
+        if (!settingManager.ResetToDefaultsAndSave())
+        {
+            Debug.LogWarning("[GameplayPauseMenu] 초기화한 설정을 파일에 저장하지 못했습니다.", this);
+        }
+
+        CrosshairSettingsService.Instance?.ReapplyFromSettings();
+        m_settingsBaseline = settingManager.CreateSnapshot();
+        m_crosshairBaseline = settingManager.GetCrosshairSettings();
+        m_displayBaseline = Screen.mainWindowDisplayInfo;
+        m_hasDisplayBaseline = true;
+        SyncCombatGeneralSettings(settingManager, true);
+        SyncAudioSettings(settingManager);
+        SyncDemoResetToggle(settingManager);
+        RefreshVideoControls();
+        m_crosshairSettingsPanel?.RevertToCommittedValues();
+        m_throwableCrosshairSettingsPanel?.RevertToCommittedValues();
+    }
+
+    /// <summary>
+    /// Figma Setting Scene Battle Popup입니다. 저장하지 않은 변경이 있는데 설정 화면을 나가려 하면 띄웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 저장하기는 저장한 뒤 나가고, 나가기는 설정 화면을 열었을 때(또는 마지막 저장) 값으로 되돌린 뒤 나가고, 뒤로가기는 팝업만 닫습니다.
+    /// </remarks>
+    private void BuildUnsavedChangesPopup()
+    {
+        m_unsavedPopup = CreateConfirmPopup(
+            m_settingsPage.transform,
+            "Unsaved Changes Popup",
+            "저장이 되지 않았습니다. 저장 하시겠습니까?",
+            out Button[] buttons,
+            ("Save Button", "저장하기", SaveAndLeaveSettings),
+            ("Out Button", "나가기", DiscardAndLeaveSettings),
+            ("Back Button", "뒤로가기", CloseUnsavedChangesPopup));
+        m_popupSaveButton = buttons[0];
+    }
+
+    /// <summary>
+    /// 기타 탭의 초기화 버튼(설정·저장·전체)을 눌렀을 때 한 번 더 묻는 팝업입니다. 저장 확인 팝업과 같은 모양이고, 문구는 연 버튼이 정합니다.
+    /// </summary>
+    private void BuildResetConfirmPopup()
+    {
+        m_resetPopup = CreateConfirmPopup(
+            m_settingsPage.transform,
+            "Reset Confirm Popup",
+            string.Empty,
+            out Button[] buttons,
+            ("Reset Button", "초기화", ConfirmPendingReset),
+            ("Back Button", "뒤로가기", CloseResetConfirmPopup));
+        m_resetPopupBackButton = buttons[1];
+        m_resetPopupMessage = m_resetPopup.transform.Find("Popup Message").GetComponent<TextMeshProUGUI>();
+    }
+
+    /// <summary>
+    /// 데모용 초기화가 켜진 채 '타이틀로 돌아가기'를 누르면 띄우는 팝업입니다. 일시정지 메뉴와 게임오버 화면이 같이 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// 예는 전체 초기화(설정·저장 내역) 뒤 부트스트랩부터, 아니오는 초기화 없이 타이틀로 가고, 돌아가기는 팝업만 닫습니다.
+    /// 설정 화면 밖에서도 뜨도록 화면 루트 바로 아래에 둡니다.
+    /// </remarks>
+    private void BuildDemoResetPopup()
+    {
+        m_demoResetPopup = CreateConfirmPopup(
+            m_viewRoot.transform,
+            "Demo Reset Popup",
+            DemoTitleReset.ConfirmMessage,
+            out Button[] buttons,
+            ("Yes Button", "예", () => DecideDemoReset(true)),
+            ("No Button", "아니오", () => DecideDemoReset(false)),
+            ("Back Button", "돌아가기", CancelDemoResetPopup));
+        m_demoResetPopupBackButton = buttons[2];
+    }
+
+    private bool IsDemoResetPopupOpen => m_demoResetPopup != null && m_demoResetPopup.activeSelf;
+
+    /// <summary>
+    /// 데모용 초기화 확인 팝업을 띄웁니다. <paramref name="onDecide"/>는 예(true)·아니오(false)를 고르면 불립니다. 돌아가기를 고르면 불리지 않습니다.
+    /// </summary>
+    /// <remarks>일시정지 메뉴가 닫혀 있을 때(게임오버 화면)는 메뉴 화면 없이 팝업만 띄우고, 돌아가기로 닫으면 다시 숨깁니다.</remarks>
+    public void ShowDemoResetConfirm(System.Action<bool> onDecide)
+    {
+        EnsureViewBuilt();
+        m_demoResetDecision = onDecide;
+        m_demoResetPopupStandalone = !m_isOpen;
+        if (m_demoResetPopupStandalone)
+        {
+            m_pausePage.SetActive(false);
+            m_settingsPage.SetActive(false);
+            SetViewActive(true);
+        }
+
+        m_demoResetPopup.SetActive(true);
+        m_demoResetPopup.transform.SetAsLastSibling();
+        SelectUiObject(m_demoResetPopupBackButton);
+    }
+
+    private void DecideDemoReset(bool reset)
+    {
+        System.Action<bool> decision = m_demoResetDecision;
+        m_demoResetDecision = null;
+        m_demoResetPopup.SetActive(false);
+        decision?.Invoke(reset);
+    }
+
+    private void CancelDemoResetPopup()
+    {
+        m_demoResetDecision = null;
+        m_demoResetPopup.SetActive(false);
+        if (m_demoResetPopupStandalone)
+        {
+            m_demoResetPopupStandalone = false;
+            SetViewActive(false);
+        }
+    }
+
+    /// <summary>
+    /// Figma Setting Scene Battle Popup 모양의 확인 팝업을 만듭니다. 처음에는 꺼져 있습니다.
+    /// </summary>
+    /// <remarks>
+    /// 버튼이 셋이면 Figma 위치(왼쪽 620·896·1172)를 그대로 쓰고, 그보다 적으면 같은 간격으로 팝업 가운데에 모읍니다.
+    /// </remarks>
+    private GameObject CreateConfirmPopup(
+        Transform parent,
+        string name,
+        string messageText,
+        out Button[] buttons,
+        params (string Name, string Label, UnityEngine.Events.UnityAction OnClick)[] buttonSpecs)
+    {
+        GameObject popup = CreateStretchObject(name, parent);
+
+        // 덮개가 레이캐스트를 받아 팝업이 떠 있는 동안 뒤의 설정 화면을 누를 수 없게 합니다.
+        Image cover = CreateStretchImage("Popup_background_cover", popup.transform, new Color(0f, 0f, 0f, 0.6f));
+        ApplySprite(cover, m_theme != null ? m_theme.popupCover : null);
+        cover.raycastTarget = true;
+
+        Image popupBase = CreateTopLeftImage(
+            "Popup_base",
+            popup.transform,
+            new Vector2(PopupLeft, -304f),
+            new Vector2(PopupWidth, 364f),
+            new Color(0.12f, 0.12f, 0.12f, 0.95f));
+        ApplySprite(popupBase, m_theme != null ? m_theme.popupBase : null);
+
+        TextMeshProUGUI message = CreateFigmaText(
+            "Popup Message",
+            popup.transform,
+            PopupLeft + 30f,
+            396f,
+            PopupWidth - 60f,
+            32f,
+            messageText,
+            32f,
+            TextAlignmentOptions.Center);
+        message.textWrappingMode = TextWrappingModes.NoWrap;
+        message.overflowMode = TextOverflowModes.Overflow;
+
+        buttons = new Button[buttonSpecs.Length];
+        float rowWidth = (PopupButtonSize.x * buttonSpecs.Length) + (PopupButtonGap * (buttonSpecs.Length - 1));
+        float left = PopupLeft + ((PopupWidth - rowWidth) * 0.5f);
+        for (int i = 0; i < buttonSpecs.Length; i++)
+        {
+            Button button = CreateButton(
+                buttonSpecs[i].Name,
+                popup.transform,
+                new Vector2(left + ((PopupButtonSize.x + PopupButtonGap) * i), -557f),
+                PopupButtonSize,
+                buttonSpecs[i].Label,
+                32f,
+                new Color(0.02f, 0.03f, 0.04f, 1f));
+            ApplySprite(button.GetComponent<Image>(), m_theme != null ? m_theme.actionButton : null);
+            m_theme?.ApplyActionButtonStates(button);
+            button.onClick.AddListener(buttonSpecs[i].OnClick);
+            buttons[i] = button;
+        }
+
+        popup.SetActive(false);
+        return popup;
+    }
+
+    // Figma Setting Scene Battle Popup의 Popup_base(553, 304, 863x364)와 button 3(178x58, 98px 간격)입니다.
+    private const float PopupLeft = 553f;
+    private const float PopupWidth = 863f;
+    private const float PopupButtonGap = 98f;
+    private static readonly Vector2 PopupButtonSize = new(178f, 58f);
+
+    /// <summary>
+    /// 설정 화면을 열었을 때(또는 마지막 저장) 이후 바뀐 값이 있으면 <c>true</c>입니다.
+    /// </summary>
+    /// <remarks>조준선 편집은 바꿀 때마다 <see cref="GameSettingManager"/>로 넘어가므로 매니저 값과 기준값만 비교하면 됩니다.</remarks>
+    private bool HasUnsavedChanges()
+    {
+        GameSettingManager settingManager = GameSettingManager.Instance;
+        if (settingManager == null)
+        {
+            return false;
+        }
+
+        if (m_settingsBaseline != null
+            && JsonUtility.ToJson(settingManager.CreateSnapshot()) != JsonUtility.ToJson(m_settingsBaseline))
+        {
+            return true;
+        }
+
+        if (m_crosshairBaseline != null
+            && JsonUtility.ToJson(settingManager.GetCrosshairSettings()) != JsonUtility.ToJson(m_crosshairBaseline))
+        {
+            return true;
+        }
+
+        return m_hasDisplayBaseline && !m_displayBaseline.Equals(Screen.mainWindowDisplayInfo);
+    }
+
+    /// <summary>뒤로가기·ESC로 설정 화면을 나갈 때 부릅니다. 저장하지 않은 변경이 있으면 나가기 전에 확인 팝업을 띄웁니다.</summary>
+    private void RequestLeaveSettings()
+    {
+        if (IsUnsavedPopupOpen)
+        {
+            return;
+        }
+
+        if (HasUnsavedChanges())
+        {
+            m_unsavedPopup.SetActive(true);
+            m_unsavedPopup.transform.SetAsLastSibling();
+            SelectUiObject(m_popupSaveButton);
+            return;
+        }
+
+        LeaveSettings();
+    }
+
+    private bool IsUnsavedPopupOpen => m_unsavedPopup != null && m_unsavedPopup.activeSelf;
+
+    private void LeaveSettings()
+    {
+        CloseUnsavedChangesPopup();
+        if (m_settingsOnly)
+        {
+            CloseSettingsOnly();
+        }
+        else
+        {
+            ShowPausePage();
+        }
+    }
+
+    private void SaveAndLeaveSettings()
+    {
+        SaveSettings();
+
+        // 파일 쓰기에 실패하면 기준값이 그대로라 변경이 남아 있습니다. 그때는 팝업을 닫지 않고 설정 화면에 머뭅니다.
+        if (!HasUnsavedChanges())
+        {
+            LeaveSettings();
+        }
+    }
+
+    private void DiscardAndLeaveSettings()
+    {
+        RevertSettings();
+        LeaveSettings();
+    }
+
+    private void CloseUnsavedChangesPopup()
+    {
+        if (m_unsavedPopup != null)
+        {
+            m_unsavedPopup.SetActive(false);
+        }
     }
 
     /// <summary>

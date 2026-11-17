@@ -26,6 +26,8 @@ public class GameSettingManager : MonoBehaviour
         public bool cameraKickEnabled = true;
         // 켜면 조준 키를 한 번 눌러 조준하고 다시 눌러 풀니다. 끄면 누르고 있는 동안만 조준합니다.
         public bool aimToggleEnabled;
+        // 켜면 '타이틀로 돌아가기' 때마다 설정과 진행을 처음 상태로 되돌립니다(데모 시연용). 초기화해도 이 값은 남습니다.
+        public bool demoResetOnTitle;
     }
 
     public static GameSettingManager Instance { get; private set; }
@@ -98,6 +100,9 @@ public class GameSettingManager : MonoBehaviour
     public bool CameraKickEnabled => currentSettings.cameraKickEnabled;
     /// <summary>조준(ADS)을 누를 때마다 켜고 끄는 방식이면 true, 누르고 있는 동안만 조준하면 false입니다.</summary>
     public bool AimToggleEnabled => currentSettings.aimToggleEnabled;
+
+    /// <summary>켜져 있으면 '타이틀로 돌아가기' 때마다 설정과 진행을 처음 상태로 되돌립니다. 설정 화면 기타 탭의 데모용 초기화입니다.</summary>
+    public bool DemoResetOnTitle => currentSettings.demoResetOnTitle;
 
     /// <summary>조준선 기본값 템플릿입니다. 씬에 지정하지 않았으면 Resources 기본 에셋을 읽습니다. 둘 다 없으면 null입니다.</summary>
     public DefaultCrosshairSettings DefaultCrosshairSettings
@@ -314,6 +319,11 @@ public class GameSettingManager : MonoBehaviour
         currentSettings.gameplaySettingsVersion = 1;
     }
 
+    public void SetDemoResetOnTitle(bool enabled)
+    {
+        currentSettings.demoResetOnTitle = enabled;
+    }
+
     // Applies all currently cached display/audio values.
     public void ApplySettings()
     {
@@ -339,7 +349,10 @@ public class GameSettingManager : MonoBehaviour
     /// </remarks>
     public bool ResetToDefaultsAndSave()
     {
+        // 데모용 초기화는 시연 운영 설정이라 초기화해도 유지합니다. 지우면 첫 초기화 뒤 데모 모드가 풀립니다.
+        bool demoResetOnTitle = DemoResetOnTitle;
         ApplySnapshot(m_initialSettings ?? new SettingSnapshot());
+        SetDemoResetOnTitle(demoResetOnTitle);
 
         SettingData.CrosshairSettingData crosshair = new SettingData.CrosshairSettingData();
         DefaultCrosshairSettings defaults = DefaultCrosshairSettings;
@@ -435,7 +448,8 @@ public class GameSettingManager : MonoBehaviour
             sfxVolume = currentSettings.sfxVolume,
             mouseSensitivity = currentSettings.mouseSensitivity,
             cameraKickEnabled = currentSettings.cameraKickEnabled,
-            aimToggleEnabled = currentSettings.aimToggleEnabled
+            aimToggleEnabled = currentSettings.aimToggleEnabled,
+            demoResetOnTitle = currentSettings.demoResetOnTitle
         };
     }
 
@@ -456,6 +470,7 @@ public class GameSettingManager : MonoBehaviour
         data.gameplay.mouseSensitivity = currentSettings.mouseSensitivity;
         data.gameplay.cameraKickEnabled = currentSettings.cameraKickEnabled;
         data.gameplay.aimToggleEnabled = currentSettings.aimToggleEnabled;
+        data.gameplay.demoResetOnTitle = currentSettings.demoResetOnTitle;
         data.crosshair = m_crosshairSettings.Clone();
         data.MarkUpdatedNow();
         return data;
@@ -485,6 +500,7 @@ public class GameSettingManager : MonoBehaviour
         SetMouseSensitivity(snapshot.mouseSensitivity);
         SetCameraKickEnabled(snapshot.cameraKickEnabled);
         SetAimToggleEnabled(snapshot.aimToggleEnabled);
+        SetDemoResetOnTitle(snapshot.demoResetOnTitle);
     }
 
     public void ApplySettingData(SettingData data)
@@ -527,7 +543,8 @@ public class GameSettingManager : MonoBehaviour
             sfxVolume = data.audio.sfxVolume,
             mouseSensitivity = hasGameplaySettings ? data.gameplay.mouseSensitivity : 1f,
             cameraKickEnabled = !hasGameplaySettings || data.gameplay.cameraKickEnabled,
-            aimToggleEnabled = hasGameplaySettings && data.gameplay.aimToggleEnabled
+            aimToggleEnabled = hasGameplaySettings && data.gameplay.aimToggleEnabled,
+            demoResetOnTitle = hasGameplaySettings && data.gameplay.demoResetOnTitle
         };
 
         ApplySnapshot(snapshot);
