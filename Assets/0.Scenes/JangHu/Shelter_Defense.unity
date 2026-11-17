@@ -23599,6 +23599,7 @@ MonoBehaviour:
   m_noticeRoot: {fileID: 0}
   m_bodyLineHeight: 39
   m_compactHeightRatio: 1
+  m_sortingOrder: 800
 --- !u!224 &96151444
 RectTransform:
   m_ObjectHideFlags: 0
@@ -122646,6 +122647,7 @@ MonoBehaviour:
   m_noticeRoot: {fileID: 0}
   m_bodyLineHeight: 50
   m_compactHeightRatio: 0.5
+  m_sortingOrder: 800
 --- !u!114 &520775388
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -196746,7 +196748,7 @@ MonoBehaviour:
   m_startPromptKeyIconPosition: {x: 279, y: 99}
   m_startPromptKeyIconSize: {x: 30, y: 30}
   m_missionTitleText: {fileID: 0}
-  m_combatMissionTitle: "\uC678\uACFD \uBC29\uC5B4\uC120\uC744 \uC9C0\uD0A4\uC2ED\uC2DC\uC624"
+  m_combatMissionTitle: "\uC678\uACFD \uBC29\uC5B4\uC120\uC744 \uC218\uBE44\uD558\uC138\uC694"
   m_missionDescriptionText: {fileID: 1140254097}
   m_combatMissionDescription: "\uBAB0\uB824\uB4DC\uB294 \uC801\uC744 \uC800\uC9C0\uD558\uC2ED\uC2DC\uC624."
   m_debugSkipClearsEnemies: 1
@@ -221976,6 +221978,7 @@ GameObject:
   m_Component:
   - component: {fileID: 934500072}
   - component: {fileID: 934500073}
+  - component: {fileID: 934500074}
   m_Layer: 2
   m_Name: MapGuard(Tunnel)
   m_TagString: Untagged
@@ -222020,6 +222023,32 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 30, y: 50, z: 5}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &934500074
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 934500071}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f045cb3bf58b434479e202979131736c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MapGuardReturnLine
+  m_lines:
+  - characterId: 1
+    speaker: {fileID: 11400000, guid: 83c1000525abcd94eba7494290f44033, type: 2}
+    text: "\uBC29\uC5B4\uC120\uC5D0\uC11C \uB108\uBB34 \uB5A8\uC5B4\uC84C\uC5B4.
+      \uBCF5\uADC0\uD558\uC790."
+  - characterId: 2
+    speaker: {fileID: 11400000, guid: 5a79809b359003b458c6c3cec59db0cb, type: 2}
+    text: "\uB108\uBB34 \uBA40\uB9AC \uC628\uAC83 \uAC19\uC740\uB370? \uC774\uB7EC\uB2E4
+      \uD63C\uB098\uACA0\uB2E4..\uB3CC\uC544\uAC00\uC790!"
+  - characterId: 3
+    speaker: {fileID: 11400000, guid: c9ee43f5e45ae0949ad3d51a84a0994c, type: 2}
+    text: "\uC870\uAE08 \uBA40\uC5B4\uC9C4 \uAC83 \uAC19\uB124\uC694, \uB3CC\uC544\uAC00\uC57C\uACA0\uC5B4\uC694."
+  m_cooldownSeconds: 3
+  m_contactDistance: 0.1
 --- !u!1001 &934810964
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -241805,7 +241834,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1.6, z: 0}
-  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
+  m_LocalScale: {x: 0.5079051, y: 0.5079051, z: 0.5079051}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 75051474}
@@ -241859,7 +241888,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: d16acd8eda1259849b88757297f4826c, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 047e577926d8da046aab56d9aed24fc3, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -261901,6 +261930,7 @@ MonoBehaviour:
   m_pendingColor: {r: 1, g: 1, b: 1, a: 1}
   m_doneColor: {r: 0.3, g: 1, b: 0.45, a: 1}
   m_arrow: {fileID: 1145809440}
+  m_arrowRollDegrees: 0
   m_arrowBobHeight: 0.3
   m_arrowBobSpeed: 1.5
 --- !u!114 &1103413301
@@ -271730,7 +271760,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1.6, z: 0}
-  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
+  m_LocalScale: {x: 0.5079051, y: 0.5079051, z: 0.5079051}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 34313718}
@@ -271784,7 +271814,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: d16acd8eda1259849b88757297f4826c, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 047e577926d8da046aab56d9aed24fc3, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -299385,6 +299415,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1267676752}
   - component: {fileID: 1267676753}
+  - component: {fileID: 1267676754}
   m_Layer: 2
   m_Name: MapGuard(Bridge)
   m_TagString: Untagged
@@ -299429,6 +299460,32 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 25, y: 50, z: 5}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &1267676754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267676751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f045cb3bf58b434479e202979131736c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MapGuardReturnLine
+  m_lines:
+  - characterId: 1
+    speaker: {fileID: 11400000, guid: 83c1000525abcd94eba7494290f44033, type: 2}
+    text: "\uBC29\uC5B4\uC120\uC5D0\uC11C \uB108\uBB34 \uB5A8\uC5B4\uC84C\uC5B4.
+      \uBCF5\uADC0\uD558\uC790."
+  - characterId: 2
+    speaker: {fileID: 11400000, guid: 5a79809b359003b458c6c3cec59db0cb, type: 2}
+    text: "\uB108\uBB34 \uBA40\uB9AC \uC628\uAC83 \uAC19\uC740\uB370? \uC774\uB7EC\uB2E4
+      \uD63C\uB098\uACA0\uB2E4..\uB3CC\uC544\uAC00\uC790!"
+  - characterId: 3
+    speaker: {fileID: 11400000, guid: c9ee43f5e45ae0949ad3d51a84a0994c, type: 2}
+    text: "\uC870\uAE08 \uBA40\uC5B4\uC9C4 \uAC83 \uAC19\uB124\uC694, \uB3CC\uC544\uAC00\uC57C\uACA0\uC5B4\uC694."
+  m_cooldownSeconds: 3
+  m_contactDistance: 0.1
 --- !u!1001 &1268142458
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -346972,9 +347029,13 @@ MonoBehaviour:
   m_centerOffset: 0.19
   m_useCone: 1
   m_coneHalfAngle: 65
-  m_coneApexOffset: 0
+  m_coneApexOffset: -0.4
+  m_coneLength: 0
+  m_skipBeyondTarget: 1
+  m_beyondTargetMargin: 0.3
   m_registerScanInterval: 3
   m_disableCameraCollision: 1
+  m_drawDebug: 1
 --- !u!1001 &1472316882
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -366545,6 +366606,7 @@ MonoBehaviour:
   m_pendingColor: {r: 1, g: 1, b: 1, a: 1}
   m_doneColor: {r: 0.3, g: 1, b: 0.45, a: 1}
   m_arrow: {fileID: 1020486894}
+  m_arrowRollDegrees: 0
   m_arrowBobHeight: 0.3
   m_arrowBobSpeed: 1.5
 --- !u!114 &1558333924
