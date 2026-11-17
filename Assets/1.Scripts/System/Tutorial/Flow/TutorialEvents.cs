@@ -1975,7 +1975,10 @@ public sealed class TutorialEvents : MonoBehaviour
             // 검은 화면으로 끝내면 마지막 카메라 클립의 Ease Out(플레이어 카메라로 옮겨 가는 구간)은 재생하지 않고, 그 직전까지 검게 덮습니다.
             double endTime = cinematic.FadeToPlayer ? Math.Max(0.0, duration - GetTailEaseOut(director)) : duration;
             double fadeStart = endTime - cinematic.FadeOutSeconds;
-            while (m_cinematicDirector == director && director != null && director.state == PlayState.Playing && director.time < endTime)
+            // 일시정지 메뉴가 타임라인을 멈춘 동안도 재생 중으로 보고 기다립니다(멈춘 상태를 끝으로 보면 컷신을 건너뜁니다).
+            while (m_cinematicDirector == director && director != null
+                && (director.state == PlayState.Playing || GameplayPauseMenuController.IsDirectorHeldByMenu(director))
+                && director.time < endTime)
             {
                 if (cinematic.FadeToPlayer && cinematic.FadeOutSeconds > 0.0f && director.time >= fadeStart)
                 {
@@ -2017,7 +2020,12 @@ public sealed class TutorialEvents : MonoBehaviour
                 float elapsed = 0.0f;
                 while (elapsed < cinematic.SecondsPerCamera && !m_cinematicSkipRequested)
                 {
-                    elapsed += Time.unscaledDeltaTime;
+                    // 일시정지 메뉴가 열린 동안은 카메라 전환 시간을 세지 않습니다.
+                    if (!GameplayPauseMenuController.IsGameplayPausedByMenu)
+                    {
+                        elapsed += Time.unscaledDeltaTime;
+                    }
+
                     yield return null;
                 }
             }
@@ -2097,7 +2105,12 @@ public sealed class TutorialEvents : MonoBehaviour
         float elapsed = 0.0f;
         while (elapsed < seconds)
         {
-            elapsed += Time.unscaledDeltaTime;
+            // 일시정지 메뉴가 열린 동안은 세지 않습니다. 컷신 중 대사 지연이 메뉴를 연 사이에 지나가 버리지 않게 합니다.
+            if (!GameplayPauseMenuController.IsGameplayPausedByMenu)
+            {
+                elapsed += Time.unscaledDeltaTime;
+            }
+
             yield return null;
         }
     }

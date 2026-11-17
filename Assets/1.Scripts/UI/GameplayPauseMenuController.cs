@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.Playables;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -336,6 +337,7 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         if (m_pauseTime)
         {
             Time.timeScale = 0f;
+            HoldPlayingCinematics();
         }
 
         Cursor.lockState = CursorLockMode.None;
@@ -516,11 +518,63 @@ public sealed class GameplayPauseMenuController : MonoBehaviour
         if (m_pauseTime)
         {
             Time.timeScale = m_previousTimeScale;
+            ReleaseHeldCinematics();
         }
 
         SetGameplayInputEnabled(true);
         Cursor.lockState = m_previousCursorLockMode;
         Cursor.visible = m_previousCursorVisible;
+    }
+
+    /// <summary>일시정지 메뉴가 멈춰 둔 컷신 타임라인입니다. 메뉴를 닫을 때 다시 재생합니다.</summary>
+    private static readonly List<PlayableDirector> s_heldDirectors = new();
+
+    /// <summary>일시정지 메뉴가 열려 게임 시간을 멈춘 상태인지 여부입니다. 실제 시간으로 흐르는 컷신 대기도 이 동안은 멈춥니다.</summary>
+    public static bool IsGameplayPausedByMenu { get; private set; }
+
+    /// <summary>이 타임라인이 일시정지 메뉴 때문에 멈춰 있는지 여부입니다. 컷신이 끝났는지 볼 때 멈춘 상태도 재생 중으로 봐야 합니다.</summary>
+    public static bool IsDirectorHeldByMenu(PlayableDirector director)
+    {
+        return director != null && s_heldDirectors.Contains(director);
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        s_heldDirectors.Clear();
+        IsGameplayPausedByMenu = false;
+    }
+
+    /// <summary>
+    /// 재생 중인 컷신 타임라인을 멈춥니다. 컷신 타임라인은 실제 시간으로 재생돼 게임 시간을 멈춰도 계속 돌기 때문에,
+    /// 그대로 두면 캐릭터는 타임라인을 따라 움직이는데 애니메이터(게임 시간)는 멈춰 미끄러지듯 보입니다.
+    /// </summary>
+    private static void HoldPlayingCinematics()
+    {
+        IsGameplayPausedByMenu = true;
+        foreach (PlayableDirector director in FindObjectsByType<PlayableDirector>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+        {
+            if (director.state == PlayState.Playing && !s_heldDirectors.Contains(director))
+            {
+                director.Pause();
+                s_heldDirectors.Add(director);
+            }
+        }
+    }
+
+    /// <summary>일시정지 메뉴가 멈춰 둔 컷신 타임라인을 이어서 재생합니다.</summary>
+    private static void ReleaseHeldCinematics()
+    {
+        IsGameplayPausedByMenu = false;
+        foreach (PlayableDirector director in s_heldDirectors)
+        {
+            if (director != null && director.state == PlayState.Paused)
+            {
+                director.Resume();
+            }
+        }
+
+        s_heldDirectors.Clear();
     }
 
     private void SetGameplayInputEnabled(bool enabled)

@@ -127,7 +127,8 @@ public sealed class DialoguePlayer : MonoBehaviour
 
     private void Update()
     {
-        if (!IsPlaying || IsHoldingLastLine)
+        // 일시정지 메뉴가 열린 동안은 대사를 넘기지 않습니다(컷신 타임라인도 같이 멈춥니다).
+        if (!IsPlaying || IsHoldingLastLine || GameplayPauseMenuController.IsGameplayPausedByMenu)
         {
             return;
         }
