@@ -203,7 +203,7 @@ public sealed class DefenseManager : CombatSceneManager
     [SerializeField] private TMP_Text m_missionTitleText;
 
     [Tooltip("전투 중 목표 패널 제목 문구입니다. 비어 있으면 바꾸지 않습니다.")]
-    [SerializeField] private string m_combatMissionTitle = "외곽 방어선을 지키십시오";
+    [SerializeField] private string m_combatMissionTitle = "외곽 방어선을 수비하세요";
 
     [Tooltip("좌상단 목표 패널의 설명 텍스트입니다. 전투 중에는 아래 문구로 바꾸고, 휴식·시작 전에는 원래 문구로 돌려놓습니다. 비어 있으면 바꾸지 않습니다.")]
     [SerializeField] private TMP_Text m_missionDescriptionText;

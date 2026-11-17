@@ -213715,7 +213715,7 @@ MonoBehaviour:
   m_startPromptKeyIconPosition: {x: 279, y: 99}
   m_startPromptKeyIconSize: {x: 30, y: 30}
   m_missionTitleText: {fileID: 0}
-  m_combatMissionTitle: "\uC678\uACFD \uBC29\uC5B4\uC120\uC744 \uC9C0\uD0A4\uC2ED\uC2DC\uC624"
+  m_combatMissionTitle: "\uC678\uACFD \uBC29\uC5B4\uC120\uC744 \uC218\uBE44\uD558\uC138\uC694"
   m_missionDescriptionText: {fileID: 2052895459}
   m_combatMissionDescription: "\uBAB0\uB824\uB4DC\uB294 \uC801\uC744 \uC800\uC9C0\uD558\uC2ED\uC2DC\uC624."
   m_debugSkipClearsEnemies: 1
