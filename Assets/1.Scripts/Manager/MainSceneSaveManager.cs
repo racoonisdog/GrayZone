@@ -85,6 +85,15 @@ public class MainSceneSaveManager : MonoBehaviour
         if (StartNewGame())
         {
             SceneTransitionController.LoadScene(ShelterSceneName);
+            return;
+        }
+
+        // 타이틀 씬을 에디터에서 단독 실행하면 GameManager(부트스트랩 씬)가 없어 새 게임을 만들 수 없습니다.
+        // 버튼이 아무 반응 없이 멈추지 않도록 부트스트랩부터 시작합니다.
+        if (GameManager.Instance == null && Application.CanStreamedLevelBeLoaded(DemoTitleReset.BootSceneName))
+        {
+            Debug.LogWarning("[MainSceneSaveManager] GameManager가 없어 부트스트랩 씬부터 시작합니다.", this);
+            SceneTransitionController.LoadScene(DemoTitleReset.BootSceneName);
         }
     }
 
