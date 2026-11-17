@@ -6,7 +6,7 @@ using UnityEngine;
 /// </summary>
 /// <remarks>
 /// 위치 사수 지점(Defense Point) 아래 자식으로 두므로, 지점이 켜진 위치 사수 파트에서만 보입니다.
-/// 세는 기준은 위치 사수 도착 조건(AllyInArea)과 같습니다. 조작 중이 아닌 동료 중 다운·이탈하지 않은 동료가 지점 반경 안에 있으면 셉니다. 높이는 보지 않습니다.
+/// 세는 기준은 위치 사수 도착 조건(AllyInArea)과 같습니다. 조작 중이 아닌 동료 중 다운·이탈하지 않고, Q/E로 이 지점에 사수 명령을 받아 반경 안에 있는 동료를 셉니다. 높이는 보지 않습니다.
 /// 지점을 가리키는 화살표(<see cref="m_arrow"/>)도 함께 맡습니다. 아직 다 채우지 않은 지점에만 화살표를 띄우고, 다 채우면 끕니다.
 /// </remarks>
 [DisallowMultipleComponent]
@@ -36,8 +36,11 @@ public sealed class TutorialAllyCountLabel : MonoBehaviour
     [SerializeField] private Color m_doneColor = new(0.3f, 1.0f, 0.45f, 1.0f);
 
     [Header("Arrow")]
-    [Tooltip("지점을 가리키는 화살표입니다(오른쪽을 가리키는 스프라이트). 카메라를 향한 채 아래를 가리키고 위아래로 움직입니다. 다 채우면 끕니다. 비우면 화살표 없이 숫자만 띄웁니다.")]
+    [Tooltip("지점을 가리키는 화살표입니다. 카메라를 향한 채 아래를 가리키고 위아래로 움직입니다. 다 채우면 끕니다. 비우면 화살표 없이 숫자만 띄웁니다.")]
     [SerializeField] private Transform m_arrow;
+
+    [Tooltip("화살표 스프라이트를 화면 안에서 돌릴 각도(도)입니다. 아래를 가리키는 그림(Tutorial_arrow)은 0, 오른쪽을 가리키는 그림은 -90입니다.")]
+    [SerializeField] private float m_arrowRollDegrees;
 
     [Tooltip("화살표가 위아래로 움직이는 폭(m)입니다.")]
     [Min(0.0f)]
@@ -117,9 +120,17 @@ public sealed class TutorialAllyCountLabel : MonoBehaviour
         m_arrow.localPosition = m_arrowBasePosition + Vector3.up * bob;
         if (camera != null)
         {
-            // 스프라이트는 오른쪽을 가리키므로 화면 안에서 -90도 돌려 아래를 가리키게 합니다.
-            m_arrow.rotation = camera.transform.rotation * Quaternion.Euler(0.0f, 0.0f, -90.0f);
+            // 스프라이트가 가리키는 방향이 화면 아래가 되도록 화면 안에서 돌립니다.
+            m_arrow.rotation = camera.transform.rotation * Quaternion.Euler(0.0f, 0.0f, m_arrowRollDegrees);
         }
+    }
+
+    /// <summary>위치가 지점 반경 안인지 평면 거리로 봅니다.</summary>
+    private bool IsInRadius(Vector3 position)
+    {
+        Vector3 offset = position - m_center.position;
+        offset.y = 0.0f;
+        return offset.sqrMagnitude <= m_radius * m_radius;
     }
 
     private int CountAlliesInArea()
@@ -138,9 +149,9 @@ public sealed class TutorialAllyCountLabel : MonoBehaviour
                 continue;
             }
 
-            Vector3 offset = member.transform.position - m_center.position;
-            offset.y = 0.0f;
-            if (offset.sqrMagnitude <= m_radius * m_radius)
+            // 위치 사수 도착 조건과 같이, Q/E로 이 지점에 사수 명령을 받고 범위 안에 있는 동료만 셉니다.
+            SquadAIController ai = member.GetComponent<SquadAIController>();
+            if (ai != null && ai.HasMoveOrder && IsInRadius(ai.MoveOrderPosition) && IsInRadius(member.transform.position))
             {
                 count++;
             }

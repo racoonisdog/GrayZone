@@ -151,6 +151,7 @@ public sealed class TutorialConditionWatcher : IDisposable
         }
 
         m_disposed = true;
+        ReleaseClaimedAllies();
         EnemyHealth.OnEnemyEnabled -= WatchEnemy;
         InteractionController.OnAnyInteracted -= HandleInteracted;
         ReleaseInteractTarget();
@@ -287,12 +288,31 @@ public sealed class TutorialConditionWatcher : IDisposable
         return health == null || (!health.IsDowned && !health.IsDead);
     }
 
-    /// <summary>조작 중이 아닌 동료 중 다운·이탈하지 않은 한 명이 도착 범위 안에 있는지 여부입니다.</summary>
+    /// <summary>
+    /// 위치 사수 지점(동료 도착 조건)마다 맡은 동료입니다. 한 동료가 두 지점에 겹쳐 세어지지 않게 합니다.
+    /// </summary>
+    private static readonly Dictionary<SquadMemberController, TutorialConditionWatcher> s_claimedAllies = new();
+
+    /// <summary>모든 동료의 명령이 잠긴 채 이 조건이 채워지지 않은 시각(실제 시간)입니다. 음수면 막힌 상태가 아닙니다.</summary>
+    private float m_allyStuckSince = -1.0f;
+
+    /// <summary>모든 동료의 명령이 잠긴 채 진행이 막혔을 때, 강제로 복귀시키기까지 기다릴 시간(초)입니다.</summary>
+    private const float AllyStuckRecallSeconds = 2.0f;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetClaimedAllies()
+    {
+        s_claimedAllies.Clear();
+    }
+
+    /// <summary>조작 중이 아닌 동료 중 다운·이탈하지 않은 한 명이 이 지점에 위치 사수 중인지 여부입니다.</summary>
     /// <remarks>
-    /// 위치 사수 명령을 받고 반경 안에 들어온 동료는 그 동료의 Q/E 명령 키를 막습니다. 다른 지점으로 다시 옮겨 조건이 깨지지 않게 하기 위해서입니다.
+    /// Q/E로 이 지점에 사수 명령을 받고 실제로 범위 안에 있는 동료만 셉니다. 지나가다 범위에 들어온 동료, 다른 지점이 이미 맡은 동료는 세지 않습니다.
+    /// 센 동료는 이 지점이 맡고 Q/E 명령 키를 막습니다. 다른 지점으로 다시 옮겨 조건이 깨지지 않게 하기 위해서입니다.
     /// 막은 키는 "위치 사수 키 잠금 풀기" 이벤트나 튜토리얼 종료 때 풉니다.
+    /// 동료가 모두 잠겼는데 이 지점이 채워지지 않으면(겹쳐 잠긴 경우 등) 잠시 뒤 전원 복귀(CapsLock)시키고 잠금을 풀어 다시 지시할 수 있게 합니다.
     /// </remarks>
-    private static bool IsAllyInArea(Func<Vector3, bool> isInArea)
+    private bool IsAllyInArea(Func<Vector3, bool> isInArea)
     {
         SquadManager squad = SquadManager.Instance;
         if (squad == null)
@@ -302,24 +322,97 @@ public sealed class TutorialConditionWatcher : IDisposable
 
         foreach (SquadMemberController member in squad.SquadMembers)
         {
-            if (member == null || member.IsPlayerSquadMember || !member.IsAlive || member.IsDown)
+            if (!IsAvailableAlly(member))
             {
                 continue;
             }
 
-            if (isInArea(member.transform.position))
+            if (s_claimedAllies.TryGetValue(member, out TutorialConditionWatcher owner) && owner != this && !owner.m_disposed)
             {
-                SquadAIController ai = member.GetComponent<SquadAIController>();
-                if (ai != null && ai.HasMoveOrder)
-                {
-                    squad.LockOrders(member);
-                }
+                continue;
+            }
 
+            SquadAIController ai = member.GetComponent<SquadAIController>();
+            if (ai != null && ai.HasMoveOrder && isInArea(ai.MoveOrderPosition) && isInArea(member.transform.position))
+            {
+                s_claimedAllies[member] = this;
+                squad.LockOrders(member);
+                m_allyStuckSince = -1.0f;
                 return true;
             }
         }
 
+        RecallIfAllAlliesLocked(squad);
         return false;
+    }
+
+    /// <summary>조작 중이 아니고 다운·이탈하지 않은 동료인지 여부입니다.</summary>
+    private static bool IsAvailableAlly(SquadMemberController member)
+    {
+        return member != null && !member.IsPlayerSquadMember && member.IsAlive && !member.IsDown;
+    }
+
+    /// <summary>
+    /// 동료가 모두 명령이 잠겨 더 지시할 수 없는데 이 지점이 비어 있으면, 정한 시간 뒤 전원 복귀시키고 잠금·맡은 동료를 모두 풉니다.
+    /// </summary>
+    private void RecallIfAllAlliesLocked(SquadManager squad)
+    {
+        bool anyAlly = false;
+        bool allLocked = true;
+        foreach (SquadMemberController member in squad.SquadMembers)
+        {
+            if (!IsAvailableAlly(member))
+            {
+                continue;
+            }
+
+            anyAlly = true;
+            allLocked &= squad.IsOrderLocked(member);
+        }
+
+        if (!anyAlly || !allLocked)
+        {
+            m_allyStuckSince = -1.0f;
+            return;
+        }
+
+        if (m_allyStuckSince < 0.0f)
+        {
+            m_allyStuckSince = Time.unscaledTime;
+            return;
+        }
+
+        if (Time.unscaledTime - m_allyStuckSince < AllyStuckRecallSeconds)
+        {
+            return;
+        }
+
+        Debug.LogWarning("위치 사수: 동료 명령이 모두 잠긴 채 진행되지 않아 전원 복귀시키고 잠금을 풉니다. 다시 Q/E로 지시하면 됩니다.");
+        m_allyStuckSince = -1.0f;
+        squad.ClearOrderLocks();
+        squad.RecallAllAiMembers();
+        s_claimedAllies.Clear();
+    }
+
+    /// <summary>이 조건이 맡았던 동료를 놓습니다. 동료의 Q/E 잠금은 그대로 두고, 푸는 것은 잠금 풀기 이벤트가 합니다.</summary>
+    private void ReleaseClaimedAllies()
+    {
+        List<SquadMemberController> released = null;
+        foreach (KeyValuePair<SquadMemberController, TutorialConditionWatcher> pair in s_claimedAllies)
+        {
+            if (pair.Value == this)
+            {
+                (released ??= new List<SquadMemberController>()).Add(pair.Key);
+            }
+        }
+
+        if (released != null)
+        {
+            foreach (SquadMemberController member in released)
+            {
+                s_claimedAllies.Remove(member);
+            }
+        }
     }
 
     /// <summary>위치가 이 조건의 도착 범위 안인지 여부입니다. 범위 오브젝트가 있으면 그 범위로, 없으면 위치·반경(평면 거리)으로 봅니다.</summary>
