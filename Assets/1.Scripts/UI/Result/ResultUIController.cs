@@ -102,7 +102,7 @@ public class ResultUIController : MonoBehaviour
     [SerializeField] private Button m_returnButton;
 
     [Tooltip("'셸터로 복귀' 버튼을 누르면 전환할 씬 이름입니다(Build Settings에 등록되어 있어야 합니다).")]
-    [SerializeField] private string m_returnSceneName = "TEst";
+    [SerializeField] private string m_returnSceneName = "ShelterScene_Jung";
 
     [Header("Demo End")]
     [Tooltip("선택 사항입니다. 데모 마지막 회차의 방어전을 끝냈을 때 셸터 대신 띄울 데모 종료 화면입니다. 비워 두면 항상 셸터로 돌아갑니다.")]

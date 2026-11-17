@@ -466,6 +466,11 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
     /// <summary>무한 장탄수가 실제로 적용되는 상태인지 여부입니다. 개발 모드에서 플래그가 켜졌을 때만 <c>true</c>입니다.</summary>
     private bool IsInfiniteMagazineDebugActive => m_debugInfiniteMagazine && GameDevMode.DebugFeaturesEnabled;
 
+    /// <summary>장탄이 0이어도 사격을 허용할지 묻는 콜백입니다. 튜토리얼 청솔 특수탄 사격 파트에서 스킬이 씁니다. 허용해도 장탄은 0 아래로 내려가지 않습니다.</summary>
+    public System.Func<bool> AllowFireWhenEmpty { get; set; }
+
+    private bool CanFireWhenEmpty => IsInfiniteMagazineDebugActive || (AllowFireWhenEmpty != null && AllowFireWhenEmpty());
+
     /// <summary>총구 기준 탄착점이 조준점과 같다고 볼 허용 오차(m)입니다.</summary>
     /// <remarks>
     /// 총구와 카메라의 위치가 다르므로 두 지점은 완전히 일치하지 않습니다.
@@ -1303,7 +1308,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return false;
         }
 
-        bool isOutOfAmmo = m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive;
+        bool isOutOfAmmo = m_currentBullet <= 0 && !CanFireWhenEmpty;
         if (!m_canShoot || m_isReloading || isOutOfAmmo)
         {
             if (isOutOfAmmo && !m_isReloading)
@@ -1320,7 +1325,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return false;
         }
 
-        if (!IsInfiniteMagazineDebugActive)
+        if (!IsInfiniteMagazineDebugActive && m_currentBullet > 0)
         {
             m_currentBullet--;
         }
@@ -1383,7 +1388,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return false;
         }
 
-        bool isOutOfAmmo = m_currentBullet <= 0 && !IsInfiniteMagazineDebugActive;
+        bool isOutOfAmmo = m_currentBullet <= 0 && !CanFireWhenEmpty;
         if (!m_canShoot || m_isReloading || isOutOfAmmo)
         {
             if (isOutOfAmmo && !m_isReloading)
@@ -1394,7 +1399,7 @@ public class Gun : MonoBehaviour, IBalancePostProcess, ISharedBalanceReceiver
             return false;
         }
 
-        if (!IsInfiniteMagazineDebugActive)
+        if (!IsInfiniteMagazineDebugActive && m_currentBullet > 0)
         {
             m_currentBullet--;
         }

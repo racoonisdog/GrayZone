@@ -251,6 +251,8 @@ public class GameOverUIController : MonoBehaviour
             Debug.LogWarning("[GameOverUIController] 마지막 저장을 불러오지 못했습니다. 현재 진행 상태로 셸터에 들어갑니다.", this);
         }
 
+        // 셸터 씬을 단독 실행한 경우 켜져 있는 테스트용 DefaultSaveData 덮어쓰기가 방금 불러온 저장을 덮지 않게 끕니다(ResultUI 귀환과 같음).
+        GameDataManager.Instance?.SetUseDefaultSaveDataOnShelterStart(false);
         LeaveTo(m_retrySceneName);
     }
 

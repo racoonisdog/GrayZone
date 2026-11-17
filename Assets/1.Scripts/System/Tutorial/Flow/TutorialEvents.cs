@@ -847,6 +847,92 @@ public sealed class TutorialEvents : MonoBehaviour
         return value * value;
     }
 
+    /// <summary>
+    /// 처치 미션 중 살아 있는 적 가운데 가장 가까운 적에게서 너무 멀어지면 그 적까지 경로선을 띄우고, 가까워지면 숨깁니다.
+    /// </summary>
+    /// <param name="farDistance">가장 가까운 적과 이 거리(m) 이상 떨어지면 경로선을 띄웁니다. 높이는 보지 않습니다.</param>
+    /// <param name="nearDistance">경로선이 떠 있을 때 이 거리(m) 안으로 들어오면 숨깁니다. 경계에서 깜빡이지 않게 띄우는 거리보다 짧게 둡니다.</param>
+    /// <remarks>
+    /// 기다리지 않고 바로 다음 줄로 넘어갑니다. 처치 미션이 끝나는 엔드포인트에서 경로선 숨기기를 불러 멈춥니다.
+    /// 다른 경로선 안내가 시작돼도 멈춥니다. 살아 있는 적이 없으면 경로선을 숨긴 채 기다립니다.
+    /// </remarks>
+    [TutorialEvent("경로선 안내 (적에게서 멀어지면 가장 가까운 적)")]
+    public void ShowPathLineToNearestEnemyWhenFar(float farDistance, float nearDistance)
+    {
+        ObjectivePathArrow arrow = ResolvePathArrow();
+        if (arrow == null)
+        {
+            Debug.LogWarning($"씬에 {nameof(ObjectivePathArrow)}가 없어 경로선을 띄우지 못했습니다.", this);
+            return;
+        }
+
+        StopPathWatch();
+        HidePathAreaObject();
+        arrow.SetVisible(false);
+        m_pathWatch = StartCoroutine(WatchNearestEnemy(arrow, Mathf.Max(0.1f, farDistance), Mathf.Clamp(nearDistance, 0.1f, Mathf.Max(0.1f, farDistance))));
+    }
+
+    /// <summary>가장 가까운 살아 있는 적을 따라 경로선 기준점을 옮기며, 거리에 따라 경로선을 띄우고 숨깁니다.</summary>
+    private IEnumerator WatchNearestEnemy(ObjectivePathArrow arrow, float farDistance, float nearDistance)
+    {
+        if (m_pathAnchor == null)
+        {
+            m_pathAnchor = new GameObject("TutorialPathAnchor").transform;
+        }
+
+        arrow.SetTarget(m_pathAnchor);
+        bool shown = false;
+        EnemyHealth[] enemies = Array.Empty<EnemyHealth>();
+        float nextRefreshTime = 0.0f;
+        while (true)
+        {
+            // 적 목록은 가끔만 다시 찾고, 위치는 매 프레임 따라갑니다.
+            if (Time.unscaledTime >= nextRefreshTime)
+            {
+                nextRefreshTime = Time.unscaledTime + 0.5f;
+                enemies = FindObjectsByType<EnemyHealth>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            }
+
+            SquadMemberController player = SquadManager.Instance != null ? SquadManager.Instance.PlayerSquadMember : null;
+            EnemyHealth nearest = null;
+            float nearestSqr = float.MaxValue;
+            if (player != null)
+            {
+                foreach (EnemyHealth enemy in enemies)
+                {
+                    if (enemy == null || enemy.IsDead || !enemy.isActiveAndEnabled)
+                    {
+                        continue;
+                    }
+
+                    Vector3 offset = enemy.transform.position - player.transform.position;
+                    offset.y = 0.0f;
+                    if (offset.sqrMagnitude < nearestSqr)
+                    {
+                        nearestSqr = offset.sqrMagnitude;
+                        nearest = enemy;
+                    }
+                }
+            }
+
+            if (nearest != null)
+            {
+                m_pathAnchor.position = nearest.transform.position;
+                m_pathTarget = m_pathAnchor.position;
+                m_pathArriveRadius = nearDistance;
+            }
+
+            bool wantShown = nearest != null && nearestSqr > Square(shown ? nearDistance : farDistance);
+            if (wantShown != shown)
+            {
+                shown = wantShown;
+                arrow.SetVisible(shown);
+            }
+
+            yield return null;
+        }
+    }
+
     /// <summary>안내 대상을 마쳤는지 여부입니다. 함정은 설치돼 있고 내구도가 가득 차면, 방어 목표 수리는 체력이 가득 차면 마친 것입니다.</summary>
     private static bool IsTargetDone(TutorialTarget target)
     {
@@ -1616,6 +1702,22 @@ public sealed class TutorialEvents : MonoBehaviour
                 m_cooldownOverrides.Remove(target);
             }
         }
+    }
+
+    /// <summary>청솔 특수탄 장전이 끝나는 순간 화면 가운데 알림을 띄웁니다. 장전 중이 아니면 바로 띄웁니다.</summary>
+    /// <remarks>같은 블록의 다른 이벤트(대사 등)와 동시에 돌므로, 대사가 길어도 알림은 장전 종료에 맞춰 바뀝니다.</remarks>
+    [TutorialEvent("청솔 특수탄 장전 끝나면 알림")]
+    public IEnumerator ShowBannerWhenSpecialAmmoLoaded(string bannerMessage)
+    {
+        yield return WaitForSpecialAmmoLoaded();
+        DefenseManager.Instance?.ShowBannerMessage(bannerMessage);
+    }
+
+    /// <summary>화면 가운데 알림만 띄웁니다. 미션 목표 문구는 바꾸지 않습니다.</summary>
+    [TutorialEvent("화면 가운데 알림")]
+    public void ShowBanner(string bannerMessage)
+    {
+        DefenseManager.Instance?.ShowBannerMessage(bannerMessage);
     }
 
     /// <summary>청솔이 스킬로 특수탄을 장전하는 중이면 장전이 끝날 때까지 기다립니다. 장전 중이 아니면 바로 넘어갑니다.</summary>

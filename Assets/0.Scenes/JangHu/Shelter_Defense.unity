@@ -23599,6 +23599,7 @@ MonoBehaviour:
   m_noticeRoot: {fileID: 0}
   m_bodyLineHeight: 39
   m_compactHeightRatio: 1
+  m_sortingOrder: 800
 --- !u!224 &96151444
 RectTransform:
   m_ObjectHideFlags: 0
@@ -75392,7 +75393,6 @@ MonoBehaviour:
   m_titleSceneName: TitleScene
   m_pauseTime: 1
   m_showSettingsButton: 1
-  m_showCombatTab: 1
   m_settingsOnly: 0
 --- !u!1001 &323467594
 PrefabInstance:
@@ -121074,6 +121074,7 @@ MonoBehaviour:
   m_lockedStateText: "\uC2DC\uC124 \uC5C5\uADF8\uB808\uC774\uB4DC\uC2DC \uD574\uC81C"
   m_unavailableStateText: "\uC7A0\uAE40"
   m_availableStateText: "\uC0AC\uC6A9 \uAC00\uB2A5"
+  m_treatedImage: {fileID: 0}
 --- !u!114 &513518107
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -122646,6 +122647,7 @@ MonoBehaviour:
   m_noticeRoot: {fileID: 0}
   m_bodyLineHeight: 50
   m_compactHeightRatio: 0.5
+  m_sortingOrder: 800
 --- !u!114 &520775388
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -145837,6 +145839,7 @@ MonoBehaviour:
   m_upgradeRoot: {fileID: 0}
   m_createView: {fileID: 817469384}
   m_noticeText: {fileID: 0}
+  m_levelText: {fileID: 0}
   m_backButton: {fileID: 0}
 --- !u!1 &623557906
 GameObject:
@@ -156217,6 +156220,7 @@ MonoBehaviour:
   m_lockedStateText: "\uC2DC\uC124 \uC5C5\uADF8\uB808\uC774\uB4DC\uC2DC \uD574\uC81C"
   m_unavailableStateText: "\uC7A0\uAE40"
   m_availableStateText: "\uC0AC\uC6A9 \uAC00\uB2A5"
+  m_treatedImage: {fileID: 0}
 --- !u!114 &660930634
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -182658,6 +182662,7 @@ MonoBehaviour:
   m_lockedStateText: "\uC2DC\uC124 \uC5C5\uADF8\uB808\uC774\uB4DC\uC2DC \uD574\uC81C"
   m_unavailableStateText: "\uC7A0\uAE40"
   m_availableStateText: "\uC0AC\uC6A9 \uAC00\uB2A5"
+  m_treatedImage: {fileID: 0}
 --- !u!114 &780014602
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -196743,7 +196748,7 @@ MonoBehaviour:
   m_startPromptKeyIconPosition: {x: 279, y: 99}
   m_startPromptKeyIconSize: {x: 30, y: 30}
   m_missionTitleText: {fileID: 0}
-  m_combatMissionTitle: "\uC678\uACFD \uBC29\uC5B4\uC120\uC744 \uC9C0\uD0A4\uC2ED\uC2DC\uC624"
+  m_combatMissionTitle: "\uC678\uACFD \uBC29\uC5B4\uC120\uC744 \uC218\uBE44\uD558\uC138\uC694"
   m_missionDescriptionText: {fileID: 1140254097}
   m_combatMissionDescription: "\uBAB0\uB824\uB4DC\uB294 \uC801\uC744 \uC800\uC9C0\uD558\uC2ED\uC2DC\uC624."
   m_debugSkipClearsEnemies: 1
@@ -221973,6 +221978,7 @@ GameObject:
   m_Component:
   - component: {fileID: 934500072}
   - component: {fileID: 934500073}
+  - component: {fileID: 934500074}
   m_Layer: 2
   m_Name: MapGuard(Tunnel)
   m_TagString: Untagged
@@ -222017,6 +222023,32 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 30, y: 50, z: 5}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &934500074
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 934500071}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f045cb3bf58b434479e202979131736c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MapGuardReturnLine
+  m_lines:
+  - characterId: 1
+    speaker: {fileID: 11400000, guid: 83c1000525abcd94eba7494290f44033, type: 2}
+    text: "\uBC29\uC5B4\uC120\uC5D0\uC11C \uB108\uBB34 \uB5A8\uC5B4\uC84C\uC5B4.
+      \uBCF5\uADC0\uD558\uC790."
+  - characterId: 2
+    speaker: {fileID: 11400000, guid: 5a79809b359003b458c6c3cec59db0cb, type: 2}
+    text: "\uB108\uBB34 \uBA40\uB9AC \uC628\uAC83 \uAC19\uC740\uB370? \uC774\uB7EC\uB2E4
+      \uD63C\uB098\uACA0\uB2E4..\uB3CC\uC544\uAC00\uC790!"
+  - characterId: 3
+    speaker: {fileID: 11400000, guid: c9ee43f5e45ae0949ad3d51a84a0994c, type: 2}
+    text: "\uC870\uAE08 \uBA40\uC5B4\uC9C4 \uAC83 \uAC19\uB124\uC694, \uB3CC\uC544\uAC00\uC57C\uACA0\uC5B4\uC694."
+  m_cooldownSeconds: 3
+  m_contactDistance: 0.1
 --- !u!1001 &934810964
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -225388,6 +225420,7 @@ MonoBehaviour:
   m_content: {fileID: 0}
   m_text: {fileID: 0}
   m_format: "[{0}] \uD29C\uD1A0\uB9AC\uC5BC \uAC74\uB108\uB6F0\uAE30"
+  m_showHint: 0
 --- !u!1001 &948157193
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -241649,6 +241682,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FacilityUpgradeUI
   m_nameText: {fileID: 1630836606}
   m_currentLevelText: {fileID: 1845609172}
+  m_maxLevelObject: {fileID: 0}
   m_arrowText: {fileID: 0}
   m_nextLevelText: {fileID: 0}
   m_effectText: {fileID: 0}
@@ -241663,8 +241697,6 @@ MonoBehaviour:
   m_upgradeButton: {fileID: 999497488}
   m_closeButton: {fileID: 1991789590}
   m_backButton: {fileID: 0}
-  m_medicalBackReference: {fileID: 0}
-  m_manufacturingBackReference: {fileID: 0}
   m_maxLevelNotice: {fileID: 1386388379}
   m_uiManager: {fileID: 0}
 --- !u!114 &1019437880
@@ -241802,7 +241834,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1.6, z: 0}
-  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
+  m_LocalScale: {x: 0.5079051, y: 0.5079051, z: 0.5079051}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 75051474}
@@ -241856,7 +241888,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: d16acd8eda1259849b88757297f4826c, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 047e577926d8da046aab56d9aed24fc3, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -261898,6 +261930,7 @@ MonoBehaviour:
   m_pendingColor: {r: 1, g: 1, b: 1, a: 1}
   m_doneColor: {r: 0.3, g: 1, b: 0.45, a: 1}
   m_arrow: {fileID: 1145809440}
+  m_arrowRollDegrees: 0
   m_arrowBobHeight: 0.3
   m_arrowBobSpeed: 1.5
 --- !u!114 &1103413301
@@ -271727,7 +271760,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1.6, z: 0}
-  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
+  m_LocalScale: {x: 0.5079051, y: 0.5079051, z: 0.5079051}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 34313718}
@@ -271781,7 +271814,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: d16acd8eda1259849b88757297f4826c, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 047e577926d8da046aab56d9aed24fc3, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -273677,7 +273710,6 @@ MonoBehaviour:
   m_titleSceneName: TitleScene
   m_pauseTime: 1
   m_showSettingsButton: 1
-  m_showCombatTab: 1
   m_settingsOnly: 0
 --- !u!1 &1153141525
 GameObject:
@@ -296444,18 +296476,22 @@ MonoBehaviour:
   m_trapIcons:
   - kind: 0
     icon: {fileID: 2800000, guid: 43c052aa1a612ad4881fdbe1d336ef35, type: 3}
+    inactiveIcon: {fileID: 2800000, guid: eb07e8def74d6e841a581049f34a56ec, type: 3}
     alignToTrap: 1
     artAngle: 124.3
   - kind: 1
     icon: {fileID: 2800000, guid: 668fa17e0b4d74947ac27796f6c8e073, type: 3}
+    inactiveIcon: {fileID: 2800000, guid: 853c166c3db371444bd2995c0891beb5, type: 3}
     alignToTrap: 1
     artAngle: 73.8
   - kind: 2
     icon: {fileID: 2800000, guid: 2e8c629a440e7ec4b9c7c6ddc9c79d32, type: 3}
+    inactiveIcon: {fileID: 2800000, guid: 0c8ab9e0647fb8f48a45a3ba821c2018, type: 3}
     alignToTrap: 0
     artAngle: 0
   - kind: 3
     icon: {fileID: 2800000, guid: 7a4676e14ccb16a4f81ded8df862d7ae, type: 3}
+    inactiveIcon: {fileID: 2800000, guid: 48a234dccf7fc354dad2d5418ec12436, type: 3}
     alignToTrap: 0
     artAngle: 0
   m_builtColor: {r: 1, g: 1, b: 1, a: 1}
@@ -299379,6 +299415,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1267676752}
   - component: {fileID: 1267676753}
+  - component: {fileID: 1267676754}
   m_Layer: 2
   m_Name: MapGuard(Bridge)
   m_TagString: Untagged
@@ -299423,6 +299460,32 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 25, y: 50, z: 5}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &1267676754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267676751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f045cb3bf58b434479e202979131736c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MapGuardReturnLine
+  m_lines:
+  - characterId: 1
+    speaker: {fileID: 11400000, guid: 83c1000525abcd94eba7494290f44033, type: 2}
+    text: "\uBC29\uC5B4\uC120\uC5D0\uC11C \uB108\uBB34 \uB5A8\uC5B4\uC84C\uC5B4.
+      \uBCF5\uADC0\uD558\uC790."
+  - characterId: 2
+    speaker: {fileID: 11400000, guid: 5a79809b359003b458c6c3cec59db0cb, type: 2}
+    text: "\uB108\uBB34 \uBA40\uB9AC \uC628\uAC83 \uAC19\uC740\uB370? \uC774\uB7EC\uB2E4
+      \uD63C\uB098\uACA0\uB2E4..\uB3CC\uC544\uAC00\uC790!"
+  - characterId: 3
+    speaker: {fileID: 11400000, guid: c9ee43f5e45ae0949ad3d51a84a0994c, type: 2}
+    text: "\uC870\uAE08 \uBA40\uC5B4\uC9C4 \uAC83 \uAC19\uB124\uC694, \uB3CC\uC544\uAC00\uC57C\uACA0\uC5B4\uC694."
+  m_cooldownSeconds: 3
+  m_contactDistance: 0.1
 --- !u!1001 &1268142458
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -300372,7 +300435,6 @@ MonoBehaviour:
   m_messageText: {fileID: 318182028}
   m_retrySceneName: ShelterScene_Jung
   m_titleSceneName: TitleScene
-  m_resetGameOnTitle: 1
   m_bootSceneName: BootstrapScene
   m_pauseTimeWhileShown: 1
   m_squadEliminatedMessage: "\uC2A4\uCFFC\uB4DC \uC804\uC6D0\uC774 \uC804\uD22C\uC5D0\uC11C
@@ -346959,17 +347021,21 @@ MonoBehaviour:
     m_Bits: 64
   m_targetOverride: {fileID: 0}
   m_radiusMode: 0
-  m_radiusScale: 1.35
+  m_radiusScale: 1.4
   m_fixedRadius: 1.5
   m_minDistance: 0.5
   m_edgeSoftness: 0.35
   m_minimumVisibility: 0
-  m_centerOffset: 0
+  m_centerOffset: 0.19
   m_useCone: 1
-  m_coneHalfAngle: 45
-  m_coneSoftness: 8
-  m_coneApexOffset: 0
+  m_coneHalfAngle: 65
+  m_coneApexOffset: -0.4
+  m_coneLength: 0
+  m_skipBeyondTarget: 1
+  m_beyondTargetMargin: 0.3
+  m_registerScanInterval: 3
   m_disableCameraCollision: 1
+  m_drawDebug: 1
 --- !u!1001 &1472316882
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -352872,7 +352938,6 @@ MonoBehaviour:
   m_messageText: {fileID: 0}
   m_retrySceneName: ShelterScene_Jung
   m_titleSceneName: TitleScene
-  m_resetGameOnTitle: 0
   m_bootSceneName: BootstrapScene
   m_pauseTimeWhileShown: 1
   m_squadEliminatedMessage: "\uC2A4\uCFFC\uB4DC \uC804\uC6D0\uC774 \uC804\uD22C\uC5D0\uC11C
@@ -366541,6 +366606,7 @@ MonoBehaviour:
   m_pendingColor: {r: 1, g: 1, b: 1, a: 1}
   m_doneColor: {r: 0.3, g: 1, b: 0.45, a: 1}
   m_arrow: {fileID: 1020486894}
+  m_arrowRollDegrees: 0
   m_arrowBobHeight: 0.3
   m_arrowBobSpeed: 1.5
 --- !u!114 &1558333924
@@ -407614,6 +407680,7 @@ MonoBehaviour:
     mouseSensitivity: 1
     cameraKickEnabled: 1
     aimToggleEnabled: 0
+    demoResetOnTitle: 0
   audioMixer: {fileID: 0}
   masterVolumeParam: MasterVolume
   bgmVolumeParam: BgmVolume
@@ -421081,6 +421148,7 @@ MonoBehaviour:
   m_noTreatmentTargetText: {fileID: 0}
   m_patientSlots: []
   m_healButton: {fileID: 0}
+  m_levelText: {fileID: 0}
   m_characterManager: {fileID: 766322780}
 --- !u!1001 &1794145870
 PrefabInstance:

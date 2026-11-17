@@ -26,12 +26,15 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     private bool m_isLoadingSpecialAmmo;
     private int m_specialRoundsRemaining;
 
+    /// <summary>특수탄을 장전한 뒤 아직 다 쓰지 않았는지 여부입니다. 튜토리얼 사격 파트에서 0발이 되어도 특수탄으로 쏘게 할 때 봅니다.</summary>
+    private bool m_specialLoaded;
+
     protected override ScriptableObject BalanceSource => m_balanceSO;
 
     public override CharacterSkillType SkillType => CharacterSkillType.ChungSolDragonBreath;
     public override string DisplayName => "화염 탄환";
     public override string Description => "강력한 화염 탄환을 장전합니다.";
-    public override bool IsActive => m_isLoadingSpecialAmmo || m_specialRoundsRemaining > 0;
+    public override bool IsActive => m_isLoadingSpecialAmmo || HasSpecialRounds;
 
     /// <summary>특수탄이 남아 있어도 쿨타임이 끝나면 다시 시전해 탄창을 새로 채울 수 있습니다. 장전 중에는 다시 시전하지 않습니다.</summary>
     protected override bool CanRecastWhileActive => !m_isLoadingSpecialAmmo;
@@ -39,7 +42,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     /// <summary>장전 중이거나 특수탄이 남아 있을 때만 상태를 보여줍니다. 평소에는 Figma처럼 쿨타임 한 줄만 둡니다.</summary>
     public override string HudDetailText => m_isLoadingSpecialAmmo
         ? "특수탄 장전 중"
-        : m_specialRoundsRemaining > 0
+        : HasSpecialRounds
             ? $"화염 탄환 {m_specialRoundsRemaining} / {SpecialRoundsCapacity}"
             : null;
 
@@ -56,7 +59,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             return true;
         }
 
-        if (m_specialRoundsRemaining > 0)
+        if (HasSpecialRounds)
         {
             int capacity = SpecialRoundsCapacity;
             fill01 = capacity > 0 ? Mathf.Clamp01((float)m_specialRoundsRemaining / capacity) : 1.0f;
@@ -73,7 +76,13 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     public int SpecialRoundsRemaining => m_specialRoundsRemaining;
     public int SpecialRoundsCapacity => m_gun != null ? m_gun.MaxBullet : 0;
     /// <summary>현재 발사 순서의 맨 앞 탄환이 용숨결탄인지 여부입니다.</summary>
-    public bool IsCurrentRoundDragonBreath => m_specialRoundsRemaining > 0;
+    public bool IsCurrentRoundDragonBreath => HasSpecialRounds;
+
+    /// <summary>특수탄을 쏠 수 있는지 여부입니다. 남은 발수가 있거나, 튜토리얼 사격 파트에서 장전한 특수탄을 0발까지 쓴 경우입니다.</summary>
+    private bool HasSpecialRounds => m_specialRoundsRemaining > 0 || IsTutorialEmptyFireActive;
+
+    /// <summary>튜토리얼 사격 파트에서 특수탄을 0발까지 쓴 뒤에도 특수탄으로 쏘게 하는 상태입니다.</summary>
+    private bool IsTutorialEmptyFireActive => TutorialInfiniteRounds && m_specialLoaded;
     public float ReloadSpeedMultiplier => Mathf.Max(0.01f, m_reloadSpeedMultiplier);
     public bool DebugInfiniteDragonBreathMagazine
     {
@@ -82,9 +91,9 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     }
 
     /// <summary>
-    /// 켜면 특수탄이 남아 있는 동안 쏴도 특수탄 잔량과 실제 샷건 장탄이 줄지 않습니다. 튜토리얼의 특수탄 사격 파트에서만 켭니다.
+    /// 켜면 특수탄 잔량과 샷건 장탄은 쏠 때마다 줄지만, 0발이 되어도 특수탄을 계속 쏠 수 있습니다. 튜토리얼의 특수탄 사격 파트에서만 켭니다.
     /// </summary>
-    /// <remarks>스킬로 장전해 특수탄이 생긴 뒤부터 효과가 있습니다. 튜토리얼이 끝나면 끕니다.</remarks>
+    /// <remarks>스킬로 장전해 특수탄이 생긴 뒤부터 효과가 있습니다. 끄면(파트 종료) 0발 상태의 특수탄도 끝납니다.</remarks>
     public static bool TutorialInfiniteRounds { get; set; }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -94,7 +103,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
     }
 
     private bool IsInfiniteDragonBreathMagazineDebugActive =>
-        TutorialInfiniteRounds || (m_debugInfiniteDragonBreathMagazine && GameDevMode.DebugFeaturesEnabled);
+        m_debugInfiniteDragonBreathMagazine && GameDevMode.DebugFeaturesEnabled;
 
     protected override void Awake()
     {
@@ -120,6 +129,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
 
         m_isLoadingSpecialAmmo = false;
         m_specialRoundsRemaining = 0;
+        m_specialLoaded = false;
     }
 
     protected override bool ActivateSkill(SquadManager squadManager)
@@ -138,6 +148,8 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
 
         if (m_aimController.BeginSkillReload(ReloadSpeedMultiplier))
         {
+            // 새로 장전하는 동안에는 이전 특수탄(튜토리얼의 0발 상태 포함)으로 쏘지 않습니다.
+            m_specialLoaded = false;
             return true;
         }
 
@@ -171,6 +183,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
             m_gun.OnReloadCompleted += HandleReloadCompleted;
             m_gun.OnTryOverrideShot -= TryHandleDragonBreathShot;
             m_gun.OnTryOverrideShot += TryHandleDragonBreathShot;
+            m_gun.AllowFireWhenEmpty = () => IsTutorialEmptyFireActive;
         }
     }
 
@@ -180,6 +193,7 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
         {
             m_gun.OnReloadCompleted -= HandleReloadCompleted;
             m_gun.OnTryOverrideShot -= TryHandleDragonBreathShot;
+            m_gun.AllowFireWhenEmpty = null;
         }
     }
 
@@ -192,12 +206,13 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
 
         m_isLoadingSpecialAmmo = false;
         m_specialRoundsRemaining = m_gun.CurrentBullet;
+        m_specialLoaded = m_specialRoundsRemaining > 0;
         NotifyStateChanged();
     }
 
     private bool TryHandleDragonBreathShot(Gun.HitscanShotInfo shot)
     {
-        if (m_specialRoundsRemaining <= 0 || !shot.IsValid || shot.Direction.sqrMagnitude <= 0.0f)
+        if (!HasSpecialRounds || !shot.IsValid || shot.Direction.sqrMagnitude <= 0.0f)
         {
             return false;
         }
@@ -217,9 +232,15 @@ public sealed class ChungSolDragonBreathSkill : CharacterSkill
                 m_gun.SetCurrentBullet(m_gun.CurrentBullet + 1);
             }
         }
-        else
+        else if (m_specialRoundsRemaining > 0)
         {
             m_specialRoundsRemaining--;
+
+            // 튜토리얼 사격 파트가 아니면 다 쓴 특수탄은 끝납니다. 파트 중에는 0발로 남겨 계속 특수탄으로 쏩니다.
+            if (m_specialRoundsRemaining == 0 && !TutorialInfiniteRounds)
+            {
+                m_specialLoaded = false;
+            }
         }
 
         effect.Play(shot.Origin, shot.Direction.normalized, Faction.Player, gameObject, m_gun);
