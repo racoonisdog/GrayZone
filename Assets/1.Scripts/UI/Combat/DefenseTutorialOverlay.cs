@@ -61,6 +61,10 @@ public class DefenseTutorialOverlay : MonoBehaviour
     [Tooltip("압축 표시(2회차 시작 안내)에서 패널 높이를 원래 높이의 몇 배로 줄일지입니다. 위쪽은 그대로 두고 아래를 잘라냅니다.")]
     [SerializeField] private float m_compactHeightRatio = 0.5f;
 
+    [Header("Sorting")]
+    [Tooltip("안내 창을 그리는 순서입니다. 구조 대기·방어선·목표 마커(0)와 키 안내(500) 위, 결과·게임오버 화면(1000) 아래에 둡니다.")]
+    [SerializeField] private int m_sortingOrder = 800;
+
     /// <summary>현재 페이지를 대신 그리고 있는 프리팹 인스턴스입니다.</summary>
     private GameObject m_overrideInstance;
 
@@ -93,12 +97,38 @@ public class DefenseTutorialOverlay : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
+        EnsureSortingCanvas();
 
         // 첫 페이지는 TutorialManager가 띄웁니다. 매니저가 없으면 안내는 뜨지 않습니다.
         if (!m_showRequested)
         {
             SetPanelVisible(false);
             SetNoticeVisible(false);
+        }
+    }
+
+    /// <summary>
+    /// 이 안내 창에 정렬 전용 캔버스를 붙여 <see cref="m_sortingOrder"/> 순서로 그립니다.
+    /// </summary>
+    /// <remarks>
+    /// 구조 대기·방어선·목표 마커는 정렬 0인 별도 캔버스나 같은 HUD 캔버스의 형제라 그리는 순서가 정해져 있지 않아,
+    /// 마커가 창을 덮을 수 있었습니다. 자체 캔버스로 정렬값을 올려 항상 마커 위에 그립니다.
+    /// </remarks>
+    private void EnsureSortingCanvas()
+    {
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas == null)
+        {
+            canvas = gameObject.AddComponent<Canvas>();
+        }
+
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = m_sortingOrder;
+
+        // 창 안 버튼·스크롤이 클릭을 받도록 캔버스마다 필요한 레이캐스터를 붙입니다.
+        if (GetComponent<GraphicRaycaster>() == null)
+        {
+            gameObject.AddComponent<GraphicRaycaster>();
         }
     }
 
