@@ -43,7 +43,7 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
     [SerializeField] private RadiusMode m_radiusMode = RadiusMode.DistanceScaled;
     [Tooltip("DistanceScaled일 때 카메라-플레이어 거리의 절반에 곱할 값입니다. 1이면 구가 카메라와 플레이어에 딱 닿습니다. " +
              "1보다 작으면 플레이어 바로 뒤 벽이 덜 잘립니다.")]
-    [SerializeField, Range(0.1f, 1.5f)] private float m_radiusScale = 0.9f;
+    [SerializeField, Range(0.1f, 2.5f)] private float m_radiusScale = 0.9f;
     [Tooltip("Fixed일 때 쓸 반지름(미터)입니다. 구 중심은 그대로 카메라와 플레이어의 중간점입니다.")]
     [SerializeField, Min(0.01f)] private float m_fixedRadius = 1.5f;
     [Tooltip("카메라와 플레이어가 이보다 가까우면 자르지 않습니다.")]
@@ -52,12 +52,39 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float m_edgeSoftness = 0.35f;
     [Tooltip("구 중심에서도 남겨 둘 픽셀 비율입니다. 0이면 중심은 완전히 뚫립니다.")]
     [SerializeField, Range(0f, 1f)] private float m_minimumVisibility = 0f;
+    [Tooltip("구 중심을 카메라-플레이어 방향으로 옮기는 거리(미터)입니다. 0이면 둘의 중간점, 양수면 플레이어 쪽(앞), 음수면 카메라 쪽(뒤)으로 옮깁니다. " +
+             "구를 키웠을 때 플레이어 앞 벽까지 잘리면 음수로 당깁니다.")]
+    [SerializeField] private float m_centerOffset = 0f;
+
+    [Header("Cone")]
+    [Tooltip("켜면 플레이어에서 카메라 쪽으로 벌어지는 원뿔에 닿은 오브젝트(렌더러)만 구로 자르는 대상이 됩니다. " +
+             "대상이 된 오브젝트는 원뿔 밖 부분까지 구 모양대로 잘립니다. 원뿔에 닿지 않은 오브젝트는 구 안이어도 자르지 않습니다. 끄면 지정 레이어 전부가 대상입니다.")]
+    [SerializeField] private bool m_useCone = true;
+    [Tooltip("원뿔의 반각(도)입니다. 플레이어→카메라 방향에서 이 각도 안에 오브젝트가 걸치면 대상이 됩니다.")]
+    [SerializeField, Range(5f, 89f)] private float m_coneHalfAngle = 45f;
+    [Tooltip("원뿔 꼭짓점을 플레이어에서 카메라 반대쪽(앞)으로 옮기는 거리(미터)입니다. 0이면 꼭짓점이 플레이어 위치입니다. " +
+             "양수면 플레이어 주변에서 원뿔이 넓어져 어깨 바로 옆 오브젝트도 대상이 되고, 음수면 카메라 쪽으로 당겨집니다.")]
+    [SerializeField] private float m_coneApexOffset = 0f;
+
+    /// <summary>원뿔에 닿는지 볼 때 꼭짓점에서 카메라까지 축 위에 찍는 점 수입니다. 각 점에서 가장 가까운 바운드 지점이 원뿔 안인지 봅니다.</summary>
+    private const int ConeAxisSamples = 8;
+
+    [Tooltip("후보 렌더러의 바운드는 씬이 시작될 때(로딩 단계) 한 번 저장해 씁니다. 0이면 이후 다시 읽지 않습니다(배경이 고정이면 0). " +
+             "컷아웃 대상 중 움직이는 물체(열리는 문 등)가 있으면, 한 프레임에 이 수만큼 돌아가며 다시 읽어 위치를 따라갑니다.")]
+    [SerializeField, Min(0)] private int m_boundsRefreshPerFrame = 0;
 
     [Header("Camera")]
     [Tooltip("켜져 있으면 카메라 충돌 확장을 꺼서 카메라가 벽을 그대로 지나가게 합니다. 이 컴포넌트를 끄면 되돌립니다.")]
     [SerializeField] private bool m_disableCameraCollision = true;
 
     private readonly List<Renderer> m_taggedRenderers = new List<Renderer>();
+
+    /// <summary><see cref="m_taggedRenderers"/>와 같은 순서로, 씬 시작 때 저장해 둔 바운드입니다.</summary>
+    private readonly List<Bounds> m_cachedBounds = new List<Bounds>();
+
+    /// <summary><see cref="m_taggedRenderers"/>와 같은 순서로, 지금 전용 비트를 켜 둔 상태인지입니다. 렌더러 값을 매번 읽지 않으려고 따로 둡니다.</summary>
+    private readonly List<bool> m_isTarget = new List<bool>();
+    private int m_boundsRefreshCursor;
     private readonly List<DirectionalCameraCollisionExtension> m_disabledCollisions =
         new List<DirectionalCameraCollisionExtension>();
     private Camera m_camera;
@@ -143,11 +170,20 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
             return;
         }
 
-        SetSphere(CalculateSphere());
+        Vector4 sphere = CalculateSphere(out Vector3 coneApex, out Vector3 coneAxis, out float coneLength);
+        SetSphere(sphere);
+        if (sphere.w > 0f)
+            UpdateConeTargets(sphere, coneApex, coneAxis, coneLength);
     }
 
-    private Vector4 CalculateSphere()
+    /// <param name="coneApex">원뿔 꼭짓점(플레이어 + 앞뒤 보정)입니다.</param>
+    /// <param name="coneAxis">꼭짓점에서 카메라로 향하는 방향(단위 벡터)입니다.</param>
+    /// <param name="coneLength">꼭짓점에서 카메라까지 거리입니다. 원뿔은 이 길이까지만 봅니다.</param>
+    private Vector4 CalculateSphere(out Vector3 coneApex, out Vector3 coneAxis, out float coneLength)
     {
+        coneApex = Vector3.zero;
+        coneAxis = Vector3.zero;
+        coneLength = 0f;
         Transform target = ResolveTarget();
         if (target == null)
             return Vector4.zero;
@@ -158,8 +194,17 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
         if (distance < m_minDistance)
             return Vector4.zero;
 
-        Vector3 center = (cameraPosition + targetPosition) * 0.5f;
+        // 중간점에서 카메라→플레이어 방향으로 앞뒤 보정을 더합니다.
+        Vector3 direction = (targetPosition - cameraPosition) / distance;
+        Vector3 center = (cameraPosition + targetPosition) * 0.5f + direction * m_centerOffset;
         float radius = m_radiusMode == RadiusMode.Fixed ? m_fixedRadius : distance * 0.5f * m_radiusScale;
+
+        // 원뿔은 카메라-플레이어 축을 따라 돌므로 카메라를 어느 각도로 돌려도 기준이 같습니다.
+        coneApex = targetPosition + direction * m_coneApexOffset;
+        Vector3 toCamera = cameraPosition - coneApex;
+        coneLength = toCamera.magnitude;
+        coneAxis = coneLength > 1e-4f ? toCamera / coneLength : -direction;
+
         return new Vector4(center.x, center.y, center.z, radius);
     }
 
@@ -183,12 +228,86 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
     }
 
     /// <summary>
+    /// 구로 자를 대상을 오브젝트(렌더러) 단위로 고릅니다. 구에 걸치고 원뿔에도 닿은 렌더러만 전용 비트를 켜고, 나머지는 끕니다.
+    /// </summary>
+    /// <remarks>
+    /// 원뿔은 자르는 모양을 정하지 않습니다. 대상이 된 렌더러는 셰이더에서 원래대로 구 모양 전체로 잘립니다.
+    /// 원뿔을 끄면 지정 레이어 렌더러가 모두 대상입니다. 비트가 바뀔 때만 값을 씁니다.
+    /// </remarks>
+    private void UpdateConeTargets(Vector4 sphere, Vector3 coneApex, Vector3 coneAxis, float coneLength)
+    {
+        RefreshSomeBounds();
+
+        uint bit = 1u << RenderingLayerBit;
+        Vector3 center = sphere;
+        float radiusSqr = sphere.w * sphere.w;
+        float cosHalf = Mathf.Cos(m_coneHalfAngle * Mathf.Deg2Rad);
+        for (int i = 0; i < m_taggedRenderers.Count; i++)
+        {
+            bool isTarget = true;
+            if (m_useCone)
+            {
+                Bounds bounds = m_cachedBounds[i];
+                isTarget = bounds.SqrDistance(center) <= radiusSqr && TouchesCone(bounds, coneApex, coneAxis, coneLength, cosHalf);
+            }
+
+            if (isTarget == m_isTarget[i])
+                continue;
+
+            Renderer targetRenderer = m_taggedRenderers[i];
+            if (targetRenderer == null)
+                continue;
+
+            m_isTarget[i] = isTarget;
+            targetRenderer.renderingLayerMask = isTarget ? targetRenderer.renderingLayerMask | bit : targetRenderer.renderingLayerMask & ~bit;
+        }
+    }
+
+    /// <summary>저장해 둔 바운드를 이번 프레임 몫(Bounds Refresh Per Frame)만큼 돌아가며 다시 읽습니다. 0이면 로딩 때 값만 씁니다.</summary>
+    private void RefreshSomeBounds()
+    {
+        int count = m_taggedRenderers.Count;
+        if (count == 0 || m_boundsRefreshPerFrame <= 0)
+            return;
+
+        int refresh = Mathf.Min(m_boundsRefreshPerFrame, count);
+        for (int n = 0; n < refresh; n++)
+        {
+            m_boundsRefreshCursor = (m_boundsRefreshCursor + 1) % count;
+            Renderer targetRenderer = m_taggedRenderers[m_boundsRefreshCursor];
+            if (targetRenderer != null)
+                m_cachedBounds[m_boundsRefreshCursor] = targetRenderer.bounds;
+        }
+    }
+
+    /// <summary>
+    /// 바운드가 원뿔(꼭짓점에서 축 방향으로 정한 길이, 반각의 cos)에 닿는지 여부입니다.
+    /// 축 위 몇 지점에서 가장 가까운 바운드 지점을 구해, 그 지점이 꼭짓점에서 본 각도로 원뿔 안이면 닿은 것으로 봅니다.
+    /// </summary>
+    private static bool TouchesCone(Bounds bounds, Vector3 apex, Vector3 axis, float length, float cosHalf)
+    {
+        for (int i = 0; i < ConeAxisSamples; i++)
+        {
+            Vector3 onAxis = apex + axis * (length * i / (ConeAxisSamples - 1));
+            Vector3 toPoint = bounds.ClosestPoint(onAxis) - apex;
+            float sqr = toPoint.sqrMagnitude;
+            if (sqr < 1e-6f || Vector3.Dot(toPoint, axis) >= cosHalf * Mathf.Sqrt(sqr))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// 지정 레이어 렌더러와 <see cref="OcclusionCutoutTarget"/> 아래 렌더러에 전용 비트를 켭니다.
     /// 같은 셰이더를 쓰는 다른 레이어 물체는 잘리지 않습니다.
     /// </summary>
     private void TagRenderers()
     {
         m_taggedRenderers.Clear();
+        m_cachedBounds.Clear();
+        m_isTarget.Clear();
+        m_boundsRefreshCursor = 0;
         Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         for (int i = 0; i < renderers.Length; i++)
         {
@@ -216,6 +335,8 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
 
         targetRenderer.renderingLayerMask |= bit;
         m_taggedRenderers.Add(targetRenderer);
+        m_cachedBounds.Add(targetRenderer.bounds);
+        m_isTarget.Add(true);
     }
 
     private void UntagRenderers()
@@ -229,6 +350,8 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
         }
 
         m_taggedRenderers.Clear();
+        m_cachedBounds.Clear();
+        m_isTarget.Clear();
     }
 
     private void DisableCameraCollisions()

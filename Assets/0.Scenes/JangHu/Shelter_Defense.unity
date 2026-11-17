@@ -346959,11 +346959,16 @@ MonoBehaviour:
     m_Bits: 64
   m_targetOverride: {fileID: 0}
   m_radiusMode: 0
-  m_radiusScale: 0.9
+  m_radiusScale: 1.35
   m_fixedRadius: 1.5
   m_minDistance: 0.5
   m_edgeSoftness: 0.35
   m_minimumVisibility: 0
+  m_centerOffset: 0
+  m_useCone: 1
+  m_coneHalfAngle: 45
+  m_coneSoftness: 8
+  m_coneApexOffset: 0
   m_disableCameraCollision: 1
 --- !u!1001 &1472316882
 PrefabInstance:
@@ -391945,7 +391950,7 @@ MonoBehaviour:
   resourceAmounts: []
   itemStorageEntries:
   - m_itemDefinitionId: Grenade_01
-    m_quantity: 10
+    m_quantity: 0
   - m_itemDefinitionId: Firebomb_01
     m_quantity: 0
   characters: []

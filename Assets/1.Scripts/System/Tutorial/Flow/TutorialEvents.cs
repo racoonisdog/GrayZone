@@ -1149,6 +1149,26 @@ public sealed class TutorialEvents : MonoBehaviour
         }
     }
 
+    /// <summary>분대 인벤토리에 그 아이템이 하나도 없을 때만 정한 수량을 넣습니다. 하나라도 있으면 아무것도 하지 않습니다.</summary>
+    /// <param name="item">확인할 아이템 정의입니다(Grenade_Definition, Firebomb_Definition 등).</param>
+    /// <param name="count">없을 때 넣을 수량입니다.</param>
+    /// <remarks>제조실에서 만들어 온 아이템을 덮어쓰거나 빼지 않고, 다 써서 없는 경우만 채우는 방어용입니다.</remarks>
+    [TutorialEvent("아이템이 없으면 지급")]
+    public void GiveItemIfEmpty(ItemDefinition item, int count)
+    {
+        SquadInventoryManager inventory = FindFirstObjectByType<SquadInventoryManager>(FindObjectsInactive.Include);
+        if (item == null || inventory == null)
+        {
+            Debug.LogWarning("아이템이 없으면 지급: 아이템이 비어 있거나 씬에서 SquadInventoryManager를 찾지 못했습니다.", this);
+            return;
+        }
+
+        if (inventory.CountOf(item.ItemDefinitionId) <= 0)
+        {
+            GiveItem(item, count);
+        }
+    }
+
     /// <summary>셸터 창고에 자원(함정 설치 자원 등)을 넣습니다.</summary>
     /// <param name="resource">넣을 자원 종류입니다.</param>
     /// <param name="amount">넣을 수량입니다.</param>
