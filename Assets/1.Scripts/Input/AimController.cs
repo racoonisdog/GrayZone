@@ -543,8 +543,14 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// <summary>지난 프레임의 전력질주 입력입니다. 누름 시점을 잡기 위한 것입니다.</summary>
     private bool m_sprintWasHeld;
 
-    /// <summary>지난 프레임의 조준/사격 입력입니다. 누름 시점을 잡기 위한 것입니다.</summary>
-    private bool m_combatWasHeld;
+    /// <summary>지난 프레임의 조준 입력입니다. 누름 시점을 잡기 위한 것입니다.</summary>
+    private bool m_aimWasHeld;
+
+    /// <summary>지난 프레임의 사격 입력입니다. 누름 시점을 잡기 위한 것입니다.</summary>
+    private bool m_shootWasHeld;
+
+    /// <summary>지난 프레임의 투척 모드 상태입니다. 켜지는 시점을 잡기 위한 것입니다.</summary>
+    private bool m_throwModeWasHeld;
 
     /// <summary>전력질주가 조준/사격보다 최근 입력이어서 우선하는 상태인지입니다.</summary>
     private bool m_sprintOverridesCombat;
@@ -1725,18 +1731,24 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     ///
     /// 달리기를 놓으면 유지 중인 조준·사격이 곧바로 이어받습니다. 그러려면 놓는 순간 우선권을
     /// 넘겨야 하고, 그래서 새 입력을 다시 요구하지 않습니다(§6).
+    ///
+    /// 조준·사격·투척 모드는 각각 따로 누름 시점을 봅니다. 셋을 하나로 묶어 보면, 조준을 누른 채 달리기로
+    /// 조준이 풀린 뒤 사격을 새로 눌러도 묶음은 이미 눌린 상태라 새 입력으로 잡히지 않아 사격이 막힙니다.
     /// </remarks>
     private void UpdateStanceArbitration()
     {
         bool sprint = m_input.Sprint;
-        bool combat = m_input.Aim || m_input.Shoot || m_input.ThrowMode;
+        bool aim = m_input.Aim;
+        bool shoot = m_input.Shoot;
+        bool throwMode = m_input.ThrowMode;
 
         if (sprint && !m_sprintWasHeld)
         {
             m_sprintOverridesCombat = true;
         }
 
-        if (combat && !m_combatWasHeld)
+        bool combatPressed = (aim && !m_aimWasHeld) || (shoot && !m_shootWasHeld) || (throwMode && !m_throwModeWasHeld);
+        if (combatPressed)
         {
             m_sprintOverridesCombat = false;
         }
@@ -1747,7 +1759,9 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         }
 
         m_sprintWasHeld = sprint;
-        m_combatWasHeld = combat;
+        m_aimWasHeld = aim;
+        m_shootWasHeld = shoot;
+        m_throwModeWasHeld = throwMode;
     }
 
     /// <summary>
