@@ -58,6 +58,16 @@ MonoBehaviour:
         subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
         cornerRadiusPixels: 2
         subSpreadMode: 0
+    displayName: "\uB098\uB9B0"
+    hasPreviewBasis: 1
+    previewBasis:
+      spreadDisplayBasis: 1
+      spreadDisplayFactorOverride: -1
+      hipfireMinSpread: 1
+      hipfireMaxSpread: 3
+      distribution: 1
+      concentration: 3
+      fovDegrees: 35
   - characterId: 2
     style:
       useSpreadAccuracy: 1
@@ -103,6 +113,16 @@ MonoBehaviour:
         subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
         cornerRadiusPixels: 2
         subSpreadMode: 0
+    displayName: "\uCCAD\uC194"
+    hasPreviewBasis: 1
+    previewBasis:
+      spreadDisplayBasis: 1
+      spreadDisplayFactorOverride: 0.3333333
+      hipfireMinSpread: 2
+      hipfireMaxSpread: 6
+      distribution: 1
+      concentration: 1
+      fovDegrees: 30
   - characterId: 3
     style:
       useSpreadAccuracy: 1
@@ -148,6 +168,16 @@ MonoBehaviour:
         subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
         cornerRadiusPixels: 2
         subSpreadMode: 0
+    displayName: "\uC11C\uD558"
+    hasPreviewBasis: 1
+    previewBasis:
+      spreadDisplayBasis: 1
+      spreadDisplayFactorOverride: -1
+      hipfireMinSpread: 1
+      hipfireMaxSpread: 3
+      distribution: 1
+      concentration: 3
+      fovDegrees: 35
   m_hasThrowable: 1
   m_throwable:
     useSpreadAccuracy: 0
@@ -193,3 +223,4 @@ MonoBehaviour:
       subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
       cornerRadiusPixels: 2
       subSpreadMode: 0
+  m_previewHud: {fileID: 8591575545439928725, guid: 719e4cdd98ec21e439d12331720a9ddc, type: 3}

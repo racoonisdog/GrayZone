@@ -254,7 +254,16 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
     /// </remarks>
     public void ApplyCrosshairPreview(CrosshairController target, CrosshairStyle style, bool ads)
     {
-        if (target == null || style == null)
+        ApplyCrosshairPreview(target, style, ads, CaptureCrosshairPreviewBasis());
+    }
+
+    /// <summary>
+    /// 캐릭터가 없는 씬(타이틀·셸터)에서도 미리보기를 그릴 수 있도록, 간격 계산에 쓰는 값을 따로 받아 그립니다.
+    /// </summary>
+    /// <param name="basis">이 캐릭터의 <see cref="CaptureCrosshairPreviewBasis"/> 값입니다.</param>
+    public static void ApplyCrosshairPreview(CrosshairController target, CrosshairStyle style, bool ads, CrosshairPreviewBasis basis)
+    {
+        if (target == null || style == null || basis == null)
         {
             return;
         }
@@ -262,17 +271,34 @@ public class AimController : MonoBehaviour, ISharedBalanceReceiver
         CrosshairStyle sideStyle = ads ? style.CreateAdsView() : style;
         CrosshairSubStyle sub = sideStyle.GetHipSub();
         sideStyle.ApplyTo(target, true);
-        target.SetSpreadDisplayBasis(m_crosshairSpreadDisplayBasis);
-        target.SetSpreadDisplayFactorOverride(m_crosshairSpreadDisplayFactorOverride);
+        target.SetSpreadDisplayBasis(basis.spreadDisplayBasis);
+        target.SetSpreadDisplayFactorOverride(basis.spreadDisplayFactorOverride);
         target.SetShotRecoilPulseEnabled(false);
         target.ClearShotRecoilPulse();
 
-        ResolveFixedCrosshairSpread(sub.subSpreadMode, out float spreadDegrees, out float fovDegrees);
-        SpreadDistribution distribution = m_weaponController != null
-            ? m_weaponController.Distribution
-            : SpreadDistribution.Gaussian;
-        float concentration = m_weaponController != null ? m_weaponController.SpreadConcentration : 3.0f;
-        target.SetSpread(spreadDegrees, distribution, concentration, fovDegrees, true);
+        float spreadDegrees = sub.subSpreadMode == CrosshairSpreadMode.WeaponMaxSpread
+            ? basis.hipfireMaxSpread
+            : basis.hipfireMinSpread;
+        target.SetSpread(spreadDegrees, basis.distribution, basis.concentration, basis.fovDegrees, true);
+    }
+
+    /// <summary>
+    /// 설정 화면 미리보기가 이 캐릭터의 쏘지 않고 서 있을 때 간격을 계산하는 값입니다. <see cref="ResolveFixedCrosshairSpread"/>와 같은 출처를 씁니다.
+    /// </summary>
+    public CrosshairPreviewBasis CaptureCrosshairPreviewBasis()
+    {
+        ResolveFixedCrosshairSpread(CrosshairSpreadMode.CurrentSpread, out float minSpread, out float fovDegrees);
+        ResolveFixedCrosshairSpread(CrosshairSpreadMode.WeaponMaxSpread, out float maxSpread, out _);
+        return new CrosshairPreviewBasis
+        {
+            spreadDisplayBasis = m_crosshairSpreadDisplayBasis,
+            spreadDisplayFactorOverride = m_crosshairSpreadDisplayFactorOverride,
+            hipfireMinSpread = minSpread,
+            hipfireMaxSpread = maxSpread,
+            distribution = m_weaponController != null ? m_weaponController.Distribution : SpreadDistribution.Gaussian,
+            concentration = m_weaponController != null ? m_weaponController.SpreadConcentration : 3.0f,
+            fovDegrees = fovDegrees,
+        };
     }
 
     /// <summary>
