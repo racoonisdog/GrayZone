@@ -432,6 +432,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 5593502697882872043, guid: 32c7fd41ab432f74ca34cdcca57f8294, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "\uC624\uB978\uCABD \uD130\uB110\uB85C \uC774\uB3D9\uD558\uC138\uC694."
@@ -685,6 +691,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 8096410815865314114, guid: 08c293aec8555c34b800c76d883864b4, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "\uBCC0\uC774\uCCB4\uB97C \uBAA8\uB450 \uCC98\uCE58\uD558\uC138\uC694."
@@ -1142,6 +1154,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 4870855025800295428, guid: 53788c51d0364574b83f630232d56286, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "\uD22C\uCC99\uBB3C\uC744 \uC120\uD0DD\uD574 \uC0AC\uC6A9\uD558\uACE0,
@@ -1552,6 +1570,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 680588392438513411, guid: 88389a6c0e245ff438f0f58d5cbf6205, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "2\uBC88\uC744 \uB20C\uB7EC \uCCAD\uC194\uB85C \uBCC0\uACBD\uD558\uC138\uC694."
@@ -1785,6 +1809,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 2270509367873947677, guid: 8fda6d763f979e046b709c0ff00144f5, type: 3}
       - m_method: SetSkillCooldown
         m_args:
         - m_string: 
@@ -2558,6 +2588,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 977755900149386650, guid: 5b459009be51cdd44acace8ddb92f339, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "\uD568\uC815\uC744 \uC124\uCE58 \uBC0F \uC218\uB9AC\uD558\uC138\uC694."
@@ -3170,6 +3206,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 1895814034841913301, guid: 41d5396ae38f9ae47a3bde253e5da1cc, type: 3}
       m_condition: 0
       m_seconds: 2
       m_enemyPrefab: {fileID: 0}
@@ -3539,6 +3581,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 4798394602570292449, guid: 6cb0675e612d807498981642e6d3def2, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "\uC815\uBB38\uC73C\uB85C \uC774\uB3D9\uD558\uC138\uC694."
@@ -3807,6 +3855,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 7244907705271809186, guid: 30d5484923d412443a256ab1629b21f1, type: 3}
       - m_method: SetSceneObjectActive
         m_args:
         - m_string: ----- Event -----/Defense Point1
@@ -4134,6 +4188,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 37845533073361805, guid: 6f48f45896fbd2a4da64d33a9d287beb, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "\uC815\uBB38\uC744 \uC218\uB9AC\uD558\uC138\uC694."
@@ -4708,6 +4768,12 @@ MonoBehaviour:
           m_bool: 1
           m_vector: {x: 0, y: 0, z: 0}
           m_object: {fileID: 0}
+        - m_string: 
+          m_float: 0
+          m_int: 0
+          m_bool: 0
+          m_vector: {x: 0, y: 0, z: 0}
+          m_object: {fileID: 2303632899417242567, guid: 8eeab98c73abe98438ff8c4b6756eff0, type: 3}
       - m_method: SetObjective
         m_args:
         - m_string: "\uC815\uBB38\uC744 \uC9C0\uD0A4\uBA70 \uB0A8\uC740 \uC801\uC744

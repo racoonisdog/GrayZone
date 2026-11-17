@@ -426,11 +426,16 @@ public sealed class TutorialEvents : MonoBehaviour
     /// 예전 튜토리얼 방식의 창을 띄우고, 닫기 키를 정한 시간만큼 누르고 있을 때까지 기다립니다. 닫으면 창을 내립니다.
     /// </summary>
     /// <param name="pauseTime">켜면 창이 떠 있는 동안 게임 시간을 멈추고, 닫을 때 되돌립니다.</param>
+    /// <param name="panelPrefab">
+    /// 완성된 튜토리얼 패널 프리팹입니다(Assets/2.Prefabs/UI/Tutorial/Panels). 넣으면 제목·본문·이미지·안내 문구 칸은 쓰지 않고
+    /// 프리팹을 그대로 띄웁니다. 비우면 공용 템플릿에 위 칸의 글을 채워 띄웁니다.
+    /// </param>
     /// <remarks>
     /// 창이 뜰 때 이미 눌려 있던 닫기 키는 한 번 뗀 뒤부터 셉니다. 앞 대사를 넘기려고 누른 채로 있던 키로 창이 닫히지 않게 하기 위해서입니다.
+    /// 프리팹 칸은 마지막 파라미터라, 이 칸이 생기기 전에 만든 블록은 비어 있는 채로 읽혀 예전처럼 동작합니다.
     /// </remarks>
     [TutorialEvent("튜토리얼 창 띄우기 (닫을 때까지 대기)")]
-    public IEnumerator ShowWindow(string title, string body, Sprite image, string hint, bool pauseTime)
+    public IEnumerator ShowWindow(string title, string body, Sprite image, string hint, bool pauseTime, GameObject panelPrefab)
     {
         DefenseTutorialOverlay window = ResolveWindow();
         if (window == null)
@@ -438,7 +443,14 @@ public sealed class TutorialEvents : MonoBehaviour
             yield break;
         }
 
-        window.Show(TutorialPage.CreateWindowPage(title, body, image, hint));
+        if (panelPrefab != null)
+        {
+            window.ShowPrefab(panelPrefab);
+        }
+        else
+        {
+            window.Show(TutorialPage.CreateWindowPage(title, body, image, hint));
+        }
         window.SetGaugeProgress(0.0f);
         s_isWindowOpen = true;
         if (DefenseManager.Instance != null)
