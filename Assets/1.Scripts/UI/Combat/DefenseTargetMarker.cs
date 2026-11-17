@@ -1,34 +1,25 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 방어 목표(정문) 위에 방어선 마커를 띄웁니다. 기본 게임 내내 보입니다. 튜토리얼은 초반에 이 마커를 꺼 두었다가 정문 안내 때 다시 켭니다.
 /// </summary>
 /// <remarks>
-/// 마커 모양은 튜토리얼 목표 마커와 같은 <see cref="ObjectiveIndicatorController"/> 템플릿을 복제해 아이콘만 바꿉니다.
+/// 마커 생김새는 프리팹(<see cref="m_markerPrefab"/>)에 미리 만들어 둔 그대로 씁니다. 이 컴포넌트는 목표 위 높이(<see cref="m_height"/>)만 정합니다.
 /// 마커 위치는 목표의 보이는 모습(켜진 렌더러) 맨 위를 따라갑니다.
 /// </remarks>
 [DisallowMultipleComponent]
 public sealed class DefenseTargetMarker : MonoBehaviour
 {
-    [Tooltip("복제할 마커입니다(튜토리얼 목표 마커 템플릿과 같은 것). 씬에서는 꺼 둡니다.")]
-    [SerializeField] private ObjectiveIndicatorController m_markerTemplate;
+    [Tooltip("만들 방어선 마커 프리팹입니다(Assets/2.Prefabs/UI/Marker/Marker_DefensePoint). 아이콘·크기·모양은 프리팹에서 고칩니다.")]
+    [FormerlySerializedAs("m_markerTemplate")]
+    [SerializeField] private ObjectiveIndicatorController m_markerPrefab;
+
+    [Tooltip("만든 마커를 둘 부모입니다. 비우면 씬 맨 위에 둡니다. 마커는 자체 화면 캔버스를 가져 다른 캔버스 아래에 두지 않습니다.")]
+    [SerializeField] private Transform m_markerParent;
 
     [Tooltip("마커를 띄울 방어 목표(정문)입니다.")]
     [SerializeField] private Transform m_target;
-
-    [Tooltip("마커에 쓸 이미지입니다. 비우면 템플릿의 기본 이미지를 씁니다.")]
-    [SerializeField] private Sprite m_icon;
-
-    [Tooltip("마커 크기 배율입니다. 1이면 템플릿 크기 그대로입니다.")]
-    [Min(0.1f)]
-    [SerializeField] private float m_scale = 1.25f;
-
-    [Tooltip("테두리는 두고 안쪽 아이콘만 곱할 배율입니다. 아이콘이 테두리 밖으로 나가면 1보다 작게 둡니다.")]
-    [Range(0.1f, 1.5f)]
-    [SerializeField] private float m_iconScale = 0.45f;
-
-    [Tooltip("테두리는 두고 안쪽 아이콘만 옮길 거리(마커 UI 단위)입니다. 테두리 아래 화살표 때문에 마름모 중심이 마커 가운데보다 위라서 올려 맞춥니다.")]
-    [SerializeField] private Vector2 m_iconOffset = new(0.0f, 3.5f);
 
     [Tooltip("마커를 목표의 보이는 모습 맨 위에서 이만큼(m) 더 띄웁니다.")]
     [Min(0.0f)]
@@ -48,7 +39,7 @@ public sealed class DefenseTargetMarker : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (m_markerTemplate == null || m_target == null)
+        if (m_markerPrefab == null || m_target == null)
         {
             return;
         }
@@ -83,14 +74,10 @@ public sealed class DefenseTargetMarker : MonoBehaviour
     private void CreateMarker()
     {
         m_anchor = new GameObject($"DefenseTargetMarkerAnchor_{m_target.name}").transform;
-        m_view = Instantiate(m_markerTemplate, m_markerTemplate.transform.parent);
+        m_view = Instantiate(m_markerPrefab, m_markerParent);
         m_view.name = $"DefenseTargetMarker_{m_target.name}";
         m_view.gameObject.SetActive(true);
         m_view.SetTarget(m_anchor);
-        m_view.SetOnscreenMarkerSprite(m_icon);
-        m_view.SetOnscreenMarkerScale(m_scale);
-        m_view.SetOnscreenIconScale(m_iconScale);
-        m_view.SetOnscreenIconOffset(m_iconOffset);
         m_view.SetVisible(false);
     }
 }

@@ -87,9 +87,13 @@ public sealed class TutorialEvents : MonoBehaviour
     [Tooltip("경로선 안내가 쓸 발밑 경로 화살표입니다. 비어 있으면 씬에서 찾습니다.")]
     [SerializeField] private ObjectivePathArrow m_pathArrow;
 
-    [Tooltip("목표 대상 위 마커 띄우기가 대상마다 복제할 마커입니다(공격로 마커를 복제해 아이콘만 바꾼 것). 씬에서는 꺼 둡니다. " +
-             "비어 있으면 대상 마커 이벤트는 경고만 남깁니다.")]
-    [SerializeField] private ObjectiveIndicatorController m_targetMarkerTemplate;
+    [Tooltip("목표 대상 위 마커 띄우기가 대상마다 만들 마커 프리팹입니다(Assets/2.Prefabs/UI/Marker/Marker_TutorialTarget). " +
+             "아이콘·크기·모양은 프리팹에서 고칩니다. 비어 있으면 대상 마커 이벤트는 경고만 남깁니다.")]
+    [UnityEngine.Serialization.FormerlySerializedAs("m_targetMarkerTemplate")]
+    [SerializeField] private ObjectiveIndicatorController m_targetMarkerPrefab;
+
+    [Tooltip("만든 목표 마커를 둘 부모입니다. 비우면 씬 맨 위에 둡니다. 마커는 자체 화면 캔버스를 가져 다른 캔버스 아래에 두지 않습니다.")]
+    [SerializeField] private Transform m_targetMarkerParent;
 
     [Min(0.0f)]
     [Tooltip("대상 마커를 대상의 보이는 모습 맨 위에서 이만큼(m) 더 띄웁니다.")]
@@ -422,11 +426,16 @@ public sealed class TutorialEvents : MonoBehaviour
     /// 예전 튜토리얼 방식의 창을 띄우고, 닫기 키를 정한 시간만큼 누르고 있을 때까지 기다립니다. 닫으면 창을 내립니다.
     /// </summary>
     /// <param name="pauseTime">켜면 창이 떠 있는 동안 게임 시간을 멈추고, 닫을 때 되돌립니다.</param>
+    /// <param name="panelPrefab">
+    /// 완성된 튜토리얼 패널 프리팹입니다(Assets/2.Prefabs/UI/Tutorial/Panels). 넣으면 제목·본문·이미지·안내 문구 칸은 쓰지 않고
+    /// 프리팹을 그대로 띄웁니다. 비우면 공용 템플릿에 위 칸의 글을 채워 띄웁니다.
+    /// </param>
     /// <remarks>
     /// 창이 뜰 때 이미 눌려 있던 닫기 키는 한 번 뗀 뒤부터 셉니다. 앞 대사를 넘기려고 누른 채로 있던 키로 창이 닫히지 않게 하기 위해서입니다.
+    /// 프리팹 칸은 마지막 파라미터라, 이 칸이 생기기 전에 만든 블록은 비어 있는 채로 읽혀 예전처럼 동작합니다.
     /// </remarks>
     [TutorialEvent("튜토리얼 창 띄우기 (닫을 때까지 대기)")]
-    public IEnumerator ShowWindow(string title, string body, Sprite image, string hint, bool pauseTime)
+    public IEnumerator ShowWindow(string title, string body, Sprite image, string hint, bool pauseTime, GameObject panelPrefab)
     {
         DefenseTutorialOverlay window = ResolveWindow();
         if (window == null)
@@ -434,7 +443,14 @@ public sealed class TutorialEvents : MonoBehaviour
             yield break;
         }
 
-        window.Show(TutorialPage.CreateWindowPage(title, body, image, hint));
+        if (panelPrefab != null)
+        {
+            window.ShowPrefab(panelPrefab);
+        }
+        else
+        {
+            window.Show(TutorialPage.CreateWindowPage(title, body, image, hint));
+        }
         window.SetGaugeProgress(0.0f);
         s_isWindowOpen = true;
         if (DefenseManager.Instance != null)
@@ -521,9 +537,9 @@ public sealed class TutorialEvents : MonoBehaviour
     /// 튜토리얼 대상 위에 목표 마커(함정 재료 아이콘)를 띄웁니다. 대상마다 한 번씩 부릅니다.
     /// </summary>
     /// <param name="targetId">마커를 띄울 대상의 ID입니다(씬 오브젝트의 <see cref="TutorialTarget"/>). 꺼져 있는 대상도 찾습니다.</param>
-    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 템플릿의 기본 이미지(함정 재료 아이콘)를 씁니다.</param>
-    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 템플릿 크기 그대로입니다.</param>
-    /// <param name="iconScale">테두리 안 아이콘만 줄이거나 키우는 배율입니다. 0이나 1이면 그대로입니다. 아이콘이 테두리 밖으로 나가면 1보다 작게 둡니다.</param>
+    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 프리팹의 이미지(함정 재료 아이콘)를 씁니다.</param>
+    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 프리팹 크기 그대로입니다.</param>
+    /// <param name="iconScale">테두리 안 아이콘만 줄이거나 키우는 배율입니다. 0이나 1이면 프리팹 그대로입니다. 아이콘이 테두리 밖으로 나가면 1보다 작게 둡니다.</param>
     /// <remarks>
     /// 마커는 대상의 보이는 모습(켜진 렌더러) 맨 위를 따라갑니다. 청사진과 설치된 모습의 높이가 달라도 맞춰 움직입니다.
     /// 대상이 함정이면 설치하거나 수리해 내구도를 가득 채우는 순간 그 마커만 내립니다. 나머지는 목표 대상 마커 모두 내리기나 튜토리얼 종료 때 내립니다.
@@ -545,8 +561,8 @@ public sealed class TutorialEvents : MonoBehaviour
     /// 분대원 머리 위에 목표 마커를 띄웁니다(함정 마커와 같은 모양). 다운된 동료를 구조할 때처럼 찾아갈 대원을 표시합니다.
     /// </summary>
     /// <param name="memberNumber">마커를 띄울 캐릭터 번호입니다(캐릭터 변경 키 1~3과 같은 번호).</param>
-    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 템플릿의 기본 이미지를 씁니다.</param>
-    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 템플릿 크기 그대로입니다.</param>
+    /// <param name="icon">마커에 쓸 이미지입니다. 비우면 프리팹의 이미지를 씁니다.</param>
+    /// <param name="sizeMultiplier">마커 크기 배율입니다. 0이나 1이면 프리팹 크기 그대로입니다.</param>
     /// <remarks>그 대원이 다운된 상태였다가 구조돼 일어나면 마커를 내립니다. 그 밖에는 목표 대상 마커 모두 내리기나 튜토리얼 종료 때 내립니다.</remarks>
     [TutorialEvent("대원 머리 위 마커 띄우기 (구조되면 내림)")]
     public void ShowSquadMemberMarker(int memberNumber, Sprite icon, float sizeMultiplier)
@@ -566,9 +582,9 @@ public sealed class TutorialEvents : MonoBehaviour
     /// <summary>대상 위에 마커를 하나 만듭니다. 같은 대상에 이미 있으면 만들지 않습니다.</summary>
     private void CreateTargetMarker(Transform root, string label, Sprite icon, float sizeMultiplier, float iconScale, Trap trap, PlayerHealth member)
     {
-        if (m_targetMarkerTemplate == null)
+        if (m_targetMarkerPrefab == null)
         {
-            Debug.LogWarning($"목표 대상 위 마커 띄우기: {nameof(TutorialEvents)}에 대상 마커 템플릿이 비어 있습니다.", this);
+            Debug.LogWarning($"목표 대상 위 마커 띄우기: {nameof(TutorialEvents)}에 대상 마커 프리팹이 비어 있습니다.", this);
             return;
         }
 
@@ -581,13 +597,27 @@ public sealed class TutorialEvents : MonoBehaviour
         }
 
         Transform anchor = new GameObject($"TutorialTargetMarkerAnchor_{label}").transform;
-        ObjectiveIndicatorController view = Instantiate(m_targetMarkerTemplate, m_targetMarkerTemplate.transform.parent);
+        ObjectiveIndicatorController view = Instantiate(m_targetMarkerPrefab, m_targetMarkerParent);
         view.name = $"TutorialTargetMarker_{label}";
         view.gameObject.SetActive(true);
         view.SetTarget(anchor);
-        view.SetOnscreenMarkerSprite(icon);
-        view.SetOnscreenMarkerScale(sizeMultiplier);
-        view.SetOnscreenIconScale(iconScale);
+
+        // 생김새는 프리팹 그대로 씁니다. 이벤트 인자로 따로 정한 값(이미지, 0·1이 아닌 배율)만 덮어씁니다.
+        if (icon != null)
+        {
+            view.SetOnscreenMarkerSprite(icon);
+        }
+
+        if (sizeMultiplier > 0.0f && !Mathf.Approximately(sizeMultiplier, 1.0f))
+        {
+            view.SetOnscreenMarkerScale(sizeMultiplier);
+        }
+
+        if (iconScale > 0.0f && !Mathf.Approximately(iconScale, 1.0f))
+        {
+            view.SetOnscreenIconScale(iconScale);
+        }
+
         view.SetVisible(true);
 
         TargetMarker marker = new()
@@ -1957,7 +1987,10 @@ public sealed class TutorialEvents : MonoBehaviour
             // 검은 화면으로 끝내면 마지막 카메라 클립의 Ease Out(플레이어 카메라로 옮겨 가는 구간)은 재생하지 않고, 그 직전까지 검게 덮습니다.
             double endTime = cinematic.FadeToPlayer ? Math.Max(0.0, duration - GetTailEaseOut(director)) : duration;
             double fadeStart = endTime - cinematic.FadeOutSeconds;
-            while (m_cinematicDirector == director && director != null && director.state == PlayState.Playing && director.time < endTime)
+            // 일시정지 메뉴가 타임라인을 멈춘 동안도 재생 중으로 보고 기다립니다(멈춘 상태를 끝으로 보면 컷신을 건너뜁니다).
+            while (m_cinematicDirector == director && director != null
+                && (director.state == PlayState.Playing || GameplayPauseMenuController.IsDirectorHeldByMenu(director))
+                && director.time < endTime)
             {
                 if (cinematic.FadeToPlayer && cinematic.FadeOutSeconds > 0.0f && director.time >= fadeStart)
                 {
@@ -1999,7 +2032,12 @@ public sealed class TutorialEvents : MonoBehaviour
                 float elapsed = 0.0f;
                 while (elapsed < cinematic.SecondsPerCamera && !m_cinematicSkipRequested)
                 {
-                    elapsed += Time.unscaledDeltaTime;
+                    // 일시정지 메뉴가 열린 동안은 카메라 전환 시간을 세지 않습니다.
+                    if (!GameplayPauseMenuController.IsGameplayPausedByMenu)
+                    {
+                        elapsed += Time.unscaledDeltaTime;
+                    }
+
                     yield return null;
                 }
             }
@@ -2079,7 +2117,12 @@ public sealed class TutorialEvents : MonoBehaviour
         float elapsed = 0.0f;
         while (elapsed < seconds)
         {
-            elapsed += Time.unscaledDeltaTime;
+            // 일시정지 메뉴가 열린 동안은 세지 않습니다. 컷신 중 대사 지연이 메뉴를 연 사이에 지나가 버리지 않게 합니다.
+            if (!GameplayPauseMenuController.IsGameplayPausedByMenu)
+            {
+                elapsed += Time.unscaledDeltaTime;
+            }
+
             yield return null;
         }
     }

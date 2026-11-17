@@ -68,6 +68,9 @@ public class DefenseTutorialOverlay : MonoBehaviour
     /// <summary>현재 페이지를 대신 그리고 있는 프리팹 인스턴스입니다.</summary>
     private GameObject m_overrideInstance;
 
+    /// <summary>프리팹 인스턴스 안의 넘김 키 게이지 채움 링입니다. 없으면 null입니다.</summary>
+    private Image m_overrideGaugeFill;
+
     /// <summary>압축 표시 중인지 여부입니다.</summary>
     private bool m_isCompact;
 
@@ -145,8 +148,7 @@ public class DefenseTutorialOverlay : MonoBehaviour
 
         if (page.OverridePrefab != null)
         {
-            SetPanelVisible(false);
-            m_overrideInstance = Instantiate(page.OverridePrefab, transform);
+            SpawnOverride(page.OverridePrefab);
             FillByName(m_overrideInstance.transform, page);
             return;
         }
@@ -154,6 +156,30 @@ public class DefenseTutorialOverlay : MonoBehaviour
         ApplyPage(m_titleText, m_bodyText, m_hintText, m_image, m_keyIcon, page);
         FitPanelToBody(true);
         SetPanelVisible(true);
+    }
+
+    /// <summary>
+    /// 완성된 튜토리얼 패널 프리팹을 그대로 띄웁니다. 공용 패널은 끄고, 프리팹 안의 글과 이미지는 바꾸지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 프리팹 루트는 화면(1920x1080) 기준으로 자리를 잡아 둡니다. 넘김 키 게이지는 프리팹 안 'KeyGauge/Fill'을 채웁니다.
+    /// </remarks>
+    public void ShowPrefab(GameObject panelPrefab)
+    {
+        m_showRequested = true;
+        AutoFindReferences();
+        ClearOverride();
+        ApplyCompactLayout(false);
+        SetNoticeVisible(true);
+        SpawnOverride(panelPrefab);
+    }
+
+    /// <summary>공용 패널을 끄고 프리팹을 이 오브젝트 아래에 띄웁니다. 게이지 채움 링이 있으면 기억해 둡니다.</summary>
+    private void SpawnOverride(GameObject prefab)
+    {
+        SetPanelVisible(false);
+        m_overrideInstance = Instantiate(prefab, transform);
+        m_overrideGaugeFill = FindChild<Image>(m_overrideInstance.transform, KeyGaugeFillName);
     }
 
     /// <summary>
@@ -329,6 +355,8 @@ public class DefenseTutorialOverlay : MonoBehaviour
             Destroy(m_overrideInstance);
             m_overrideInstance = null;
         }
+
+        m_overrideGaugeFill = null;
     }
 
     private void AutoFindReferences()
@@ -475,6 +503,11 @@ public class DefenseTutorialOverlay : MonoBehaviour
         if (m_keyGaugeFill != null)
         {
             m_keyGaugeFill.fillAmount = Mathf.Clamp01(progress01);
+        }
+
+        if (m_overrideGaugeFill != null)
+        {
+            m_overrideGaugeFill.fillAmount = Mathf.Clamp01(progress01);
         }
     }
 

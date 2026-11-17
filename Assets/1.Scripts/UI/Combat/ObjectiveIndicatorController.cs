@@ -219,7 +219,7 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
 
     private bool ResolveRequiredReferences()
     {
-        if (m_worldCamera == null)
+        if (m_worldCamera == null || m_distanceOrigin == null)
         {
             CacheMainCamera();
         }
@@ -337,6 +337,12 @@ public sealed class ObjectiveIndicatorController : MonoBehaviour
         if (m_worldCamera == null && Camera.main != null)
         {
             m_worldCamera = Camera.main;
+        }
+
+        // 프리팹으로 만든 마커는 씬 카메라를 미리 가질 수 없어, 거리 기준점이 비어 있으면 카메라 위치를 씁니다.
+        if (m_distanceOrigin == null && m_worldCamera != null)
+        {
+            m_distanceOrigin = m_worldCamera.transform;
         }
     }
 

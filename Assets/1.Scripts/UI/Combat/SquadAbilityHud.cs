@@ -45,6 +45,9 @@ public sealed class SquadAbilityHud : MonoBehaviour
 
         [Tooltip("아이콘 하단 가운데에 스킬 키(예: C)를 표시할 텍스트입니다. 조작 대원 아이콘(하단 가운데)에만 연결합니다. 선택 항목입니다.")]
         public TMP_Text keyLabel;
+
+        [Tooltip("아이콘 위쪽 가운데에 스킬 이름을 표시할 텍스트입니다. 아래 스킬 키와 짝을 이룹니다. 조작 대원 아이콘(하단 가운데)에만 연결합니다. 선택 항목입니다.")]
+        public TMP_Text nameLabel;
     }
 
     [System.Serializable]
@@ -247,6 +250,11 @@ public sealed class SquadAbilityHud : MonoBehaviour
             {
                 m_controlledSkill.keyLabel.text = key;
             }
+        }
+
+        if (m_controlledSkill.nameLabel != null && m_controlledSkill.nameLabel.text != skill.DisplayName)
+        {
+            m_controlledSkill.nameLabel.text = skill.DisplayName;
         }
 
         ApplySkill(m_controlledSkill, skill);

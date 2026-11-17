@@ -14,7 +14,7 @@ public sealed class NarinTeamHasteSkill : CharacterSkill
     [Tooltip("전 스쿼드에 적용할 이동·행동속도 상태효과입니다. 비어 있으면 Resources 기본 에셋을 사용합니다.")]
     [SerializeField] private StatusEffectDefinitionSO m_hasteEffect;
 
-    [Tooltip("전술 가속 발동 순간 각 팀원에게 한 번 재생할 VFX입니다. 비어 있으면 Resources 기본 에셋을 사용합니다.")]
+    [Tooltip("신속 기동 발동 순간 각 팀원에게 한 번 재생할 VFX입니다. 비어 있으면 Resources 기본 에셋을 사용합니다.")]
     [SerializeField] private StatusEffectVisualSO m_activationVisual;
 
     private Coroutine m_effectRoutine;
@@ -23,7 +23,7 @@ public sealed class NarinTeamHasteSkill : CharacterSkill
     protected override ScriptableObject BalanceSource => m_balanceSO;
 
     public override CharacterSkillType SkillType => CharacterSkillType.NarinTeamHaste;
-    public override string DisplayName => "전술 가속";
+    public override string DisplayName => "신속 기동";
     public override string Description => "팀원 전체의 이동속도와 행동속도를 증가시킵니다";
     public override bool IsActive => m_effectRoutine != null;
     public override float ActiveDuration => ResolveHasteEffect() != null ? ResolveHasteEffect().Duration : 0.0f;
