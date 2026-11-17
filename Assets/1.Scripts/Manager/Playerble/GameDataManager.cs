@@ -744,13 +744,19 @@ public class GameDataManager : MonoBehaviour
         {
             shelterCheckpointId = ShelterCheckpointId,
             defenseClearCount = DefenseClearCount,
-            shelterFlowState = ShelterFlowState,
+            // 새 게임 첫 체크포인트는 인트로 컷신 재생 중에 저장되어 NotStarted로 남습니다.
+            // 그대로 저장하면 복구할 때마다 컷신이 다시 나오므로, 컷신을 본 뒤의 첫 안내 단계로 기록합니다.
+            shelterFlowState = ShelterFlowState == ShelterFlowState.NotStarted
+                ? ShelterFlowState.GuideToManufacturing
+                : ShelterFlowState,
             trapUpgradeLevel = TrapUpgradeLevel,
             spikeUpgradeLevel = SpikeUpgradeLevel,
             explosiveUpgradeLevel = ExplosiveUpgradeLevel,
             shooterUpgradeLevel = ShooterUpgradeLevel,
             wireUpgradeLevel = WireUpgradeLevel,
-            facilities = CloneFacilityStates(facilityStates)
+            facilities = CloneFacilityStates(facilityStates),
+            items = CloneItemStorageEntries(itemStorageEntries),
+            manufacturing = manufacturing.Clone()
         };
 
         for (int i = 0; i < resourceAmounts.Count; i++)
@@ -816,6 +822,11 @@ public class GameDataManager : MonoBehaviour
         // 저장에 없는 시설은 셸터 진입 시 FacilityManager가 시설 기본값(해금 여부, 레벨 0)으로 만듭니다.
         facilityStates = CloneFacilityStates(saveData.facilities);
         ApplySavedResources(saveData.resources);
+        // 자원만 되돌리고 제작 아이템을 남기면 "재료 복구 + 제작품 유지"가 되므로 함께 되돌립니다.
+        itemStorageEntries = CloneItemStorageEntries(saveData.items);
+        manufacturing = saveData.manufacturing != null
+            ? saveData.manufacturing.Clone()
+            : new ManufacturingRuntimeData();
         ApplySavedCharacterStates(saveData.characters);
 
         EnsureRuntimeState();
