@@ -861,6 +861,30 @@ public class GameDataManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 저장 파일에 들어가지 않는 판 단위 값을 처음 값으로 비웁니다. 타이틀에서 새 게임을 시작하거나 저장을 불러오기 전에 부릅니다.
+    /// </summary>
+    /// <remarks>
+    /// GameDataManager는 씬을 넘어 유지되므로, 일시정지 메뉴로 타이틀에 돌아간 뒤 다른 판을 시작하면 이전 판의 날짜·안정도·출전 분대·
+    /// 마지막 필드 결과 같은 값이 남습니다. <see cref="ApplySaveData"/>는 저장에 있는 값만 덮어쓰므로 그 전에 이 함수로 비웁니다.
+    /// 게임오버 재시도처럼 같은 판을 체크포인트로 되돌리는 경로에서는 부르지 않습니다.
+    /// </remarks>
+    public void ResetSessionState()
+    {
+        lastStageId = string.Empty;
+        shelterStability = 100;
+        currentDay = 1;
+        foodShortagePenaltyActive = false;
+        fuelShortagePenaltyActive = false;
+        playableSquadRuntimeIds = new List<string>();
+        shelterCharacterAssignments = new List<ShelterCharacterAssignmentData>();
+        ClearLastFieldResult();
+        totalFieldKillCount = 0;
+        fieldKillHistory = new List<int>();
+        pendingDefenseVictoryStageId = string.Empty;
+        checkpointAutoSavePending = false;
+    }
+
     private void ClearLastFieldResult()
     {
         lastSettledFieldId = string.Empty;
