@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 /// </summary>
 /// <remarks>
 /// 대화창과 따로 둡니다. 대사가 없는 챕터에서도 보여야 해서입니다. 키는 진행 중인 시퀀스(<see cref="TutorialSequence.SkipKey"/>)를 따르고,
-/// 건너뛸 수 없는 시퀀스(키 None)거나 튜토리얼이 끝나면 숨깁니다. 표시는 이 오브젝트가 아니라 <see cref="m_content"/>를 켜고 끕니다.
+/// 건너뛸 수 없는 시퀀스(키 None)거나 튜토리얼이 끝나면 숨깁니다. <see cref="m_showHint"/>를 끄면 키는 그대로 두고 안내만 숨깁니다. 표시는 이 오브젝트가 아니라 <see cref="m_content"/>를 켜고 끕니다.
 /// </remarks>
 [DisallowMultipleComponent]
 public sealed class TutorialSkipHint : MonoBehaviour
@@ -23,6 +23,9 @@ public sealed class TutorialSkipHint : MonoBehaviour
 
     [Tooltip("안내 문구입니다. {0}에 키 이름이 들어갑니다.")]
     [SerializeField] private string m_format = "[{0}] 튜토리얼 건너뛰기";
+
+    [Tooltip("켜면 건너뛰기 안내를 화면에 띄웁니다. 꺼도 건너뛰기 키는 그대로 동작합니다(플레이어에게는 숨기고 개발용으로만 씁니다).")]
+    [SerializeField] private bool m_showHint;
 
     private Key m_shownKey = Key.None;
 
@@ -53,7 +56,7 @@ public sealed class TutorialSkipHint : MonoBehaviour
         }
 
         m_shownKey = key;
-        SetVisible(key != Key.None);
+        SetVisible(m_showHint && key != Key.None);
     }
 
     private void SetVisible(bool visible)

@@ -27,6 +27,13 @@ public sealed class GameplaySettingsTheme : ScriptableObject
     [Tooltip("전투 탭 왼쪽 메뉴와 내용을 나누는 세로선입니다. (Side_menu_bar)")]
     public Sprite sideMenuBar;
 
+    [Header("Popup")]
+    [Tooltip("확인 팝업이 뜰 때 설정 화면 전체를 덮는 어두운 막입니다. (Setting Scene Battle Popup의 Popup_background_cover)")]
+    public Sprite popupCover;
+
+    [Tooltip("확인 팝업 바탕입니다. (Setting Scene Battle Popup의 Popup_base, 863x364)")]
+    public Sprite popupBase;
+
     [Header("Buttons")]
     [Tooltip("되돌리기·변경사항 저장·뒤로가기와 조준선 기본값 버튼 배경입니다. (Setting Scene Battle Throwable Items의 button 3)")]
     public Sprite actionButton;

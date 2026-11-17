@@ -32,10 +32,16 @@ public sealed class CrosshairSettingsService : MonoBehaviour
 
     private static bool s_sceneHookRegistered;
 
-    /// <summary>현재 씬의 서비스입니다. 조준선 HUD가 없는 씬에서는 null입니다.</summary>
+    /// <summary>
+    /// 조준선 HUD가 없는 씬에서 설정 화면 미리보기가 쓸 캐릭터별 간격 값입니다. 전투 씬에서 읽을 때마다 갱신해 이번 실행 동안 기억합니다.
+    /// </summary>
+    private static readonly Dictionary<PlayerbleCharacterId, CrosshairPreviewBasis> s_lastPreviewBases =
+        new Dictionary<PlayerbleCharacterId, CrosshairPreviewBasis>();
+
+    /// <summary>현재 씬의 서비스입니다. 조준선 HUD가 없는 씬(타이틀·셸터)에서는 HUD 없이 값 저장과 미리보기만 맡습니다.</summary>
     public static CrosshairSettingsService Instance { get; private set; }
 
-    // 씬에 따로 배치하지 않아도 조준선 HUD가 있는 모든 씬에서 동작하도록, 씬을 불러온 뒤 HUD 오브젝트에 붙입니다.
+    // 씬에 따로 배치하지 않아도 모든 씬에서 동작하도록, 씬을 불러온 뒤 HUD 오브젝트에 붙이고 HUD가 없으면 따로 만듭니다.
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AttachOnStartup()
     {
@@ -49,13 +55,26 @@ public sealed class CrosshairSettingsService : MonoBehaviour
 
     private static void AttachToLoadedScene()
     {
+        CrosshairController crosshair = FindFirstObjectByType<CrosshairController>(FindObjectsInactive.Include);
         if (Instance != null)
         {
+            // HUD 없이 만든 서비스가 남아 있는데 HUD가 있는 씬이 들어왔으면 HUD 쪽 서비스로 바꿉니다.
+            if (Instance.m_crosshair != null || crosshair == null)
+            {
+                return;
+            }
+
+            Destroy(Instance.gameObject);
+            Instance = null;
+        }
+
+        if (crosshair == null)
+        {
+            new GameObject(nameof(CrosshairSettingsService)).AddComponent<CrosshairSettingsService>();
             return;
         }
 
-        CrosshairController crosshair = FindFirstObjectByType<CrosshairController>(FindObjectsInactive.Include);
-        if (crosshair != null && crosshair.GetComponent<CrosshairSettingsService>() == null)
+        if (crosshair.GetComponent<CrosshairSettingsService>() == null)
         {
             crosshair.gameObject.AddComponent<CrosshairSettingsService>();
         }
@@ -106,7 +125,9 @@ public sealed class CrosshairSettingsService : MonoBehaviour
         var result = new List<KeyValuePair<PlayerbleCharacterId, string>>();
         if (m_squadManager == null || m_squadManager.PlayerDataSources == null)
         {
-            return result;
+            // 캐릭터가 없는 씬(타이틀·셸터)은 기본값 템플릿에 있는 캐릭터를 보여 줍니다.
+            DefaultCrosshairSettings defaults = ResolveDefaults();
+            return defaults != null ? defaults.GetCharacters() : result;
         }
 
         foreach (PlayerbleUnitData data in m_squadManager.PlayerDataSources)
@@ -302,6 +323,48 @@ public sealed class CrosshairSettingsService : MonoBehaviour
 
     /// <summary>캐릭터들이 같이 쓰는 실제 조준선 HUD입니다. 설정 화면 미리보기가 이것을 복제합니다.</summary>
     public CrosshairController Crosshair => m_crosshair;
+
+    /// <summary>
+    /// 설정 화면 미리보기가 복제할 조준선 HUD입니다. 씬에 HUD가 있으면 그것이고, 없으면 기본값 템플릿의 HUD 프리팹입니다.
+    /// </summary>
+    public CrosshairController PreviewSource
+    {
+        get
+        {
+            if (m_crosshair != null)
+            {
+                return m_crosshair;
+            }
+
+            DefaultCrosshairSettings defaults = ResolveDefaults();
+            return defaults != null ? defaults.PreviewHud : null;
+        }
+    }
+
+    /// <summary>
+    /// 미리보기가 캐릭터 조준선 간격을 계산할 값입니다. 씬에 캐릭터가 있으면 바로 읽고, 없으면 이번 실행에서 마지막으로 읽은 값,
+    /// 그것도 없으면 기본값 템플릿 값입니다.
+    /// </summary>
+    public bool TryGetPreviewBasis(PlayerbleCharacterId characterId, out CrosshairPreviewBasis basis)
+    {
+        AimController aim = FindAimController(characterId);
+        if (aim != null)
+        {
+            basis = aim.CaptureCrosshairPreviewBasis();
+            s_lastPreviewBases[characterId] = basis.Clone();
+            return true;
+        }
+
+        if (s_lastPreviewBases.TryGetValue(characterId, out CrosshairPreviewBasis last))
+        {
+            basis = last.Clone();
+            return true;
+        }
+
+        DefaultCrosshairSettings defaults = ResolveDefaults();
+        basis = null;
+        return defaults != null && defaults.TryGetPreviewBasis(characterId, out basis);
+    }
 
     /// <summary>캐릭터의 AimController입니다. 설정 화면 미리보기가 그 캐릭터의 간격 계산을 빌려 씁니다.</summary>
     public AimController FindAimController(PlayerbleCharacterId characterId)

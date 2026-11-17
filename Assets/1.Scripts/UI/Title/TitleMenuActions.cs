@@ -75,6 +75,18 @@ public sealed class TitleMenuActions : MonoBehaviour
         Bind(m_quitButton, QuitGame);
         Bind(m_settingsButton, OpenSettings);
 
+        RefreshLoadButton();
+        SaveFilePaths.GameSavesDeleted += RefreshLoadButton;
+    }
+
+    private void OnDestroy()
+    {
+        SaveFilePaths.GameSavesDeleted -= RefreshLoadButton;
+    }
+
+    /// <summary>저장 파일이 없으면 불러오기 버튼을 막습니다. 설정 화면에서 저장을 초기화하면 다시 부릅니다.</summary>
+    private void RefreshLoadButton()
+    {
         if (m_loadGameButton != null && m_disableLoadWithoutSave)
         {
             m_loadGameButton.interactable = HasAutoSaveFile();
@@ -129,6 +141,8 @@ public sealed class TitleMenuActions : MonoBehaviour
         }
 
         m_isLeaving = true;
+        // 이전 판의 저장 밖 값(날짜·분대·필드 결과 등)이 새 판에 섞이지 않게 씬을 옮기기 전에 비웁니다.
+        GameDataManager.Instance?.ResetSessionState();
         if (loadSave)
         {
             s_loadSaveOnNextScene = true;

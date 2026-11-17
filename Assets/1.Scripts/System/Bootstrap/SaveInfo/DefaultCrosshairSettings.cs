@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using VInspector;
 
@@ -24,6 +25,15 @@ public sealed class DefaultCrosshairSettings : ScriptableObject
 
         [Tooltip("이 캐릭터의 기본 조준선입니다.")]
         public CrosshairStyle style = new CrosshairStyle();
+
+        [Tooltip("캐릭터가 없는 씬(타이틀·셸터) 설정 화면에서 캐릭터 버튼에 쓸 이름입니다.")]
+        public string displayName;
+
+        [Tooltip("캐릭터가 없는 씬의 미리보기가 간격 계산에 쓰는 값이 있는지 여부입니다.")]
+        public bool hasPreviewBasis;
+
+        [Tooltip("캐릭터가 없는 씬의 미리보기가 간격 계산에 쓰는 값입니다. '열린 씬 값으로 미리보기 기준 채우기'로 채웁니다.")]
+        public CrosshairPreviewBasis previewBasis = new CrosshairPreviewBasis();
     }
 
     [Header("Characters")]
@@ -36,6 +46,45 @@ public sealed class DefaultCrosshairSettings : ScriptableObject
 
     [Tooltip("모든 캐릭터가 같이 쓰는 투척 모드 조준선 기본값입니다.")]
     [SerializeField] private CrosshairStyle m_throwable = new CrosshairStyle();
+
+    [Header("Preview")]
+    [Tooltip("조준선 HUD가 없는 씬(타이틀·셸터)에서 설정 화면 미리보기가 복제할 조준선 HUD 프리팹입니다.")]
+    [SerializeField] private CrosshairController m_previewHud;
+
+    /// <summary>조준선 HUD가 없는 씬에서 미리보기가 복제할 HUD 프리팹입니다. 없으면 null입니다.</summary>
+    public CrosshairController PreviewHud => m_previewHud;
+
+    /// <summary>기본값이 있는 캐릭터 목록(식별자와 표시 이름)입니다. 캐릭터가 없는 씬의 설정 화면이 씁니다.</summary>
+    public List<KeyValuePair<PlayerbleCharacterId, string>> GetCharacters()
+    {
+        var result = new List<KeyValuePair<PlayerbleCharacterId, string>>();
+        foreach (CharacterDefault entry in m_characters)
+        {
+            if (entry != null && entry.characterId != PlayerbleCharacterId.Unknown)
+            {
+                string name = string.IsNullOrWhiteSpace(entry.displayName) ? entry.characterId.ToString() : entry.displayName.Trim();
+                result.Add(new KeyValuePair<PlayerbleCharacterId, string>(entry.characterId, name));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>캐릭터가 없는 씬의 미리보기 간격 값 사본을 찾습니다.</summary>
+    public bool TryGetPreviewBasis(PlayerbleCharacterId characterId, out CrosshairPreviewBasis basis)
+    {
+        foreach (CharacterDefault entry in m_characters)
+        {
+            if (entry != null && entry.hasPreviewBasis && entry.previewBasis != null && entry.characterId == characterId)
+            {
+                basis = entry.previewBasis.Clone();
+                return true;
+            }
+        }
+
+        basis = null;
+        return false;
+    }
 
     /// <summary>Resources 기본 에셋을 읽습니다. 없으면 null입니다.</summary>
     public static DefaultCrosshairSettings LoadFromResources()
@@ -102,7 +151,14 @@ public sealed class DefaultCrosshairSettings : ScriptableObject
             style.subShape = aim.CrosshairSubShape;
             style.centerSpacePixels = aim.CrosshairCenterSpacePixels;
             style.subRingSizePixels = aim.CrosshairSubRingBaseDiameterPixels;
-            characters.Add(new CharacterDefault { characterId = data.CharacterId, style = style });
+            characters.Add(new CharacterDefault
+            {
+                characterId = data.CharacterId,
+                style = style,
+                displayName = data.DisplayName,
+                hasPreviewBasis = true,
+                previewBasis = aim.CaptureCrosshairPreviewBasis(),
+            });
         }
 
         characters.Sort((a, b) => a.characterId.CompareTo(b.characterId));
@@ -117,6 +173,42 @@ public sealed class DefaultCrosshairSettings : ScriptableObject
 
         UnityEditor.EditorUtility.SetDirty(this);
         Debug.Log($"[DefaultCrosshairSettings] 캐릭터 {m_characters.Length}명과 투척물 기본값을 채웠습니다.", this);
+    }
+
+    /// <summary>
+    /// 기본 조준선은 그대로 두고, 캐릭터 이름과 미리보기 간격 값만 열린 씬 캐릭터에서 채웁니다.
+    /// </summary>
+    /// <remarks>
+    /// 쏘지 않고 서 있을 때의 카메라 FOV는 실행 중에만 정해지므로, 전투 씬을 실행하고 자유 시점으로 잠시 둔 뒤 누르는 것이 정확합니다.
+    /// Edit 모드에서 누르면 FOV는 각 캐릭터의 힙파이어 FOV로 채워집니다. 실행 중 바꾼 이 에셋 값은 실행을 끝내도 남습니다.
+    /// </remarks>
+    [Button("열린 씬 값으로 미리보기 기준 채우기")]
+    public void CapturePreviewBasisFromOpenScene()
+    {
+        UnityEditor.Undo.RecordObject(this, "Capture Crosshair Preview Basis");
+        int filled = 0;
+        foreach (PlayerbleUnitData data in FindObjectsByType<PlayerbleUnitData>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID))
+        {
+            AimController aim = data.GetComponentInChildren<AimController>(true);
+            if (aim == null || data.CharacterId == PlayerbleCharacterId.Unknown)
+            {
+                continue;
+            }
+
+            foreach (CharacterDefault entry in m_characters)
+            {
+                if (entry != null && entry.characterId == data.CharacterId)
+                {
+                    entry.displayName = data.DisplayName;
+                    entry.previewBasis = aim.CaptureCrosshairPreviewBasis();
+                    entry.hasPreviewBasis = true;
+                    filled++;
+                }
+            }
+        }
+
+        UnityEditor.EditorUtility.SetDirty(this);
+        Debug.Log($"[DefaultCrosshairSettings] 캐릭터 {filled}명의 이름과 미리보기 기준을 채웠습니다.", this);
     }
 #endif
 }
