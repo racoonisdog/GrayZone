@@ -10,7 +10,7 @@ using UnityEngine.UI;
 /// 월드 좌표의 높이(Y)는 버리고 XZ만 맵 이미지에 옮깁니다. 이미지 중심의 월드 위치, 이미지가 덮는 거리,
 /// 이미지 위쪽이 가리키는 월드 방향 세 값으로 변환합니다.
 /// 분대원은 바라보는 방향으로 아이콘을 돌리고, 적은 위치만 표시합니다.
-/// 함정은 시작할 때 메시 범위로 위치와 긴 방향을 한 번 계산하고, 설치 여부에 따라 색만 바꿉니다.
+/// 함정은 시작할 때 메시 범위로 위치와 긴 방향을 한 번 계산하고, 설치 여부에 따라 설치·미설치 아이콘을 바꿉니다.
 /// 아이콘 그림은 Sprite가 아닌 기본 텍스처로 가져와져 있어 RawImage로 그립니다(3.Resources 가져오기 설정을 바꾸지 않기 위해서입니다).
 /// </remarks>
 public class DefenseMinimap : MonoBehaviour
@@ -30,8 +30,11 @@ public class DefenseMinimap : MonoBehaviour
         [Tooltip("이 아이콘을 쓸 함정 분류입니다.")]
         public TrapKind kind;
 
-        [Tooltip("함정 아이콘 그림입니다.")]
+        [Tooltip("설치된 함정 아이콘 그림입니다. (Map_*_active)")]
         public Texture icon;
+
+        [Tooltip("설치 안 된(청사진) 함정 아이콘 그림입니다. (Map_*) 비워 두면 설치 아이콘에 청사진 색을 곱해 씁니다.")]
+        public Texture inactiveIcon;
 
         [Tooltip("켜면 함정 메시의 긴 방향에 맞춰 아이콘을 돌립니다. 철조망·가시 함정처럼 길쭉한 함정에 씁니다.")]
         public bool alignToTrap;
@@ -44,6 +47,8 @@ public class DefenseMinimap : MonoBehaviour
     {
         public Trap trap;
         public RawImage image;
+        public Texture builtIcon;
+        public Texture inactiveIcon;
     }
 
     [Header("Map")]
@@ -89,7 +94,7 @@ public class DefenseMinimap : MonoBehaviour
     [Tooltip("설치된 함정 아이콘 색입니다. 아이콘 원본 색에 곱합니다.")]
     [SerializeField] private Color m_builtColor = Color.white;
 
-    [Tooltip("설치 안 된(청사진) 함정 아이콘 색입니다. 아이콘 원본 색에 곱합니다. 기본값은 디자인 시안의 청사진 투명도(128/209)입니다.")]
+    [Tooltip("설치 안 된(청사진) 함정 아이콘 색입니다. 미설치 아이콘이 없는 분류에만 설치 아이콘 원본 색에 곱합니다. 기본값은 디자인 시안의 청사진 투명도(128/209)입니다.")]
     [SerializeField] private Color m_blueprintColor = new Color(1.0f, 1.0f, 1.0f, 0.61f);
 
     [Tooltip("함정 목록을 다시 찾는 간격(초)입니다. 함정 설치 상태는 매 프레임 반영합니다.")]
@@ -410,7 +415,13 @@ public class DefenseMinimap : MonoBehaviour
                 image.rectTransform.localEulerAngles = new Vector3(0.0f, 0.0f, WorldYawToUiAngle(longYaw) + setting.artAngle);
             }
 
-            m_trapMarkers.Add(new TrapMarker { trap = trap, image = image });
+            m_trapMarkers.Add(new TrapMarker
+            {
+                trap = trap,
+                image = image,
+                builtIcon = setting.icon,
+                inactiveIcon = setting.inactiveIcon,
+            });
         }
     }
 
@@ -434,7 +445,16 @@ public class DefenseMinimap : MonoBehaviour
             SetVisible(marker.image, visible);
             if (visible)
             {
-                Color color = marker.trap.IsBuilt ? m_builtColor : m_blueprintColor;
+                // 설치 안 된 아이콘이 따로 있으면 그림을 바꾸고, 없으면 설치 아이콘에 청사진 색을 곱합니다.
+                bool built = marker.trap.IsBuilt;
+                bool hasInactiveIcon = marker.inactiveIcon != null;
+                Texture icon = built || !hasInactiveIcon ? marker.builtIcon : marker.inactiveIcon;
+                Color color = built || hasInactiveIcon ? m_builtColor : m_blueprintColor;
+                if (marker.image.texture != icon)
+                {
+                    marker.image.texture = icon;
+                }
+
                 if (marker.image.color != color)
                 {
                     marker.image.color = color;

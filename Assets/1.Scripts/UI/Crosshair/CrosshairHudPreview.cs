@@ -168,6 +168,32 @@ public sealed class CrosshairHudPreview : IDisposable
     {
         UIDocument document = m_source.GetComponent<UIDocument>();
         IPanel panel = document != null && document.rootVisualElement != null ? document.rootVisualElement.panel : null;
-        return panel != null ? panel.scaledPixelsPerPoint : 1f;
+        if (panel != null)
+        {
+            return panel.scaledPixelsPerPoint;
+        }
+
+        // 프리팹처럼 화면에 떠 있지 않은 원본은 패널이 없으므로, 패널 설정으로 지금 화면에서의 배율을 직접 구합니다.
+        PanelSettings settings = document != null ? document.panelSettings : null;
+        if (settings == null)
+        {
+            return 1f;
+        }
+
+        if (settings.scaleMode != PanelScaleMode.ScaleWithScreenSize
+            || settings.referenceResolution.x <= 0 || settings.referenceResolution.y <= 0)
+        {
+            return settings.scale;
+        }
+
+        float widthRatio = (float)Screen.width / settings.referenceResolution.x;
+        float heightRatio = (float)Screen.height / settings.referenceResolution.y;
+        float screenScale = settings.screenMatchMode switch
+        {
+            PanelScreenMatchMode.Expand => Mathf.Min(widthRatio, heightRatio),
+            PanelScreenMatchMode.Shrink => Mathf.Max(widthRatio, heightRatio),
+            _ => Mathf.Pow(2f, Mathf.Lerp(Mathf.Log(widthRatio, 2f), Mathf.Log(heightRatio, 2f), settings.match)),
+        };
+        return screenScale * settings.scale;
     }
 }

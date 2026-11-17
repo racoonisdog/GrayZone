@@ -1,0 +1,252 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3352925018025556925
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 967347955783550592}
+  - component: {fileID: 4604705718823687206}
+  - component: {fileID: 3573835874368068031}
+  - component: {fileID: 8591575545439928725}
+  m_Layer: 5
+  m_Name: CrosshairHUD_SettingsPreview
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &967347955783550592
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3352925018025556925}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 50, y: 50}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &4604705718823687206
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3352925018025556925}
+  m_CullTransparentMesh: 1
+--- !u!114 &3573835874368068031
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3352925018025556925}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: 6c709b4ddd61dde459bbc85a8dedcf35, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: ab3f49c5e24e1e74fa472c3e53ccc0d8, type: 3}
+  m_SortingOrder: 0
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
+--- !u!114 &8591575545439928725
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3352925018025556925}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abfdbe41398e4462923c9f5ae206b316, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CrosshairController
+  m_document: {fileID: 3573835874368068031}
+  m_rootElementName: CrosshairRoot
+  m_crosshairElementName: Crosshair
+  m_centerElementName: Center
+  m_topElementName: Top
+  m_topStrokeElementName: TopStroke
+  m_bottomElementName: Bottom
+  m_bottomStrokeElementName: BottomStroke
+  m_leftElementName: Left
+  m_leftStrokeElementName: LeftStroke
+  m_rightElementName: Right
+  m_rightStrokeElementName: RightStroke
+  m_mainStrokeElementName: MainRingLine
+  m_subShapeElementName: SubRing
+  m_subStrokeElementName: SubRingLine
+  m_createMissingElements: 1
+  m_useSpreadAccuracy: 1
+  m_spreadDisplayBasis: 2
+  m_spreadGapScale: 1.2
+  m_clampToMaxGap: 0
+  m_maxGapPixels: 220
+  m_lerpSpeed: 12
+  m_enableShotRecoilPulse: 1
+  m_shotRecoilPulseAmplitudePixels: 14
+  m_shotRecoilPulseDuration: 0.2
+  m_shotRecoilPulseCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 7.352941
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.16
+      value: 1
+      inSlope: 0
+      outSlope: -1.1904762
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -1.1904762
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  m_mainShape: 1
+  m_mainSizePixels: 3
+  m_mainRingSizePixels: 8
+  m_mainRingThicknessPixels: 1
+  m_mainColor: {r: 1, g: 1, b: 1, a: 1}
+  m_mainStrokeThicknessPixels: 1
+  m_mainStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+  m_subShape: 2
+  m_centerSpacePixels: 5
+  m_subSizePixels: 1
+  m_subWidthPixels: 10
+  m_subThicknessPixels: 1
+  m_subRingSizePixels: 16
+  m_subRingThicknessPixels: 1
+  m_subColor: {r: 1, g: 1, b: 1, a: 1}
+  m_subStrokeThicknessPixels: 1
+  m_subStrokeColor: {r: 0, g: 0, b: 0, a: 1}
+  m_cornerRadiusPixels: 2
+  m_swapCrosshairOnReload: 1
+  m_reloadBulletImage: {fileID: 6192944022281365145, guid: faa35d9f8a9846b6ae8b773d9afd9091, type: 3}
+  m_reloadBulletSizePixels: 50
+  m_reloadBlinkSpeed: 3
+  m_reloadBlinkMinAlpha: 0.15
+  m_showAmmoGauge: 1
+  m_ammoGaugeAlwaysVisible: 1
+  m_ammoGaugeColor: {r: 0.8509804, g: 0.8509804, b: 0.8509804, a: 1}
+  m_lowAmmoGaugeColor: {r: 0.8862745, g: 0.23137255, b: 0.23137255, a: 1}
+  m_reloadAmmoGaugeColor: {r: 0.8509804, g: 0.8509804, b: 0.8509804, a: 1}
+  m_specialAmmoGaugeColor: {r: 1, g: 0.47843137, b: 0.09411765, a: 1}
+  m_ammoGaugeThicknessPixels: 5
+  m_ammoGaugeStartAngleDegrees: 0
+  m_ammoGaugeFillDirection: 0
+  m_ammoGaugeSweepDegrees: 90
+  m_ammoGaugeSegmentGapDegrees: 2
+  m_showAmmoGaugeBackground: 1
+  m_ammoGaugeBackgroundAlpha: 0.25
+  m_ammoGaugeBackgroundColor: {r: 0.8509804, g: 0.8509804, b: 0.8509804, a: 1}
+  m_ammoGaugeSizePixels: 100
+  m_ammoGaugeDiagonalOffset: 40
+  m_showAmmoGaugeBullet: 1
+  m_ammoGaugeBulletUI: {fileID: 0}
+  m_showHitMarker: 1
+  m_hitMarkerColorBody: {r: 0.8509804, g: 0.8509804, b: 0.8509804, a: 1}
+  m_hitMarkerColorHead: {r: 0.8862745, g: 0.23137255, b: 0.23137255, a: 1}
+  m_hitMarkerLengthPixels: 16
+  m_enableHitMarkerDamageScale: 1
+  m_hitMarkerMinDamage: 1
+  m_hitMarkerMaxDamage: 10
+  m_hitMarkerLengthAtMinDamagePixels: 16
+  m_hitMarkerLengthAtMaxDamagePixels: 40
+  m_hitMarkerCenterGapPixels: 8
+  m_hitMarkerBaseLengthPixels: 5.5
+  m_hitMarkerFadeDuration: 0.25
+  m_hitMarkerRollBaseDegrees: 0
+  m_enableHitMarkerRandomRoll: 1
+  m_hitMarkerRollRandomRangeDegrees: 10
+  m_showKillSkull: 0
+  m_killSkullTexture: {fileID: 2800000, guid: 7a6209cfe005b9346ad8ff7738e9f147, type: 3}
+  m_killSkullTint: {r: 1, g: 1, b: 1, a: 1}
+  m_killSkullSizePixels: 48
+  m_killSkullHoldDuration: 0.35
+  m_killSkullFadeDuration: 0.6
+  m_enableKillPulse: 1
+  m_killPulseDirection: 0
+  m_killPulseAmplitudePixels: 12
+  m_killPulseDuration: 0.3
+  m_killPulseCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 5.882353
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.2
+      value: 1
+      inSlope: 0
+      outSlope: -1.25
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -1.25
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  m_showBlockMarker: 1
+  m_blockMarkerRingSizePixels: 24
+  m_blockMarkerRingThicknessPixels: 2
+  m_blockMarkerDotSizePixels: 4
+  m_blockMarkerColor: {r: 0.8862745, g: 0.23137255, b: 0.23137255, a: 1}
+  m_dimCrosshairWhileBlockMarker: 1
+  m_blockMarkerCrosshairAlpha: 0.4
+  m_blockMarkerCrosshairFadeDuration: 0.2
+  m_editModePreview: 1
+  m_previewHitFeedback: 1
+  m_previewHeadshotColor: 0
+  m_debugStance: Free

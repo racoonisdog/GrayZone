@@ -69,22 +69,42 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
     /// <summary>원뿔에 닿는지 볼 때 꼭짓점에서 카메라까지 축 위에 찍는 점 수입니다. 각 점에서 가장 가까운 바운드 지점이 원뿔 안인지 봅니다.</summary>
     private const int ConeAxisSamples = 8;
 
-    [Tooltip("후보 렌더러의 바운드는 씬이 시작될 때(로딩 단계) 한 번 저장해 씁니다. 0이면 이후 다시 읽지 않습니다(배경이 고정이면 0). " +
-             "컷아웃 대상 중 움직이는 물체(열리는 문 등)가 있으면, 한 프레임에 이 수만큼 돌아가며 다시 읽어 위치를 따라갑니다.")]
-    [SerializeField, Min(0)] private int m_boundsRefreshPerFrame = 0;
+    [Tooltip("시작할 때 없던(나중에 생성된) 후보 렌더러를 찾아 등록하는 간격(초)입니다. 0이면 시작 때 등록한 것만 씁니다. " +
+             "찾을 때 씬의 렌더러를 한 번 훑으므로 너무 짧게 두지 않습니다.")]
+    [SerializeField, Min(0f)] private float m_registerScanInterval = 3f;
 
     [Header("Camera")]
     [Tooltip("켜져 있으면 카메라 충돌 확장을 꺼서 카메라가 벽을 그대로 지나가게 합니다. 이 컴포넌트를 끄면 되돌립니다.")]
     [SerializeField] private bool m_disableCameraCollision = true;
 
-    private readonly List<Renderer> m_taggedRenderers = new List<Renderer>();
+    /// <summary>
+    /// 컷아웃 후보 렌더러 하나의 등록 정보입니다. 바운드를 캐싱해 두고 매 프레임 이 값으로 대상 여부를 판정합니다.
+    /// </summary>
+    private struct CutoutEntry
+    {
+        public Renderer Renderer;
+        public Transform Transform;
 
-    /// <summary><see cref="m_taggedRenderers"/>와 같은 순서로, 씬 시작 때 저장해 둔 바운드입니다.</summary>
-    private readonly List<Bounds> m_cachedBounds = new List<Bounds>();
+        /// <summary>캐싱해 둔 월드 바운드입니다.</summary>
+        public Bounds Bounds;
 
-    /// <summary><see cref="m_taggedRenderers"/>와 같은 순서로, 지금 전용 비트를 켜 둔 상태인지입니다. 렌더러 값을 매번 읽지 않으려고 따로 둡니다.</summary>
-    private readonly List<bool> m_isTarget = new List<bool>();
-    private int m_boundsRefreshCursor;
+        /// <summary>바운드를 캐싱했는지 여부입니다. 등록 때 꺼져 있던 렌더러는 켜질 때 캐싱합니다.</summary>
+        public bool HasBounds;
+
+        /// <summary>정적 배치가 아니어서 움직일 수 있는지 여부입니다. 움직일 수 있는 것만 Transform 변화를 봅니다.</summary>
+        public bool Movable;
+
+        /// <summary>지금 전용 비트를 켜 둔 상태인지입니다. 렌더러 값을 매번 읽지 않으려고 따로 둡니다.</summary>
+        public bool IsTarget;
+    }
+
+    /// <summary>
+    /// 후보 렌더러 등록부입니다. 스포너 풀처럼 한 번 등록한 항목은 계속 쓰고, 파괴된 렌더러의 자리는 비워 두었다가 새 등록에 다시 씁니다.
+    /// </summary>
+    private readonly List<CutoutEntry> m_entries = new List<CutoutEntry>();
+    private readonly Dictionary<Renderer, int> m_entryIndex = new Dictionary<Renderer, int>();
+    private readonly Stack<int> m_freeSlots = new Stack<int>();
+    private float m_nextRegisterScanTime;
     private readonly List<DirectionalCameraCollisionExtension> m_disabledCollisions =
         new List<DirectionalCameraCollisionExtension>();
     private Camera m_camera;
@@ -96,7 +116,7 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
     public Vector4 CurrentSphere { get; private set; }
 
     /// <summary>전용 렌더링 레이어 비트를 켠 렌더러 수입니다.</summary>
-    public int TaggedRendererCount => m_taggedRenderers.Count;
+    public int TaggedRendererCount => m_entryIndex.Count;
 
     private void Reset()
     {
@@ -236,48 +256,81 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
     /// </remarks>
     private void UpdateConeTargets(Vector4 sphere, Vector3 coneApex, Vector3 coneAxis, float coneLength)
     {
-        RefreshSomeBounds();
+        RegisterNewRenderersIfDue();
+        RefreshEntryBounds();
 
         uint bit = 1u << RenderingLayerBit;
         Vector3 center = sphere;
         float radiusSqr = sphere.w * sphere.w;
         float cosHalf = Mathf.Cos(m_coneHalfAngle * Mathf.Deg2Rad);
-        for (int i = 0; i < m_taggedRenderers.Count; i++)
+        for (int i = 0; i < m_entries.Count; i++)
         {
+            CutoutEntry entry = m_entries[i];
+            if (entry.Renderer == null)
+                continue;
+
             bool isTarget = true;
             if (m_useCone)
             {
-                Bounds bounds = m_cachedBounds[i];
-                isTarget = bounds.SqrDistance(center) <= radiusSqr && TouchesCone(bounds, coneApex, coneAxis, coneLength, cosHalf);
+                isTarget = entry.HasBounds
+                    && entry.Bounds.SqrDistance(center) <= radiusSqr
+                    && TouchesCone(entry.Bounds, coneApex, coneAxis, coneLength, cosHalf);
             }
 
-            if (isTarget == m_isTarget[i])
+            if (isTarget == entry.IsTarget)
                 continue;
 
-            Renderer targetRenderer = m_taggedRenderers[i];
-            if (targetRenderer == null)
-                continue;
-
-            m_isTarget[i] = isTarget;
-            targetRenderer.renderingLayerMask = isTarget ? targetRenderer.renderingLayerMask | bit : targetRenderer.renderingLayerMask & ~bit;
+            entry.IsTarget = isTarget;
+            m_entries[i] = entry;
+            entry.Renderer.renderingLayerMask = isTarget ? entry.Renderer.renderingLayerMask | bit : entry.Renderer.renderingLayerMask & ~bit;
         }
     }
 
-    /// <summary>저장해 둔 바운드를 이번 프레임 몫(Bounds Refresh Per Frame)만큼 돌아가며 다시 읽습니다. 0이면 로딩 때 값만 씁니다.</summary>
-    private void RefreshSomeBounds()
+    /// <summary>
+    /// 등록부의 캐싱 바운드를 맞춥니다. 움직이지 않는 것은 그대로 두고, 움직인 것과 아직 캐싱하지 못한 것만 다시 읽습니다.
+    /// </summary>
+    /// <remarks>
+    /// 움직였는지는 <see cref="Transform.hasChanged"/>로 봅니다. 위치·회전·크기가 바뀌면(부모가 움직여도) Unity가 켜 주는 표시로,
+    /// 캐싱할 때 끄고 다시 켜진 것만 갱신합니다. 이전 프레임과 변화가 없으면 마지막 값이 그대로 캐시로 남습니다.
+    /// 정적 배치(Static Batching)된 렌더러는 움직일 수 없어 보지 않습니다. Static 표시만으로는 고정이라 볼 수 없습니다(정문 철망 문은 Static 표시지만 시작 뒤 움직임).
+    /// 파괴된 렌더러는 등록을 풀고 자리를 비워 다음 등록에 씁니다.
+    /// </remarks>
+    private void RefreshEntryBounds()
     {
-        int count = m_taggedRenderers.Count;
-        if (count == 0 || m_boundsRefreshPerFrame <= 0)
+        for (int i = 0; i < m_entries.Count; i++)
+        {
+            CutoutEntry entry = m_entries[i];
+            if (ReferenceEquals(entry.Renderer, null))
+                continue;
+
+            if (entry.Renderer == null)
+            {
+                ReleaseEntry(i);
+                continue;
+            }
+
+            if (entry.HasBounds && (!entry.Movable || !entry.Transform.hasChanged))
+                continue;
+
+            // 꺼져 있는 렌더러는 바운드가 비어 있어 캐싱하지 않고, 켜졌을 때 캐싱합니다.
+            if (!entry.Renderer.enabled || !entry.Renderer.gameObject.activeInHierarchy)
+                continue;
+
+            entry.Bounds = entry.Renderer.bounds;
+            entry.HasBounds = true;
+            entry.Transform.hasChanged = false;
+            m_entries[i] = entry;
+        }
+    }
+
+    /// <summary>등록 검사 간격이 지났으면 새로 생긴 후보 렌더러를 찾아 등록합니다.</summary>
+    private void RegisterNewRenderersIfDue()
+    {
+        if (m_registerScanInterval <= 0f || Time.unscaledTime < m_nextRegisterScanTime)
             return;
 
-        int refresh = Mathf.Min(m_boundsRefreshPerFrame, count);
-        for (int n = 0; n < refresh; n++)
-        {
-            m_boundsRefreshCursor = (m_boundsRefreshCursor + 1) % count;
-            Renderer targetRenderer = m_taggedRenderers[m_boundsRefreshCursor];
-            if (targetRenderer != null)
-                m_cachedBounds[m_boundsRefreshCursor] = targetRenderer.bounds;
-        }
+        m_nextRegisterScanTime = Time.unscaledTime + m_registerScanInterval;
+        RegisterCandidates(FindObjectsInactive.Exclude);
     }
 
     /// <summary>
@@ -304,54 +357,97 @@ public sealed class EnvironmentOcclusionCutout : MonoBehaviour
     /// </summary>
     private void TagRenderers()
     {
-        m_taggedRenderers.Clear();
-        m_cachedBounds.Clear();
-        m_isTarget.Clear();
-        m_boundsRefreshCursor = 0;
-        Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        UntagRenderers();
+        RegisterCandidates(FindObjectsInactive.Include);
+        m_nextRegisterScanTime = Time.unscaledTime + m_registerScanInterval;
+    }
+
+    /// <summary>지정 레이어 렌더러와 <see cref="OcclusionCutoutTarget"/> 아래 렌더러 중 아직 등록하지 않은 것을 등록합니다.</summary>
+    /// <param name="inactive">꺼진 오브젝트까지 찾을지입니다. 시작 때는 포함하고, 늦은 등록 검사 때는 켜진 것만 봅니다.</param>
+    private void RegisterCandidates(FindObjectsInactive inactive)
+    {
+        Renderer[] renderers = FindObjectsByType<Renderer>(inactive, FindObjectsSortMode.None);
         for (int i = 0; i < renderers.Length; i++)
         {
             if ((m_cutoutLayers.value & (1 << renderers[i].gameObject.layer)) != 0)
-                TagRenderer(renderers[i]);
+                RegisterRenderer(renderers[i]);
         }
 
-        OcclusionCutoutTarget[] targets = FindObjectsByType<OcclusionCutoutTarget>(
-            FindObjectsInactive.Include,
-            FindObjectsSortMode.None
-        );
+        OcclusionCutoutTarget[] targets = FindObjectsByType<OcclusionCutoutTarget>(inactive, FindObjectsSortMode.None);
         for (int i = 0; i < targets.Length; i++)
         {
-            Renderer[] children = targets[i].GetComponentsInChildren<Renderer>(true);
+            Renderer[] children = targets[i].GetComponentsInChildren<Renderer>(inactive == FindObjectsInactive.Include);
             for (int j = 0; j < children.Length; j++)
-                TagRenderer(children[j]);
+                RegisterRenderer(children[j]);
         }
     }
 
-    private void TagRenderer(Renderer targetRenderer)
+    /// <summary>
+    /// 렌더러를 등록부에 올리고 전용 비트를 켭니다. 비어 있는 자리가 있으면 그 자리를 다시 씁니다. 이미 등록돼 있으면 아무것도 하지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// 처음부터 전용 비트가 켜져 있던 렌더러는 이 컴포넌트가 켠 것이 아니므로 등록하지 않습니다. 끌 때 남의 비트를 지우지 않기 위해서입니다.
+    /// 바운드는 켜져 있으면 바로 캐싱하고, 꺼져 있으면 켜질 때 캐싱합니다.
+    /// </remarks>
+    private void RegisterRenderer(Renderer targetRenderer)
     {
+        if (targetRenderer == null || m_entryIndex.ContainsKey(targetRenderer))
+            return;
+
         uint bit = 1u << RenderingLayerBit;
         if ((targetRenderer.renderingLayerMask & bit) != 0)
             return;
 
         targetRenderer.renderingLayerMask |= bit;
-        m_taggedRenderers.Add(targetRenderer);
-        m_cachedBounds.Add(targetRenderer.bounds);
-        m_isTarget.Add(true);
+        bool visible = targetRenderer.enabled && targetRenderer.gameObject.activeInHierarchy;
+        Transform targetTransform = targetRenderer.transform;
+        targetTransform.hasChanged = false;
+        CutoutEntry entry = new CutoutEntry
+        {
+            Renderer = targetRenderer,
+            Transform = targetTransform,
+            Bounds = visible ? targetRenderer.bounds : default,
+            HasBounds = visible,
+            Movable = !targetRenderer.isPartOfStaticBatch,
+            IsTarget = true,
+        };
+
+        int slot;
+        if (m_freeSlots.Count > 0)
+        {
+            slot = m_freeSlots.Pop();
+            m_entries[slot] = entry;
+        }
+        else
+        {
+            slot = m_entries.Count;
+            m_entries.Add(entry);
+        }
+
+        m_entryIndex[targetRenderer] = slot;
+    }
+
+    /// <summary>파괴된 렌더러의 등록을 풀고 자리를 비워 둡니다. 비운 자리는 다음 등록 때 다시 씁니다.</summary>
+    private void ReleaseEntry(int slot)
+    {
+        m_entryIndex.Remove(m_entries[slot].Renderer);
+        m_entries[slot] = default;
+        m_freeSlots.Push(slot);
     }
 
     private void UntagRenderers()
     {
         uint bit = 1u << RenderingLayerBit;
-        for (int i = 0; i < m_taggedRenderers.Count; i++)
+        for (int i = 0; i < m_entries.Count; i++)
         {
-            Renderer targetRenderer = m_taggedRenderers[i];
+            Renderer targetRenderer = m_entries[i].Renderer;
             if (targetRenderer != null)
                 targetRenderer.renderingLayerMask &= ~bit;
         }
 
-        m_taggedRenderers.Clear();
-        m_cachedBounds.Clear();
-        m_isTarget.Clear();
+        m_entries.Clear();
+        m_entryIndex.Clear();
+        m_freeSlots.Clear();
     }
 
     private void DisableCameraCollisions()

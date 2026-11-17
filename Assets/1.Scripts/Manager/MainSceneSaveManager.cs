@@ -64,6 +64,8 @@ public class MainSceneSaveManager : MonoBehaviour
             return false;
         }
 
+        // 일시정지 메뉴로 타이틀에 돌아온 경우 이전 판의 저장 밖 값(날짜·분대·필드 결과 등)이 남지 않게 먼저 비웁니다.
+        GameDataManager.Instance.ResetSessionState();
         GameDataManager.Instance.InitializeCharacters(defaultSaveData.CreateStartingCharacterSnapshots());
         GameDataManager.Instance.ApplySaveData(newGameSaveData);
         // 새 게임으로 셸터에 처음 배치된 상태를 첫 게임오버 복구 지점으로 저장합니다.

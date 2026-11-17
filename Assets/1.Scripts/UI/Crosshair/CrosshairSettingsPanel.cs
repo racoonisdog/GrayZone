@@ -862,25 +862,27 @@ public sealed class CrosshairSettingsPanel : MonoBehaviour
 
         // 저장·되돌리기는 화면이 꺼져 있을 때도 값을 새로 그립니다. 그때 복제본을 만들면 OnDisable이 다시 오지 않아 남으므로 만들지 않습니다.
         CrosshairSettingsService service = CrosshairSettingsService.Instance;
-        if (!isActiveAndEnabled || style == null || service == null || service.Crosshair == null)
+        // 조준선 HUD가 없는 씬(타이틀·셸터)은 기본값 템플릿의 HUD 프리팹을 복제합니다.
+        CrosshairController previewSource = service != null ? service.PreviewSource : null;
+        if (!isActiveAndEnabled || style == null || previewSource == null)
         {
             m_hudPreview?.Clear();
             m_previewZoomLabel.text = string.Empty;
             return;
         }
 
-        m_hudPreview ??= new CrosshairHudPreview(service.Crosshair, m_previewImage);
+        m_hudPreview ??= new CrosshairHudPreview(previewSource, m_previewImage);
         CrosshairStyle stored = CurrentStyle;
         bool ads = IsEditingAds;
-        AimController aim = !m_isThrowableMode && m_selectedCharacterIndex < m_characters.Count
-            ? service.FindAimController(m_characters[m_selectedCharacterIndex].Key)
-            : null;
+        CrosshairPreviewBasis basis = null;
+        bool hasBasis = !m_isThrowableMode && m_selectedCharacterIndex < m_characters.Count
+            && service.TryGetPreviewBasis(m_characters[m_selectedCharacterIndex].Key, out basis);
 
         bool drawn = m_hudPreview.Render(clone =>
         {
-            if (aim != null)
+            if (hasBasis)
             {
-                aim.ApplyCrosshairPreview(clone, stored, ads);
+                AimController.ApplyCrosshairPreview(clone, stored, ads, basis);
                 return;
             }
 

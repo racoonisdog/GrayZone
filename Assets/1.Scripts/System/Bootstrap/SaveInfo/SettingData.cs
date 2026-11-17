@@ -57,6 +57,8 @@ public class SettingData
         public bool cameraKickEnabled = true;
         // 조준(ADS)을 누를 때마다 켜고 끄면 true입니다. 이 값이 없던 설정 파일은 false(누르는 동안만 조준)로 읽습니다.
         public bool aimToggleEnabled;
+        // 켜면 '타이틀로 돌아가기' 때마다 설정과 진행을 처음 상태로 되돌립니다(데모 시연용). 이 값이 없던 파일은 false로 읽습니다.
+        public bool demoResetOnTitle;
     }
 
     /// <summary>

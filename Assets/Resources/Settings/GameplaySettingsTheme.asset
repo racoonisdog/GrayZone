@@ -16,6 +16,8 @@ MonoBehaviour:
   tabSelected: {fileID: 21300000, guid: 277517076327ef341b994de241134311, type: 3}
   titleMark: {fileID: 21300000, guid: 653fd5a763aa5024b9affa5a3ee1f953, type: 3}
   sideMenuBar: {fileID: 21300000, guid: 46e27b9f31ea4644dbc185f7d9f0fa45, type: 3}
+  popupCover: {fileID: 21300000, guid: 76faca814856ead4b85270f34775eede, type: 3}
+  popupBase: {fileID: 21300000, guid: 7fb899678bfdcfb4b98f549953e2c794, type: 3}
   actionButton: {fileID: 21300000, guid: c86f3b31ff7e8514abcdfa643d7a6c7a, type: 3}
   actionButtonHover: {fileID: 21300000, guid: 8b9e6792f4840e34fb84294c2e45e2eb, type: 3}
   actionButtonPressed: {fileID: 21300000, guid: 557ed73b4e9551c42a7576d8c049a45d, type: 3}
