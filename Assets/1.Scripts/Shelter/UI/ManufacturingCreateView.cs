@@ -316,7 +316,7 @@ public sealed class ManufacturingCreateView : MonoBehaviour
     }
 
     /// <summary>
-    /// 선택된 레시피의 첫 번째 재료 견적으로 보유/총 필요 수량을 표시합니다.
+    /// 선택된 레시피의 첫 번째 재료 견적으로 지불 후 예상 잔량/총 필요 수량을 표시합니다.
     /// 현재 레시피는 재료 1종만 사용하므로 요약 칸도 대표 재료 하나만 다룹니다.
     /// </summary>
     private void SetMaterialSummary(IReadOnlyList<ManufacturingMaterialQuoteLine> quoteLines)
@@ -332,7 +332,10 @@ public sealed class ManufacturingCreateView : MonoBehaviour
             ? m_sufficientAmountColor
             : m_insufficientAmountColor;
 
-        SetAmountText(m_ownedAmountText, line.OwnedAmount, m_sufficientAmountColor);
+        // 보유 칸은 이번 견적을 지불한 뒤 남을 예상 잔량을 미리 보여줍니다.
+        // 실제 차감은 확정 시 ManufacturingManager에서만 일어나며, 부족하면 음수(부족분)로 표시합니다.
+        int remainingAmount = line.OwnedAmount - line.RequiredAmount;
+        SetAmountText(m_ownedAmountText, remainingAmount, amountColor);
         SetAmountText(m_totalAmountText, line.RequiredAmount, amountColor);
     }
 
